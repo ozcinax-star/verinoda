@@ -67,6 +67,10 @@
       impactDepth: "links back", impactStop: "stopped at", impactTests: "in tests", withTests: "with tests",
       pathBtn: "Path…", pathTo: "Search the note to reach…", pathNone: "No chain of calls, imports or references links them.",
       pathBack: "(the other way round: the target reaches this note)", pathTitle: "Path", close2: "close",
+      bfly: "Butterfly", bflyCalls: "calls", bflyInherits: "inheritance", bflyNone: "none in the index", bflyLeftOut: "none shown ({n} left out: test code or code outside the project)",
+      bflyRec: "recursive", bflyGraphCut: "the graph shows {n} of {m} linked notes", bflyStop: "stopped",
+      bflySide: { callers: "Called by", callees: "Calls", supertypes: "Extends / implements", subtypes: "Extended / implemented by" },
+      bflyNote: "Links read from the index, not checked against their lines.",
       noteOn: "on", noNotes: "No notes of your own yet: open a note and press + Note.",
       theme: "Light / dark", toggleFiles: "Show or hide files", toggleGraph: "Show or hide the local graph",
       searchOffline: "Search files and symbols  (/)   ·   commands: Ctrl+K",
@@ -85,10 +89,11 @@
         imported_by: "Imported by", references: "References", referenced_by: "Referenced by",
         names_data: "Names (resource ids)", named_by: "Named by", other_out: "Other links", other_in: "Other backlinks",
         claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes", answerMore: "Also relevant",
-        wiki: "Wiki", diagrams: "Diagrams", wikiFiles: "Files", problems: "Problems",
+        wiki: "Wiki", diagrams: "Diagrams", wikiFiles: "Files", problems: "Problems", decisions: "Decision records",
       },
       wikiMermaid: "Mermaid text: paste it into a Mermaid viewer (GitHub, GitLab, Obsidian, mermaid.live) to draw it. A dashed arrow comes from an inferred edge.",
       copy: "Copy", copied: "Copied", evidence: "Evidence", wikiNone: "No page named so.",
+      decNote: "By the date each record states. Superseding and links as each record writes them; a dashed relation is stated by one record only.", decNone: "No decision records (verinoda decide record).", undated: "no date", oneSided: "stated by one record only", notEnforced: "not enforced", chosen: "chosen",
       kind: {
         class: "class", method: "method", function: "function", file: "file", doc: "document", section: "section",
         data: "data file", symbol: "symbol", external: "external", claim: "claim",
@@ -151,6 +156,10 @@
       impactDepth: "bağlantı geri", impactStop: "şurada durdu:", impactTests: "testlerde", withTests: "testlerle",
       pathBtn: "Yol…", pathTo: "Ulaşılacak notu ara…", pathNone: "Aralarında çağrı, import ya da başvuru zinciri yok.",
       pathBack: "(ters yönde: hedef bu nota ulaşıyor)", pathTitle: "Yol", close2: "kapat",
+      bfly: "Kelebek", bflyCalls: "çağrılar", bflyInherits: "kalıtım", bflyNone: "indekste yok", bflyLeftOut: "gösterilen yok ({n} dışarıda bırakıldı: test kodu ya da proje dışı kod)",
+      bflyRec: "özyinelemeli", bflyGraphCut: "grafik {m} bağlı nottan {n} tanesini gösteriyor", bflyStop: "durdu",
+      bflySide: { callers: "Çağıranlar", callees: "Çağırdıkları", supertypes: "Genişlettiği / uyguladığı", subtypes: "Genişletenler / uygulayanlar" },
+      bflyNote: "Bağlantılar indeksten okundu, satırlarına karşı denetlenmedi.",
       noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
       theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
       searchOffline: "Dosya ya da sembol ara  (/)   ·   komutlar: Ctrl+K",
@@ -170,10 +179,11 @@
         names_data: "Adlandırdığı kaynaklar", named_by: "Adlandıranlar", other_out: "Diğer bağlantılar",
         other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
         myNotes: "Notlarım", answerMore: "Ayrıca ilgili", wiki: "Wiki", diagrams: "Diyagramlar", wikiFiles: "Dosyalar",
-        problems: "Sorunlar",
+        problems: "Sorunlar", decisions: "Karar kayıtları",
       },
       wikiMermaid: "Mermaid metni: çizmek için bir Mermaid görüntüleyicisine (GitHub, GitLab, Obsidian, mermaid.live) yapıştırın. Kesikli ok çıkarım yapılmış bir bağlantıdan gelir.",
       copy: "Kopyala", copied: "Kopyalandı", evidence: "Kanıt", wikiNone: "Bu adda sayfa yok.",
+      decNote: "Her kaydın belirttiği tarihe göre. Yerine geçme ve bağlantılar her kaydın yazdığı gibi; kesikli ilişkiyi yalnızca bir kayıt belirtir.", decNone: "Karar kaydı yok (verinoda decide record).", undated: "tarih yok", oneSided: "yalnızca bir kayıt belirtiyor", notEnforced: "uygulanmıyor", chosen: "seçilen",
       kind: {
         class: "sınıf", method: "metot", function: "fonksiyon", file: "dosya", doc: "belge", section: "bölüm",
         data: "veri dosyası", symbol: "sembol", external: "dış", claim: "iddia",
@@ -380,6 +390,8 @@
       meta.append(el("button", { class: "chip addnote", onclick: () => showImpact(n) }, t("impact")));
       meta.append(el("button", { class: "chip addnote", onclick: () => askPath(n) }, t("pathBtn")));
     }
+    if (!OFFLINE && ["function", "method", "class", "symbol"].includes(n.kind))  // an export has no symbol graph
+      meta.append(el("button", { class: "chip addnote", onclick: () => showButterfly(n) }, t("bfly")));
     if (n.user_note) parts.push(userNoteBox(n));
     for (const u of n.user_notes || []) parts.push(userNoteBox(n, u)); // an exported file: the notes on the file's symbols
     if (n.signature) parts.push(el("pre", { class: "sig mono", text: n.signature }));
@@ -437,6 +449,45 @@
     local.setData([{ id: n.id, title: n.title, kind: n.kind, group: n.community ? n.community.id : "other" },
       ...r.items.slice(0, 220).map((x) => ({ id: x.id, title: x.title, kind: x.kind, group: x.group, depth: x.depth }))],
       r.items.slice(0, 220).filter((x) => ids.has(x.via)).map((x) => ({ source: x.id, target: x.via, relation: x.relation })), { center: n.id });
+  }
+  // the butterfly: callers on the left, callees on the right (or supertypes and subtypes), each a tree
+  async function showButterfly(n, mode = null, depth = 2) {
+    const box = panel("butterfly", t("bfly"), el("div", { class: "muted small", text: t("loading") }));
+    let r;
+    try { r = await api(`/api/butterfly?id=${encodeURIComponent(n.id)}&depth=${depth}` + (mode ? `&mode=${mode}` : "")); }
+    catch (e) { box.append(el("div", { class: "empty error", text: e.message })); return; }
+    if (current !== n.id) return;
+    const modeSel = el("select", { onchange: (ev) => showButterfly(n, ev.target.value, depth) },
+      ["calls", "inherits"].map((m) => el("option", { value: m, selected: m === r.mode }, t(m === "calls" ? "bflyCalls" : "bflyInherits"))));
+    const depthSel = el("select", { onchange: (ev) => showButterfly(n, r.mode, Number(ev.target.value)) },
+      [1, 2, 3, 4].map((d) => el("option", { value: d, selected: d === r.depth }, String(d))));
+    const controls = el("div", { class: "muted small" }, modeSel, " ", t("depth"), " ", depthSel, " · ", t("bflyNote"));
+    function tree(side) {
+      const kids = new Map();
+      for (const it of side.items) { if (!kids.has(it.via)) kids.set(it.via, []); kids.get(it.via).push(it); }
+      const list = (parent) => el("ul", { class: "links bfly-tree" }, (kids.get(parent) || []).map((it) => el("li", {},
+        kindBadge(it.kind), noteLink(it), it.edge_at ? atLink(it.edge_at) : null,
+        el("span", { class: "rel", title: it.claim.text, text: it.claim.status + (it.recursive ? ` · ${t("bflyRec")}` : "") }),
+        kids.has(it.id) && !it.recursive ? list(it.id) : null)));
+      const left = Object.values(side.left_out || {}).reduce((s, k) => s + k, 0);
+      return el("div", { class: "bfly-side" },
+        el("div", { class: "sec small", text: `${t("bflySide." + side.key)} · ${side.count}` + (side.truncated ? ` · ${t("bflyStop")}` : "") }),
+        side.items.length ? list(r.id) : el("p", { class: "muted small", text: left ? fill(t("bflyLeftOut"), { n: left }) : t("bflyNone") }));
+    }
+    const [a, b] = r.sides;
+    const mid = el("div", { class: "bfly-mid" }, kindBadge(r.kind), el("strong", { text: r.title }));
+    // the right pane shows the same: the note, its two sides and the links between them (at most 220 notes,
+    // shared by the two sides; the panel says when some are left out of the graph)
+    const la = a.items.filter((x) => !x.recursive), lb = b.items.filter((x) => !x.recursive);
+    const na = Math.min(la.length, Math.max(110, 220 - lb.length)), nb = Math.min(lb.length, 220 - na);
+    const items = [...la.slice(0, na), ...lb.slice(0, nb)], shown = new Set([r.id, ...items.map((x) => x.id)]);
+    if (items.length < la.length + lb.length) controls.append(" · ", fill(t("bflyGraphCut"), { n: items.length, m: la.length + lb.length }));
+    box.replaceWith(panel("butterfly", `${t("bfly")} · ${n.title}`, controls, el("div", { class: "bfly" }, tree(a), mid, tree(b))));
+    const outward = (x) => (lb.includes(x) ? r.mode === "calls" : r.mode !== "calls");
+    local.setData([{ id: r.id, title: r.title, kind: r.kind, group: n.community ? n.community.id : "other" },
+      ...items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, group: x.group, depth: x.depth }))],
+      items.filter((x) => shown.has(x.via)).map((x) => (outward(x) ? { source: x.via, target: x.id, relation: x.relation }
+        : { source: x.id, target: x.via, relation: x.relation })), { center: r.id });
   }
   function askPath(n) {
     const input = el("input", { type: "search", class: "pathq", placeholder: t("pathTo"), autocomplete: "off" });
@@ -621,7 +672,7 @@
   }
 
   // the start page is what the address shows when it names nothing else
-  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h.startsWith("#/n/") || h.startsWith("#/w/") || (h.startsWith("#/q/") && !OFFLINE)); };
+  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h === "#/d" || h.startsWith("#/n/") || h.startsWith("#/w/") || (h.startsWith("#/q/") && !OFFLINE)); };
   async function renderHome() {
     current = null;
     document.title = "Verinoda";
@@ -653,10 +704,15 @@
       return li;
     })) : el("p", { class: "muted small", text: t("noNotes") });
     const wiki = await wikiList();
+    let dec = null;
+    try { dec = await api("/api/decisions"); } catch (_) { dec = null; }
     if (!onHome()) return;
+    const decs = dec && (dec.records || []).length ? el("div", {}, sectionHeader("decisions", dec.records.length),
+      el("ul", { class: "links" }, el("li", {}, el("a", { href: "#/d" }, t("sec.decisions")),
+        el("span", { class: "at", text: dec.records.slice(-3).map((r) => r.id).join(", ") })))) : null;
     setMain(el("div", { class: "home" }, el("h1", { text: s.project }), el("p", { class: "muted", text: t("welcome") }),
       OFFLINE ? el("p", { class: "muted small", text: `${t("offlineHome")} ${OFFLINE.generated || ""}` }) : null,
-      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs, wiki));
+      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs, wiki, decs));
     $("#outline").replaceChildren();
     local.setData([], []);
   }
@@ -718,6 +774,39 @@
     const ds = p.diagrams || [];
     if (ds.length) parts.push(sectionHeader("diagrams", ds.length), el("p", { class: "muted small", text: t("wikiMermaid") }), ...ds.map(diagramBlock));
     if ((w.problems || []).length) parts.push(sectionHeader("problems", w.problems.length), el("ul", { class: "links" }, w.problems.map((x) => el("li", { text: x }))));
+    setMain(el("div", { class: "wiki" }, parts));
+  }
+
+  // -- the decision records on a timeline: by the date each states, with superseding and links -------
+  async function renderDecisions() {
+    current = null;
+    setMain(el("div", { class: "empty", text: t("loading") }));
+    $("#outline").replaceChildren(); local.setData([], []); markTree(null);
+    let d;
+    try { d = await api("/api/decisions"); } catch (e) { showError(e); return; }
+    if (location.hash !== "#/d") return; // another page was opened meanwhile
+    document.title = `${t("sec.decisions")} · Verinoda`;
+    const recs = d.records || [], rels = d.relations || [];
+    const parts = [el("div", { class: "crumbs" }, el("a", { href: "#/" }, t("cmd.home"))), el("h1", { text: t("sec.decisions") }),
+      el("p", { class: "muted small", text: `${t("decNote")} ${d.dir || ""}` })];
+    if (!recs.length) { parts.push(el("div", { class: "empty", text: t("decNone") })); setMain(el("div", { class: "wiki" }, parts)); return; }
+    const rel = (e, out) => el("span", { class: "rel" + (e.one_sided || (e.missing || []).length ? " one-sided" : ""),
+      title: e.one_sided ? t("oneSided") : "" }, out ? `${e.kind} ${e.to}` : `${e.kind === "supersedes" ? "superseded-by" : e.kind + " ←"} ${e.from}`);
+    let lastDate;
+    const items = recs.map((r) => {
+      const head = r.date !== lastDate ? el("div", { class: "tl-date mono", text: r.date || t("undated") }) : null;
+      lastDate = r.date;
+      const mine = rels.filter((e) => e.from === r.id).map((e) => rel(e, true)).concat(rels.filter((e) => e.to === r.id).map((e) => rel(e, false)));
+      return el("li", { class: "tl-item st-" + r.status }, head,
+        el("div", {}, el("strong", { text: r.id }), " ", el("span", { text: r.title }), " ",
+          el("span", { class: "status", text: r.status + (r.status === "accepted" && !r.enforced ? ` · ${t("notEnforced")}` : "") })),
+        r.chosen ? el("div", { class: "muted small", text: `${t("chosen")}: ${r.chosen}` }) : null,
+        mine.length ? el("div", { class: "rels" }, mine) : null,
+        r.file ? el("div", {}, atLink(r.file)) : null,
+        ...[...(r.problems || []), ...(r.warnings || [])].map((w) => el("div", { class: "muted small warn", text: w })));
+    });
+    parts.push(el("ol", { class: "timeline" }, items));
+    if (d.mermaid) parts.push(diagramBlock({ kind: "decisions", title: t("sec.diagrams"), mermaid: d.mermaid, claims: [] }));
     setMain(el("div", { class: "wiki" }, parts));
   }
 
@@ -1876,6 +1965,7 @@
       }
       case "/api/search": return { results: offlineSearch(p.get("q") || "") };
       case "/api/wiki": return D.wiki || { pages: [] }; // every page with its diagrams
+      case "/api/decisions": return D.decisions || { records: [], relations: [], mermaid: "" };
       case "/api/global": return offlineGlobal(flag("tests"), flag("data"));
       case "/api/impact": return offlineImpact(p.get("id") || "", flag("tests"));
       case "/api/path": return offlinePath(p.get("from") || "", p.get("to") || "");
@@ -2104,6 +2194,7 @@
     if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)));
     else if (h.startsWith("#/q/") && !OFFLINE) renderAnswer(decodeURIComponent(h.slice(4)));
     else if (h.startsWith("#/w/")) renderWiki(decodeURIComponent(h.slice(4)));
+    else if (h === "#/d") renderDecisions();
     else renderHome();
   }
   window.addEventListener("hashchange", route);

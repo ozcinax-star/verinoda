@@ -845,7 +845,7 @@ def cmd_review(args) -> int:
         res = rv.review(repo, store=st, base=args.base, staged=args.staged, targets=args.target,
                         change=args.change or ("body" if args.target else None), concerns=concerns,
                         run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars,
-                        coverage_reports=_report_args(repo, args.coverage))
+                        coverage_reports=_report_args(repo, args.coverage), findings=args.findings)
     finally:
         st.close()
     _emit(args, res, lambda r: _write(rv.render_text(r)))
@@ -1069,6 +1069,21 @@ def cmd_shader(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_access_check(args) -> int:
+    from verinoda import accesscheck
+
+    repo = _repo(args)
+    missing = [p for p in args.paths if not (Path(p).is_file() or (repo / p).is_file())]
+    if missing:
+        raise SystemExit(f"error: not a file: {', '.join(missing)}")
+    res = accesscheck.lookup(repo, [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths])
+    _emit(args, res, lambda r: print(accesscheck.render(r)))
+    if res["status"] == "no_files":
+        return 2
+    c = res["counts"]
+    return 3 if c["absent"] or c["malformed"] else 4 if c["unknown"] else 0
+
+
 def cmd_lang(args) -> int:
     from verinoda import langkeys
 
@@ -1090,6 +1105,26 @@ def cmd_when(args) -> int:
 
     def render(r: dict) -> None:
         print(when.render(r))
+        _stale_note(r)
+
+    _emit(args, res, render)
+    return 0 if res["status"] == "found" else 2
+
+
+def cmd_butterfly(args) -> int:
+    from verinoda import butterfly, freshness, index
+
+    if not 1 <= args.depth <= butterfly.MAX_DEPTH:
+        raise SystemExit(f"error: --depth is 1-{butterfly.MAX_DEPTH} links")
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    res = butterfly.run(index.load(repo), args.symbol, mode=args.mode, depth=args.depth, stale=fresh["files"],
+                        tests=not args.no_tests)
+    res.update(freshness.summary(fresh))
+
+    def render(r: dict) -> None:
+        print(butterfly.render(r))
         _stale_note(r)
 
     _emit(args, res, render)
@@ -1123,6 +1158,17 @@ def cmd_history(args) -> int:
     repo = _repo(args)
     if args.history_cmd == "text":
         res = history.text_history(repo, args.text, regex=args.regex, path=args.path)
+    elif args.history_cmd == "symbol":
+        from verinoda import freshness, index
+
+        g = stale = None
+        if not history._SPAN.match(args.target.strip()):   # path:A-B needs no index
+            _need_graph(repo)
+            g, stale = index.load(repo), freshness.check(repo)["files"]
+        try:
+            res = history.symbol_history(repo, g, args.target, stale=stale or (), limit=args.limit)
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}") from None
     elif args.history_cmd == "commits":
         res = history.commits(repo, message=args.message, author=args.author, path=args.path, since=args.since,
                               until=args.until, diff=args.diff, limit=args.limit)
@@ -1344,6 +1390,8 @@ def _r_decision(d: dict, indent: str = "") -> None:
         print(f"{indent}  " + "; ".join(x for x in (f"supersedes {d['supersedes']}" if d.get("supersedes") else "",
                                                      f"superseded by {d['superseded_by']}" if d.get("superseded_by")
                                                      else "") if x))
+    if d.get("links"):
+        print(f"{indent}  " + "; ".join(f"{x.get('kind')} {x.get('id')}" for x in d["links"]))
     for g in d.get("guards") or []:
         src = f"  <- {g['from_sentence']['at']}" if g.get("from_sentence") else ""
         print(f"{indent}  {g['id']} ({g.get('status')}): {g.get('spec')}{src}")
@@ -1377,12 +1425,29 @@ def _r_decide(res: dict) -> None:
     _r_decision(res)
     if res.get("superseded"):
         print(f"  {res['superseded']} is now superseded")
+    if res.get("linked"):
+        ln = res["linked"]
+        print(f"  {ln['from']} {ln['kind']} {ln['to']}; {ln['to']} {ln['reverse']} {ln['from']}")
+    for n in res.get("not_changed") or []:
+        print(f"  not changed: {n}")
     for s in res.get("not_turned_into_guards") or []:
         print(f"  not a guard ({s['why']}): {s['at']} {s['text'][:120]}")
     proposed = [g["id"] for g in res.get("guards") or [] if g.get("status") == "proposed"]
     if proposed:
         print(f"  next: read the proposed guard(s) against the document; only the user accepts them: "
               f"`verinoda decide accept {res['id']} {' '.join(proposed)}`")
+
+
+def _r_toc(tl: dict) -> None:
+    from verinoda import decisions as dm
+
+    if tl.get("written"):
+        print(f"wrote {tl['written']}: {len(tl['records'])} record(s), {len(tl['relations'])} relation(s)")
+    else:
+        print(dm.toc_markdown(tl))
+    for r in tl["records"]:
+        for w in (r.get("warnings") or []) + (r.get("problems") or []):
+            print(f"  {r['id']}: {w}", file=sys.stderr)
 
 
 def _r_decide_check(r: dict) -> None:
@@ -1489,7 +1554,7 @@ def _decide_check(args, repo: Path) -> int:
     ddir = getattr(args, "decisions_dir", None)
     recs = dm.load_all(repo, ddir)
     graph, note, stale_graph = None, None, None
-    if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
+    if any(d.enforced and g.get("kind") in dm.EDGE_KINDS and g.get("status") == "accepted"
            for d in recs for g in d.guards):
         if not args.no_refresh and db_path(repo).is_file():
             from verinoda import buildlock, workflow
@@ -1539,6 +1604,17 @@ def cmd_decide(args) -> int:
                 print(json.dumps({"status": "error", "exit": 2, "error": msg[:600]}, ensure_ascii=False))
             print(f"error: {msg}", file=sys.stderr)
             return 2
+    if args.decide_cmd == "toc":  # reads the files only: no store needed
+        try:
+            res = dm.write_toc(repo, args.write, args.decisions_dir) if args.write else \
+                dm.timeline(repo, args.decisions_dir)
+        except dm.DecisionError as exc:
+            if getattr(args, "json", False):  # like decide check: JSON on stdout too
+                print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        _emit(args, res, _r_toc)
+        return 0
     if args.decide_cmd in ("brief", "answer"):
         from verinoda import decision_brief as dbr
 
@@ -1583,6 +1659,10 @@ def cmd_decide(args) -> int:
             res = dm.add_guards(st, repo, args.id, args.spec, user_statement=said)
         elif args.decide_cmd == "accept":
             res = dm.accept(st, repo, args.id, args.guard_ids, user_statement=said)
+        elif args.decide_cmd == "supersede":
+            res = dm.supersede(st, repo, args.id, args.by, user_statement=said)
+        elif args.decide_cmd == "link":
+            res = dm.link(st, repo, args.id, args.kind, args.target, user_statement=said)
         else:  # waive
             res = dm.waive(st, repo, args.id, args.guard_id, at=args.at, reason=args.reason, until=args.until,
                            user_statement=said)
@@ -2480,12 +2560,22 @@ def _r_api(r: dict) -> None:
         kind = " ".join(x for x in (m.get("access") if m.get("access") != "public" else None,
                                     "static" if m.get("static") else None, m.get("kind")) if x)
         print(f"  {sig:<60} {kind:<22} {m.get('at') or ''}{extra}")
+    docs = r.get("docs")
+    if docs:
+        print("docs" + (f" ({docs['version']})" if docs.get("version") else "") + ":")
+        for q in docs.get("quotes", []):
+            head = q["kind"] + (f" - {q['heading']}" if q.get("heading") else "")
+            print(f"  {head} ({q['at']}){' [truncated]' if q.get('truncated') else ''}")
+            for ln in q["text"].splitlines():
+                print(f"    | {ln}")
+        for n in docs.get("notes", []):
+            print(f"  note: {n}")
 
 
 def cmd_api(args) -> int:
     from verinoda import codecheck
 
-    res = codecheck.api(_repo(args), args.target, env=args.env, private=args.private)
+    res = codecheck.api(_repo(args), args.target, env=args.env, private=args.private, docs=args.docs)
     _emit(args, res, _r_api)
     return int(res.get("exit", 0))
 
@@ -2892,6 +2982,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--observe", action="store_true",
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
+    sp.add_argument("--findings", choices=["introduced", "all"], default="introduced",
+                    help="introduced (default): list only the findings the change introduced, the preexisting and "
+                         "fixed ones under differential; all: list the preexisting ones too")
     sp.add_argument("--coverage", action="append", metavar="REPORT",
                     help="a coverage report (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON; repeatable): the "
                          "changed lines no test ran (default: the reports found at the usual paths)")
@@ -2980,6 +3073,12 @@ def build_parser() -> argparse.ArgumentParser:
                                    "from; --check: blocks and writers that differ, mirrored constants that disagree")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
     sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
+    sp = add("access-check", cmd_access_check, "access wideners and access transformers checked against the class "
+                                               "files of the build's classpath: each entry exists, is absent (with "
+                                               "the nearest real names), malformed or unknown, with its line "
+                                               "(exit 3: absent or malformed; 4: something unknown)")
+    sp.add_argument("paths", nargs="*", help="files to check instead of the ones found (.accesswidener, "
+                                             ".classtweaker, accesstransformer.cfg)")
     sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")
@@ -2989,6 +3088,12 @@ def build_parser() -> argparse.ArgumentParser:
                                "around each call")
     sp.add_argument("symbol")
     sp.add_argument("--depth", type=int, default=6, help="caller hops to walk back (default 6)")
+    sp = add("butterfly", cmd_butterfly, "callers and callees of one symbol, or the types it extends and those "
+                                         "that extend it, as two trees with each link's file:line")
+    sp.add_argument("symbol")
+    sp.add_argument("--mode", choices=["calls", "inherits"], help="default: inherits for a type, else calls")
+    sp.add_argument("--depth", type=int, default=2, help="links out on each side (1-4, default 2)")
+    sp.add_argument("--no-tests", action="store_true", help="leave test code out")
     sp = add("extract", cmd_extract, "the whole function or class around a location: path:LINE, path#Symbol, or "
                                      "the locations in a compiler's or test run's output (the file as it is now; "
                                      "no index needed; exit 2 = a location not found)")
@@ -3002,7 +3107,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-numbers", action="store_true", help="the source as it is, without line numbers")
 
     sp = sub.add_parser("history", help="git history: when a text appeared or disappeared (the commits as "
-                                         "evidence), commit search, two revisions compared (exit 2: nothing found)")
+                                         "evidence), the commits that changed a symbol, commit search, two "
+                                         "revisions compared (exit 2: nothing found)")
     hsub = sp.add_subparsers(dest="history_cmd", required=True)
     c = add("text", cmd_history, "the commit that first added TEXT and, when HEAD has none, the one that last "
                                  "removed it (git log -S; -G with --regex), each with its file:line", parent=hsub)
@@ -3010,6 +3116,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--regex", action="store_true", help="TEXT is an extended regular expression matched against "
                                                         "added and removed lines")
     c.add_argument("--path", help="only the history of this file or folder (a git pathspec)")
+    c = add("symbol", cmd_history, "why a symbol is the way it is: the commits that changed its lines (git log "
+                                   "-L from HEAD), newest first, each quoting its message", parent=hsub)
+    c.add_argument("target", help="Class.method, path/file.py::name, a node id, or path:A-B")
+    c.add_argument("--limit", type=int, default=10, help="commits to list (default 10, at most 100)")
     c = add("commits", cmd_history, "commits by message, author, path, date and diff content, newest first",
             parent=hsub)
     c.add_argument("--message", help="a regular expression the commit message matches (case ignored)")
@@ -3082,7 +3192,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--title")
     c.add_argument("--guard", action="append", metavar="SPEC",
                    help="a check of the code, e.g. 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
-                        "'no_edge from=src/main/** to=src/client/**', 'dependency absent=psycopg'; repeatable")
+                        "'no_edge from=src/main/** to=src/client/**', 'layers order=src/ui/**,src/core/**', "
+                        "'allow_edges from=src/ui/** allowed=src/api/**', 'public module=src/orders/** "
+                        "api=src/orders/api.py', 'dependency absent=psycopg' (a glob may be tag:NAME from "
+                        "[architecture.tags] in verinoda.toml); repeatable")
     c.add_argument("--governs", action="append", metavar="SYMBOL",
                    help="path/file.py::Symbol whose changes need a review; repeatable")
     c.add_argument("--revisit-when", action="append", metavar="SPEC",
@@ -3108,11 +3221,28 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--reason", required=True)
     c.add_argument("--until", metavar="YYYY-MM-DD")
     c.add_argument("--said", help=said_help)
+    c = add("supersede", cmd_decide, "an existing record replaces another: the old one's status becomes superseded "
+                                     "and both records name each other (the user's call)", parent=dsub)
+    c.add_argument("id", metavar="OLD", help="the record that is replaced (ADR-N)")
+    c.add_argument("--by", required=True, metavar="NEW", help="the accepted record that replaces it")
+    c.add_argument("--said", help=said_help)
+    c = add("link", cmd_decide, "link two records; the reverse link is written on the other one (amends / "
+                                "amended-by, clarifies, depends-on / required-by, relates-to)", parent=dsub)
+    c.add_argument("id", metavar="ADR-N")
+    c.add_argument("kind", metavar="KIND", help="amends, clarifies, depends-on, relates-to or a reverse "
+                                                "(amended-by, clarified-by, required-by)")
+    c.add_argument("target", metavar="ADR-M")
+    c.add_argument("--said", help=said_help)
     ddir_help = ("the folder of the decision records, relative to the repository (default: decisions.dir in "
                  ".verinoda/config.json, else [decisions] dir in verinoda.toml or [tool.verinoda.decisions] dir in "
                  "pyproject.toml, else .verinoda/decisions)")
     c = add("list", cmd_decide, "decision records, their guards and waivers, and ADRs without a record", parent=dsub)
     c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
+    c = add("toc", cmd_decide, "the records by date with their relations: a Markdown table of contents and a "
+                               "Mermaid graph (--json: the timeline)", parent=dsub)
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
+    c.add_argument("--write", metavar="FILE.md", help="write it to this file in the repository (only a file "
+                                                      "`decide toc` wrote before is overwritten)")
     c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED; exit 3 when "
                                  "something could not be checked - no record while ADR-like files exist, a guard "
                                  "that checked no file, edge or manifest: usable in CI)", parent=dsub)
@@ -3121,7 +3251,8 @@ def build_parser() -> argparse.ArgumentParser:
     grp.add_argument("--changed", action="store_true",
                      help="label findings new/touched since HEAD or pre-existing; only new ones fail")
     grp.add_argument("--base", metavar="REF", help="as --changed, against this git revision (e.g. origin/main)")
-    c.add_argument("--no-refresh", action="store_true", help="do not update a stale index first (no_edge guards)")
+    c.add_argument("--no-refresh", action="store_true",
+                   help="do not update a stale index first (edge guards: no_edge, layers, allow_edges, public)")
     c = add("brief", cmd_decide, "what a decision needs, from the code: forces with evidence, what is absent, "
                                  "decisions on record, options, and the questions only the user can answer (no "
                                  "recommendation)", parent=dsub)
@@ -3404,6 +3535,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("target", metavar="NAME", help="dotted name, e.g. packaging.specifiers.SpecifierSet")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--private", action="store_true", help="also list names that start with an underscore")
+    sp.add_argument("--docs", action="store_true",
+                    help="also quote the definition's docstring and the section of the installed distribution's "
+                         "README that names it, from the installed files (the version the environment has)")
 
     sp = sub.add_parser("memory", help="versioned learnings tied to claims")
     msub = sp.add_subparsers(dest="mem_cmd", required=True)

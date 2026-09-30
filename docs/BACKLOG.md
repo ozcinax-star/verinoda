@@ -61,7 +61,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 4.5 | **Suggested reviewers and related changes** | Reviewers and earlier commits or PRs that touched the same code | CodeRabbit | `review` lists them |
 | 4.6 | **Pattern trends and code monitors** | A search pattern's count over history (migration progress); a saved pattern that fails CI when new matches appear | Sourcegraph Code Insights and Code Monitoring | `verinoda monitor` exits 1 on a new match |
-| 4.7 | **Commit rationale per symbol** | Commit messages mapped to the symbols their diffs touched, quoted as "why" evidence (no model summaries) | Augment Context Lineage | a why-question quotes the commit that changed that symbol |
 
 ## 5 - Retrieval and token economy
 
@@ -82,7 +81,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 7.1 | **Architecture rules as code** | Layers, forbidden and allowed dependencies, public interfaces, tags; checked in CI | ArchUnit, import-linter, Tach, dependency-cruiser, Nx, Sonargraph, NDepend | `decide check` or a rules file fails CI on a violating edge with its call site |
 | 7.2 | **Violation baseline and ratchet** | Known violations recorded; only new ones fail; the baseline shrinks as they are fixed | ArchUnit FreezingArchRule, dependency-cruiser | a new violation fails while old ones pass |
 | 7.3 | **Ask before writing a dependency** | Check a proposed dependency against the rules before the code exists | Sonargraph MCP `check_proposed_dependency` | an MCP call answers allowed / forbidden with the rule |
 | 7.4 | **What-if refactoring** | Simulate moving or renaming modules and re-check rules and cycles without editing | Sonargraph, Lattix | a simulated move reports the violations it would add or remove |
@@ -93,7 +91,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 8.1 | **Differential findings** | Findings split into introduced, fixed and preexisting between base and head | Infer reportdiff, SonarQube new code, CodeScene delta | `review` shows only what the change introduced by default |
 | 8.4 | **Change risk score** | One roll-up of a change's findings, reach and test coverage, with the parts shown | Greptile, GitNexus | a score whose inputs are listed; never "safe" |
 | 8.5 | **Path-scoped review rules** | Rule files per directory (like BUGBOT.md), AGENTS.md and CLAUDE.md read as rules; off, warning and error modes | Cursor Bugbot, Greptile, CodeRabbit | a rule under `src/api/` applies only to changes there |
 | 8.6 | **Incremental re-review** | Review only commits since the last review, with repeated findings removed | Bugbot, Ellipsis | a second `review` shows only new findings |
@@ -133,11 +130,8 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 12.1 | **Docs coupled to code, drift check and trivial auto-fix** | Code references in ordinary repo docs checked on each change; renames and moved lines fixed, the rest flagged; a CI check | Swimm | `verinoda docs check` fails on a broken reference and `--fix` repairs a rename |
-| 12.3 | **What a merged change made stale** | The claims, notes and decision records a PR made stale, as a comment or report | Mintlify, Dosu (without a model here) | `review` lists them |
-| 12.4 | **Decision record lifecycle** | Supersede with status updated on both records, links with reverse links, a graph of records, a table of contents, a timeline site | adr-tools, Log4brains | `decide supersede` and a timeline in `ui` |
 | 12.5 | **Undocumented decisions** | Find structural choices no decision record covers (a single storage path, an exclusive library) | Codex ADR workflow | candidates listed as `weak_inference` for the user to record or dismiss |
 | 12.6 | **Specs traced to code and tests** | Requirement criteria (EARS style) linked to code and tests through claims; criteria with no evidence reported | Kiro specs, GitHub spec-kit, Tessl | `verinoda spec check` lists unevidenced criteria |
-| 12.7 | **Installed-version library docs** | Usage docs for the exact installed version, read offline from site-packages, jars or node_modules | Context7, Ref | `api NAME --docs` quotes the installed docstring or README section |
 | 12.8 | **Issue and chat sources (opt-in)** | PR, issue, Jira and Slack threads as "why" evidence, with contradictions between sources shown | Unblocked, Glean, Tabnine | a why-answer cites a PR discussion |
 
 ## 13 - Agent integration
@@ -155,7 +149,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 14.1 | **Evidence-backed code tours** | A tour built from `trace` or the dataflow view, pinned to a commit, re-anchored when code moves; CodeTour format | CodeTour | `verinoda tour` writes a `.tour` file that opens in VS Code |
 | 14.2 | **Named flow maps** | A `trace` or map result saved under a name, shareable and citable by agents | Windsurf/Devin Codemaps | `verinoda map save NAME` and an MCP read by name |
-| 14.5 | **Butterfly view** | Callers and callees, or the inheritance tree, centred on one symbol | Understand, Sourcetrail | a view in `ui` |
 
 ## 15 - Runtime evidence import
 
@@ -180,7 +173,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 17.1 | **Mixin injection points** | `@At` targets, method selectors, descriptors and `@Shadow` signatures checked against the target's bytecode | MinecraftDev, minecraft-modding-mcp | a wrong `@At` target is `absent` with the nearest real one |
-| 17.2 | **Access Widener and Access Transformer** | Each `.accesswidener` and AT `.cfg` entry checked against the bytecode | MinecraftDev, minecraft-dev-mcp | a wrong entry is reported with its line |
 | 17.3 | **Mixin conflicts across mods** | Several mods injecting into the same method; the mod behind a failed injection | ModLens, MixinConflictHelper | conflicts listed with both Mixins |
 | 17.4 | **Mixin debug export as evidence** | `.mixin.out` classes and audit reports read as what a Mixin really changed | SpongePowered Mixin | a Mixin claim cites the exported class |
 | 17.5 | **Command syntax and JSON schemas per version** | Commands, resource locations, NBT paths, loot tables and predicates checked against vanilla-mcdoc | Spyglass, Datapack Helper Plus | a malformed command is reported with its line |

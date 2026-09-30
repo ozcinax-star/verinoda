@@ -1091,8 +1091,12 @@ def test_an_existing_security_call_on_a_changed_line_is_not_added(tmp_path):
     repo = _project(tmp_path, "adds", {"app/__init__.py": "", "app/runner.py": "import subprocess\n\n\n"
                                        "def launch(cmd):\n    return subprocess.run(cmd)\n"})
     _edit(repo, "app/runner.py", "    return subprocess.run(cmd)", "    out = subprocess.run(cmd)\n    return out")
-    [f] = _by(_review(repo), "security", "op-on-changed-line")
+    res = _review(repo)
+    assert _by(res, "security", "op-on-changed-line") == []   # preexisting: listed under differential
+    [f] = [f for f in res["differential"]["preexisting_findings"] if f["rule"] == "op-on-changed-line"]
     assert f["status"] == "weak_inference" and "had on its changed lines too" in f["finding"]
+    [f] = _by(_review(repo, findings="all"), "security", "op-on-changed-line")
+    assert f["delta"] == "preexisting"
     # r2-2 C26: the same call with other arguments "changes" it (a keyword with a constant: strong_inference)
     _git(repo, "checkout", "--", "app/runner.py")
     _edit(repo, "app/runner.py", "subprocess.run(cmd)", "subprocess.run(cmd, timeout=5)")

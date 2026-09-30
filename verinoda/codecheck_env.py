@@ -103,6 +103,18 @@ class EnvInfo:
 
     def dist_of(self, module_path: Path | str | None) -> tuple[str, str] | None:
         """(dist name, version) of an installed file, or None."""
+        found = self._dist_entry(module_path)
+        if found is None:
+            return None
+        top, d = found
+        return (d[0], d[1]) if d else (top, "?")
+
+    def dist_info_of(self, module_path: Path | str | None) -> tuple[str, str, Path] | None:
+        """(dist name, version, its .dist-info or .egg-info directory) of an installed file, or None."""
+        found = self._dist_entry(module_path)
+        return found[1] if found else None
+
+    def _dist_entry(self, module_path: Path | str | None) -> tuple[str, tuple[str, str, Path] | None] | None:
         if not module_path:
             return None
         p = Path(module_path)
@@ -114,7 +126,11 @@ class EnvInfo:
             top = rel.parts[0] if rel.parts else ""
             top = top[:-3] if top.endswith((".py", ".so")) else top.split(".")[0]
             d = self.dists.get(self.top_level.get(top, _norm_dist(top)))
-            return (d[0], d[1]) if d else (top, "?")
+            # a namespace package (google, opentelemetry) is shared: the distribution whose RECORD lists the file
+            want = rel.as_posix()
+            if d is not None and want not in _record(d[2]):
+                d = next((o for o in self.dists.values() if o[2].parent == site and want in _record(o[2])), d)
+            return top, d
         return None
 
     def origin(self, module_path: Path | str | None) -> str | None:
@@ -209,6 +225,26 @@ def _own_stdlib_dirs() -> list[Path]:
             seen.add(str(p))
             res.append(p)
     return res
+
+
+_RECORDS: dict[Path, frozenset] = {}
+
+
+def _record(dist_info: Path) -> frozenset:
+    """The paths a distribution's RECORD lists (relative to its site directory, '/'-separated); empty when it
+    has none (an egg-info). Read once per process."""
+    hit = _RECORDS.get(dist_info)
+    if hit is None:
+        paths: set[str] = set()
+        try:
+            for ln in (dist_info / "RECORD").read_text(encoding="utf-8", errors="replace").split("\n"):
+                first = ln.split(",", 1)[0].strip().replace("\\", "/")
+                if first:
+                    paths.add(first)
+        except OSError:
+            pass
+        hit = _RECORDS[dist_info] = frozenset(paths)
+    return hit
 
 
 def _dists(site_dirs: list[Path]) -> tuple[dict, dict]:

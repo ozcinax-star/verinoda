@@ -230,14 +230,21 @@ def _free_path(d: Path, slug: str) -> Path:
 def check(repo: Path, note: UserNote, *, resolves: bool | None = None) -> dict:
     """``{"status": fresh | changed | gone, "start", "end", "why"}`` for ``note`` against the files now.
     ``resolves=False``: the index no longer knows the subject (renamed or deleted), so it is gone."""
+    if resolves is False:
+        return {"status": "gone", "start": None, "end": None,
+                "why": f"{note.subject} is not in the index any more (renamed or deleted?)"}
+    _p, facts, text = _read(repo, note.file)
+    return check_text(note, text, facts)
+
+
+def check_text(note: UserNote, text: str | None, facts: dict | None) -> dict:
+    """:func:`check` against one version of the note's file: its ``text`` (None: not there) and ``facts``
+    (:mod:`verinoda.anchors`; None when the language has none or the text does not parse)."""
     from verinoda import anchors
 
     def out(status, start=None, end=None, why=""):
         return {"status": status, "start": start, "end": end, "why": why}
 
-    if resolves is False:
-        return out("gone", why=f"{note.subject} is not in the index any more (renamed or deleted?)")
-    _p, facts, text = _read(repo, note.file)
     if text is None:
         return out("gone", why=f"{note.file} is no longer there")
     lines = _lines(text)

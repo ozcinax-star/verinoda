@@ -6923,6 +6923,811 @@ clone reports `shallow` and its limit; a failing git log gives `error`; `analyze
 `co_change=False`; the text renderer; `map --view impact --json` through the CLI; a project without git. The existing impact tests (`test_architecture_map`,
 `test_exact_and_fresh`, `test_gametests`, `test_jvm_callbacks`, `test_mcp`, `test_cli`) pass unchanged.
 
+## 66. Installed-version library docs (D93, 2026-10-01)
+
+### 66.1 Why
+
+`api` said which members a library really has, but not how the authors mean them to be used. An agent then reads
+docs from memory or from the web, which describe some other version. The installed files already hold the docs
+of the exact version the project runs: the docstrings in the source and the README packaged in the
+distribution's metadata. `api NAME --docs` quotes them, offline, with their lines.
+
+### 66.2 Decisions
+
+- **An option of `api`, not a new command or MCP tool.** `verinoda api NAME --docs` and the MCP `api_members`
+  argument `docs=true` (full profile; the core profile and its menu are unchanged). Without the option the
+  answer is unchanged. Only a found target gets a `docs` block; not found and not decided answers get none.
+- **Two quotes, read from files, nothing imported.** Every quote is whole lines of the file, cited as
+  `path:start-end` exactly as far as it is shown: the docstring is quoted as its source lines (dedented, escapes
+  as written), not as the evaluated string; a cut at 40 lines or 4,000 characters ends on a whole line and the
+  cited range ends there too. Lines are counted at `
+` only (a form feed or U+2028 is not a line break of the
+  file). (1) The docstring of the definition in the file the environment would import, read with `ast` (for a module its module docstring; for a class or function the one
+  at the line `api` already found; for a standard-library object the source file the interpreter oracle names).
+  An `@overload` stub without a docstring quotes the implementation that follows it in the same class or
+  module body (never a same-named method elsewhere). A standard-library name its package only re-exports
+  (`json.JSONDecoder`) is followed through up to three `from x import name`. When the line `api` found is an
+  alias or an import, the note says so ("an alias or a value", "a re-export"), never "no docstring". (2) The section of the
+  distribution's README, i.e. the long description in `*.dist-info/METADATA` (or `PKG-INFO`), found from the
+  definition's file through the installed distributions Verinoda already reads (`EnvInfo.dist_info_of`).
+- **Which distribution.** A file is attributed to the distribution whose `RECORD` lists it, so a namespace
+  package shared by several distributions (google, opentelemetry) gets the right version and README; the
+  top-level mapping is the fallback. This also corrects `check`'s `installed:<dist> <version>` for such files.
+- **Which README section.** The long description is the METADATA body, or an old `PKG-INFO`'s indented
+  `Description:` header (its prefix removed; the header ends at the first empty line, not a whitespace-only
+  continuation line). A changelog appended to it (a heading such as Changelog, History, Release notes or a
+  version number) and everything after is not searched. A top-level package quotes the opening section: the
+  first with a line of prose (not only a logo, badges or HTML). Otherwise: Headings are Markdown (`#`) and reStructuredText (underlined or overlined) titles;
+  lines in fenced code are never headings. Tried in order: the dotted target, then its last part. A heading
+  that names it wins; otherwise the first section whose text names it. The full dotted name counts anywhere;
+  a bare last part counts in running text only where it reads as code (inside backticks, after a `.`, before
+  `(`, or on a code line: fenced, indented, a `::` literal block, `>>>`), so `click.Command` does not quote
+  click's intro for the words "Command Line"; a mention inside a URL never counts. Markdown headings are read
+  without a backtracking pattern (a heading line with thousands of spaces took minutes before).
+- **Shape.** `docs: {read_from, version ("packaging 26.3"), quotes: [{kind: docstring | readme, at:
+  "path:start-end", heading?, text, truncated}], notes, note}`. Each quote is capped at 40 lines and 4,000
+  characters and marked `truncated`. A missing docstring, a README that does not name the target, a compiled
+  module, a standard-library or project definition (no packaged README) are `notes`, never filled in.
+- **Status.** The quotes are the library authors' statement about the installed version, kept apart from the
+  verified member list: `note` says the docs state intent, not verified behaviour.
+- **Java.** Class files carry no Javadoc, so a Java class's `docs` is an empty list with that note, in the
+  same shape (`read_from`, `quotes`, `notes`, `note`). A compiled module (`.pyd`, `.so`) says it has no source
+  docstring and still quotes its distribution's README.
+- **Warnings.** Parsing an installed file never prints its `SyntaxWarning`s (invalid escapes are the library's).
+
+### 66.3 Measured
+
+On this repository's `.venv` (warm): the docs add about 0.02-0.25 s to an `api` answer (the member lookup
+dominates: 0.04-0.9 s, 16-29 s for networkx and mcp on the first call). Quoted correctly: `jedi.Script`
+(docstring 48 lines, capped, and the "Autocompletion / Goto / Documentation" section that shows
+`jedi.Script(`), `click.option` (docstring and "A Simple Example"), `pytest.fixture` (the implementation's
+docstring behind two overloads), `json.loads` (standard-library docstring, no README). `click.Command`,
+`pytest.raises`, `networkx.DiGraph` and `packaging.specifiers.SpecifierSet` quote the docstring and say that
+no README section names them (checked by hand: none does).
+
+Review round (two reviewers, 45 real targets): fixed the cited range of a cut docstring (10 of 45 targets cited
+more lines than they quoted), the character cap's range, false README matches (a URL, a marketing heading, a
+changelog entry), the opening section of a package whose README starts with a logo, the namespace-package
+version, alias and re-export notes, the overload lookup across classes, line numbers after a form feed, the
+old `PKG-INFO` format, and the heading pattern's backtracking.
+
+### 66.4 Not done
+
+- Python only for docstrings; Java class files carry no Javadoc and `node_modules` READMEs are not read (`api`
+  does not read JavaScript packages).
+- Docs pages that are not packaged (Sphinx sites, a `docs/` folder not installed) are not available offline.
+- A heading that happens to contain the last part as a word ("Command line options" for `Command`) still wins.
+- The section is chosen by name mention, not by meaning; the first matching section is quoted.
+
+### 66.5 Tests
+
+`tests/test_libdocs.py`: a class, a function and a top-level package in a fake `.venv` under a path with a
+space and non-ASCII (docstring lines, README heading and text matches, the opening section); no docstring and
+no README mention reported as notes; not found gets no docs; the standard library's `json.loads`; Markdown
+fences and reStructuredText titles; the 40-line cap; an unparsable file; the implementation behind
+`@overload` (and not a same-named method of another class); prose versus code mentions of a bare name; the
+cited range after a cut by lines and by characters; lines after a form feed and U+2028; escapes quoted as
+written; alias, import and re-export notes; `json.JSONDecoder` followed to `json/decoder.py`; a URL mention, a
+changelog section and a logo preamble; an old `PKG-INFO`; a long heading line under a second; a namespace
+package's two distributions.
+
+## 67. Commit rationale per symbol (D94, 2026-10-01)
+
+### 67.1 Why
+
+"Why is this function like this?" is often answered by the commit that changed it: its author wrote the reason in
+the message. `analyze` already quoted the subjects of up to three `git log -L` commits for a why-question, but only
+the subject (the reason is usually in the body), only through `analyze`, and with the working tree's line numbers
+given to `git log -L`, which starts from HEAD: after an uncommitted edit above the symbol, git followed the wrong
+lines or failed. There was no direct way to ask for a symbol's commits.
+
+### 67.2 Decisions
+
+- **`verinoda history symbol NAME|path:A-B [--limit N]`** and the MCP `history_search` mode `{symbol}` (a fourth
+  mode; a parameter of another mode, `path` included, is an error as before). The core MCP profile keeps its
+  tools; the gateway's one-line description of `history_search` names the new mode.
+- **Git follows the lines, Verinoda does not guess.** The commits are git's own `log -L start,end:file` over the
+  history of HEAD, newest first, read with `%B` (the whole message). No model summary: the subject and the body are
+  quoted as the author wrote them. The body is capped at 12 lines (`body_truncated`); a closing block of people
+  trailers (`Signed-off-by:`, `Co-authored-by:`, `Reviewed-by:`, `Acked-by:`, `Tested-by:`, `Cc:`, `Change-Id:`
+  and the like) is dropped because it names people, not reasons; any other `Key: value` line (`Reason:`,
+  `Note:`, `See:`) is kept.
+- **Working tree versus HEAD.** When the file differs from HEAD, the symbol's working-tree lines are mapped to
+  HEAD's lines with the same text diff the hotspots view uses (`hotspots._line_map`), and the answer says so (a
+  `note`, and an uncertainty on every claim). Lines that are all new since HEAD, or a file HEAD does not have,
+  are `not_committed`: no commit is attributed to them. A file deleted from the working tree is read at HEAD's
+  lines (said in the note); a range that starts past the file's end is an error that says the file's length.
+- **Paths.** `path:A-B` is always a path, never a name: relative to the project or absolute inside it; a path
+  outside the project (`../x.py`) is refused, since the history read is the project's.
+- **A stale index is never used for line numbers.** When the symbol's file changed since the index, the
+  index's lines are the file's as it was scanned: `history symbol NAME` answers `stale_index` (run `verinoda
+  update`, or give `path:A-B`), and `analyze` does not read that symbol's commits (the unknown says why).
+- **Names.** `NAME` is resolved by `naming.resolve` as `node_inspect` and `rename-preview` resolve it; a name that
+  is ambiguous or does not resolve is answered with its candidates and no commits, never with a similar name.
+  `path:A-B` needs no index.
+- **Claims.** Each commit is a `history` claim, `primary_source_verified` (git history is a primary source; the
+  claim is only that the commit changed those lines, with its message quoted), evidence `git_history` with the
+  locator `commit <sha> <file>`, the message as the excerpt, `meta.head_lines`. The coverage limits say that the
+  history is HEAD's, that `-L` stays within the file (a symbol moved from another file starts where it arrived),
+  and that a message states the author's intent when committing, not the current behaviour.
+- **`analyze`'s why-questions** use the same reading (`history.symbol_commits`, three commits): the claim text
+  keeps its old form (`` `sym` lines A-B were changed in <sha> (<date>): <subject> ``), and its evidence now
+  quotes the body too; the line mapping fixes the wrong-lines case above.
+
+### 67.3 Measured
+
+On this repository: `history symbol verinoda/history.py:495-520` with the file edited (the function moved down 5
+lines) mapped to HEAD's lines 490-515 and returned the commit that added `co_changes`, about 0.3 s. The tests'
+fixture: a rounding commit's reason ("the ledger stores cents") is in the body, not the subject, and is quoted.
+
+Review round (two reviewers): fixed commits of another symbol attributed through a stale index, `Reason:` and
+`Note:` bodies dropped as trailers, paths outside the project answered, a deleted file taken for a name, a range
+past the end reported as a timeout, the shallow-clone and resolution notes missing from the text output, an
+empty MCP `symbol` running a plain commit search, and the `not_committed` reason lost from analyze's unknown.
+
+### 67.4 Not done
+
+- `git log -L` does not follow a symbol across files (a move or a split); the history starts at the move.
+- A commit that only reformatted the lines counts like any other (use `git blame -w` style reading for that).
+- The mapping of edited lines to HEAD's is a text diff; a heavily rewritten symbol may map to a smaller range.
+- Merge commits appear when git's `-L` lists them; they are marked `merge`.
+- Evidence excerpts are capped at 300 characters (the store's rule); the answer's `commits` list has the body.
+
+### 67.5 Tests
+
+`tests/test_history.py`: a line range's commits newest first with subject, body and the trailer block dropped, and
+claims the store's status rules allow; working-tree lines mapped to HEAD's (and all-new lines or a new file
+`not_committed`, a reversed range an error) in a repository path with a space and non-ASCII; a name resolved
+through a scanned index, a misspelled name unresolved and never replaced, no index without `path:A-B`; `analyze`'s
+why-question quoting the body; the CLI (text and `--json`, `--limit`) and the MCP `symbol` mode with the other
+modes' parameters refused; outside git; review round: people trailers dropped but `Reason:`/`Note:` kept, a
+range past the end, `../x.py` refused, an absolute path inside the project, a deleted file read at HEAD, a stale
+index answered `stale_index`, a shallow clone, an empty MCP `symbol` refused.
+
+## 68. Architecture rules as code (D95, 2026-10-01)
+
+### 68.1 Why
+
+`decide check` could already forbid one set of files from reaching another (`no_edge`), but an architecture is
+more than one forbidden pair: layers that may only depend downward, a component that may use only a few named
+others, a module that outside code may reach only through its public files, and names for groups of files.
+ArchUnit, import-linter, Tach, dependency-cruiser and Nx express those as rules checked in CI. Done when:
+`decide check` or a rules file fails CI on a violating edge with its call site.
+
+### 68.2 Decisions
+
+- **Guards of a decision record, not a new rules file or command.** An architecture rule is a decision the
+  human made; it goes where decisions already live (`decide record --guard ...`, `decide guard`, committed
+  under `[decisions] dir`), and `decide check` already fails CI (exit 1 on VIOLATED, 3 on unknown, 2 when the
+  index could not be refreshed), labels findings new or pre-existing (`--changed` / `--base`), applies waivers,
+  and is served by MCP `decision_check` behind `run_tool`. No new command, module or MCP tool; the core MCP
+  profile and menu are unchanged.
+- **Three new guard kinds**, all over the graph's edges (relations as `no_edge`: imports, imports_from, calls,
+  uses, inherits, implements by default; `relations=` narrows):
+  - `layers order=TOP,...,BOTTOM` (two globs or more): an edge from a file of layer i to a file of a higher
+    layer j < i is a violation; a layer may use itself and every layer below it. A file two layer globs match
+    counts in the higher one (named in the limits with the count; `layer_N_files` in the scope counts each
+    file once, in the layer it counts in).
+  - `allow_edges from=GLOB allowed=GLOB[,...] [scope=product|all]`: an edge from the `from` files to any
+    indexed file that is neither a `from` file nor an allowed file is a violation.
+  - `public module=GLOB api=GLOB[,...] [scope=product|all]`: an edge from a file outside the module to a
+    module file that is not one of its api files is a violation; module files use each other freely.
+- **Test code is out of `public` and `allow_edges` by default**, as for `only_in`: with `scope=product` (the
+  default) test files (`testcode.is_test_file`) outside the module, or among the `from` files, are not
+  sources of edges, and their count is a limit; `scope=all` takes them in. A test that imports a module's
+  internals is normal and would otherwise need a waiver per site. `no_edge` and `layers` are unchanged:
+  their globs name the files they judge.
+- **Tags**: any glob of an edge guard (`no_edge` too) may be `tag:NAME`, a named set of globs in a committed
+  file: `[architecture.tags]` in `verinoda.toml` (`ui = ["src/ui/**", "src/widgets/**"]`, a single string is
+  one glob) or `[tool.verinoda.architecture.tags]` in `pyproject.toml` (verinoda.toml wins for a name in both).
+  Committed like `[decisions] dir`, so a fresh CI clone reads the same sets.
+- **Same judgement as `no_edge`** (the edge engine is now one function, `_edge_hits`, used by all four): an
+  EXTRACTED edge whose cited line still names the target in code is VIOLATED (`statically_verified`), with the
+  site as `at` (`file:line`) and the line's text; an INFERRED edge, or one whose line changed since the index,
+  is POSSIBLE (`weak_inference`). The why names the rule broken ("layer 3 (app/db/**) may not depend on layer
+  1 (app/ui/**) above it"). An import and each call through it are separate sites.
+- **Never ok on what was not looked at.** A tag that is not defined, a `from`, layer, `module` or `api` glob
+  that matches no indexed file, or no index at all, makes the guard `unknown` (exit 3). So does a layer
+  left with no file of its own (a higher layer's glob covers all of its files: `order=app/**,app/db/**`, no
+  edge could ever cross into it), `api` globs that match no file inside the module (the module would have
+  no public file, so every edge into it would be called a violation; one stray api file among others
+  inside is a limit), and `from` files that are all test code under the default scope. An `allowed` glob that
+  matches nothing only narrows what is allowed, so it is a limit, not unknown. A stale graph whose refresh
+  failed makes every edge guard unknown and the exit 2, as for `no_edge` (`EDGE_KINDS` in decisions.py).
+- **Review**: `decision_reach` lists a record when a changed file matches any glob of its edge guards (tags
+  read as their globs), as it did for `no_edge`, and when the change edits the definition of a tag the
+  guard uses (`[architecture.tags]` of `verinoda.toml` or `[tool.verinoda.architecture.tags]` of
+  `pyproject.toml`, parsed on the base and new side and compared per tag, cited at the tag's line), since
+  that widens or narrows what the rule checks.
+
+### 68.3 Measured
+
+On this repository (worktree of `competitor-backlog` at 1b815a6, indexed from scratch in 951 s; 364 files
+under `verinoda/`), one guard per `guards.check` call, graph already loaded:
+
+| rule | result | time |
+|---|---|---|
+| `layers order=verinoda/cli.py,verinoda/mcp/**,verinoda/**` | 1 VIOLATED: `verinoda/__main__.py:1 from verinoda.cli import main` | 3.6 s |
+| `layers order=verinoda/cli.py,verinoda/**` | the same site | 3.1 s |
+| `public module=verinoda/mcp/** api=verinoda/mcp/__init__.py,verinoda/mcp/server.py` | 3 VIOLATED: `from verinoda.mcp import prompts as P` in verinoda/cli.py:2547, tests/test_mcp.py:1581, tests/test_mcp_prompts.py:14 (measured before test code left the default scope: with it only verinoda/cli.py:2547 is production code; the two test sites now need `scope=all`) | 4.3 s |
+| `allow_edges from=verinoda/guards.py allowed=testcode,decisions,research,anchors,snapshot` | 6 VIOLATED (imports and calls of `paths.load_config`, `copies.load`, ...), e.g. guards.py:396 | 4.4 s |
+| `no_edge from=verinoda/** to=tests/**` | ok, 15,801 edges checked, 0 matched | 3.7 s |
+
+Every VIOLATED site above was read by hand: each line imports or calls what the rule forbids (10/10; 8 of
+them in production code). Most of
+the time is the file listing and graph walk shared with `no_edge`, not the new rules. Not measured: recall on
+a labelled set of architecture violations (none exists), languages other than Python (the edges are the
+same as `no_edge` reads, so the same extraction limits apply).
+
+### 68.4 Not done
+
+- Edges are what the index extracted: reflection, DI containers, string class loading and build-time wiring
+  are not seen (the same `EDGE_LIMITS` as `no_edge`, listed on every ok).
+- Packages outside the project are no nodes: `allow_edges` does not judge imports of third-party packages
+  (the `dependency` guard and `only_in calls=` cover those).
+- `layers` and `no_edge` have no scope key: a test file a layer glob matches is judged as that layer
+  (write the globs to leave tests out, such as `src/**` rather than `**`).
+- Review names a tag change only in the root `verinoda.toml` / `pyproject.toml`; a name defined in both is
+  reported for either file, although verinoda.toml's wins.
+- Layers are strict only in direction: skipping a layer (ui -> db past core) is allowed; there is no
+  "independence" contract (import-linter) or cycle rule per component yet.
+- No baseline and ratchet (7.2), no "ask before writing a dependency" MCP call (7.3), no what-if (7.4); a
+  known violation is excused with `decide waive` per site, as for other guards.
+- A tag is a set of path globs; there are no tags on symbols or per-project tags read from build files (Nx
+  project.json).
+
+### 68.5 Tests
+
+`tests/test_arch_rules.py` (12 tests, on a small Python project indexed in a temporary git repository):
+layers hold downward and fail upward at the import line; `allow_edges` names the import and the call outside
+the allowed files, an allowed glob that matches nothing is a limit; `public` fails on a deep import into the
+module; tags from `verinoda.toml` for `layers` and `no_edge`, an undefined tag is unknown (exit 3); a layer or
+api glob that matches nothing, and no index, are unknown; spec validation (too few layers, missing keys, a
+path outside the repository, a bad relation); `architecture_tags` reports bad entries of `pyproject.toml`;
+`verinoda decide check` (text and `--json`) exits 1 with the site `app/db/store.py:1` and its line, and
+`decision_reach` lists the record for a change to a layer's file; the CLI names the kind once
+(`VIOLATED ADR-0001 g1 layers app/ui/** > ...`). Added after review: a test that imports a module's
+internals is out of `public` by default (a limit) and VIOLATED with `scope=all`, `allow_edges` whose `from`
+files are all tests is unknown by default; `api` globs that match only files outside the module are
+unknown, one stray api file among others is a limit; a layer left with no file of its own
+(`order=app/**,app/db/**`, `order=app/**,app/**`) is unknown while overlapping layers that each keep files
+still fail; `scope=` is validated; review names a record when its tag's globs change in `verinoda.toml`
+and not when the file changes without changing the tag. The existing decide, no-silent-ok,
+decision-reach, JVM callback, MCP, docs and review tests pass unchanged.
+
+## 69. Differential findings (D96, 2026-10-01)
+
+### 69.1 Why
+
+`verinoda review` ran its concern rules on the changed lines of the head only. A line that was edited but already
+held a sink, a risky operation, an IO call in a loop or an environment read was reported as if the change had put
+it there; two rules (security operations, IO in loops) already softened such hits to `weak_inference` with the
+words "the base version had ... too", the others did not. Nothing told the reader what the change removed. Infer's
+reportdiff, SonarQube's new-code period and CodeScene's delta all answer "what did this change introduce" and keep
+the rest out of the way.
+
+### 69.2 Decisions
+
+- **Two kinds of rule.** A *state rule* compares what it finds with the base version itself and says so in its
+  own text: `op-on-changed-line` (the same call on the base's changed lines of the file: "holds X that the base
+  version had ... too") and `io-in-loop` (the loop and its IO were there before the change)
+  (`review.STATE_RULES`). Every other rule says what the change touches or does (a write or a config read on a
+  changed line, a security word a changed line names, a sink the change reaches, a guard removed or moved, a check
+  made constant, a signature that breaks call sites, a removed name still used, health that fell, a clone or a loop
+  added, an entry that reaches the change): it is always `introduced`. A write the change edits is what the change
+  touches, even when the base wrote there too, so the persistence and config rules are left out of the state set:
+  pairing them would hide the edited writes the review exists to show. `security-words` is left out for the same
+  reason: it describes the edited line (weakening a password check, hard-coding a key read from the environment
+  both keep a security word on the line).
+- **The rule decides, not the pairing.** A state-rule finding carries `base_had`: `call` (`op-on-changed-line`:
+  the base had the same call on its changed lines), `kind` (it had that kind of operation in another call:
+  "changes X: `a` is now `b`"), `loop` (`io-in-loop`: the loop and this IO were there before) or none (the changed
+  line adds it). Only `call` and `loop` are `preexisting`; `kind` and none are `introduced`. Letting the pairing
+  decide instead hid a newly added operation behind an old one of the same kind in the same function (the new one,
+  walked first by status, took the only base candidate), paired operations of different kinds (one pattern,
+  `derived_by`, covers every kind the import engine or the text rules find) and left a loop that did IO before
+  `introduced` when no base line in it changed.
+- **The base side is the same review, reversed.** The diff is swapped (base text as the code under review, the
+  head as its base) and the two concerns with state rules (security, performance) run on it with a second `_Ctx`;
+  the graph is the same snapshot. Only state-rule findings of that run are kept, marked `side: base` (their `at`
+  lines are base lines). A base finding with `base_had` none (the head does not have it) is `fixed`; one with
+  `call` or `loop` gives a preexisting head finding its `base_at`.
+- **Matching for `base_at`.** A preexisting head finding and a base finding with `base_had` `call`/`loop` pair when
+  concern, rule, file and operation kind (`op_kind`; for `io-in-loop` the sink pattern) are equal; among several
+  the one whose text (numbers removed) is most similar wins, each base finding pairs once. The file, not the
+  symbol: the operation rule compares with the base's changed lines of the whole file, so a renamed function keeps
+  its pair. A preexisting finding with no base finding (IO added to a loop none of whose base lines changed) has
+  no `base_at`.
+- **Default: only what the change introduced.** `review(..., findings="introduced")` (CLI `--findings
+  introduced|all`, MCP `change_review` argument `findings`) keeps only introduced findings under `concerns`; every
+  finding carries `delta`. With `all` the preexisting ones stay in `concerns`, labelled (`[status, preexisting]`
+  in the text output).
+- **Nothing is hidden silently.** `differential` holds `shown`, `status` (`strong_inference`: the pairing is a
+  heuristic), `method`, the counts `introduced` / `preexisting` / `fixed`, `preexisting_by_concern`,
+  `preexisting_findings` (when not shown in `concerns`) and `fixed_findings` (each capped at `MAX_PER_CONCERN`,
+  `truncated` said). `concerns_checked` names hidden preexisting findings ("no finding the change introduced; N
+  preexisting finding(s) not listed") instead of "no finding from rules"; the summary and the text output add an
+  "Against the base: N introduced, M preexisting, K fixed" line. `counts` gains `preexisting` and `fixed`; the
+  stored review record keeps each finding's `delta`.
+- **Exit code** counts what `concerns` lists: a change whose only findings are preexisting exits 0 by default
+  (3 with `--findings all`).
+- **A planned change** (`--target`) has no base version: `differential: {"skipped": ...}`, no `delta`.
+- No new command, module, MCP tool or schema change; the core MCP profile is untouched (`change_review` sits
+  behind `run_tool` / the full profile).
+
+### 69.3 Measured
+
+- Tests: `tests/test_review_delta.py` (18 tests; all pass).
+- `tests/test_review.py` (109, rerun after the review fixes: pass) and `tests/test_cli.py` (94) pass; `tests/test_mcp.py` passes with `findings` added
+  to `change_review`'s expected parameters (the core menu is unchanged: `change_review` is behind `run_tool`).
+- Cost of the base-side run on the test fixture (three functions changed, one added): 0.10 s of a 0.69 s review
+  (mean of 5 runs, warm); result 3 introduced, 1 preexisting, 1 fixed. The labelled review fixtures were not
+  re-scored under the new default: the load limits of this run allowed only the item's and the touched modules'
+  tests. `findings=all` keeps the previous list, so the old precision/recall numbers hold for it; with the default
+  a finding can only drop out as preexisting, which can lower recall on a fixture that labels such a finding.
+
+### 69.4 Not done
+
+- The base side reuses the head's graph snapshot; callers and sinks reached through the graph are the head's, so a
+  base finding that needed a caller the head removed can be missed (then nothing reads fixed, or a preexisting
+  finding has no `base_at`; a head finding's `delta` comes from its own rule and does not change).
+- Which call is "the same" is the operation rule's own test (its call text with parameters renamed by position,
+  against the base's changed lines of the file): a call moved to another function of the file and edited there
+  reads preexisting; two identical calls of one kind, one old and one new, are told apart only by line order.
+- `base_at` pairing is by file and kind with text similarity: with several preexisting operations of one kind in
+  a file, a `base_at` can name the other one's base line. It never changes a `delta`.
+- `io-in-loop` in Python says "before" per loop and per call name; a loop that already did IO through one call and
+  gains a second call of the same name reads preexisting.
+- Only the state rules run on the base side: the transition rules have no "fixed" counterpart (a guard added
+  is not reported).
+- The base-side run repeats the security and performance rules on the base text (see Measured).
+- Persistence, config and security-word findings on an edited line are always introduced: a write or a word the
+  base already had on that line is listed again. That is intended (it is what the change touches), not a delta.
+- Findings are still not stored as claims (D35 limit); `delta` is the review's label, not a claim status.
+
+### 69.5 Tests
+
+`tests/test_review_delta.py`:
+- only introduced findings are listed; an edited and an added write are introduced, an unchanged operation call
+  on an edited line is preexisting (with `base_at`), a removed operation (`pickle.loads`) is fixed (`side: base`,
+  base line); counts, `concerns_checked`, summary and text output name them;
+- `findings="all"` lists preexisting findings labelled;
+- a change with only preexisting findings exits 0, and 3 with `all`;
+- a removed guard (a rule about the change itself) is introduced and yields no fixed finding;
+- an operation whose call changed (`base_had: kind`) is introduced;
+- an operation added next to an old one of the same kind in one function is introduced and the old one
+  preexisting (`subprocess.run`, and `eval`);
+- an operation swapped for one of another kind (Python `pickle.loads` to `subprocess.run`, JS `ProcessBuilder` to
+  `ObjectInputStream`) is introduced and the old one fixed;
+- `security-words` on an edited line (a weakened password check, a key read from the environment now hard-coded)
+  is introduced;
+- `io-in-loop`: a loop that did the IO before is preexisting (no `base_at`) and hidden by default, IO added to a
+  loop is introduced, IO taken out of a loop is fixed;
+- a renamed function's unchanged operation call is preexisting with its `base_at`, nothing fixed;
+- a planned change has no differential; an unknown `findings` value is refused; the CLI takes `--findings`.
+
+`tests/test_mcp.py`: `change_review` takes `findings`.
+
+`tests/test_review.py`: the test that asserted a weak "had on its changed lines too" finding in `concerns` now
+reads it from `differential.preexisting_findings`.
+
+## 70. What a merged change made stale (D97, 2026-10-01)
+
+### 70.1 Why
+
+A change can leave the project's own knowledge behind it: an analysis claim about a function whose body it
+rewrote, a note pinned to a symbol it removed, a decision record governing code it edited. `verinoda update`
+already marks such claims stale afterwards (D24) and `verinoda notes` shows changed notes, but only one at a
+time and only after the fact, with nothing tying the result to the change. `review` now says, for the change
+under review, which claims, notes and decision records it makes stale, with the changed line and what each
+item cites. Mintlify and Dosu do this with a model reading the docs; here it is the fingerprints Verinoda
+already records.
+
+### 70.2 Decisions
+
+- **Part of `review`, not a new command or MCP tool.** `review` (CLI text and `--json`) and the MCP
+  `change_review` (behind `run_tool`) get a `made_stale` key and a "Made stale by the change" text section; the
+  summary gets a "Made stale: ..." sentence. The core MCP profile, its menu text and the tool count are
+  unchanged. It works for `--base REF` (the branch against main before a merge; `--base HEAD~1` or the merge
+  base after it), `--staged`, and the working tree. A planned change (`--target`) has no new version: nothing
+  is listed.
+- **New module `verinoda/stale_reach.py`**, the sibling of `decision_reach.py`: `reached(repo, store, diffs,
+  decisions)` and `render_lines`. Both versions of each file come from the review's own diff (the staged text
+  with `--staged`), never from the disk, so what is compared is exactly the change. `FileDiff` now also keeps
+  the bytes each version was decoded from (`old_raw`, `new_raw`: LF line ends, a byte-order mark kept), and
+  facts, note anchors and file shas are computed from those bytes, as they are from the file on disk; the
+  review's decoded text drops the mark, so a note or a section on a file with a byte-order mark never matched.
+- **Claims** (active statuses, not superseded): each recorded dependency (`claim_deps`: symbol facets, bindings,
+  module statements, sections, whole files; D24) whose file the diff changes is fingerprinted in the base and
+  in the new version (`anchors.compute_facts` on both texts). A fingerprint that differs is
+  `statically_verified` ("the body of the symbol a.py::f changed", "... is gone from the new version" at a
+  base line); a whole-file dependency is compared by its recorded sha256 with both versions (with LF or CRLF
+  line ends), as `update` does. The invalidation's file rule is `strong_inference`: a version that does not
+  parse, a claim about the whole project (`scope`) when a code file changed, a test-watching claim when a test
+  file changed (left out when its recorded tests fingerprint is that of the last scan and the scan holds the
+  new version of every changed test file), and an older claim without recorded dependencies whose cited file
+  changed.
+- **Notes** (`verinoda notes`): `usernotes.check_text` (split out of `check`, same result for the same
+  text) runs the note's anchor against both versions (read as the file on disk is read); fresh on the base and changed or gone on the new one is listed
+  (`statically_verified`).
+- **Decision records**: those `decision_reach` already found by a governed symbol or by the record's own file
+  (record text describes the code it governs; a guard is `decide check`'s answer), with that reach's status.
+  The "Decisions to read" section is unchanged. A changed line inside the governed symbol that no definition
+  change counts (a comment, docstring or whitespace edit; `decision_reach` marks that reach `text_only`) is
+  left out here, as it is for claims and notes: it does not alter what the record rests on.
+- **The status is of "the change alters what this item rests on"**, never "the item is now wrong". Each item
+  has `at` (the first changed line inside the symbol or region, `(base)` for a line only the base has) and
+  `evidence_at` (the claim's cited lines, the note file, the record's front matter line).
+- **Stale before is not blamed on the change.** A dependency or note that matches the new version is neither
+  listed nor counted (it was made after the edit, or is fresh anyway). One that matches neither the base nor
+  the new version is counted in `stale_before`, not listed (`review --base` an older commit shows it).
+- **Read only.** Nothing is written; claims keep their status until `update`. The exit code is unchanged (like
+  the decision records, this is reading to do, not a finding).
+- Lists are capped at 20 per kind (`counts` are totals, `truncated` when cut); the text shows 8 per kind.
+  A store or notes folder that cannot be read gives `error` and an `unknown` entry, the review goes on.
+
+### 70.3 Measured
+
+A synthetic project of 20 files x 25 functions with 500 claims (one per function, a symbol dependency each)
+and 10 notes; a diff of 5 files editing one function each: 5 claims and the 3 notes on those functions listed,
+none other; `stale_reach.reached` took 140-195 ms (3 runs, Windows). On the test project the review's time is
+unchanged within noise. Not measured: precision on real merged PRs (no labelled set); the cost on a store with
+tens of thousands of claims (one query for all claims, one for all dependencies, then per claim only its
+dependencies in changed files).
+
+### 70.4 Not done
+
+- Cited lines are not re-read (the invalidation's evidence re-check); symbol facets cover most of it.
+- Claims `update` already marked stale are not listed, so after a post-merge hook ran `update` the claims show
+  under `claim list --status stale` rather than here; run `review` before `update`, or read the stale list.
+- No PR comment is posted (nothing leaves the machine); the text section is the report and `--json` the data a
+  CI step can turn into a comment.
+- A test-watching claim already stale on the base is listed, not counted (the base's tests fingerprint needs
+  every test file of the base, which the diff does not hold); when the last scan is not of the new version it
+  is listed even if it was made on it.
+- A whole-file sha recorded from a file with mixed line ends (some CRLF, some LF) matches neither version as the
+  diff reads it (all LF, or all CRLF): the claim is counted as stale before rather than listed.
+- Decision records reached only by a guard, glob or manifest are in "Decisions to read", not in `made_stale`.
+- Docs in the repository that mention changed code (a README naming a function) are 12.1's drift check, not
+  this.
+
+### 70.5 Tests
+
+`tests/test_stale_reach.py` (git fixture with a scanned project, a claim with a symbol dependency, an older
+claim without dependencies, a decision record governing a function, two notes): a body change lists the claim
+(`statically_verified`, changed line, cited line), the note (`changed`) and the record, the summary and text
+say so, and the claim's stored status is unchanged; a comment-only and a README change list no claim, note or
+decision record; a
+removed function is "gone" at a base line for the claim and the note; the file rule for the older claim
+(`strong_inference`); a change on top of an already-committed change counts `stale_before` and lists nothing,
+while `--base HEAD~1` lists both; `--staged` compares the staged text, not the working copy; a planned change
+and no store; no store with a real diff says `not_checked`; a whole-file dependency made on the new version
+is not listed, one matching neither version is stale before, a CRLF sha matches; a symbol dependency made on
+the new version is neither listed nor stale before; the scope, testset and unparsable-version branches; notes
+on files with a byte-order mark (Python symbol, whole text file, Markdown) are listed; a claim and a note made
+after the edit are neither listed nor counted; the CLI `review --json` and text and the MCP `change_review`
+carry `made_stale`; `usernotes.check_text` equals `check`. Run with the modules touched: `test_review`,
+`test_decision_reach`, `test_decide_review3`, `test_usernotes`, `test_mcp`, `test_docs`, `test_line_endings`.
+
+## 71. Decision record lifecycle (D98, 2026-10-01)
+
+### 71.1 Why
+
+A decision record could only be superseded while a new one was being made (`decide record --supersedes`).
+Two records that already existed could not be tied together, nothing linked records in other ways (adr-tools'
+"Amends" / "Amended by"), and there was no overview: no table of contents, no graph of the records and no
+timeline. A hand edit that set `supersedes` on one record and not `superseded-by` on the other went unnoticed.
+
+### 71.2 Decisions
+
+- **`decide supersede OLD --by NEW [--said]`** (`decisions.supersede`). Both records must exist and be readable
+  (a record with problems is never rewritten, as before). OLD becomes `status: superseded` with `superseded-by:
+  NEW`; NEW gets `supersedes: OLD`; both files are written and both get a `supersede` row in the append-only
+  `decisions` log, carrying the user's words. It refuses: a record superseding itself, an OLD already
+  superseded, a NEW that is not `accepted` (a proposed, rejected, deprecated or superseded record replaces
+  nothing; a record's status is the human's to change), a NEW that already supersedes another record (one
+  record replaces one record, as the front matter has one `supersedes`), and a pair where OLD already says it
+  supersedes NEW. A relation only one of the two records states (a hand edit) is completed from either side: a
+  NEW that already says `supersedes: OLD`, or an OLD that already says `superseded-by: NEW` (with or without
+  `status: superseded`); an OLD superseded by another record is still refused, and a relation both records
+  already state is refused as already recorded. A hand-written
+  ADR an imported record points to is never edited; the result says so in `not_changed`.
+- **`decide link ADR-N KIND ADR-M [--said]`** (`decisions.link`). A new front-matter key `links` (one line of
+  JSON, like the other lists): `[{"kind": "amends", "id": "ADR-0002"}]`. Kinds: `amends` / `amended-by`,
+  `clarifies` / `clarified-by`, `depends-on` / `required-by`, `relates-to` (its own reverse); a reverse kind can
+  be given too (`amended by` and `relates_to` are read). The reverse is written on the other record, so both
+  files say it; event `link` in the log. `supersedes` is refused as a link kind: superseding changes a status.
+  A relation already on both records is refused; a record may link another in two ways.
+- **One-sided relations are warnings, never problems.** `load_all` now adds a warning when a `supersedes`,
+  `superseded-by` or link names a record the folder does not hold, when the other record does not state the
+  reverse, and when a link kind is unknown. Warnings do not change enforcement: the existing rule (an enforced
+  record that supersedes another makes it inactive) is unchanged. A `links` value that is not a JSON list of
+  objects with `kind` and `id` is a problem, as for the other lists (the record would otherwise be rewritten
+  without it); so is an entry whose `kind` or `id` is missing or not text. Such an entry is a problem of that
+  record only: it is left out of the warnings, the relations and the timeline, so `decide list`, `decide check`,
+  `decide toc`, `/api/decisions` and `ui --export` still read every other record.
+- **`decide toc [--write FILE.md] [--decisions-dir DIR] [--json]`**. `decisions.timeline` lists the records by
+  the `date` each states (then by id; a record without a valid date last, listed in `undated`) and every
+  relation once in its forward direction (`supersedes` new -> old, a reverse link drawn as the forward one,
+  `relates-to` once per pair), with `stated_by`, `one_sided` and `missing`. The text output is a Markdown table
+  (date, record linked to its file, status - "not enforced" for an accepted record that is not -, relations
+  both ways) and a Mermaid `graph LR` (dashed arrow: one-sided or to a missing record; dashed border:
+  superseded, deprecated or rejected; a record whose id could not be read gets a node id of its own, `rec1`,
+  so the graph stays valid Mermaid, and two files with one id are two nodes). `--write` puts it in a `.md` file inside the repository, with links
+  relative to that file (percent-encoded, so a folder name with a space still links; a bracket in a title is
+  escaped in the link text); it starts with a `verinoda:toc` marker and a file without that marker is never
+  overwritten. Such a file in the decisions folder is not a record, and elsewhere it is not listed as a
+  hand-written ADR without a record. No store is needed: the command reads the files only.
+- **A timeline in `verinoda ui`**: `/api/decisions` (`Atlas.decisions`, the same timeline plus its Mermaid
+  text; it needs no index), a page at `#/d` (records grouped by date, status, chosen option, relations both
+  ways with one-sided ones dashed, the file, warnings and problems, then the Mermaid text with a copy button as
+  on the wiki pages; no renderer is loaded), a "Decision records" entry on the start page when any exist, and
+  the same timeline in `ui --export` (answered offline). The page writes nothing.
+- **MCP**: `decision_record` (full profile, as before; not in the core profile) gets the
+  actions `supersede` (`decision_id` = the record that replaces, `supersedes` = the one replaced) and `link`
+  (`decision_id`, `link: "KIND ADR-N"`, split at the last space so a kind of two words such as `amended by` or
+  `relates to` is read); both need `user_statement`, like `record`, `guard`, `accept` and
+  `waive`. No new tool; the core menu is unchanged. The full-profile instructions now say "never record, accept,
+  waive, supersede or link without the user's own words".
+- **The generated block** of a record (between the `verinoda:generated` markers) lists `supersedes`,
+  `superseded by` and each link, so a reader of the Markdown sees them.
+- `decide toc --json` prints an error as JSON on stdout too (`{"status": "error", "exit": 2, ...}`), as
+  `decide check --json` does.
+- **No claims.** The timeline states what the record files say (front matter), not facts about code, like
+  `decide list`; dates are what each record states.
+
+### 71.3 Measured
+
+Not benchmarked: the timeline reads the decision files once (`load_all`), as `decide list` does. Tests: 15 in
+`tests/test_decide_lifecycle.py` (about 1 minute on this machine, each on a fresh git repository).
+
+### 71.4 Not done
+
+- The `decisions` log table has no `links` column (schema unchanged): a `link` event is logged with the record's
+  state and the file's hash, and the link itself lives in the file. Adding the column is a schema change.
+- A hand-written ADR's own date is not read: an imported record's `date` is the day of the import.
+- No unlink command; a link is removed by editing both records (a one-sided leftover is then warned about).
+- The timeline page shows the Mermaid text, not a drawn graph (the page loads no third-party code).
+- `decide toc --write` writes one page, not a static site (Log4brains builds a site); the page is plain
+  Markdown that GitHub and GitLab render, Mermaid included.
+- One record supersedes at most one record (the front matter's single `supersedes`); a split or merge of
+  decisions is expressed with links.
+
+### 71.5 Tests
+
+`tests/test_decide_lifecycle.py`: supersede updates and logs both records and leaves no warning; its refusals
+(itself, missing, already superseded, a superseded or proposed record as the new one, a second `supersedes`,
+supersede each other); an imported ADR's document is never edited; link and its reverse, refusals, two kinds
+on one pair, four `link` events; one-sided relations and unknown kinds are warnings and do not change
+enforcement, and `supersede` completes a one-sided relation from either record (and refuses one both state); a links entry
+without a text `kind` or `id` (missing, a list, a number) is a problem of its record only and `decide check`,
+`list` and `toc` still run; MCP `link` reads `amended by` and `relates to`; a title with `[` and a folder with a
+space still give a working Markdown link, and a record with an unreadable id gets a valid Mermaid node; the timeline's order by date, undated last, each
+relation once, the Mermaid and Markdown output (escaped `|` and quotes, relative links, reverse labels);
+`--write` refuses a file it did not write, paths outside the repository and non-Markdown names, rewrites its
+own, and its file is neither a record nor an unrecorded ADR; the CLI (`supersede`, `link`, `toc`, `toc --json`,
+`toc --write`, `list` showing links, `toc --json` errors as JSON); MCP `supersede` and `link` need the user's words; `Atlas.decisions`
+without an index and the page's `#/d` route and offline answer. `tests/test_ui.py`: `/api/decisions` is served
+and the export carries the timeline. `tests/test_mcp.py`: the `decision_record` argument set includes `link`.
+
+## 72. Butterfly view (D99, 2026-10-01)
+
+### 72.1 Why
+
+A note in `verinoda ui` already lists a symbol's callers and callees, but as flat sections of one link
+each, and inheritance only one step up or down. Understand and Sourcetrail centre a view on one symbol
+with its callers on one side and its callees on the other, or its inheritance tree, several links deep.
+That is the question "who reaches this, and what does it reach" answered in one picture, with each link
+still pointing at the line it is written on.
+
+### 72.2 Decisions
+
+- One module, `verinoda/butterfly.py`, used by the `ui` panel (`Atlas.butterfly`, `GET /api/butterfly`)
+  and by a CLI command, `verinoda butterfly <symbol> [--mode calls|inherits] [--depth N] [--no-tests]
+  [--json]`, as the `when` command sits beside the graph view.
+- Two modes. `calls`: callers (incoming `calls` edges) and callees (outgoing ones). `inherits`: supertypes
+  (outgoing `inherits` / `implements`) and subtypes (incoming). The default is `inherits` for a node with
+  an inheritance edge, else `calls`: a class with no supertype or subtype in the index opens on its callers
+  rather than on two empty sides.
+- Each side is a tree walked breadth first from the centre, 1-4 links (default 2); every item names the
+  node it hangs from (`via`). A node already on a side is not repeated there (a recursive call further
+  out, a diamond): the first link that reached it is given. A direct recursive call (the centre calls
+  itself) is listed once on each side, marked `recursive`, and not walked further. Stated (EXTRACTED)
+  links are walked before inferred ones, then by file and line number (of two call sites the first line is
+  cited). At most 200 nodes per side; the side says `truncated`.
+- A side counts what it left out (`left_out`: test code with `--no-tests`, code outside the project in
+  the calls view); an empty side with something left out says "none shown", not "none in the index"
+  (the UI says the same).
+- A method is named `Class.method` (its owner by the `method` edge, as `when` names it) in the header,
+  the item labels and the claim text ("Box.open calls Box.peek").
+- `--json` names the resolved symbol `symbol`, as `when` does (no `label`, no `query` on a found result);
+  an ambiguous or unknown one keeps `query` and `candidates`, as `when` does. `--depth` outside 1-4 is
+  refused (exit 1), not clamped.
+- Every link is a claim ("A calls B", "Square extends Polygon") with the `file:line` it is written on as
+  evidence and a status from `graph_export.edge_status`: `strong_inference` for EXTRACTED,
+  `weak_inference` for INFERRED, `unknown` without a line. Nothing is marked verified; the text output ends
+  by saying the links are extractions.
+- Code outside the project is a leaf listed only in the inheritance view (`Exception`,
+  `PathAwareEntity`; Java's `implements Runnable` gives no edge today, so it is not listed): a library
+  supertype says something about the class, a library callee is noise.
+  Docstring/comment nodes and file nodes are never listed.
+- The CLI resolves the name with `naming.resolve`, as `trace`, `when` and `map --view impact` do: an
+  ambiguous or unknown name lists candidates, none is picked, exit 2. The UI takes a note id.
+- UI: a *Butterfly* button on function, method, class and symbol notes opens a panel under the note's
+  header (as *Impact* and *Path…* do): the left tree, the note in the middle, the right tree (stacked on a
+  narrow window), a mode and a depth selector, each item with its `file:line` (opens the editor) and its
+  status; the local graph turns into the same set with the links in their true direction (at most 220
+  notes shared by the two sides; the panel says "the graph shows N of M" when it is cut). English and
+  Turkish labels.
+- No MCP tool: the core profile stays at five tools; `relation_trace` and `node_inspect` already give
+  an agent the edges.
+
+### 72.3 Measured
+
+- On `examples/glow_mod` (198 nodes, 352 edges): `verinoda butterfly
+  src/main/java/com/example/glowmod/entity/Wisp.java::Wisp.spawn` lists 8 callers over two levels
+  (`onInitialize` under `etkinlestir`, `ritual` under `baslat`), each with its call line; `Wisp` opens on
+  its inheritance tree with `net.minecraft.entity.mob.PathAwareEntity` as a library leaf. 3.2 s for the
+  command, almost all of it loading the index; the walk itself for all 77 symbols at depth 4 took 0.02 s.
+- The bare name `Wisp.spawn` is ambiguous there (the reference copy is not configured in that scratch
+  copy): both candidates are listed, exit 2.
+
+### 72.4 Not done
+
+- Callers and callees are `calls` edges only: a method handed over as a callback (`registers`), an
+  import or a reference is not shown (the note's sections and *Impact* have them); `when` walks
+  registrations.
+- Overloads: the CLI centres on the overload `naming.resolve` picks (the note says which); the other
+  overloads are not merged in.
+- The exported page (`ui --export`) has no symbol graph, so the button is not shown there.
+- The call graph is what the extractor found: a dynamic call has no edge, and an INFERRED edge may be
+  wrong; the status says so, the line is not read here.
+- No browser test drives the panel; the API, the model and the CLI are tested.
+
+### 72.5 Tests
+
+- `tests/test_butterfly.py`: callers and callees with their lines and statuses (never verified); a second
+  level hangs from the first; test code left out on request; a class opens on its inheritance tree
+  (supertypes and subtypes, a grandparent at depth 2); a library supertype is a leaf; an unknown name is
+  not replaced by a similar one (exit 2); CLI text and `--json`; the `ui` model (titles, `via_title`,
+  tests off, a file note and an unknown mode refused); a direct recursive call listed once on each side;
+  a class with no supertype or subtype opening on its callers; an empty side saying what it left out; of
+  two call sites the first line cited (9 before 10); a method named `Box.peek`; `--json` keys as `when`'s;
+  `--depth 0` and `5` refused.
+- `tests/test_ui.py::test_the_butterfly_of_a_method_is_served`: `/api/butterfly` on the served glow mod
+  (callers of `Wisp.spawn`, 400 on a bad mode, 404 on an unknown id).
+
+## 73. Access Widener and Access Transformer (D100, 2026-10-01)
+
+### 73.1 Why
+
+An access widener (Fabric, Quilt: `accessible method net/minecraft/world/entity/Mob checkSpawnRules (...)Z`) or
+an access transformer (Forge, NeoForge: `public net.minecraft.world.entity.Mob m_5545_(...)Z`) names a class,
+and usually a member with its descriptor, of a jar the mod compiles against. Nothing in the source says when the
+name is wrong: a typo, a name from another mapping or a descriptor from another game version. Loom stops the
+build on the first bad widener entry (one at a time), and a transformer entry that matches nothing is skipped by
+the loader, so the mod fails later with an `IllegalAccessError`. `code_check` already reads the classpath's class
+files for Java; the same class files can check every entry of these files at once.
+
+### 73.2 Decisions
+
+- **A new command, `verinoda access-check [FILE ...] [--json]`, and a new module `verinoda/accesscheck.py`.** No
+  MCP change: the core profile stays at five tools and its menu is unchanged (the tool count in README,
+  ARCHITECTURE and UPGRADING does not change). It sits beside `lang` and `shader`: a Minecraft validator that
+  reads files and lists what disagrees, exit 3 when something does.
+- **Files.** Found by name among the listed files (build output folders skipped as in `langkeys.py`):
+  `*.accesswidener`, `*.classtweaker`, `accesstransformer*.cfg` (any case) and `*_at.cfg`; plus the files a
+  `fabric.mod.json` / `quilt.mod.json` (`accessWidener`, `access_widener`, a string or a list) or a
+  `neoforge.mods.toml` / `mods.toml` (`[[accessTransformers]] file = ...`) names, relative to the resources root,
+  whatever their name. The manifest gives the format of a file it names (a `mods.toml` entry is a transformer,
+  a `fabric.mod.json` entry a widener), not the file's suffix. A name that matches no file gets a note, as one
+  that matches only in another case does (the loader stops on either). Files given on the command line replace
+  the search.
+- **Parsing, line by line, every entry keeps its line.** Widener: the header `accessWidener|classTweaker v<N>
+  <namespace>`; `<access> class <class>`, `<access> method|field <class> <name> <descriptor>`, access
+  `accessible`, `extendable`, `mutable`, each with an optional `transitive-`. Transformer: `<access>[-f|+f]
+  <class> [<field> | <method>(<descriptor>) | * | *()]`, access `public`, `protected`, `default`, `private`.
+  `#` starts a comment in both. A class tweaker (`classTweaker v1`) also takes
+  `[transitive-]inject-interface <class> <interface>`: the target class is looked up (the interface, most often
+  the mod's own, is not); any other class tweaker rule word is `unknown`, not `malformed`, since the format has
+  more rule kinds than an access widener. Only a line feed or a carriage return ends a line, as for the loaders
+  (`str.splitlines` would also split at a form feed or U+2028 in a comment and shift every later line number).
+- **`malformed`** (`statically_verified`, no classpath needed): an unknown access word, a wrong word count, a
+  widener class written with dots, a descriptor that is not a JVM field or method descriptor, `mutable` on a
+  class or method, `extendable` on a field, `transitive-` in a v1 widener, a transformer `<init>`/`<clinit>`
+  without its descriptor. The header must be the first line (`accessWidener v1|v2`, `classTweaker v1`), as the
+  loader reads it: a missing, misplaced (the line where it is, is named) or unsupported header gives one
+  `malformed` entry at line 1 and the rules are not checked (the loader refuses the whole file).
+- **The classpath** is the one `code_check` uses: `jvmclass.discover()` for the build the file belongs to
+  (`jvmclass.build_root()`), so `code_check.classpath` in `.verinoda/config.json` or the jars a Loom build
+  resolved (the named Minecraft jar included). An unreadable jar makes it incomplete. Only the jars' directories
+  are read up front; a class file is read only when an entry names it, through the new
+  `jvmclass.class_members()`: every field and method with its full descriptor and access bits, synthetic and
+  bridge members included (a widener may name a lambda; `parse_class` drops those and keeps no full descriptor).
+  `parse_class` and `class_members` now share `_constant_pool()`; the cached index format is unchanged.
+  Nested jars (`META-INF/jars/`, `META-INF/jarjar/`) are read one level deep. A damaged archive entry (bad
+  CRC, corrupt deflate data, a truncated or encrypted entry) never stops the run: a class file that cannot be
+  read makes its entry `unknown`, a nested jar that cannot be read is listed as an unreadable jar
+  (`outer.jar!META-INF/jars/in.jar`), which makes the classpath not complete. Nothing is written to disk.
+- **Verdicts per entry**, each with `at` (`path:line`), the entry text, `why`:
+  - `exists` (`statically_verified`): the class, and the member with that name and descriptor (a transformer
+    field has no descriptor: the name), are in a class file; `evidence` is `jar!class` (or
+    `jar!nested.jar!class`). In a transformer `*` and `*()` check the class only; a widener has no wildcard, so
+    a widener member named `*` is looked up like any name (and is `absent`).
+  - `absent`, member (`strong_inference`): the class file was read and has no such member. If the name exists
+    with other descriptors, `why` names them and `nearest` lists them; a transformer field name that is a method
+    of the class names the method with its descriptor; otherwise `nearest` holds the closest member names
+    (difflib) with their descriptors.
+  - `absent`, class (`strong_inference`): on no jar of a complete classpath while other classes of its first two
+    packages (`net/minecraft`) are; `nearest` holds the closest class names of the same package, else classes
+    of the same simple name elsewhere (the whole classpath is never compared name by name).
+  - Both `absent` kinds are `strong_inference`, not `statically_verified`: the classpath is what the last build
+    resolved and may be older than the build file (a game version bumped without a rebuild).
+  - `unknown`: the class is on no jar and the classpath is not complete (or there is none); a JDK class
+    (`java/`, `javax/`, `jdk/`, `sun/`); a class of the project's own sources (a `.java`/`.kt` file of that
+    path); a widener whose header namespace is not `named` (the dev classpath carries named names); a transformer
+    member written as an SRG name (`m_12345_`, `f_12345_`, `func_`, `field_`) that the class file lacks (older
+    Forge transformers use the production jar's names); a class whose root package no jar has (the jar that
+    would hold it is not on the classpath); a classpath that holds no class at all (patterns that match no jar,
+    a cleaned build) is taken as not complete, with a note.
+- **Builds.** A file in a sub-build with no classpath of its own falls back to the configured
+  `code_check.classpath`, with a note. A manifest that names a file which exists only in another case gets a
+  note (a jar's names are case-sensitive; the loader would not find it). Archives are opened once per jar and
+  closed after the build's files are checked.
+- **Exit codes** as `check`/`lang`: 3 when an entry is absent or malformed, 4 when nothing is but an entry is
+  unknown, 2 when the project has no such file, 0 otherwise. `--json` gives `files`, `builds` (classpath source,
+  complete, jars, classes), `entries`, `counts`, `notes`.
+
+### 73.3 Measured
+
+- Fixture (`tests/test_accesscheck.py`): one widener of 15 rules and one transformer of 7 against a jar of 4
+  classes: the misspelt method `checkSpawnRule` is `absent` at line 5 with `checkSpawnRules(...)Z` as nearest,
+  the wrong descriptor `(Lnet/minecraft/world/Level;)Z` names the real `(Lnet/minecraft/world/Level;I)Z`, the
+  field `xp J` names `xp I`, the class `Mobb` names `Mob`, a synthetic lambda is found; 5 malformed lines with
+  their reason; JDK and project classes unknown. Transformer: a misspelt field absent with the nearest, an SRG
+  name unknown, `*()` and an inner class found.
+- This repository: no widener or transformer file (`access-check` says so, exit 2). No real mod project with a
+  Loom classpath was available on this machine, so the time on a full Minecraft classpath was not measured; the
+  work per run is one directory read per jar plus one class file per class named.
+
+### 73.4 Not done
+
+- Only existence is checked. Whether the access change is needed (widening what is already public), whether
+  `mutable` is on a final field, and whether `extendable` fits a final or private method are not reported.
+- Inherited members count as absent: an entry must name the class that declares the member, as Loom and the
+  loaders apply it.
+- A widener in another namespace than `named`, and SRG names in a transformer, are `unknown`: no mapping is read
+  (backlog section 16 would provide them).
+- Transformer files named only in a Gradle build script (`accessTransformer = file(...)` with another name) are
+  found only when given on the command line.
+- No MCP tool: an agent reaches it through the CLI. `run_tool`'s list is unchanged.
+- Duplicate entries and entries of two wideners that contradict each other are not reported.
+- Of a class tweaker only the access rules and `inject-interface` (its target class) are read; the injected
+  interface and other rule kinds are not looked up.
+- A file given on the command line gets its format from its suffix (`.cfg`: transformer, else widener).
+
+### 73.5 Tests
+
+`tests/test_accesscheck.py` (15): the files found by name and through `fabric.mod.json`; `class_members` reads a
+synthetic method with its descriptor and `parse_class` still reads the class; widener entries (exists, absent
+member with the nearest name, absent descriptor naming the real one, absent class with the nearest class, a
+synthetic lambda found, five malformed lines, JDK and project classes unknown); transformer entries (method and
+field found, misspelt field absent with the nearest, SRG name unknown, inner class and `*()` found, unknown
+access malformed); without a classpath a missing class is unknown while a syntax error stays malformed; another
+namespace unknown and a missing header malformed; a header on line 2, `transitive-` in v1, a class of an unknown root package, a
+transformer `<init>` without descriptor and a field name that is a method; a manifest name in another case
+noted; the CLI (text, `--json`, a file argument, exit 3/0/4); a
+project with no file (exit 2); a widener member named `*` absent (no wildcard in a widener); a class tweaker's
+`inject-interface` found (its target class) and absent (a misspelt target), a `transitive-` access rule found,
+another rule word unknown, a short `inject-interface` malformed, and the same word malformed in an access
+widener; a `neoforge.mods.toml` that names `mymod.at` makes it a transformer, and a manifest name that matches no
+file is noted (json and toml); a form feed, U+2028, NEL and a vertical tab in comments and CR / CRLF line ends
+keep the line numbers; a class in a nested jar found with `jar!nested.jar!class` evidence and its members read,
+corrupt deflate data in a class file gives no members instead of a crash, a nested jar with corrupt data is
+listed as unreadable. Also run: `tests/test_codecheck_java.py`, `tests/test_codecheck_kotlin.py`,
+`tests/test_mixins.py`, `tests/test_cli.py`, `tests/test_docs.py`, `tests/test_line_endings.py`,
+`tests/test_mcp.py`.
+
 ## Sources
 
 - **Retrieval:**
