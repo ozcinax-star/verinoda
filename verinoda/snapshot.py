@@ -259,10 +259,20 @@ def tree_hash(files: dict[str, str]) -> str:
     return h.hexdigest()
 
 
-def take_snapshot(store: Store, repo: Path, *, graph_stats: dict | None = None) -> dict:
+def take_snapshot(store: Store, repo: Path, *, graph_stats: dict | None = None,
+                  listing: list[str] | None = None) -> dict:
+    """Record the working tree as a snapshot (or return the latest one when nothing changed).
+
+    ``listing``, when given, is filled with the :func:`list_files` result the file hashes were taken from,
+    so that a caller deriving data right after (``workflow._derive``) need not list the tree again."""
     repo = Path(repo).resolve()
     info = git_info(repo)
-    files = hash_files(repo, store=store)
+    if listing is None:
+        files = hash_files(repo, store=store)
+    else:
+        rels = list_files(repo)
+        listing[:] = rels
+        files = hash_files(repo, rels, store=store)
     th = tree_hash(files)
     prev = store.latest_snapshot()
     if prev and prev["tree_hash"] == th and prev["commit_sha"] == info["commit"] and not graph_stats:

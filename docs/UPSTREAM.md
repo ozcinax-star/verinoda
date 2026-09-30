@@ -99,6 +99,27 @@ therefore memoises them per instance.
   `built_at_commit`, because each measured copy was its own git repository.
   The memoised methods took about 60% of such an update before the patch.
 
+**Kept Python symbol facts.** The vendored symbol resolution pass
+(`project_index/extractors/resolution.py`,
+`_collect_python_symbol_resolution_facts`) walks every node of every `.py`
+file on each build to find `from … import` statements and calls. What those
+walks find depends only on the file's bytes, so Verinoda keeps it per file,
+keyed by a hash of the bytes.
+
+- **Where:** `verinoda.python_facts.python_facts_cache`, entered by
+  `verinoda.index.build()` for the length of a build. It replaces the module
+  attribute and puts it back afterwards. No vendored file changes.
+- **What it changes:** only speed. The replacement makes the same appends in
+  the same order. Where an import points is still worked out on every build
+  with the vendored resolvers (`_resolve_python_module_path`,
+  `_resolve_python_namespace_dir`). They read the importing file only through
+  its folder, so each (module, level, folder) is resolved once per pass, and
+  each probed submodule path is asked `is_file()` once per pass. The tree is
+  assumed not to change during a build, the same assumption the build's
+  `_resolve_once` makes. `tests/test_python_facts.py` and
+  `tests/test_update_memos.py` compare the facts with the vendored pass, on
+  generated packages and on Verinoda's own `verinoda/` tree.
+
 ## Post-processing of graph.json from outside the vendored tree
 
 **Portable ids.** An id with no file of its own keeps what the upstream

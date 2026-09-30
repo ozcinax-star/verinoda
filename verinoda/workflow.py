@@ -104,13 +104,16 @@ def _call_hook(fn, *args, **kwargs) -> dict:
 
 
 def _derive(store: Store, repo: Path, *, changed: list[str] | None, all_files: list[str],
-            file_hashes: dict[str, str] | None = None, tree: str | None = None) -> dict:
+            file_hashes: dict[str, str] | None = None, tree: str | None = None,
+            listed: list[str] | None = None) -> dict:
     """Refresh the data derived from the graph after an index build.
 
     ``search_index.update`` first, then - when those modules are installed -
     ``lexicon.build`` and ``anchors.update_facts``. ``changed`` is the list of
     changed paths (None after a full scan, when ``all_files`` is passed to
-    ``update_facts``). Errors are reported per step, never raised.
+    ``update_facts``). ``listed`` is the snapshot's own ``list_files`` result, taken
+    just before (the steps would otherwise list the tree again, each). Errors are
+    reported per step, never raised.
     """
     import importlib
     import inspect
@@ -122,7 +125,8 @@ def _derive(store: Store, repo: Path, *, changed: list[str] | None, all_files: l
         g = index.load(repo)
     except (OSError, ValueError) as exc:
         return {"error": f"graph not loadable: {type(exc).__name__}: {exc}"[:300]}
-    out["search_index"] = _call_hook(search_index.update, repo, g, changed)
+    out["search_index"] = _call_hook(search_index.update, repo, g, changed,
+                                     **({} if listed is None else {"listed": list(listed)}))
     from verinoda import copies
 
     out["copies"] = _call_hook(copies.update, repo, g)
@@ -144,6 +148,8 @@ def _derive(store: Store, repo: Path, *, changed: list[str] | None, all_files: l
                 kwargs["file_hashes"] = file_hashes
             if tree is not None and "tree_hash" in params:
                 kwargs["tree_hash"] = tree
+            if listed is not None and "listed" in params:
+                kwargs["listed"] = list(listed)
             out["lexicon"] = _call_hook(fn, repo, g, **kwargs)
         else:
             out["anchors"] = _call_hook(fn, store, repo, all_files if changed is None else changed)
@@ -184,13 +190,14 @@ def _scan(store: Store, repo: Path, *, force: bool) -> dict:
     buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"), configs=configs)
     before = store.latest_snapshot()
     stats, pruned, dangling = _no_missing_files(repo, stats, store.snapshot_files(before["id"]) if before else ())
-    snap = take_snapshot(store, repo, graph_stats=stats)
+    listed: list[str] = []
+    snap = take_snapshot(store, repo, graph_stats=stats, listing=listed)
     stale = invalidate_stale(store, snap)
     files = store.snapshot_files(snap["id"])
     out = {"snapshot": snap, "graph": {k: stats[k] for k in ("nodes", "edges", "graph_path")},
            "index_seconds": round(t_index, 3), "stale": stale,
            "derived": _derive(store, repo, changed=None, all_files=sorted(files), file_hashes=files,
-                              tree=snap.get("tree_hash"))}
+                              tree=snap.get("tree_hash"), listed=listed)}
     if missing_before:
         out["forced_for_deleted_files"] = missing_before[:20]
     if pruned:
@@ -419,8 +426,10 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
     dangling: list[str] = []
     if stats is not None:
         stats, pruned, dangling = _no_missing_files(repo, stats, store.snapshot_files(prev["id"]))
+    listed: list[str] = []
     snap = take_snapshot(store, repo, graph_stats=stats or {
-        "graph_path": prev["graph_path"], "nodes": prev["graph_nodes"], "edges": prev["graph_edges"]})
+        "graph_path": prev["graph_path"], "nodes": prev["graph_nodes"], "edges": prev["graph_edges"]},
+        listing=listed)
     stale = invalidate_stale(store, snap)
     out = {"snapshot": snap, "changed": diff, "changed_count": len(changed), "stale": stale,
            "mode": "incremental", "index_mode": index_mode, "index_seconds": round(t_index, 3),
@@ -428,7 +437,7 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
     if changed:
         files = store.snapshot_files(snap["id"])
         out["derived"] = _derive(store, repo, changed=changed, all_files=sorted(files), file_hashes=files,
-                                 tree=snap.get("tree_hash"))
+                                 tree=snap.get("tree_hash"), listed=listed)
     if pruned:
         out["pruned_missing_files"] = pruned[:20]
     if dangling:

@@ -859,16 +859,20 @@ def load(repo: Path) -> Lexicon | None:
     return lx
 
 
-def _candidate_files(repo: Path, graph) -> list[str]:
+def _candidate_files(repo: Path, graph, listing: list[str] | None = None) -> list[str]:
+    """``listing``: :func:`verinoda.snapshot.list_files` of ``repo`` when the caller has it already."""
     from verinoda.snapshot import list_files
+
+    def listed_now() -> list[str]:
+        return list_files(repo) if listing is None else listing
 
     if graph is not None:
         files = {d["source_file"] for _, d in graph.G.nodes(data=True) if d.get("source_file")}
     else:
-        files = set(list_files(repo))
+        files = set(listed_now())
     out = {f for f in files if PurePosixPath(f).suffix.lower() in CODE_SUFFIXES | DOC_SUFFIXES}
     try:
-        listed = list_files(repo) if graph is not None else files
+        listed = listed_now() if graph is not None else files
     except Exception:  # noqa: BLE001 - no listing: the graph's files only
         listed = ()
     return sorted(out | set(_document_files(repo, listed)))
@@ -908,7 +912,7 @@ def _norm_rel(repo: Path, p) -> str:
 
 
 def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] | None = None,
-          tree_hash: str | None = None) -> dict:
+          tree_hash: str | None = None, listed: list[str] | None = None) -> dict:
     """(Re)build ``.verinoda/index/lexicon.json``; returns build statistics.
 
     ``graph`` (an :class:`verinoda.index.Graph`) supplies the file list and
@@ -917,7 +921,9 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
     or repository-relative) limits re-extraction to those files; files not
     listed keep their stored units. Without ``changed`` every file whose
     sha256 differs from the stored one is re-extracted (``file_hashes``, e.g.
-    a snapshot's, spares re-hashing). Never raises for a single bad file.
+    a snapshot's, spares re-hashing). ``listed``, the snapshot's own
+    :func:`verinoda.snapshot.list_files` result, spares listing the tree again.
+    Never raises for a single bad file.
     """
     from verinoda.snapshot import sha256_file
     from verinoda.store import now
@@ -930,7 +936,7 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
     changed_set = None if changed is None else {_norm_rel(repo, c) for c in changed}
     files: dict[str, dict] = {}
     reparsed = 0
-    for rel in _candidate_files(repo, graph):
+    for rel in _candidate_files(repo, graph, listed):
         prev = old_files.get(rel)
         if changed_set is not None and prev is not None and rel not in changed_set:
             files[rel] = prev
@@ -951,7 +957,7 @@ def build(repo: Path, graph=None, changed=None, *, file_hashes: dict[str, str] |
     try:
         from verinoda.snapshot import list_files
 
-        listed = list_files(repo)
+        listed = list_files(repo) if listed is None else listed
         translations = translation_pairs(repo, listed)
         phrases = translation_phrases(repo, listed)
     except Exception:  # noqa: BLE001 - a malformed locale file never breaks the lexicon

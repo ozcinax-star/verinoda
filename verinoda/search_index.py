@@ -458,11 +458,13 @@ def _ignore_rules(repo: Path):
     return ignored
 
 
-def _data_files(repo: Path, graph_files: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
+def _data_files(repo: Path, graph_files: list[str], listed: list[str] | None = None
+                ) -> tuple[list[str], dict[str, str], list[str]]:
     """``(data files, {not indexed file: reason}, every repository file)``.
 
     Data files are text files the graph has no node for, by suffix (:data:`DATA_SUFFIXES`);
-    the others are listed with the reason they are not indexed.
+    the others are listed with the reason they are not indexed. ``listed``: the tree's
+    :func:`verinoda.snapshot.list_files` result when the caller has just taken it.
     """
     from verinoda import resources
     from verinoda.project_index import detect
@@ -471,7 +473,7 @@ def _data_files(repo: Path, graph_files: list[str]) -> tuple[list[str], dict[str
     from verinoda import doctext
 
     in_graph = set(graph_files)
-    files = list_files(repo)
+    files = list_files(repo) if listed is None else listed
     ignored = _ignore_rules(repo)
     data: list[str] = []
     skipped: dict[str, str] = {}
@@ -1115,7 +1117,8 @@ def _install(build: Path, db: Path) -> None:
         _unlink(Path(str(build) + suffix))
 
 
-def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: Path | None = None) -> dict:
+def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: Path | None = None,
+           listed: list[str] | None = None) -> dict:
     """Bring ``search.db`` in line with the graph and the files; return what was done.
 
     ``changed`` (repo-relative paths or absolute Paths) is a hint from the
@@ -1123,6 +1126,8 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
     stat changed is re-hashed, a file is re-indexed when its sha256 or its
     graph signature differs, and files that left the graph are removed.
     ``rebuild`` (or a schema/tokenizer version change) builds from scratch.
+    ``listed``: :func:`verinoda.snapshot.list_files` of ``repo``, when the caller has just
+    taken it (a snapshot); otherwise the tree is listed here.
     """
     from verinoda import index as ix
 
@@ -1146,7 +1151,7 @@ def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: P
         from verinoda import resources
 
         gfiles = _graph_files(g)
-        data_files, not_indexed, repo_files = _data_files(repo, gfiles)
+        data_files, not_indexed, repo_files = _data_files(repo, gfiles, listed)
         keymap = resources.KeyMap.build(repo_files)
         key_sig = keymap.signature()
         files = gfiles + data_files

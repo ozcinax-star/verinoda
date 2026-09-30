@@ -98,16 +98,27 @@ def _plans(nodes: list, root: Path | None) -> tuple[dict[str, _Plan], set[str]]:
     """(the plan of every split id, the ids split now)."""
     groups: dict[str, list[dict]] = {}
     owner: dict[str, tuple[str, str]] = {}
+    # _file_key is lexical (no file-system call): one answer per spelling, for this call only (root is fixed)
+    keys: dict[str, str] = {}
+
+    def file_key(source_file) -> str:
+        s = str(source_file or "")
+        k = keys.get(s)
+        if k is None:
+            k = keys[s] = _file_key(s, root)
+        return k
+
     for n in nodes:
         if isinstance(n, dict) and isinstance(n.get("id"), str) and n.get("source_file"):
             groups.setdefault(n["id"], []).append(n)
-            owner.setdefault(n["id"], (_file_key(n["source_file"], root), _bare(n.get("label"))))
+            if n["id"] not in owner:  # the first node of an id names its owner
+                owner[n["id"]] = (file_key(n["source_file"]), _bare(n.get("label")))
     plans: dict[str, _Plan] = {}
     split_now: set[str] = set()
     for nid, group in groups.items():
         if len(group) < 2:
             continue
-        files = {_file_key(n["source_file"], root) for n in group}
+        files = {file_key(n["source_file"]) for n in group}
         if len(files) != 1 or Path(str(group[0]["source_file"])).suffix.lower() not in CASE_SENSITIVE_SUFFIXES:
             continue   # across files the upstream pass keeps them apart by path
         first_line: dict[str, int | None] = {}

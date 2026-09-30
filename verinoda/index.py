@@ -111,7 +111,10 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
         out["own_files_dropped"] = own  # Verinoda's own files the build kept nodes of (D68)
     rewrote = bool(pruned) or bool((portable or {}).get("changed")) or bool(own)
     keep.finish(data if ok and "error" not in (portable or {}) else None, pruned, rewrote)
-    del data  # the sidecar refresh loads the graph again
+    # ``data`` is what graph.json holds now: the parse _post_process wrote back (or left as it was), or the
+    # file read again above. The sidecar refresh builds its graph from it instead of reading the file again.
+    sidecar_graph = _graph_from_data(data, gp, repo) if ok else None
+    del data
     if portable is not None:
         out["portable_ids"] = portable
     if pruned is not None:
@@ -122,9 +125,10 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
         out["empty_json"] = {"replayed": empties.replayed, "recorded": empties.recorded}
     if ok:
         try:
-            out["receiver_calls"] = refresh_receiver_sidecar(repo)
+            out["receiver_calls"] = refresh_receiver_sidecar(repo, sidecar_graph)
         except (OSError, ValueError) as exc:  # the sidecar is derived data; load() recomputes it
             out["receiver_calls"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+        del sidecar_graph
     return out
 
 
@@ -1518,7 +1522,15 @@ def load(repo: Path, gp: Path | None = None, *, augment: bool = True) -> Graph:
     gp = Path(gp) if gp else graph_path(repo)
     if not gp.exists():
         raise FileNotFoundError(f"no graph at {gp}; run `verinoda scan {repo}` first")
-    data = json.loads(gp.read_text(encoding="utf-8"))
+    g = _graph_from_data(json.loads(gp.read_text(encoding="utf-8")), gp, repo)
+    if augment:
+        apply_receiver_calls(g)
+    return g
+
+
+def _graph_from_data(data: dict, gp: Path, repo: Path) -> Graph:
+    """The :class:`Graph` of graph.json's parsed ``data`` (``gp`` its file, ``repo`` resolved), not augmented:
+    what :func:`load` builds with ``augment=False`` when ``data`` is what the file holds."""
     G = nx.MultiDiGraph()
     for n in data.get("nodes", []):
         G.add_node(n["id"], **{k: v for k, v in n.items() if k != "id"})
@@ -1526,10 +1538,7 @@ def load(repo: Path, gp: Path | None = None, *, augment: bool = True) -> Graph:
         u, v = e.get("_src", e["source"]), e.get("_tgt", e["target"])
         if u in G and v in G:
             G.add_edge(u, v, **{k: val for k, val in e.items() if k not in ("source", "target")})
-    g = Graph(G=G, path=gp, root=repo)
-    if augment:
-        apply_receiver_calls(g)
-    return g
+    return Graph(G=G, path=gp, root=repo)
 
 
 # -- graph identity (shared with the search index) --------------------------------------------------
@@ -2540,17 +2549,29 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
     old_files = old.get("files") or {}
     files: dict[str, dict] = {}
     parsed = 0
+    # The snapshot's stat-cached sha256 of each file (atlas.db ``file_stat``, trusted by the snapshot's own
+    # rule: same size and mtime, and the mtime older than the recording by the racy margin): a file whose
+    # cached hash is the one the kept facts were made from is not read and hashed again.
+    from verinoda.snapshot import _StatCache
+
+    stat_cache = _StatCache.for_repo(repo, None) if old_files else None
 
     def facts_for(f: str) -> dict | None:
         nonlocal parsed
         p = repo / f
         try:
-            key = _stat_key(p)  # taken before the read, as py_file_info does
+            st = p.stat()
+            key = (str(p), st.st_mtime_ns, st.st_size)  # _stat_key(p), taken before the read as py_file_info does
+            prev = old_files.get(f)
+            if prev and stat_cache is not None:
+                known = stat_cache.fresh(f, st)
+                if known is not None and prev.get("sha256") == known:
+                    files[f] = prev
+                    return prev.get("facts")
             data = p.read_bytes()
         except OSError:
             return None
         sha = hashlib.sha256(data).hexdigest()
-        prev = old_files.get(f)
         if prev and prev.get("sha256") == sha:
             files[f] = prev
             return prev.get("facts")
@@ -2632,6 +2653,19 @@ def _missing_in_nodes(repo: Path, nodes) -> list[str]:
         sf = n.get("source_file")
         if not isinstance(sf, str) or sf in seen:
             continue
+        # A file that exists is never missing, whether or not it resolves inside ``repo``: stat the path
+        # :func:`_local_source` would return (one call) before resolving it (a call per path component on
+        # Windows). Only a path that does not exist takes the full rule.
+        if sf and not _REMOTE_SOURCE.match(sf):
+            q = Path(sf)
+            if not q.is_absolute():
+                q = repo / q
+            try:
+                if q.exists():
+                    seen[sf] = False
+                    continue
+            except (OSError, ValueError):
+                pass
         p = _local_source(repo, sf)
         seen[sf] = p is not None and not p.exists()
     return sorted(sf for sf, gone in seen.items() if gone)

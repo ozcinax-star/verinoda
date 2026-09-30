@@ -180,23 +180,46 @@ class python_facts_cache:
                 if found is not None:
                     seen[key] = found
             # the upstream order: every file's imports, then every file's calls
+            # Where a module name points depends on the importing file only through its folder (both
+            # resolvers read ``path.parent`` / ``path.parents``), on ``root`` (fixed for this call) and on
+            # which files exist, which does not change during a build (the same assumption as
+            # ``index._resolve_once``). So each (module, level, folder) is resolved once, and each probed
+            # submodule path is asked ``is_file`` once, for this call only.
+            resolved: dict[tuple, tuple] = {}
+            probed: dict[str, bool] = {}
+
+            def is_file(p: Path) -> bool:
+                s = str(p)
+                hit = probed.get(s)
+                if hit is None:
+                    hit = probed[s] = p.is_file()
+                return hit
+
             for path in py_paths:
                 found = local.get(str(path))
                 if found is None:
                     continue
                 for line, level, module_name, names in found["imports"]:
-                    target_path = res._resolve_python_module_path(module_name, path, root, level)
+                    rkey = (module_name, level, str(path.parent))
+                    hit = resolved.get(rkey)
+                    if hit is None:
+                        target_path = res._resolve_python_module_path(module_name, path, root, level)
+                        namespace = None
+                        if target_path is None:
+                            namespace = res._resolve_python_namespace_dir(module_name, path, root, level)
+                        hit = resolved[rkey] = (target_path, namespace)
+                    target_path, namespace = hit
                     if target_path is not None:
                         pkg_dir = target_path.parent if target_path.name == "__init__.py" else None
                     else:
-                        pkg_dir = res._resolve_python_namespace_dir(module_name, path, root, level)
+                        pkg_dir = namespace
                         if pkg_dir is None:
                             continue
                     for imported_name, local_name in names:
                         if pkg_dir is not None:
                             sub_py = pkg_dir / f"{imported_name}.py"
                             sub_pkg = pkg_dir / imported_name / "__init__.py"
-                            submodule = sub_py if sub_py.is_file() else (sub_pkg if sub_pkg.is_file() else None)
+                            submodule = sub_py if is_file(sub_py) else (sub_pkg if is_file(sub_pkg) else None)
                             if submodule is not None:
                                 facts.module_imports.append((path, submodule, line, local_name))
                                 continue
