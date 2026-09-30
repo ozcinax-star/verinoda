@@ -394,7 +394,7 @@ def test_default_map_leaves_the_dead_view_out(plugins):
     g = index.load(plugins)
     assert "dead" in am.VIEWS and "dead" not in am.DEFAULT_VIEWS
     assert set(am.build_map(g)) == set(am.DEFAULT_VIEWS)
-    assert list(am.DEFAULT_VIEWS) == [v for v in am.VIEWS if v not in ("dead", "hotspots")]
+    assert list(am.DEFAULT_VIEWS) == [v for v in am.VIEWS if v not in ("dead", "hotspots", "sides")]
 
 
 def test_mcp_dead_view_cuts_the_searched_lists_before_the_claims(plugins, pview):
