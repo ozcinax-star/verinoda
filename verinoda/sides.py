@@ -27,11 +27,26 @@ CLIENT_SOURCE_SET_RE = re.compile(r"(?:^|/)src/client/")
 CLIENT_MARK_RE = re.compile(
     r"@Environment\s*\(\s*(?:value\s*=\s*)?(?:(?:net\.fabricmc\.api\.)?EnvType\s*\.\s*)?CLIENT\s*\)"
     r"|@OnlyIn\s*\(\s*(?:value\s*=\s*)?(?:(?:net\.\w+\.api\.distmarker\.)?Dist\s*\.\s*)?CLIENT\s*\)"
-    r"|@(?:Mod\s*\.\s*)?EventBusSubscriber\s*\([^)]*\bDist\s*\.\s*CLIENT\b")
-# an entry point whose reason names the client (a "client" entrypoint, ClientModInitializer, a client tick event,
-# a mixin into net.minecraft.client, a playToClient handler) runs on the client only
-CLIENT_ENTRY_RE = re.compile(r"client", re.I)
-# edges a reached method follows; a reached class loads its supertypes only (its methods run when called)
+    # an event subscriber or a NeoForge @Mod class for the client alone (one that also names the dedicated
+    # server runs on both sides)
+    r"|@(?:Mod\s*\.\s*)?EventBusSubscriber\s*\((?![^)]*\bDEDICATED_SERVER\b)[^)]*\bDist\s*\.\s*CLIENT\b[^)]*\)"
+    r"|@Mod\s*\((?![^)]*\bDEDICATED_SERVER\b)[^)]*\bdist\s*=\s*\{?\s*(?:Dist\s*\.\s*)?CLIENT\b[^)]*\)")
+# "Client" as a word of a name: ClientModInitializer, MinecraftClient, ClientTickEvents.END_CLIENT_TICK, a
+# net.minecraft.client package (not "clientsync" or "onClientCommand"'s server handler: see _client_entry)
+CLIENT_WORD_RE = re.compile(r"Client(?![a-z])|(?<![A-Za-z])CLIENT(?![A-Za-z])|(?:^|\.)client(?:\.|$)")
+# the parts of framework_entries' reasons that say which side runs the entry point
+_ENTRY_REASON_RES = (
+    re.compile(r'^fabric\.mod\.json entrypoint "(client)"'),
+    re.compile(r"^implements (\w+):"),
+    re.compile(r"^@SubscribeEvent handler of ([\w.$]+)"),
+    re.compile(r"^mixin @\w+ into ((?:[a-z_]\w*\.)*[\w$]+?)(?:\.[a-z_<][^.]*)?$"),
+    re.compile(r"^callback (?:registered with|handed to) ([\w.$]+)\("),
+)
+ANNOTATION_RE = re.compile(r"@[\w.:]+(?:\s*\((?:[^()]|\([^()]*\))*\))?")
+# a constructor call in a reached method's code lines (the extractor emits no edge for some)
+NEW_RE = re.compile(r"(?<![\w$.])new\s+([A-Z][\w$]*)\s*(?:<[^()]*>)?\s*\(")
+# edges a reached method follows; a reached class loads its supertypes (its methods run when called, its
+# constructors when it is instantiated)
 FOLLOW = frozenset({"calls", "uses", "references", "references_constant", "instantiates", "indirect_call",
                     "registers", "inherits", "extends", "implements"})
 SUPERTYPES = frozenset({"inherits", "extends", "implements"})
@@ -57,6 +72,35 @@ def _where(g: Graph, n: str) -> str:
     return am._loc(g, n)
 
 
+def _client_entry(why: str) -> bool:
+    """Whether one of an entry point's reasons says it runs on the client: a ``client`` fabric.mod.json
+    entrypoint, ``ClientModInitializer``, a client event, a mixin into a client class, a client registrar. Only
+    that part of the reason is read: a package, a file path or a mixin target method that says "client" (a
+    server handler of a client packet) does not count."""
+    for rx in _ENTRY_REASON_RES:
+        m = rx.search(why)
+        if m:
+            return bool(CLIENT_WORD_RE.search(m.group(1)))
+    return False
+
+
+def _own_head(code: list[str], line: int | None, name: str) -> tuple[str, int] | None:
+    """``(text, first line)``: a symbol's declaration head (:func:`architecture_map._decl_head`) without what
+    belongs to the member above it. Kotlin statements and expression bodies end in no ``;``, ``{`` or ``}``, so
+    the head can reach back over another member and its annotations; it starts after the last line holding
+    anything but annotations."""
+    hd = am._decl_head(code, line, name)
+    if not hd:
+        return None
+    lines = hd[0].split("\n")
+    first = hd[1] - (len(lines) - 1)
+    above = "\n".join(lines[:-1])
+    rest = ANNOTATION_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), above)
+    last = len(rest.rstrip())
+    keep = rest.count("\n", 0, last) + 1 if last else 0
+    return "\n".join(lines[keep:]), first + keep
+
+
 def _client_marks(g: Graph, files: list[str]) -> dict[str, dict]:
     """``{node: {"why", "at"}}``: the project's client-only symbols, by source set or annotation."""
     out: dict[str, dict] = {}
@@ -75,15 +119,16 @@ def _client_marks(g: Graph, files: list[str]) -> dict[str, dict]:
         for n in syms:
             if n in out:
                 continue
-            hd = am._decl_head(code, g.line(n), _bare(g, n))
+            hd = _own_head(code, g.line(n), _bare(g, n))
             if not hd:
                 continue
             m = CLIENT_MARK_RE.search(hd[0])
             if not m:
                 continue
-            first = hd[1] - hd[0].count("\n")
-            at_line = first + hd[0].count("\n", 0, m.start())
-            mark = re.sub(r"\s+", " ", m.group(0))
+            at_line = hd[1] + hd[0].count("\n", 0, m.start())
+            # quoted from the file as written (the code lines have their strings emptied)
+            raw = CLIENT_MARK_RE.search("\n".join(lines[at_line - 1:hd[1] + hd[0].count("\n")]))
+            mark = re.sub(r"\s+", " ", (raw or m).group(0))
             why = {"why": f"{mark} on `{_name(g, n)}`: the loader strips it from the server", "at": f"{f}:{at_line}",
                    "basis": "annotation"}
             out[n] = why
@@ -129,6 +174,42 @@ def _external_uses(g: Graph, n: str, cache: dict) -> list[tuple[str, int, int | 
     return sorted(found.values(), key=lambda x: (x[1], x[0]))
 
 
+def _constructors(g: Graph, cid: str) -> list[str]:
+    """A class's constructors (Java's methods named after the class, Kotlin's ``constructor``)."""
+    return [v for v, _d in g.out_edges(cid, {"method"}) if _bare(g, v) in (_bare(g, cid), "constructor")]
+
+
+def _next(g: Graph, u: str, classes: dict[str, list[str]], cache: dict) -> list[tuple[str, dict]]:
+    """What a reached symbol leads to: a class its supertypes (loading it loads them; its methods run only when
+    called); a method or function its :data:`FOLLOW` edges, the constructors of a class it instantiates, and the
+    constructors of the project classes its own code lines call with ``new`` (a unique class name; the hop is
+    ``INFERRED``, read from the text)."""
+    if g.G.nodes[u].get("_callable_class"):
+        return list(g.out_edges(u, set(SUPERTYPES)))
+    out = []
+    for v, d in g.out_edges(u, set(FOLLOW)):
+        out.append((v, d))
+        if d.get("relation") == "instantiates" and g.G.nodes[v].get("_callable_class"):
+            out += [(c, d) for c in _constructors(g, v)]
+    f, sp = g.file(u), g.span(u)
+    if not f or not sp or not f.endswith(".java"):
+        return out
+    if f not in cache:
+        code = am._jvm_code(am._read(g.root, f))
+        cache[f] = (code, _client_imports(code))
+    code = cache[f][0]
+    for ln in range(sp[0], min(sp[1], len(code)) + 1):
+        if g.symbol_at(f, ln) != u:
+            continue
+        for m in NEW_RE.finditer(code[ln - 1]):
+            cids = classes.get(m.group(1).rpartition("$")[2], [])
+            if len(cids) != 1:
+                continue
+            d = {"relation": "instantiates", "source_file": f, "source_location": f"L{ln}", "confidence": "INFERRED"}
+            out += [(v, d) for v in _constructors(g, cids[0]) or cids]
+    return out
+
+
 def _hop(g: Graph, u: str, v: str, d: dict) -> dict:
     return {"from": _name(g, u), "to": _name(g, v), "relation": d.get("relation"),
             "at": am._edge_loc(d) or _where(g, u), "confidence": d.get("confidence") or "?"}
@@ -155,14 +236,16 @@ def sides(g: Graph) -> dict:
     coverage = {
         "method": "reachability from the server-side entry points over call, use and type edges to client-only "
                   "code: the src/client source set, @Environment(EnvType.CLIENT) / @OnlyIn(Dist.CLIENT) / "
-                  "@EventBusSubscriber(Dist.CLIENT) classes and methods, and classes of "
+                  "@EventBusSubscriber(Dist.CLIENT) / @Mod(dist = Dist.CLIENT) classes and methods, and classes of "
                   + ", ".join(p.rstrip(".") for p in CLIENT_PACKAGES) + " named in a reached method",
         "limits": [
-            "entry points are heuristics (the dataflow view's JVM entries); one whose reason names the client "
-            "(a client entrypoint, ClientModInitializer, a client event, a mixin into a client class) is left out",
+            "entry points are heuristics (the dataflow view's JVM entries); one the reason puts on the client "
+            "(a client entrypoint, ClientModInitializer, an event type, mixin target class or registrar with "
+            "Client as a word of its name) is left out",
             "calls the extractor did not resolve (reflection, lambdas stored and run later, dynamic dispatch "
             "through an interface) are not followed; a reached class loads its supertypes, its methods only when "
-            "called",
+            "called, its constructors when instantiated (a `new` in Java code the extractor gave no edge for is "
+            "read from the text, an INFERRED hop); field initialisers and static initialisers are not walked",
             "a guarded use (`if (world.isClient)`, a DistExecutor or EnvType check) is still a path: the check is "
             "not read",
             "a path is strong_inference at most (weak_inference through an INFERRED edge); a class-loading "
@@ -177,7 +260,7 @@ def sides(g: Graph) -> dict:
     entries = am.framework_entries(g)
     roots, left_out = [], 0
     for n, e in sorted(entries.items(), key=lambda kv: (am.ENTRY_TIERS[kv[1]["basis"]], _where(g, kv[0]))):
-        if n in client or any(CLIENT_ENTRY_RE.search(w) for w in e["why"]):
+        if n in client or any(_client_entry(w) for w in e["why"]):
             left_out += 1
             continue
         roots.append({"id": n, "symbol": _name(g, n), "at": _where(g, n), "basis": e["basis"], "why": e["why"]})
@@ -196,6 +279,11 @@ def sides(g: Graph) -> dict:
     queue = deque(r["id"] for r in roots)
     claims: list[dict] = []
     cache: dict = {}
+    classes: dict[str, list[str]] = {}
+    for f in files:
+        for n in g.symbols_in(f):
+            if g.G.nodes[n].get("_callable_class"):
+                classes.setdefault(_bare(g, n), []).append(n)
     while queue:
         u = queue.popleft()
         hops = None
@@ -209,8 +297,7 @@ def sides(g: Graph) -> dict:
             claims.append(_claim("client_class_use", fqn, f"{f}:{ln}", entry, hops + [step],
                                  _sentence(entry, hops + [step], f"class `{fqn}`", why),
                                  {"class": fqn, "why": why, "at": f"{f}:{imp}" if imp else f"{f}:{ln}"}))
-        follow = SUPERTYPES if g.G.nodes[u].get("_callable_class") else FOLLOW
-        for v, d in g.out_edges(u, set(follow)):
+        for v, d in _next(g, u, classes, cache):
             if v in prev or not g.file(v) or not g.file(v).endswith(am.JVM_SUFFIXES) or is_test_file(g.file(v)):
                 continue
             prev[v] = (u, d)

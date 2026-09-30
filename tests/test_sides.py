@@ -183,6 +183,9 @@ def test_annotations_mark_a_class_and_its_members_or_one_method(view):
     assert "@Environment(EnvType.CLIENT) on `Annot`" in got["Annot.x"]["client_only"]["why"]
     assert got["Mixed.render"]["client_only"]["at"] == f"{MAIN}/Mixed.java:10"
     assert got["ClientEvents.hook"]["client_only"]["at"] == f"{MAIN}/ClientEvents.java:6"
+    # the annotation is quoted as written, strings and closing parenthesis included
+    assert got["ClientEvents.hook"]["client_only"]["why"].startswith(
+        '@Mod.EventBusSubscriber(modid = "ex", value = Dist.CLIENT) on `ClientEvents`')
     # a server-only method and the other methods of a partly client class are not client-only
     assert "Mixed.serverOnly" not in got and "Mixed.common" not in got
 
@@ -224,6 +227,161 @@ public class Helper {
     c = _by_subject(v)["Annot"]
     assert c["path"][-1]["confidence"] == "INFERRED" and c["status"] == "weak_inference"
     assert "reaches client-only class `Annot`" in c["claim"]
+
+
+HUD = {f"{CLIENT}/Hud.java": FILES[f"{CLIENT}/Hud.java"]}
+
+
+def test_only_the_side_part_of_an_entry_reason_puts_it_on_the_client(tmp_path):
+    for why in ['fabric.mod.json entrypoint "client": com.ex.Mod (src/main/resources/fabric.mod.json)',
+                "implements ClientModInitializer: Fabric calls onInitializeClient() at start",
+                "@SubscribeEvent handler of TickEvent.ClientTickEvent",
+                "@SubscribeEvent handler of net.minecraftforge.client.event.RenderGuiEvent",
+                "mixin @Inject into MinecraftClient.tick",
+                "mixin @Inject into net.minecraft.client.gui.Screen.render",
+                "callback registered with ClientTickEvents.END_CLIENT_TICK.register(...) at a/B.java:3",
+                "callback handed to PayloadRegistrar.playToClient(...) at a/B.java:3"]:
+        assert sides._client_entry(why), why
+    for why in ['fabric.mod.json entrypoint "main": com.ex.clientsync.Mod (src/client-mod/fabric.mod.json)',
+                "implements ModInitializer: Fabric calls onInitialize() at start",
+                "@SubscribeEvent handler of TickEvent.ServerTickEvent",
+                "mixin @Inject into ServerPlayNetworkHandler.onClientCommand",
+                "mixin @Inject into ServerPlayNetworkHandler.onClientSettings",
+                "callback registered with ServerTickEvents.END_SERVER_TICK.register(...) at client/B.java:3",
+                "@Mod class: the mod loader constructs it"]:
+        assert not sides._client_entry(why), why
+    # a package named like the client and a server mixin into a handler of a client packet stay server roots
+    files = {"src/main/java/com/ex/clientsync/Mod.java": """package com.ex.clientsync;
+
+import net.fabricmc.api.ModInitializer;
+import net.minecraft.client.MinecraftClient;
+
+public class Mod implements ModInitializer {
+    @Override
+    public void onInitialize() {
+        MinecraftClient.getInstance();
+    }
+}
+""",
+             f"{MAIN}/mixin/NetMixin.java": """package com.ex.mixin;
+
+import com.ex.client.Hud;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.Inject;
+
+@Mixin(ServerPlayNetworkHandler.class)
+public class NetMixin {
+    @Inject(method = "onClientStatus", at = @At("HEAD"))
+    private void onStatus(CallbackInfo ci) {
+        Hud.draw();
+    }
+}
+""",
+             "src/main/resources/fabric.mod.json": '{"entrypoints": {"main": ["com.ex.clientsync.Mod"]}}\n', **HUD}
+    v = sides.sides(index.load(_project(tmp_path / "names", files)))
+    assert v["summary"]["server_entry_points"] == 2 and v["summary"]["client_entry_points_left_out"] == 0
+    got = _by_subject(v)
+    assert got["net.minecraft.client.MinecraftClient"]["at"] == "src/main/java/com/ex/clientsync/Mod.java:9"
+    assert got["Hud.draw"]["entry"]["symbol"] == "NetMixin.onStatus"
+
+
+def test_a_client_mod_class_is_client_only_and_a_both_sides_subscriber_is_not(tmp_path):
+    files = {f"{MAIN}/ExClient.java": """package com.ex;
+
+import net.minecraft.client.Minecraft;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.common.Mod;
+
+@Mod(value = "ex", dist = Dist.CLIENT)
+public class ExClient {
+    public ExClient() {
+        Minecraft.getInstance();
+    }
+}
+""",
+             f"{MAIN}/Events.java": """package com.ex;
+
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.common.Mod;
+
+@Mod.EventBusSubscriber(modid = "ex", value = {Dist.CLIENT, Dist.DEDICATED_SERVER})
+public class Events {
+    @SubscribeEvent
+    public static void onTick(TickEvent.ServerTickEvent e) {
+        Util.go();
+    }
+}
+""",
+             f"{MAIN}/Util.java": """package com.ex;
+
+import com.ex.client.Hud;
+
+public class Util {
+    public static void go() {
+        Hud.draw();
+    }
+}
+""", **HUD}
+    v = sides.sides(index.load(_project(tmp_path / "neo", files)))
+    s = v["summary"]
+    # ExClient and its constructor (dist = Dist.CLIENT); Hud and Hud.draw (source set); not Events
+    assert s["client_only_by_basis"] == {"annotation": 2, "source_set": 2}
+    assert s["client_entry_points_left_out"] == 1   # the client @Mod constructor
+    assert {e["symbol"] for e in v["searched"]["entry_points"]} == {"Events", "Events.onTick"}
+    assert [c["subject"] for c in v["claims"]] == ["Hud.draw"]
+    assert [h["to"] for h in v["claims"][0]["path"]] == ["Util.go", "Hud.draw"]
+
+
+def test_a_constructor_is_walked_when_its_class_is_instantiated(tmp_path):
+    files = {k: v for k, v in FILES.items() if k.endswith(("Mod.java", "fabric.mod.json"))}
+    files[f"{MAIN}/Mod.java"] = FILES[f"{MAIN}/Mod.java"].replace("Helper.setup();", "new Thing();")
+    files[f"{MAIN}/Thing.java"] = """package com.ex;
+
+import net.minecraft.client.MinecraftClient;
+
+public class Thing {
+    public Thing() {
+        MinecraftClient.getInstance();
+    }
+}
+"""
+    v = sides.sides(index.load(_project(tmp_path / "ctor", files)))
+    c = _by_subject(v)["net.minecraft.client.MinecraftClient"]
+    assert c["at"] == f"{MAIN}/Thing.java:7" and c["status"] == "weak_inference"
+    assert [(h["from"], h["relation"], h["to"], h["at"]) for h in c["path"]][0] == (
+        "Mod.onInitialize", "instantiates", "Thing.Thing", f"{MAIN}/Mod.java:8")
+
+
+def test_a_kotlin_annotation_belongs_to_the_member_below_it_only(tmp_path):
+    files = {f"{MAIN}/Mod.kt": """package com.ex
+
+import net.fabricmc.api.ModInitializer
+
+class Mod : ModInitializer {
+    override fun onInitialize() {
+        Util.tick()
+        Util.render()
+    }
+}
+""",
+             f"{MAIN}/Util.kt": """package com.ex
+
+import net.fabricmc.api.EnvType
+import net.fabricmc.api.Environment
+
+object Util {
+    @Environment(EnvType.CLIENT)
+    fun render() = 1
+    fun tick() { println("server tick") }
+}
+""",
+             "src/main/resources/fabric.mod.json": FILES["src/main/resources/fabric.mod.json"]}
+    v = sides.sides(index.load(_project(tmp_path / "kt", files)))
+    got = _by_subject(v)
+    assert "Util.tick" not in got
+    if "Util.render" in got:   # when the extractor resolved the call
+        assert got["Util.render"]["client_only"]["at"] == f"{MAIN}/Util.kt:7"
+    assert v["summary"]["client_only_symbols"] == 1
 
 
 def test_no_server_entry_point_is_unknown_and_no_jvm_code_is_said(tmp_path):
