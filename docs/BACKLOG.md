@@ -173,7 +173,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 17.1 | **Mixin injection points** | `@At` targets, method selectors, descriptors and `@Shadow` signatures checked against the target's bytecode | MinecraftDev, minecraft-modding-mcp | a wrong `@At` target is `absent` with the nearest real one |
-| 17.2 | **Access Widener and Access Transformer** | Each `.accesswidener` and AT `.cfg` entry checked against the bytecode | MinecraftDev, minecraft-dev-mcp | a wrong entry is reported with its line |
 | 17.3 | **Mixin conflicts across mods** | Several mods injecting into the same method; the mod behind a failed injection | ModLens, MixinConflictHelper | conflicts listed with both Mixins |
 | 17.4 | **Mixin debug export as evidence** | `.mixin.out` classes and audit reports read as what a Mixin really changed | SpongePowered Mixin | a Mixin claim cites the exported class |
 | 17.5 | **Command syntax and JSON schemas per version** | Commands, resource locations, NBT paths, loot tables and predicates checked against vanilla-mcdoc | Spyglass, Datapack Helper Plus | a malformed command is reported with its line |

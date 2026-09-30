@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D99)
+## Upgrading from 0.3.2 (D60-D100)
 
 ### D63: Running a project's own tests safely
 
@@ -428,6 +428,15 @@ unchanged, so UPGRADING's tool count needs no change.
 line of each link; in `verinoda ui` a *Butterfly* button on a function, method or class note shows the
 same around the note. No re-scan needed. The MCP tool count is unchanged (no UPGRADING tool-count
 change).
+
+### D100: Access Widener and Access Transformer
+
+New command `verinoda access-check [FILE ...] [--json]`: every access widener (`.accesswidener`,
+`.classtweaker`) and access transformer (`accesstransformer.cfg`, `*_at.cfg`, the files the mod manifests name)
+entry checked against the class files of the build's classpath (`code_check.classpath` or the Loom build's),
+each with its `path:line`: `exists`, `absent` with the nearest real names, `malformed` or `unknown`. Exit 3 when
+an entry is absent or malformed, 4 when one is unknown, 2 when there is no such file. No MCP change; the tool
+count stays the same.
 
 ### D60-D62
 
