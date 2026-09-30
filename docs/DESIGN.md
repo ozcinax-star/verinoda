@@ -5052,6 +5052,118 @@ remove to untangle them.
 - `tests/test_architecture_map.py` (the view set), `tests/test_cli.py` (`map --view cycles --json` and text),
   `tests/test_mcp.py` (`map_view("cycles")` equals the core view).
 
+## 48. Graph exports: GraphML, Cypher, Obsidian and SVG (D75, 2026-09-30)
+
+### 48.1 Decisions
+
+1. **A new top-level command `verinoda export`**, not a change to the upstream pass-through, which stays
+   as it is. `--format graphml|cypher|obsidian|svg` (default `graphml`), `--out PATH`, `--repo`, `--json`.
+   Without `--out` it writes to `.verinoda/index/export/graph.<format>` (the vault goes to
+   `.verinoda/index/export/obsidian/`), next to `ui --export`'s file. It indexes a git work tree on first
+   use, as the other reading commands do (`_need_graph`).
+2. **One model, four writers** (`verinoda/graph_export.py`). `build()` reads the graph through `index.load`,
+   so edges keep their true direction, parallel edges stay separate and receiver-call edges are included.
+   It returns nodes (`id`, `label`, `kind`, `file`, `line`) and edges (`relation`, `confidence`, `at` =
+   `file:line`, `status`, `derived_by` for Verinoda's own resolvers), sorted so that the same graph gives
+   the same file.
+3. **Evidence and status on every edge.** `status` is the ceiling an unchecked edge can carry:
+   `strong_inference` for EXTRACTED, `weak_inference` for INFERRED or AMBIGUOUS, and `unknown` when the
+   edge has no line: `at` may then still name the file (a `.csproj` reference), but a file alone is no
+   line-level evidence. Nothing in an export is ever `verified`, because the call-site line is not read.
+   The note saying so is in every format: the GraphML graph attribute `note`, a Cypher comment, the vault's
+   index note and the SVG `<desc>`. It points to `verinoda analyze` for a checked relation.
+4. **Freshness is stated, not assumed.** Nodes and edges in a file changed since the index carry
+   `stale: true`, and so does every edge into or out of such a file (its other end may be gone), not only
+   the edges read in it. The result lists `stale_files`. When the check cannot run, the result says
+   `index_freshness: not checked: <why>`. The snapshot's commit and dirty flag go into the file header;
+   without a snapshot neither is written (no `dirty=false` for a tree nobody checked).
+5. **Nothing leaves the machine.** Each format is a local file or folder. Machine paths are removed with
+   `ui/export._scrubber` (ids included; two ids that end up equal are numbered). No code is written into
+   the export, only names, relative paths and line numbers.
+6. **GraphML is written by hand.** It is directed, has one `<edge id="eN">` per parallel edge and declares
+   typed keys. `networkx.write_graphml` took about 14 s on Verinoda's own graph; this writer takes 3.6 to 4.3 s.
+   Text goes through the upstream `_strip_xml_illegal` and XML escaping. A lone surrogate (a name read
+   from a mis-encoded file) becomes U+FFFD in the model, and every file is written with
+   `errors="replace"`, so one such character cannot stop an export.
+7. **Cypher can be imported again.** The file creates an index on `:Verinoda(id)` and MERGEs each node on
+   its id, adding a kind label. Each edge is MERGEd on its relation, `at` and confidence, so a second import
+   of the same export adds nothing, while two calls from different lines, or an EXTRACTED and an INFERRED
+   edge on one line, stay two edges. Edges alike in all of these are one relationship (none on Verinoda's
+   own graph). Values are escaped with the
+   upstream `_cypher_escape`, and labels and relationship types are allowlisted with `_cypher_label`.
+8. **The vault has one note per source file**, not one per node: Verinoda's own graph has 31k nodes and
+   1,260 files. Each note has YAML front matter (file, kind, commit, `stale`), its symbols with their
+   lines, and "Links out" / "Links in" to other files' notes. Each link line shows the two symbols, `at`,
+   confidence and status. Edges inside the same file are counted, not listed. A section lists at most 200
+   links and gives the count of the rest. Links are written as `[[path/file.py.md|path/file.py]]`: the
+   note is named after the source file, and a link to `file.py` would look for that file itself.
+   Characters that are illegal in Windows names or Obsidian links are replaced, `..` parts are dropped, a
+   leading dot becomes `_` (Obsidian hides dotfiles; `a/.b.py` -> `a/_b.py`, so it does not take
+   `a/b.py`'s name), and names that end up alike (compared case-insensitively) are numbered. An index note lists every file.
+9. **The vault writes only into a folder it owns.** A new or empty folder is fine, and so is one whose
+   `.verinoda-export.json` manifest shows an earlier export wrote it. On a rewrite, the notes that manifest
+   names and that are no longer produced are removed, and the user's own files are left alone; a name that
+   changed only in case is not removed when the disk folds case (it is the note just written, compared by
+   device and inode). The manifest is written first, naming the old and the planned notes, and again at the
+   end, so a write cut off halfway leaves a folder the next export still owns. A non-empty folder without a
+   manifest is refused (`ValueError`, exit 2) before anything is written. The single-file formats likewise
+   refuse an existing `--out` file whose head does not carry the export's marker (`verinoda-graph` or
+   `Verinoda graph export`; the SVG carries `<metadata>verinoda-graph</metadata>`).
+10. **The SVG is drawn without matplotlib.** It is a file-level graph of the 300 most linked files. Its
+    layout is a seeded networkx spring layout (numpy is already a dependency). A link is dashed when every
+    edge behind it is inferred, and a `<title>` tooltip gives each file's path. There is a light/dark style.
+    `truncated: true` and `files_total` say when files were left out.
+11. **No MCP tool.** The export writes files for other programs. An agent already reads the same graph
+    through `node_inspect`, `relation_trace` and `map_view`, and a writing tool behind `run_tool` would add
+    a side effect for no answer. The core profile stays at five tools.
+
+### 48.2 Measured
+
+Load 2.0 s, freshness 0.3 s and model 4.1 s (about half of it path scrubbing) come first in every run.
+Total per format including the model: GraphML 8.0 s, Cypher 11.0 s, Obsidian 12.7 s (1,260 notes, each
+written atomically), SVG 5.3 s (300 of 1,260 files). Status mix: strong_inference 70,144, weak_inference
+4,397, unknown 12 (`.csproj` references with a file and no line). `networkx.read_graphml` reads the GraphML back as a MultiDiGraph with the same node and
+edge counts.
+
+### 48.3 Not done
+
+- No call-site grading per edge: the status is a ceiling, not a verdict, and the note says so.
+  Grading 75k edges the way `analyze` does would take minutes.
+- Only these four formats. Communities (Graphify's `community` attribute) are not exported, because
+  Verinoda does not answer from them. Obsidian Canvas is not written.
+- The Cypher file is statements for `cypher-shell`. It has no Bolt push (`index export neo4j --push`
+  still exists upstream and needs the `neo4j` extra and the network).
+- The vault does not remove notes if the manifest is deleted by hand. The next export into that folder is
+  then refused as a foreign folder.
+- `verinoda export` in a git repository with no code files ends in a traceback from the shared first-use
+  indexing (`_need_graph` -> `_auto_index`); `verinoda map` does the same. Not changed here: it is the
+  shared path of every reading command.
+- The SVG is a picture of at most 300 files. For the whole graph, `verinoda ui --export` stays the
+  interactive one-file view.
+
+### 48.4 Tests
+
+- test_graphml_is_the_directed_graph_with_every_parallel_edge
+- test_every_edge_carries_its_evidence_and_an_unchecked_status
+- test_files_changed_since_the_index_are_marked_stale
+- test_no_path_of_this_machine_is_in_the_export (all four formats, vault note paths included)
+- test_cypher_merges_so_a_second_import_adds_nothing
+- test_cypher_keeps_an_extracted_and_an_inferred_edge_on_one_line_apart
+- test_graphml_claims_no_clean_tree_without_a_snapshot
+- test_a_lone_surrogate_does_not_stop_the_export
+- test_a_file_export_does_not_overwrite_a_file_it_did_not_write
+- test_cypher_and_graphml_escape_hostile_text
+- test_the_vault_has_a_note_per_file_and_every_link_opens_one
+- test_the_vault_is_written_only_into_a_folder_it_owns
+- test_a_note_renamed_only_in_case_survives_the_rewrite
+- test_a_vault_write_cut_off_halfway_can_be_written_again
+- test_note_names_stay_inside_the_vault_and_apart
+- test_svg_draws_the_most_linked_files_and_says_when_it_left_some_out
+- test_cli_writes_beside_the_index_and_reports_json
+
+Also run: `tests/test_docs.py` (README command table, ARCHITECTURE module list), `tests/test_cli.py` and
+`tests/test_ui.py` (the shared scrubber).
+
 ## Sources
 
 - **Retrieval:**
