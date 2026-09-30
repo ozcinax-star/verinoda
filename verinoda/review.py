@@ -4775,6 +4775,13 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     note = _graph_note(ctx, cited, changes)
     unknown += _graph_unknown(note)
     read_first, budget = _read_first(ctx, changes, dependents, shown, max_chars)
+    from verinoda import decision_reach
+
+    reach = decision_reach.reached(repo, changes, diffs)
+    if reach.get("error"):
+        unknown.append({"kind": "decision_records", "at": None, "what": "which decision records the change reaches",
+                        "why": reach["error"], "next_step": "fix the decisions folder setting or the record, then "
+                                                            "run `verinoda decide check`"})
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
     res = {
         "review_id": None,
@@ -4799,6 +4806,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "unknown": unknown,
         "read_first": read_first,
         "budget": budget,
+        "decisions": reach,
         "coverage": {"method": "changed definitions from symbol facts of both versions; dependents over the last "
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
                                "(verinoda/review_rules.py)", "limits": list(LIMITS),
@@ -5251,10 +5259,13 @@ def _summary(res: dict) -> str:
              f"{res['base']['ref']} ({res['base']['commit'][:10]})")
     others = [f["file"] for f in res.get("files") or [] if f.get("kind") in ("data", "doc")]
     named = f" ({', '.join(others[:3])}{', ...' if len(others) > 3 else ''})" if others else ""
+    recs = (res.get("decisions") or {}).get("records") or []
+    to_read = (f" {len(recs)} decision record(s) to read: " + ", ".join(r["decision"] for r in recs[:5])
+               + (" ..." if len(recs) > 5 else "") + ".") if recs else ""
     if not ch:
         return (f"Review of {where}: no changed definition (comments, whitespace and docstrings are not changes)."
                 + (f" {len(others)} data or documentation file(s) changed{named}, not reviewed by concern."
-                   if others else ""))
+                   if others else "") + to_read)
     kinds: dict[str, int] = {}
     for c in ch:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
@@ -5271,6 +5282,8 @@ def _summary(res: dict) -> str:
         parts.append(f"{len(res['unknown'])} unknown(s) to report.")
     if others:
         parts.append(f"{len(others)} data or documentation file(s) changed too{named}, not reviewed by concern.")
+    if to_read:
+        parts.append(to_read.strip())
     return " ".join(parts)
 
 
@@ -5389,6 +5402,9 @@ def render_text(res: dict) -> str:
         out.append(f"Dependents (possibly affected): {res['dependents_total']}"
                    + (f", {len(res['dependents'])} listed" if res.get("dependents_truncated") else "") + ": "
                    + ", ".join(f"{d['symbol'].split('::')[-1]} ({d['distance']})" for d in res["dependents"][:8]))
+    from verinoda import decision_reach
+
+    out += decision_reach.render_lines(res.get("decisions") or {})
     if res.get("read_first"):
         b = res["budget"]
         out.append("")
