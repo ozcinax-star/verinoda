@@ -65,7 +65,8 @@ def block(project: Path, hook: str, command: list[str] | None = None) -> str:
     cmd = command or [sys.executable, "-m", "verinoda", "update", str(project)]
     run = " ".join(_q(c) for c in cmd)
     key = str(Path(project).resolve()).replace("\\", "/")
-    body = f'( {run} >/dev/null 2>&1 & )'
+    # git sets GIT_DIR, GIT_INDEX_FILE and the like for its hooks; the update's own git calls must not inherit them
+    body = f'( unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_COMMON_DIR; {run} >/dev/null 2>&1 & )'
     if hook == "post-checkout":   # $3 = 1: a branch checkout; 0: files checked out, nothing to re-index
         body = f'if [ "$3" = "1" ]; then {body}; fi'
     return (f"{BEGIN} {key}\n"
