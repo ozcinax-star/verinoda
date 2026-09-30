@@ -1673,3 +1673,97 @@ def test_a_config_record_default_lists_the_readers_of_the_changed_component(mod)
     [f] = _by(_review(mod), "config", "config-default-changed")
     assert "src/main/java/com/ex/net/Net.java:7" in f["evidence_at"]
     assert "src/main/java/com/ex/net/Net.java:11" not in f["evidence_at"]
+
+
+# -- public API verdicts: breaking, compatible or unknown, with the call sites a change breaks ---------------
+
+def _api(res: dict) -> dict[str, dict]:
+    return {a["symbol"]: a for a in res["api_changes"]}
+
+
+def test_a_required_parameter_is_a_breaking_change_with_the_call_sites_it_breaks(tmp_path):
+    repo = _project(tmp_path, "api", PKG_FILES)
+    _edit(repo, "pkg/rules.py", "def validate(value):", "def validate(value, strict):")
+    res = _review(repo)
+    a = _api(res)["pkg/rules.py::validate"]
+    assert a["verdict"] == "breaking" and a["status"] == "statically_verified" and a["at"] == "pkg/rules.py:1"
+    assert {b["at"] for b in a["breaks"]} == {"pkg/use_from.py:5", "pkg/use_frommod.py:5", "pkg/use_import.py:5",
+                                              "pkg/use_alias.py:5"}
+    assert res["counts"]["api_breaking"] == 1
+    assert "Public API: 1 change(s) - 1 breaking." in res["summary"]
+    text = rv.render_text(res)
+    assert "[breaking, statically_verified] pkg/rules.py::validate" in text and "breaks pkg/use_from.py:5" in text
+
+
+def test_a_parameter_with_a_default_is_a_compatible_change(tmp_path):
+    repo = _project(tmp_path, "api", PKG_FILES)
+    _edit(repo, "pkg/rules.py", "def validate(value):", "def validate(value, strict=False, *, mode=None):")
+    a = _api(_review(repo))["pkg/rules.py::validate"]
+    assert a["verdict"] == "compatible" and a["status"] == "strong_inference" and a["breaks"] == []
+    assert "syntax trees" in a["basis"]
+
+
+def test_a_renamed_parameter_breaks_keyword_callers_outside_the_tree(tmp_path):
+    repo = _project(tmp_path, "api", PKG_FILES)
+    _edit(repo, "pkg/rules.py", "def validate(value):\n    return value\n", "def validate(data):\n    return data\n")
+    a = _api(_review(repo))["pkg/rules.py::validate"]
+    assert a["verdict"] == "breaking" and a["status"] == "strong_inference" and a["breaks"] == []
+    assert "parameter 1 was value, is now data" in a["reasons"]
+    assert any("callers outside it" in r for r in a["reasons"])
+
+
+def test_removed_and_added_public_names_and_private_ones_left_out(tmp_path):
+    files = {**PKG_FILES, "pkg/extra.py": "def lonely(x):\n    return x\n\n\ndef _hidden(x):\n    return x\n"}
+    repo = _project(tmp_path, "api", files)
+    _edit(repo, "pkg/rules.py", "def validate(value):\n    return value\n\n\n", "")
+    _edit(repo, "pkg/extra.py", "def lonely(x):\n    return x\n\n\n", "def fresh(x):\n    return x\n\n\n")
+    _edit(repo, "pkg/extra.py", "def _hidden(x):", "def _hidden(x, y):")
+    got = _api(_review(repo))
+    assert "pkg/extra.py::_hidden" not in got
+    rm = got["pkg/rules.py::validate"]
+    assert rm["verdict"] == "breaking" and rm["status"] == "statically_verified" and rm["at"] == "pkg/rules.py:1"
+    assert {"pkg/use_from.py:1", "pkg/use_alias.py:5"} <= {b["at"] for b in rm["breaks"]}
+    lonely = got["pkg/extra.py::lonely"]
+    assert lonely["verdict"] == "breaking" and lonely["breaks"] == [] and lonely["status"] == "strong_inference"
+    assert got["pkg/extra.py::fresh"]["verdict"] == "compatible"
+    assert [a["verdict"] for a in _review(repo)["api_changes"]] == ["breaking", "breaking", "compatible"]
+
+
+def test_python_parameter_shapes_compared():
+    def shape(src: str) -> dict:
+        return rr.py_params(ast.parse(src).body[0])
+
+    def breaks(old: str, new: str, bound: bool = False) -> list[str]:
+        return rv._py_shape_breaks(shape(old), shape(new), bound)
+
+    assert breaks("def f(a, b=1): pass", "def f(a, b=1, c=2, *args, **kw): pass") == []
+    assert breaks("def f(self, a): pass", "def f(self, a, b=None): pass", bound=True) == []
+    assert breaks("def f(a, b): pass", "def f(a): pass") == ["positional parameter b removed"]
+    assert breaks("def f(a, b): pass", "def f(b, a): pass") == ["parameter 1 was a, is now b",
+                                                               "parameter 2 was b, is now a"]
+    assert breaks("def f(a): pass", "def f(a, /): pass") == ["parameter(s) made positional-only: a"]
+    assert breaks("def f(a, **kw): pass", "def f(a): pass") == ["**kwargs removed"]
+    assert breaks("def f(a, *, k=1): pass", "def f(a, *, k): pass") == ["required keyword parameter(s) added: k"]
+    assert breaks("def f(a, *, k=1): pass", "def f(a, k=1): pass") == []
+    assert breaks("def f(*args): pass", "def f(a, *args): pass") == ["required parameter(s) added: a",
+                                                                   "parameter(s) added before *args: a"]
+
+
+def test_java_verdicts_from_parameter_counts(jvm):
+    _edit(jvm, "src/main/java/com/ex/core/Forge.java", "    public static int stoke(Object pos, int amount) {",
+          "    public static int stoke(Object pos, int amount, boolean natural) {")
+    _edit(jvm, "src/main/java/com/ex/core/Forge.java", "    public boolean stillValid(Object player) {",
+          "    public boolean stillValid(String player) {")
+    got = _api(_review(jvm))
+    st = got["src/main/java/com/ex/core/Forge.java::Forge.stoke"]
+    assert st["verdict"] == "breaking" and st["status"] == "strong_inference"
+    assert {b["at"] for b in st["breaks"]} == {"src/main/java/com/ex/net/Network.java:17",
+                                               "src/main/java/com/ex/core/ForgeBlock.java:9"}
+    sv = got["src/main/java/com/ex/core/Forge.java::Forge.stillValid"]
+    assert sv["verdict"] == "unknown" and sv["status"] == "unknown" and "not compared" in sv["reasons"][0]
+
+
+def test_the_api_verdicts_follow_the_public_api_concern(tmp_path):
+    repo = _project(tmp_path, "api", PKG_FILES)
+    _edit(repo, "pkg/rules.py", "def validate(value):", "def validate(value, strict):")
+    assert _review(repo, concerns=["security"])["api_changes"] == []
