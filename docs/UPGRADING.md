@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D91)
+## Upgrading from 0.3.2 (D60-D92)
 
 ### D63: Running a project's own tests safely
 
@@ -359,6 +359,13 @@ the skills that name it.
 changes x cyclomatic complexity. `verinoda review` orders `read_first` within each kind by the same score and adds
 `hotspot` to each range it could score; the kinds keep their order. No MCP tool was added: the tool count in
 UPGRADING does not change.
+
+### D92: Temporal coupling
+
+`map --view impact` (and the MCP `map_view` impact) now also lists `history_coupled`: files that changed together
+with the change in the last 1,000 commits and that no graph edge links to it, each a `strong_inference` claim with
+its commit count and the shared commits as evidence; `history_coupling` says how many commits were read. No new
+command or MCP tool; the tool counts in UPGRADING do not change.
 
 ### D60-D62
 

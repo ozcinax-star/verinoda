@@ -6845,6 +6845,84 @@ holding the call, not the one before it; `map --view hotspots --json`
 from the CLI; `review` reading the hotter changed function first although it comes later in the file; the Python
 bound never below the complexity on Verinoda's own sources; a file whose bound cannot reach the top not measured.
 
+## 65. Temporal coupling (D92, 2026-09-30)
+
+### 65.1 Why
+
+Impact follows graph edges only. Files that always change with a file but share no edge with it (a config file,
+a document, a sibling module wired by a registry or by name) were invisible. Git already knows which files
+change together; impact now lists those as `strong_inference` claims with their commit counts.
+
+### 65.2 Decisions
+
+- **Part of impact, not a new command or MCP tool.** `map --view impact` (CLI, `--json`), the MCP `map_view`
+  impact (behind `run_tool`) and every other caller of `architecture_map.impact` get two new keys:
+  `history_coupled` (the claims) and `history_coupling` (`is_git`, `commits_read`, `bulk_skipped`, `method`,
+  `limits`, and `truncated` when the list was cut, `shallow` for a shallow clone, `error` when git log failed).
+  The core MCP profile and its menu are unchanged. `impact(..., co_change=False)` leaves them out; `analyze`'s
+  impact answer and the review benchmark pass it, since they do not use the reading (it costs one git log of up
+  to 1,000 commits, about 0.5-0.8 s here).
+- **The reading** is `history.co_changes(repo, files, linked=, skip=)`: one `git log --no-merges --name-only`
+  over the last 1,000 commits of HEAD (with `--relative` and `-- .` when the project is a folder of its
+  repository, as the other history searches; no renames, no external diff). A commit that changed more than 30
+  files (a reformat, a mass rename) is left out and counted in `bulk_skipped`.
+- **Threshold.** A file is coupled to a target file when it changed in at least 3 of the commits that changed
+  the target and in at least 30% of them (CodeScene's defaults are similar: minimum shared revisions and a 30%
+  degree). A file coupled to several targets is listed once, with its strongest target. Sorted by shared
+  commits, then degree; 20 listed.
+- **"Without a static edge".** Left out: the targets themselves; any file a graph edge of any relation joins to
+  a target file in either direction (not only the relations the impact walk follows: a re-export, an
+  implementation, an indirect call or an include also count, so the sentence "no graph edge links the two
+  files" is true of the graph); every file the impact walk already lists (`affected_files`); files missing
+  from the working tree (deleted or moved away).
+- **Target files** are the files of the resolved targets (a symbol target reads its file) plus any target that
+  is a file of the working tree without a graph node (a TOML or text file). Such a file target is listed in
+  `history_only_targets` ("files without a graph node, read in git history only"), not in `unresolved`, so
+  `map --view impact --target notes.cfg` exits 0; with `co_change=False`, or when the file changed since the
+  index (its graph may just lack it), it stays unresolved as before. An unresolved name reads nothing.
+- **Claim shape**: `kind: temporal_coupling`, `status: strong_inference` (a pattern in the history, never
+  `verified`), `file`, `coupled_to`, `commits`, `target_commits`, `degree`, a sentence ("c.py changed in 4 of
+  the 7 commits that changed a.py (last 10 commits read); no graph edge links the two files"),
+  `uncertainties`, `subjects`, and `evidence`: the newest three shared commits as `git_history` evidence
+  naming both files (`commit <sha> a.py and c.py`, `meta.files` the pair, the subject quoted).
+- **Failures are said.** A shallow clone adds `shallow: true` and a limit, and the text says "a shallow clone,
+  only N commits to read"; a git log that fails (timeout, unreadable repository) gives `error` and "not read",
+  never an empty list that looks like "nothing changes with this file".
+- **Text output** (`map --view impact`): a block "changed together in git, no graph edge (N; last M commits)"
+  with one `[strong_inference] file: n of m commits of target` line per file, capped.
+
+### 65.3 Measured
+
+On this repository (380 commits reachable from the branch, 6 over 30 files): one `git log` read took 0.5-0.8 s.
+`verinoda/architecture_map.py` + `verinoda/deadcode.py` without graph filtering: 9 coupled files, the top one
+`verinoda/analysis.py` (8 of 16 commits); `verinoda/review.py`: `tests/test_review.py` (8 of 17) and
+`verinoda/cli.py` (6 of 17). With the graph, files that import or are imported by the target drop out. Not
+measured: precision against a labelled set (none exists), the time on a repository with a long history
+(bounded by the 1,000-commit read).
+
+### 65.4 Not done
+
+- File level only: functions that change together are not told apart (the row also names functions; a
+  function-level version needs the diff hunks mapped to symbols, as 4.7 will).
+- No rename detection: a moved file's older history is not joined to it.
+- Only the history reachable from HEAD, merges left out; a shallow clone reads what it has (and says so).
+- `review`, the UI's impact and `analyze` impact answers do not show coupled files yet (`analyze` does not read
+  them at all).
+- Thresholds are constants in `verinoda/history.py`, not options.
+
+### 65.5 Tests
+
+`tests/test_temporal_coupling.py`: a git fixture where a.py imports x.py and b.py imports a.py; c.py, cfg.toml
+and a later-deleted old.py change with a.py three times; three 33-file reformats change a.py with d.py; e.py
+shares two commits. Checked: the counts and bulk skip of `co_changes`; impact lists only c.py and cfg.toml
+(b.py is a dependent, x.py imported, old.py gone, d.py only in bulk commits, e.py below 3) as
+`strong_inference` with the commit counts, degree, sentence and three `git_history` evidence items naming both
+files, newest first; `co_change=False`; a symbol target and a plain TOML target (not unresolved, CLI exit 0,
+"read in git history only"); a TypeScript pair joined only by `re_exports` stays off the list; a `--depth 2`
+clone reports `shallow` and its limit; a failing git log gives `error`; `analyze` calls impact with
+`co_change=False`; the text renderer; `map --view impact --json` through the CLI; a project without git. The existing impact tests (`test_architecture_map`,
+`test_exact_and_fresh`, `test_gametests`, `test_jvm_callbacks`, `test_mcp`, `test_cli`) pass unchanged.
+
 ## Sources
 
 - **Retrieval:**
