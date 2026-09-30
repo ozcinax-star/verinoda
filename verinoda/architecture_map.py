@@ -6,7 +6,8 @@ a scanner did not observe are never invented; heuristics are labelled.
 
 Views: hierarchy, dependencies (calls/imports), dataflow (entry -> persistence),
 config (env vars and config files), tests (test -> behaviour), history (git +
-decision records), impact (reverse dependencies of a change).
+decision records), impact (reverse dependencies of a change), dead (code no entry point
+reaches, :mod:`verinoda.deadcode`).
 """
 
 from __future__ import annotations
@@ -907,9 +908,15 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
     }
 
 
+def dead(g: Graph) -> dict:
+    from verinoda import deadcode
+
+    return deadcode.dead_code(g)
+
+
 VIEWS = {
     "hierarchy": hierarchy, "dependencies": dependencies, "dataflow": dataflow,
-    "config": config, "tests": tests_view, "history": history,
+    "config": config, "tests": tests_view, "history": history, "dead": dead,
 }
 
 
