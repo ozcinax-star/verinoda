@@ -871,7 +871,7 @@ def cmd_export(args) -> int:
         print(f"error: cannot write {args.out or graph_export.default_path(repo, args.format)}: {exc}",
               file=sys.stderr)
         return 2
-    except ValueError as exc:  # a folder the vault may not be written into
+    except ValueError as exc:  # a file or folder an earlier export did not write: refused
         print(f"error: {exc}", file=sys.stderr)
         return 2
     _emit(args, res, lambda r: print(graph_export.render(r)))

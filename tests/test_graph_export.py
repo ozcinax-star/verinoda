@@ -86,12 +86,12 @@ def test_every_edge_carries_its_evidence_and_an_unchecked_status(model):
     assert model["edges"]
     for e in model["edges"]:
         assert e["status"] in STATUSES  # never verified: nothing was checked
-        if e.get("at"):
-            assert re.fullmatch(r"[^:]+(:\d+)?", e["at"]), e
+        if e.get("at") and re.fullmatch(r"[^:]+:\d+", e["at"]):
             assert e["status"] == ("strong_inference" if e["confidence"] == "EXTRACTED" else "weak_inference")
         else:
-            assert e["status"] == "unknown"
+            assert e["status"] == "unknown", e
     assert graph_export.edge_status("EXTRACTED", None) == "unknown"
+    assert graph_export.edge_status("EXTRACTED", "app.csproj") == "unknown"  # a file alone is no line
     assert graph_export.edge_status("INFERRED", "a.py:3") == "weak_inference"
     assert graph_export.edge_status("AMBIGUOUS", "a.py:3") == "weak_inference"
 
@@ -100,18 +100,25 @@ def test_files_changed_since_the_index_are_marked_stale(repo, g):
     m = graph_export.build(repo, g, fresh={"checked": True, "count": 1, "files": ["orders/pricing.py"]})
     stale_nodes = {n["id"] for n in m["nodes"] if n.get("stale")}
     assert stale_nodes and all(n["file"] == "orders/pricing.py" for n in m["nodes"] if n.get("stale"))
-    assert all(e["at"].startswith("orders/pricing.py") for e in m["edges"] if e.get("stale"))
+    files = {n["id"]: n.get("file") for n in m["nodes"]}
+    into = [e for e in m["edges"] if files.get(e["target"]) == "orders/pricing.py"
+            and not (e.get("at") or "").startswith("orders/pricing.py")]
+    assert into and all(e.get("stale") for e in into)  # its target may be gone: not current either
+    assert all("orders/pricing.py" in (e.get("at") or "", files.get(e["source"]), files.get(e["target"]))
+               for e in m["edges"] if e.get("stale"))
     assert m["stale_files"] == ["orders/pricing.py"]
     unchecked = graph_export.build(repo, g, fresh={"checked": False, "why": "no snapshot yet", "files": []})
     assert unchecked["index_freshness"] == "not checked: no snapshot yet"  # never claimed current
 
 
 def test_no_path_of_this_machine_is_in_the_export(repo, g, tmp_path):
-    for fmt in ("graphml", "cypher"):
-        text = Path(graph_export.write(repo, fmt, tmp_path / f"x.{fmt}", g=g, fresh=FRESH)["path"]).read_text(
-            encoding="utf-8")
-        for form in {str(repo), repo.as_posix()}:
-            assert form.lower() not in text.lower(), fmt
+    forms = {str(repo), repo.as_posix(), str(Path.home()), Path.home().as_posix()}
+    for fmt in graph_export.FORMATS:
+        out = Path(graph_export.write(repo, fmt, tmp_path / f"x.{fmt}", g=g, fresh=FRESH)["path"])
+        for f in (out.rglob("*") if out.is_dir() else [out]):
+            if f.is_file():
+                text = (f.relative_to(tmp_path).as_posix() + "\n" + f.read_text(encoding="utf-8")).lower()
+                assert not any(form.lower() in text for form in forms), (fmt, f)
 
 
 def test_cypher_merges_so_a_second_import_adds_nothing(model):
@@ -123,6 +130,42 @@ def test_cypher_merges_so_a_second_import_adds_nothing(model):
     assert len(merges) == len(model["nodes"])
     assert len(rels) == len(model["edges"]) and all(" MERGE (a)-[r:" in s and "{at: '" in s for s in rels)
     assert not any("CREATE (" in s for s in stmts)
+
+
+def test_cypher_keeps_an_extracted_and_an_inferred_edge_on_one_line_apart():
+    edge = {"source": "a", "target": "b", "relation": "calls", "status": "strong_inference", "at": "a.py:3"}
+    model = {"project": "p", "note": "n", "stale_files": [], "nodes": [],
+             "edges": [{**edge, "confidence": "EXTRACTED"}, {**edge, "confidence": "INFERRED"}]}
+    merges = [ln[ln.index("MERGE"):ln.index("SET")] for ln in graph_export.to_cypher(model).splitlines()
+              if ln.startswith("MATCH")]
+    assert len(set(merges)) == 2 and "confidence: 'INFERRED'" in merges[1]
+
+
+def test_graphml_claims_no_clean_tree_without_a_snapshot():
+    model = {"format": "verinoda-graph", "project": "p", "nodes": [], "edges": [], "note": "n", "stale_files": []}
+    text = graph_export.to_graphml(model)
+    assert 'key="g_dirty">' not in text and 'key="g_commit">' not in text
+    assert '<data key="g_dirty">true</data>' in graph_export.to_graphml({**model, "commit": "c", "dirty": True})
+
+
+def test_a_lone_surrogate_does_not_stop_the_export(tmp_path):
+    model = {"project": "p", "note": "n", "stale_files": [],
+             "nodes": [{"id": "a", "label": "x\udcff", "kind": "callable", "file": "a\udcff.py"}], "edges": []}
+    for name, text in (("g.graphml", graph_export.to_graphml(model)), ("g.cypher", graph_export.to_cypher(model))):
+        graph_export._atomic_text(tmp_path / name, text)
+        assert "x" in (tmp_path / name).read_text(encoding="utf-8")
+
+
+def test_a_file_export_does_not_overwrite_a_file_it_did_not_write(repo, g, tmp_path):
+    victim = tmp_path / "victim.py"
+    victim.write_text("print('mine')\n", encoding="utf-8")
+    for fmt in ("graphml", "cypher", "svg"):
+        with pytest.raises(ValueError, match="not written by"):
+            graph_export.write(repo, fmt, victim, g=g, fresh=FRESH)
+        assert victim.read_text(encoding="utf-8") == "print('mine')\n"
+        out = tmp_path / f"again.{fmt}"
+        graph_export.write(repo, fmt, out, g=g, fresh=FRESH)
+        graph_export.write(repo, fmt, out, g=g, fresh=FRESH)  # its own earlier export is replaced
 
 
 def test_cypher_and_graphml_escape_hostile_text():
@@ -180,11 +223,43 @@ def test_the_vault_is_written_only_into_a_folder_it_owns(repo, g, tmp_path):
     assert not (vault / "gone/old.py.md").exists() and (vault / "own.md").read_text(encoding="utf-8")
 
 
+def test_a_note_renamed_only_in_case_survives_the_rewrite(tmp_path):
+    v = tmp_path / "v"
+    graph_export._write_vault(v, {graph_export.INDEX_NOTE: "i", "pkg/Foo.py.md": "old"})
+    graph_export._write_vault(v, {graph_export.INDEX_NOTE: "i", "pkg/foo.py.md": "new"})
+    notes = list((v / "pkg").iterdir())
+    assert len(notes) == 1 and notes[0].read_text(encoding="utf-8") == "new"
+    assert json.loads((v / graph_export.MANIFEST).read_text(encoding="utf-8"))["notes"] == [
+        graph_export.INDEX_NOTE, "pkg/foo.py.md"]
+
+
+def test_a_vault_write_cut_off_halfway_can_be_written_again(tmp_path, monkeypatch):
+    v = tmp_path / "v"
+    real = graph_export._atomic_text
+    calls = []
+
+    def flaky(path, text):
+        calls.append(path)
+        if len(calls) == 3:  # the manifest, one note, then the disk is full
+            raise OSError("disk full")
+        real(path, text)
+
+    notes = {graph_export.INDEX_NOTE: "i", "a.py.md": "a", "b.py.md": "b"}
+    monkeypatch.setattr(graph_export, "_atomic_text", flaky)
+    with pytest.raises(OSError):
+        graph_export._write_vault(v, notes)
+    monkeypatch.setattr(graph_export, "_atomic_text", real)
+    graph_export._write_vault(v, notes)  # the folder is still the export's own
+    assert sorted(p.name for p in v.iterdir()) == sorted([graph_export.MANIFEST, *notes])
+
+
 def test_note_names_stay_inside_the_vault_and_apart():
     names = graph_export._note_names(["../../etc/passwd", "a/b:c?.py", "A/B_C_.py", "x/[y]#z.md"])
     assert names["../../etc/passwd"] == "etc/passwd"
     assert names["a/b:c?.py"] != names["A/B_C_.py"]  # alike once cleaned (and on a case-folding disk): numbered
     assert names["x/[y]#z.md"] == "x/_y__z.md"
+    dot = graph_export._note_names(["a/.b.py", "a/b.py", ".github/ci.yml"])
+    assert dot == {"a/.b.py": "a/_b.py", "a/b.py": "a/b.py", ".github/ci.yml": "_github/ci.yml"}
 
 
 def test_svg_draws_the_most_linked_files_and_says_when_it_left_some_out(repo, g, tmp_path, monkeypatch):

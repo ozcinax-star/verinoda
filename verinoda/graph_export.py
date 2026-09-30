@@ -5,9 +5,10 @@ direction, parallel edges kept), not Graphify's undirected build graph that `ver
 writes. Every edge carries what a claim about it would rest on: its relation, the extractor's
 ``confidence``, the ``file:line`` it was read at and a ``status`` - ``strong_inference`` for an
 EXTRACTED edge, ``weak_inference`` for an INFERRED or AMBIGUOUS one, ``unknown`` for one with no
-location. That is the ceiling of an edge nobody has checked (the call-site line is not read here;
-`verinoda analyze` does that): graph edges are extractions, never verification. A node or edge whose
-file changed since the index is marked ``stale``.
+line (a file alone is no line-level evidence). That is the ceiling of an edge nobody has checked
+(the call-site line is not read here; `verinoda analyze` does that): graph edges are extractions,
+never verification. A node whose file changed since the index is marked ``stale``, and so is an
+edge with an end or its location in such a file.
 
 The machine's own paths are taken out of every text (as `verinoda ui --export` does), so the file can
 be passed on; the code itself is not in it. Nothing is sent anywhere: each format is a local file (a
@@ -29,13 +30,16 @@ DEFAULT_NAMES = {"graphml": "graph.graphml", "cypher": "graph.cypher", "obsidian
 FORMAT = "verinoda-graph"
 VERSION = 1
 NOTE = ("edges are extractor output, not verified: status is the ceiling without reading the call site "
-        "(strong_inference for EXTRACTED, weak_inference for INFERRED or AMBIGUOUS, unknown without a location); "
+        "(strong_inference for EXTRACTED, weak_inference for INFERRED or AMBIGUOUS, unknown without a line); "
         "`verinoda analyze` checks a relation against its line")
 MANIFEST = ".verinoda-export.json"
 INDEX_NOTE = "_Verinoda export.md"
 NOTE_SECTION_CAP = 200      # links listed per section of a vault note; the rest are counted
 SVG_MAX_FILES = 300         # files drawn in the SVG (most linked first); a spring layout of more is unreadable
 _NOTE_UNSAFE = re.compile(r'[<>:"|?*#^\[\]\\\x00-\x1f]')  # not in a Windows file name or an Obsidian link
+_LINE_AT = re.compile(r":\d+$")
+_SURROGATE = re.compile(r"[\ud800-\udfff]")
+_MARKERS = ("verinoda-graph", "Verinoda graph export")  # in the head of every single-file export
 
 
 def default_path(repo: Path | str, fmt: str) -> Path:
@@ -57,6 +61,20 @@ def target_path(repo: Path | str, fmt: str, out: Path | str | None) -> Path:
     return path
 
 
+def _refuse_foreign_file(path: Path) -> None:
+    """A single-file export replaces only a file an earlier export wrote (or nothing)."""
+    if not path.is_file():
+        return
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            head = fh.read(8192)
+    except OSError:
+        return  # the write itself will say why it cannot
+    if not any(m in head for m in _MARKERS):
+        raise ValueError(f"{path} exists and was not written by `verinoda export`; "
+                         "choose another --out (nothing was written)")
+
+
 # -- the model: nodes and edges with their evidence --------------------------------------------
 
 def _kind(g, nid: str) -> str:
@@ -75,8 +93,8 @@ def _kind(g, nid: str) -> str:
 
 
 def edge_status(confidence: str | None, at: str | None) -> str:
-    """The status an unchecked graph edge can carry at most."""
-    if not at:
+    """The status an unchecked graph edge can carry at most: ``unknown`` unless ``at`` names a line."""
+    if not at or not _LINE_AT.search(at):
         return "unknown"
     return "strong_inference" if confidence == "EXTRACTED" else "weak_inference"
 
@@ -106,7 +124,10 @@ def build(repo: Path | str, g=None, *, fresh: dict | None = None) -> dict:
     g = g if g is not None else index.load(repo)
     fresh = fresh if fresh is not None else freshness.check(repo)
     stale = set(fresh.get("files") or ())
-    scrub = _scrubber(repo)
+    scrub_paths = _scrubber(repo)
+
+    def scrub(text: str) -> str:  # a lone surrogate (a name read from a mis-encoded file) cannot be written
+        return _SURROGATE.sub("\ufffd", scrub_paths(text))
 
     ids: dict[str, str] = {}
     taken: set[str] = set()
@@ -132,6 +153,7 @@ def build(repo: Path | str, g=None, *, fresh: dict | None = None) -> dict:
                 n["stale"] = True
         nodes.append(n)
 
+    stale_ids = {nid for nid in g.G.nodes if g.file(nid) in stale}
     edges = []
     for u, v, d in g.edges():
         f, loc = d.get("source_file"), d.get("source_location") or ""
@@ -142,7 +164,7 @@ def build(repo: Path | str, g=None, *, fresh: dict | None = None) -> dict:
             e["at"] = scrub(at)
         if str(d.get("_origin", "")).startswith("verinoda"):
             e["derived_by"] = d["_origin"]
-        if f and f in stale:
+        if (f and f in stale) or u in stale_ids or v in stale_ids:  # an end may be gone or moved
             e["stale"] = True
         edges.append(e)
     edges.sort(key=lambda e: (e["source"], e["target"], e["relation"], e.get("at") or ""))
@@ -160,7 +182,7 @@ def _atomic_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+        with os.fdopen(fd, "w", encoding="utf-8", errors="replace", newline="\n") as fh:
             fh.write(text)
         os.replace(tmp, path)
     except BaseException:
@@ -169,7 +191,7 @@ def _atomic_text(path: Path, text: str) -> None:
 
 
 # GraphML attribute keys per scope: (name, GraphML type). Written by hand rather than through
-# networkx.write_graphml, which took 14 s for Verinoda's own graph (75k edges) against under 2 s here.
+# networkx.write_graphml, which took 14 s for Verinoda's own graph (75k edges) against about 4 s here.
 _GRAPHML_KEYS = {
     "graph": (("format", "string"), ("version", "int"), ("project", "string"), ("commit", "string"),
               ("dirty", "boolean"), ("note", "string")),
@@ -205,7 +227,7 @@ def to_graphml(model: dict) -> str:
     for scope, keys in _GRAPHML_KEYS.items():
         out += [f'  <key id="{scope[0]}_{k}" for="{scope}" attr.name="{k}" attr.type="{t}"/>' for k, t in keys]
     out.append('  <graph id="G" edgedefault="directed">')
-    out += data("graph", {**model, "dirty": bool(model.get("dirty"))}, "    ")
+    out += data("graph", model, "    ")  # no commit or dirty flag without a snapshot: none is claimed
     for n in model["nodes"]:
         out.append(f"    <node id={attr(n['id'])}>")
         out += data("node", n, "      ")
@@ -220,8 +242,8 @@ def to_graphml(model: dict) -> str:
 
 def to_cypher(model: dict) -> str:
     """OpenCypher statements for Neo4j (``cypher-shell < graph.cypher``). Nodes carry the label ``Verinoda``
-    and their kind; MERGE on the id and, for an edge, on its relation and location, so a second import of the
-    same export adds nothing."""
+    and their kind; MERGE on the id and, for an edge, on its relation, location and confidence, so a second
+    import of the same export adds nothing while an EXTRACTED and an INFERRED edge on one line stay two."""
     from verinoda.project_index.export import _cypher_escape as esc
     from verinoda.project_index.export import _cypher_label
 
@@ -246,26 +268,36 @@ def to_cypher(model: dict) -> str:
     lines.append("")
     for e in model["edges"]:
         rel = _cypher_label(e["relation"].upper(), "RELATED")
-        rest = {k: v for k, v in e.items() if k not in ("source", "target", "at")}
+        rest = {k: v for k, v in e.items() if k not in ("source", "target", "at", "confidence")}
+        key = f"at: '{esc(e.get('at') or '')}', confidence: '{esc(e['confidence'])}'"
         lines.append(f"MATCH (a:Verinoda {{id: '{esc(e['source'])}'}}), (b:Verinoda {{id: '{esc(e['target'])}'}}) "
-                     f"MERGE (a)-[r:{rel} {{at: '{esc(e.get('at') or '')}'}}]->(b) SET r += {{{props(rest)}}};")
+                     f"MERGE (a)-[r:{rel} {{{key}}}]->(b) SET r += {{{props(rest)}}};")
     return "\n".join(lines) + "\n"
 
 
 def _note_names(files: list[str]) -> dict[str, str]:
     """A vault note path (without ``.md``) per source file: its relative path, with the characters a Windows
-    file name or an Obsidian link cannot hold replaced; two files that end up alike are numbered."""
+    file name or an Obsidian link cannot hold replaced (a leading dot too: Obsidian hides such a file); two
+    files that end up alike are numbered."""
     out: dict[str, str] = {}
     taken: set[str] = set()
     for f in sorted(files):
         parts = [p for p in PurePosixPath(f.replace("\\", "/")).parts if p not in ("", ".", "..", "/")]
-        name = "/".join(_NOTE_UNSAFE.sub("_", p).strip(" .") or "_" for p in parts) or "_"
+        name = "/".join(_note_part(p) for p in parts) or "_"
         base, k = name, 2
         while name.lower() in taken:
             name, k = f"{base}~{k}", k + 1
         taken.add(name.lower())
         out[f] = name
     return out
+
+
+def _note_part(p: str) -> str:
+    """One path part as a note path part: a leading dot or space becomes ``_`` (``.b.py`` -> ``_b.py``, so
+    it does not take ``b.py``'s name) and a trailing one is dropped (Windows drops it)."""
+    p = _NOTE_UNSAFE.sub("_", p).rstrip(" .")
+    rest = p.lstrip(" .")
+    return ("_" + rest if rest != p else p) or "_"
 
 
 def wikilink(name: str, shown: str) -> str:
@@ -370,17 +402,33 @@ def _write_vault(out: Path, notes: dict[str, str]) -> None:
             raise ValueError(f"{out} is not empty and was not written by `verinoda export`; "
                              "choose another --out (nothing was written)")
     root = out.resolve()
+    for rel in notes:
+        if root not in (out / rel).resolve().parents:  # a note name never leaves the folder
+            raise ValueError(f"note {rel!r} would be written outside {out}")
+
+    def manifest(names) -> None:
+        _atomic_text(man, json.dumps({"format": "verinoda-obsidian", "version": VERSION, "notes": sorted(names)},
+                                     indent=1) + "\n")
+
+    # the manifest first, naming what is there and what is about to be: a write cut off halfway leaves a
+    # folder the next export still owns
+    manifest(set(owned) | set(notes))
+    written = set()
     for rel, text in notes.items():
         p = (out / rel).resolve()
-        if root not in p.parents:  # a note name never leaves the folder
-            raise ValueError(f"note {rel!r} would be written outside {out}")
         _atomic_text(p, text)
+        written.add(_file_key(p))
     for rel in set(owned) - set(notes):
         p = (out / rel).resolve()
-        if root in p.parents and p.is_file() and p.suffix == ".md":
+        # on a case-folding disk an old name that differs only in case is the note just written
+        if root in p.parents and p.is_file() and p.suffix == ".md" and _file_key(p) not in written:
             p.unlink()
-    _atomic_text(man, json.dumps({"format": "verinoda-obsidian", "version": VERSION, "notes": sorted(notes)},
-                                 indent=1) + "\n")
+    manifest(notes)
+
+
+def _file_key(p: Path) -> tuple[int, int]:
+    st = p.stat()
+    return st.st_dev, st.st_ino
 
 
 def to_svg(model: dict) -> tuple[str, dict]:
@@ -425,7 +473,8 @@ def to_svg(model: dict) -> tuple[str, dict]:
              ".n{fill:#3b6fd4;stroke:#fff;stroke-width:.8}text{fill:#222}"
              "@media (prefers-color-scheme:dark){svg{background:#16181d}.l{stroke:#6b7280}.n{stroke:#16181d}"
              "text{fill:#ddd}}</style>",
-             f"<title>{esc(title)}</title>", f'<desc>{esc(NOTE)}</desc>']
+             f"<title>{esc(title)}</title>", f'<desc>{esc(NOTE)}</desc>',
+             f"<metadata>{FORMAT}</metadata>"]
     for (a, b), extracted in sorted(pair.items()):
         if a in kept and b in kept:
             (x1, y1), (x2, y2) = xy(a), xy(b)
@@ -449,6 +498,8 @@ def write(repo: Path | str, fmt: str = "graphml", out: Path | str | None = None,
         raise ValueError(f"unknown format {fmt!r}; choose one of: {', '.join(FORMATS)}")
     repo = Path(repo).resolve()
     path = target_path(repo, fmt, out)
+    if fmt != "obsidian":
+        _refuse_foreign_file(path)
     model = build(repo, g, fresh=fresh)
     res: dict = {"format": fmt, "path": str(path.resolve()), "nodes": len(model["nodes"]),
                  "edges": len(model["edges"]),
