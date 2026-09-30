@@ -4714,6 +4714,1060 @@ Kotlin callers (D69 reads Java only); a Java call to a function tag (`#ns:tag`) 
 advancement rewards and predicates that run a function are not callers; the edge is to the first node of a function
 a datapack copied into two places defines.
 
+## 45. Translation keys in Minecraft lang files (D72, 2026-09-30)
+
+### 45.1 Why
+
+A mod's text is one lang file per locale (`assets/<ns>/lang/<locale>.json`, `.lang` before 1.13), `en_us` the one
+the others are translated from. Nothing checks that they agree: a key added to `en_us` and never translated shows
+English in another language, a key written twice keeps only its last value, a `%s` dropped from a translation
+loses its argument, and a key the code asks for that no file defines shows the raw key in game.
+
+### 45.2 Decisions
+
+- **`verinoda/langkeys.py`**, next to `shaders.py` and `datapack.py`: text only, no graph and no index needed.
+  Lang files are found by path (`.../assets/<ns>/lang/<locale>.json|.lang`, the same skipped build folders as the
+  shader reader) and grouped by namespace; each namespace's default locale (`en_us`, `--default` for another)
+  is compared with its other locales. As in game, every file of one locale in a namespace is merged: a
+  multi-loader layout (`common/` and `fabric/` each with an `en_us.json`) or datagen output beside a hand-written
+  file is one default locale, and a key is cited at the first file (by path) that defines it. A locale with
+  several files is merged the same way before keys are counted missing from it.
+- **A JSON lang file is read key by key** (`json.decoder.scanstring` and `raw_decode`), not with `json.loads`, so
+  every key keeps its line and a key written twice keeps both lines; lines come from the offsets of the file's
+  newlines (bisected), so a large file reads in linear time. A file that is not a flat JSON object is an
+  `invalid_file` finding with the line where reading stopped, and is not compared (no flood of "missing" keys).
+  As in game, a value that is an object, an array or null fails the whole file (`GsonHelper.convertToString`),
+  a number or boolean is kept as its text, and a value nested too deeply to decode is `invalid_file` rather than
+  a crash. A `.lang` file's UTF-8 BOM is dropped, as the JSON reader's is.
+- **Findings**, each `{kind, key, status, at, other_at, why}`; `at` and `other_at` are the two files the finding
+  rests on (the "done when"):
+  - `missing_in_locale`: the default file's line, the other locale's file;
+  - `extra_in_locale`: the other locale's line, the default file;
+  - `placeholder_mismatch`: the other locale's line, the default file's line. Placeholders are compared as
+    `{argument index: conversion}`, so `%s %s` equals `%2$s %1$s` (a translation may reorder) and `%%` is not a
+    placeholder. Every `%d` and `%f`, with a width or precision (`%.1f`, `%5d`, `%2$d`), is read as `%s`, as
+    the game rewrites them when it loads a lang file (`%(\d+\$)?[\d.]*[df]`);
+  - `duplicate_key`: the line that wins and the first one (both in the same file);
+  - `missing_key`: the call site (`Component.translatable`, `Text.translatable`, `new TranslatableText`,
+    `new TranslationTextComponent`, `I18n.get/format`, the 1.12 `I18n`/`StatCollector` forms, with a literal
+    key) and the default file of the namespace a dot segment of the key names. The literal must be the whole
+    argument: `"tooltip.gem.level." + n` and Kotlin's `"tooltip.gem.level.$n"` are built at run time and are not
+    candidates. Comments are blanked (newlines kept) before the calls are searched, so a commented-out call asks
+    for nothing. A key with no segment naming a namespace of the project (`gui.done`) is vanilla's or another
+    mod's and is not reported; `minecraft` never counts as a project namespace here (an `assets/minecraft/lang`
+    override repeats only the vanilla keys it changes);
+  - `unused_key`: the default file's line; `other_at` is empty and `why` says how many code and resource files
+    were searched (a search that found nothing has no second file to cite).
+- **Status**: every comparison of two files and a literal key no file defines is `statically_verified` (read
+  from the lines cited). `unused_key` is `strong_inference`: a key counts as used when a string literal names it
+  in full (Java, Kotlin, advancement and other resource JSON, mcfunction), when a literal prefix ending in `.` or
+  `_` with at least two segments starts it (`"tooltip.gem.level." + n`), or the head of a Kotlin or Groovy
+  template does (`"tooltip.gem.level.$n"`), or when it is `<registry kind>.<ns>.<path>` and `path` / `ns:path`
+  is a literal or a resource file stem (the game builds `item.gem.ruby` from the registered id `ruby`; a
+  folder id `tools/ruby_pick` builds `item.gem.tools.ruby_pick`), `<kind>.<id>` with `id` a literal
+  (`itemGroup.gem`), or the 1.12 `tile|item|entity|fluid.<name>.name` with `name` a literal
+  (`setTranslationKey("gem.ruby_ore")`). Single-quoted strings of `.js`, `.ts` and `.groovy` files (KubeJS)
+  are literals too. Keys of an `assets/minecraft/lang` file override vanilla text and are never unused.
+- **`verinoda lang [--default en_us] [--no-unused] [--json]`**: counts per kind, then one line per finding
+  `kind [status] at <- other_at - why`, in file and line order (lines compared as numbers). Exit 3 when
+  something is found (as `shader --check`); 2 when nothing was compared: the project has no lang file
+  (`status: no_lang`) or no namespace has the default locale (`status: no_default`, a typo in `--default`), so a
+  CI gate does not pass on a check that did not run; 0 otherwise.
+- **No MCP tool.** The other Minecraft validators (`datapack`, `shader`, `trace-log`) are CLI only, and `run_tool`
+  reaches the core tools; a `lang_check` tool for the full profile can follow if agents ask for it.
+
+### 45.3 Measured
+
+Verinoda's own repository (the two example mods, 4 lang files, 330 files searched): nothing disagrees.
+
+### 45.4 Not done
+
+- Keys are grouped by namespace across the whole repository: two mods of one repository with the same namespace
+  are compared as one (right for a multi-loader mod, wrong for two unrelated mods sharing an id). Which of two
+  default files wins for a key defined in both is not known (pack order); the first by path is cited.
+- Only literal keys in the listed translate calls are `missing_key` candidates; a key passed through a constant,
+  a helper or a data generator's `add(...)` call is not followed. Datagen output is read only when it is in the
+  tree.
+- A key built at run time any other way than a literal prefix, a template head or a registered id is reported
+  as unused (hence `strong_inference`). Literals are read from comments too, so a key named only in a
+  commented-out line counts as used. A JavaScript template literal (backticks) is not read.
+- Comment blanking does not know Java text blocks or Kotlin raw strings (triple quotes); a `//` inside one could
+  hide a call on the same line.
+- `%,d` and other flags the game does not rewrite are not placeholders here.
+- Findings are printed, not stored as claims in the store; the text formatting codes (`§`) and Minecraft's
+  `%s` count against an actual `Component.translatable` argument count are not checked.
+
+### 45.5 Tests
+
+`tests/test_langkeys.py`:
+
+- `test_the_lang_file_reader_keeps_every_line_of_a_key_written_twice`
+- `test_placeholders_are_argument_indexes_with_their_conversion`
+- `test_each_locale_finding_cites_both_files` (missing, extra, placeholder mismatch, reordered positional
+  arguments not reported, duplicate)
+- `test_the_code_against_the_default_file` (missing key at its call site, vanilla key skipped, unused only when
+  no literal, prefix or registered id reaches the key)
+- `test_a_clean_pack_and_a_broken_file` (invalid JSON reported with its line, not compared)
+- `test_legacy_lang_files_and_another_default` (`.lang`, `--default`)
+- `test_cli` (exit codes 3 and 2, `--json`, `--no-unused`)
+- `test_a_key_built_at_run_time_is_not_a_missing_key` (Java concatenation, Kotlin template)
+- `test_placeholders_follow_what_the_game_loads`, `test_numeric_placeholders_compare_as_the_game_sees_them`
+- `test_every_default_file_of_a_namespace_is_the_default_locale` (multi-loader `en_us` files merged)
+- `test_a_vanilla_override_does_not_make_vanilla_keys_missing`
+- `test_how_else_a_key_is_named` (KubeJS single quotes, 1.12 `tile.*.name`, `itemGroup.<id>`, folder ids)
+- `test_findings_follow_the_file_line_by_line`
+- `test_no_file_of_the_default_locale_is_not_a_clean_pass` (`no_default`, exit 2)
+- `test_a_value_the_game_cannot_read_fails_the_file` (object value, deep nesting)
+- `test_a_large_file_reads_in_linear_time` (20,000 keys)
+- `test_a_bom_in_a_legacy_file_is_not_part_of_its_first_key`
+- `test_a_commented_out_call_asks_for_nothing`
+
+Also touched: `README.md` (a `lang` row in the Commands table) and `docs/ARCHITECTURE.md` (a `langkeys.py` row),
+both required by `tests/test_docs.py`.
+
+## 46. Extract the definition around a location (D73, 2026-09-30)
+
+### 46.1 Why
+
+An agent or a user who has a location (a traceback line, a compiler error, a `file:line` from a review) wants the
+unit of code around it, whole: the function, else the class. `node_inspect` needs an index and a name and cuts the
+source at 30 lines; `query` ranks passages; reading a file by hand means guessing where the function starts and
+ends. The definitions with their exact spans already exist: `anchors.py` (D23-D25) computes them per file, for
+Python with its own parser and for the other languages through tree-sitter, and `anchors.enclosing()` already
+answers "the innermost symbol around these lines" for evidence anchors.
+
+### 46.2 Decisions
+
+- **`verinoda extract TARGET... [--from FILE|-] [--max-lines N] [--limit N] [--no-numbers] [--json]`**, a new
+  module `verinoda/extract.py` and a thin `cmd_extract` in `cli.py`, as `backlog`, `datapack` and `shader` are.
+- **Targets**: `path:LINE`, `path:LINE-LINE` (the innermost definition holding both ends; a reversed range is
+  read low to high), `path:LINE:COL` (the column is ignored, as a compiler prints it), `path#Symbol` or
+  `path::Symbol` (`anchors.symbols_named`: `m` finds `C.m`; several matches are `ambiguous` with their lines). A
+  pytest node id works as it is pasted: `tests/test_x.py::TestA::test_b` is `TestA.test_b`, and a parametrised
+  id's `[1-2]` is dropped. Any other argument is read as a line of tool output.
+- **Tool output** (`--from FILE`, `-` for stdin; also a pasted error line as the argument): each line is tried
+  against, in order, a Python traceback line (`File "x", line N`), a JVM frame (`at a.b.C$D.m(C.java:N)`, found by
+  its package path `a/b/C.java`), Maven's `path:[N,C]`, tsc/MSBuild's `path(N,C)` and the common `path:N[:C]`
+  (gcc, javac, rustc, pytest, eslint, ruff). On each line the pattern whose first match starts leftmost wins (ties
+  in that order), so a call in the message after a location (`src/a.py:2: assert v.get(3) == 4`) does not hide
+  it; a location repeated is read once. Maven's and MSBuild's paths start only after a separator and are at most
+  255 characters, so a long line without spaces (minified code) is scanned in linear time. This is a line
+  scanner, not `failsig.py`'s per-test failure parsers: compiler diagnostics have no test.
+- **Paths**: as given (relative to the working directory, then to the project root); else, for a relative path,
+  the one project file (`snapshot.listed_files`) whose path ends with it (javac run in a module prints paths
+  relative to that module; a bare `orders.py`). An absolute path outside the project is never guessed from its
+  name (`/usr/lib/python3/json/decoder.py` must not become the project's `decoder.py`); a POSIX absolute path counts
+  as absolute on Windows too. `.git` and `.verinoda` are never read. The output patterns stop at a space, so for a
+  path that follows a space the absolute paths starting earlier on the line (a drive, a root, after a space, a
+  quote or MSBuild's `1>`) are tried first: `C:\Users\A B\src\a.py:3` is found. They are used only when such a
+  file exists inside the project. The project's file list is read once per run, when the first suffix match needs
+  it.
+- **What comes out**: the innermost function or class (`kind` `def` / `class`, qualified `name`, `start`-`end`
+  with decorators, `inside`: the enclosing classes), whole; a top-level statement when the line is in no definition
+  (`LIMIT = {...}` over several lines, named by what it binds); a Markdown section for a document (D25's sections).
+  A line between definitions is `no_definition`; a language without a parser (`.glsl`, `.mcfunction`) or a file
+  that does not parse is `unsupported`; statuses per location: `found`, `not_found`, `ambiguous`,
+  `no_definition`, `unsupported`.
+- **No index.** The file on disk is parsed now (`anchors.facts_for_path`, memoised by content hash): the answer is
+  never stale and works in a project never scanned. Cost on this repository: about 1.5 s per call, almost all of
+  it Python start-up and imports.
+- **Claims.** Each definition found is a claim, returned, not stored (a read, as `backlog` is): "`src/a.py:40` is
+  inside function `C.m` (`src/a.py:35-52`)" or "`C.m` is a function at ...", with the definition's lines as
+  evidence (`evidence.source_evidence`: locator, content hash, HEAD commit). `statically_verified` from a clean
+  parse; `strong_inference` with an uncertainty when tree-sitter reported syntax errors and recovered (the span it
+  recovered may be wrong). Nothing is a heuristic except the path-suffix match, which only chooses a file when
+  exactly one file matches.
+- **Output locations outside the project** (library and JDK frames, generated files, `example.com:80`) are counted
+  in `not_in_project` with the first five, not listed as failures; an explicit target that is not found is always
+  reported. `--limit` (20) caps the locations of the project read; the rest are counted (`locations_left`), not
+  read. Locations outside the project are not capped (a project frame after 30 JDK frames must still be found);
+  each costs a path check and a suffix match over the file list read once.
+- **The printed lines** are split as the parsers count lines (`\n`, `\r\n`, `\r`), not with `str.splitlines`,
+  which also ends a line at a form feed and would shift the source from the span the claim states. A negative
+  `--max-lines` is a usage error.
+- **Exit codes**: 0 when every location was found, 2 otherwise (as `backlog`, `when`); a call with no target and
+  no `--from` is a usage error.
+- **No MCP tool in this change.** The nearest commands (`backlog`, `datapack`, `shader`, `trace-log`) are CLI-only,
+  and a new tool changes the tool count that README, ARCHITECTURE and UPGRADING state (checked by
+  `tests/test_docs.py`; UPGRADING is the integrator's). The natural exposure is `code_extract {target}` in the full
+  profile or behind `run_tool` next to `node_inspect` (read-only; one `extract.run` call). See open issues.
+
+### 46.3 Not done
+
+- Innermost definition only; a whole class around a method is one more call (`path#Class`, or the `inside` list).
+- Languages: Python, Markdown and the tree-sitter grammars in `anchors.TS_LANGS` (JS/TS, Java, Kotlin, Go, Rust,
+  C/C++, C#, Ruby, PHP, Scala, Swift, Lua). A Kotlin or Scala top-level function, a Go method and so on are found
+  as far as `anchors.TS_DEF_TYPES` knows the node type; a Python file that does not parse has no fallback.
+- The output scanner is line-based: a location split over two lines, or printed only as a module or class name
+  (a Python `in f` without a file, a Go panic's package path) is not found. CI logs with absolute paths of another
+  machine are counted as outside the project (never guessed).
+- A JVM frame names its file, not its folder: a class in a source set whose folder does not follow the package
+  (`src/main/kotlin/Foo.kt` in package `a.b`) is not found from the frame.
+- No MCP exposure yet (above).
+- The evidence's content hash is computed by `evidence.source_evidence` over `str.splitlines` lines (the
+  repository-wide convention); in a file with a form feed or another such separator the hashed lines can differ
+  from the printed ones. A lone `\r` ends a line for Python's parser but not for tree-sitter's; the printed lines
+  follow Python's.
+- A wider absolute path with spaces is tried only when the path a pattern read follows a space and an absolute
+  path starts earlier on the line; a relative path with spaces (`my dir/a.py:3`) is not found.
+
+### 46.4 Tests
+
+`tests/test_extract.py`:
+
+- `test_a_line_gives_the_innermost_enclosing_function_whole`: decorator included, nested helper inside, `inside`,
+  claim text, status and evidence.
+- `test_nested_definition_class_and_range`: nested function, class, a range over two methods, a column ignored.
+- `test_top_level_statement_blank_line_and_past_the_end`.
+- `test_a_symbol_by_name`: `#m`, `::C.m`, ambiguous, missing.
+- `test_java_method_and_inner_class`.
+- `test_a_path_from_another_directory_is_found_by_its_end`.
+- `test_a_parse_the_tree_recovered_from_is_strong_inference` (TypeScript with a syntax error).
+- `test_markdown_section_and_unsupported_language`.
+- `test_locations_in_compiler_and_test_output`: traceback, `path:N:C`, `path(N,C)`, Maven, JVM frame, a repeat, a
+  time and a URL that are not locations.
+- `test_output_locations_outside_the_project_are_counted_not_listed`, with `--limit`.
+- `test_parse_target_forms`, `test_cli_prints_the_definition_with_line_numbers`,
+  `test_cli_json_from_a_file_and_exit_codes`.
+- `test_a_call_in_the_message_does_not_hide_the_location` (`v.get(3)` after `path:N`).
+- `test_a_long_line_without_spaces_is_scanned_in_linear_time`.
+- `test_an_absolute_path_with_a_space` (the gcc form and MSBuild's `1>` form).
+- `test_frames_outside_the_project_list_the_files_once`.
+- `test_negative_max_lines_is_refused_and_a_reversed_range_is_kept`.
+- `test_a_form_feed_does_not_shift_the_printed_lines`.
+- `test_a_pytest_node_id` (nested `::` and a parametrised id).
+
+Run: `python -m pytest tests/test_extract.py tests/test_docs.py tests/test_cli.py tests/test_anchors.py`.
+
+## 47. Dependency cycles and a minimal break set (D74, 2026-09-30)
+
+### 47.1 Why
+
+`map --view dependencies` lists the heaviest file-to-file dependencies but never says which of them go round in a
+circle, and the upstream `find_import_cycles` (project_index/analyze.py) is not reachable from any command, lists
+short cycles one by one (a large knot shows as dozens of overlapping rings) and does not say what to cut. The tools
+people compare against (Madge `--circular`, dependency-cruiser `no-circular`, Sonargraph's cycle groups and "minimal
+set of dependencies to cut") answer two questions: which files are tangled together, and which dependencies to
+remove to untangle them.
+
+### 47.2 Decisions
+
+- **A new map view, `cycles`**, beside the other seven: `verinoda map --view cycles [--json]`, part of the all-views
+  `map`, and `map_view {view: "cycles"}` on MCP (`map_view` is behind `run_tool` in the core profile, so the core
+  profile stays at five tools). No new command, no new flag.
+- **What a dependency is**: the dependencies view's edges (`calls`, `imports`, `imports_from`, `uses`, `inherits`)
+  between two different files, aggregated file to file. A type-only import (`import type`, stamped `type_only`) and
+  a deferred `import(...)` (`deferred`) are left out, as upstream's import-cycle finder already does: neither closes
+  a cycle when the code loads. Prose files are never code. Calls count, not only imports: two Java classes of one
+  package call each other without any import, and that is the tangle Sonargraph reports; each dependency lists its
+  relations so an import cycle can be told from a call cycle.
+- **A cycle is a strongly connected component** of that file graph (two or more files), not an enumeration of
+  simple cycles: one row per tangle, however many rings it holds.
+- **The break set** of a cycle is the fewest file-to-file dependencies whose removal leaves its files acyclic; among
+  sets of that size, the one with the fewest references behind them (the cheapest to cut). Minimum feedback arc set
+  is NP-hard, so:
+  - up to 12 files (`EXACT_BREAK_MAX`): exact, by dynamic programming over subsets of files (each ordering's
+    backward edges are a break set; the cheapest ordering gives the minimum), `break_method: "exact"`;
+  - larger: the Eades-Lin-Smyth ordering, then every cut dependency that closes no cycle with what is kept is put
+    back (heaviest first), `break_method: "greedy"`: an upper bound in which no single cut is unneeded.
+- **Evidence**: each dependency carries its reference lines (`at`, `file:line`, EXTRACTED ones first). Each cut
+  names a cycle it closes (`closes`: the cut, then the shortest way back, preferring EXTRACTED edges) with one
+  reference line per step (`steps`), so the whole ring can be read in the code.
+- **Status**: graph edges are extractions, never verification, so a cycle is `strong_inference` at most: when the
+  parser's own (EXTRACTED) edges alone strongly connect all of its files; otherwise `weak_inference` with a `note`
+  (some link rests on an INFERRED edge only: a receiver's type, a name). Each cut's `closes_status` says the same of
+  the ring it names.
+- **Detected copies** (the detection `dataflow` already uses) are kept apart from the project: a copy is, by its
+  detection, hardly used from outside its folder, so a dependency between a copy and the project is a name resolved
+  into the wrong tree; it is left out (listed in `left_out` with its lines), so a copy's cycles never merge with
+  the project's; they are listed after the project's, marked `in`. **Configured reference trees**
+  (`setup --reference`) may be vendored code the project really loads: their dependencies stay, a cycle wholly
+  inside one is marked `in`, and one that crosses into the project is the project's.
+- **A standard library import is no dependency**: the graph can resolve `import html` in
+  `pkg/security.py` to `pkg/exporters/html.py`. A Python `imports`/`imports_from` edge whose source line imports
+  only standard library modules (absolute, `sys.stdlib_module_names`, and no top-level name of the project, from
+  the root or `src/`, shadows it) is left out and listed in `left_out`. On Verinoda's own repository that one edge
+  had joined `paths <-> security` and `build -> dedup -> llm` into one 13-file `strong_inference` cycle.
+- **Every list is capped** (50 cycles, 100 files, 60 cuts, 60 dependencies per cycle, 20 steps per ring, 20
+  left-out dependencies), with `truncated: true` when one was cut and `cycles_total`, `size`, `break_set_total`,
+  `dependencies_total`, `closes_steps_total`, `left_out_total` for the full counts. The greedy put-back shares a
+  budget of 2,000,000 visited edges; past it the cuts not yet tried stay cut (still a break set),
+  `break_method: "greedy, not reduced"`, and a limit says so. Dependencies are bucketed into their cycles in one
+  pass and the Eades-Lin-Smyth ordering uses a heap.
+  On Verinoda's own repository a first version reported one 46-file tangle of `verinoda/` and
+  `benchmarks/corpora/heldout_repoatlas_*` files together; with the 10 crossing dependencies left out it is the
+  project's 41 files, and the copy's cycle is its own row.
+- **Order**: the project's cycles first, largest first, then by file name.
+- **Text**: the plain-text summary stays within its line budget (a cut takes two lines) and always ends with what
+  it left out (`... N more cuts in --json`, `... N more cycles in --json`). A cut resting on INFERRED edges only is
+  marked `[INFERRED edges only]`, and a ring it closes that only INFERRED edges complete `(weak_inference)`. The
+  break set's cost still treats such a dependency like an extracted one (a limit says so): whether the edge exists
+  is unknown, so neither preferring nor avoiding it is justified.
+
+### 47.3 Measured
+
+- `examples/orders_app`: no cycles among its 7 files with dependencies.
+- Verinoda's own repository (existing index): 14 cycles over 94 files, 36 cuts, exact for 13 of the 14 (before the
+  standard library imports were left out: 13 cycles over 102 files, the false 13-file cycle among them); 4 import
+  dependencies left out as standard library, 10 as crossing into the detected copy.
+- Synthetic, one strongly connected set of 1,000 files and 9,000 dependencies: 1.6 s, 39 KB of JSON (was 6.6 s,
+  1.46 MB); 3,000 files and 27,000 dependencies: 2.8 s, 42 KB (was 63 s, 4.8 MB); 3,000 two-file cycles and
+  60,000 acyclic dependencies: 2.8 s, 44 KB (was 33 s, 2.6 MB).
+  The largest is 41 files of `verinoda/` (`weak_inference`: some links are INFERRED only); several of the cuts it
+  proposes are already function-level (lazy) imports (`naming.py:233 -> question_plan.py`,
+  `codecheck_rank.py:354 -> codecheck.py`, `datapack.py:445 -> datapack_java.py`): the view counts them (see
+  Limits), and they show where the code already works around a cycle.
+
+### 47.4 Not done
+
+- File level only; package-level cycles (Sonargraph's second level) are not computed.
+- An import inside a function body counts like one at the top of the file: the graph does not record where an
+  import sits, so a lazy import (Python's usual way out of a cycle) still shows as a dependency.
+- Dynamic dispatch, reflection and DI are not resolved (the dependencies view's limits).
+- The break set says what to cut, not how (move, invert, inject); it minimises the count of file dependencies, not
+  the work of removing them (the reference count is only the tie-breaker).
+- Greedy sets for cycles over 12 files are not proven minimal; past the work budget they are not even reduced.
+- The standard library check reads the import line: an import spread over several lines, or a stdlib name under a
+  project package that is also importable at the top level some other way, is not recognised.
+- No CI mode (exit 1 on a new cycle); that belongs with the architecture rules engine (section 7 of the backlog).
+
+### 47.5 Tests
+
+- `tests/test_cycles.py`
+  - `test_exact_break_set_is_the_smallest_by_edges_then_references`: against brute force on random small graphs.
+  - `test_two_files_that_depend_on_each_other_cut_the_lighter_dependency`
+  - `test_greedy_break_set_leaves_no_cycle_and_no_cut_that_could_be_put_back`: and never smaller than the exact set.
+  - `test_type_only_deferred_and_prose_edges_close_no_cycle`
+  - `test_a_cycle_that_only_inferred_edges_close_is_weak_inference`
+  - `test_a_copy_of_the_project_is_kept_apart_and_listed_last`: and the crossing dependencies are in `left_out`.
+  - `test_a_configured_reference_tree_keeps_its_dependencies_on_the_project`
+  - `test_a_standard_library_import_resolved_to_a_project_module_closes_no_cycle`
+  - `test_large_inputs_are_capped_and_marked_truncated`: 55 two-file cycles and a 150-file knot with a small work
+    budget; every list capped, `truncated`, `greedy, not reduced` still a break set.
+  - `test_cycles_text_stays_in_its_lines_and_says_what_it_left_out`
+  - `test_cycles_text_marks_a_cut_on_inferred_edges_only`
+  - `test_scanned_cycles_with_their_break_set_and_evidence`: a scanned Python project with a 3-file and a 2-file
+    cycle; each cut's ring and its `file:line` steps.
+  - `test_cycles_text_names_the_cut_and_the_cycle_it_closes`
+- `tests/test_architecture_map.py` (the view set), `tests/test_cli.py` (`map --view cycles --json` and text),
+  `tests/test_mcp.py` (`map_view("cycles")` equals the core view).
+
+## 48. Graph exports: GraphML, Cypher, Obsidian and SVG (D75, 2026-09-30)
+
+### 48.1 Decisions
+
+1. **A new top-level command `verinoda export`**, not a change to the upstream pass-through, which stays
+   as it is. `--format graphml|cypher|obsidian|svg` (default `graphml`), `--out PATH`, `--repo`, `--json`.
+   Without `--out` it writes to `.verinoda/index/export/graph.<format>` (the vault goes to
+   `.verinoda/index/export/obsidian/`), next to `ui --export`'s file. It indexes a git work tree on first
+   use, as the other reading commands do (`_need_graph`).
+2. **One model, four writers** (`verinoda/graph_export.py`). `build()` reads the graph through `index.load`,
+   so edges keep their true direction, parallel edges stay separate and receiver-call edges are included.
+   It returns nodes (`id`, `label`, `kind`, `file`, `line`) and edges (`relation`, `confidence`, `at` =
+   `file:line`, `status`, `derived_by` for Verinoda's own resolvers), sorted so that the same graph gives
+   the same file.
+3. **Evidence and status on every edge.** `status` is the ceiling an unchecked edge can carry:
+   `strong_inference` for EXTRACTED, `weak_inference` for INFERRED or AMBIGUOUS, and `unknown` when the
+   edge has no line: `at` may then still name the file (a `.csproj` reference), but a file alone is no
+   line-level evidence. Nothing in an export is ever `verified`, because the call-site line is not read.
+   The note saying so is in every format: the GraphML graph attribute `note`, a Cypher comment, the vault's
+   index note and the SVG `<desc>`. It points to `verinoda analyze` for a checked relation.
+4. **Freshness is stated, not assumed.** Nodes and edges in a file changed since the index carry
+   `stale: true`, and so does every edge into or out of such a file (its other end may be gone), not only
+   the edges read in it. The result lists `stale_files`. When the check cannot run, the result says
+   `index_freshness: not checked: <why>`. The snapshot's commit and dirty flag go into the file header;
+   without a snapshot neither is written (no `dirty=false` for a tree nobody checked).
+5. **Nothing leaves the machine.** Each format is a local file or folder. Machine paths are removed with
+   `ui/export._scrubber` (ids included; two ids that end up equal are numbered). No code is written into
+   the export, only names, relative paths and line numbers.
+6. **GraphML is written by hand.** It is directed, has one `<edge id="eN">` per parallel edge and declares
+   typed keys. `networkx.write_graphml` took about 14 s on Verinoda's own graph; this writer takes 3.6 to 4.3 s.
+   Text goes through the upstream `_strip_xml_illegal` and XML escaping. A lone surrogate (a name read
+   from a mis-encoded file) becomes U+FFFD in the model, and every file is written with
+   `errors="replace"`, so one such character cannot stop an export.
+7. **Cypher can be imported again.** The file creates an index on `:Verinoda(id)` and MERGEs each node on
+   its id, adding a kind label. Each edge is MERGEd on its relation, `at` and confidence, so a second import
+   of the same export adds nothing, while two calls from different lines, or an EXTRACTED and an INFERRED
+   edge on one line, stay two edges. Edges alike in all of these are one relationship (none on Verinoda's
+   own graph). Values are escaped with the
+   upstream `_cypher_escape`, and labels and relationship types are allowlisted with `_cypher_label`.
+8. **The vault has one note per source file**, not one per node: Verinoda's own graph has 31k nodes and
+   1,260 files. Each note has YAML front matter (file, kind, commit, `stale`), its symbols with their
+   lines, and "Links out" / "Links in" to other files' notes. Each link line shows the two symbols, `at`,
+   confidence and status. Edges inside the same file are counted, not listed. A section lists at most 200
+   links and gives the count of the rest. Links are written as `[[path/file.py.md|path/file.py]]`: the
+   note is named after the source file, and a link to `file.py` would look for that file itself.
+   Characters that are illegal in Windows names or Obsidian links are replaced, `..` parts are dropped, a
+   leading dot becomes `_` (Obsidian hides dotfiles; `a/.b.py` -> `a/_b.py`, so it does not take
+   `a/b.py`'s name), and names that end up alike (compared case-insensitively) are numbered. An index note lists every file.
+9. **The vault writes only into a folder it owns.** A new or empty folder is fine, and so is one whose
+   `.verinoda-export.json` manifest shows an earlier export wrote it. On a rewrite, the notes that manifest
+   names and that are no longer produced are removed, and the user's own files are left alone; a name that
+   changed only in case is not removed when the disk folds case (it is the note just written, compared by
+   device and inode). The manifest is written first, naming the old and the planned notes, and again at the
+   end, so a write cut off halfway leaves a folder the next export still owns. A non-empty folder without a
+   manifest is refused (`ValueError`, exit 2) before anything is written. The single-file formats likewise
+   refuse an existing `--out` file whose head does not carry the export's marker (`verinoda-graph` or
+   `Verinoda graph export`; the SVG carries `<metadata>verinoda-graph</metadata>`).
+10. **The SVG is drawn without matplotlib.** It is a file-level graph of the 300 most linked files. Its
+    layout is a seeded networkx spring layout (numpy is already a dependency). A link is dashed when every
+    edge behind it is inferred, and a `<title>` tooltip gives each file's path. There is a light/dark style.
+    `truncated: true` and `files_total` say when files were left out.
+11. **No MCP tool.** The export writes files for other programs. An agent already reads the same graph
+    through `node_inspect`, `relation_trace` and `map_view`, and a writing tool behind `run_tool` would add
+    a side effect for no answer. The core profile stays at five tools.
+
+### 48.2 Measured
+
+Load 2.0 s, freshness 0.3 s and model 4.1 s (about half of it path scrubbing) come first in every run.
+Total per format including the model: GraphML 8.0 s, Cypher 11.0 s, Obsidian 12.7 s (1,260 notes, each
+written atomically), SVG 5.3 s (300 of 1,260 files). Status mix: strong_inference 70,144, weak_inference
+4,397, unknown 12 (`.csproj` references with a file and no line). `networkx.read_graphml` reads the GraphML back as a MultiDiGraph with the same node and
+edge counts.
+
+### 48.3 Not done
+
+- No call-site grading per edge: the status is a ceiling, not a verdict, and the note says so.
+  Grading 75k edges the way `analyze` does would take minutes.
+- Only these four formats. Communities (Graphify's `community` attribute) are not exported, because
+  Verinoda does not answer from them. Obsidian Canvas is not written.
+- The Cypher file is statements for `cypher-shell`. It has no Bolt push (`index export neo4j --push`
+  still exists upstream and needs the `neo4j` extra and the network).
+- The vault does not remove notes if the manifest is deleted by hand. The next export into that folder is
+  then refused as a foreign folder.
+- `verinoda export` in a git repository with no code files ends in a traceback from the shared first-use
+  indexing (`_need_graph` -> `_auto_index`); `verinoda map` does the same. Not changed here: it is the
+  shared path of every reading command.
+- The SVG is a picture of at most 300 files. For the whole graph, `verinoda ui --export` stays the
+  interactive one-file view.
+
+### 48.4 Tests
+
+- test_graphml_is_the_directed_graph_with_every_parallel_edge
+- test_every_edge_carries_its_evidence_and_an_unchecked_status
+- test_files_changed_since_the_index_are_marked_stale
+- test_no_path_of_this_machine_is_in_the_export (all four formats, vault note paths included)
+- test_cypher_merges_so_a_second_import_adds_nothing
+- test_cypher_keeps_an_extracted_and_an_inferred_edge_on_one_line_apart
+- test_graphml_claims_no_clean_tree_without_a_snapshot
+- test_a_lone_surrogate_does_not_stop_the_export
+- test_a_file_export_does_not_overwrite_a_file_it_did_not_write
+- test_cypher_and_graphml_escape_hostile_text
+- test_the_vault_has_a_note_per_file_and_every_link_opens_one
+- test_the_vault_is_written_only_into_a_folder_it_owns
+- test_a_note_renamed_only_in_case_survives_the_rewrite
+- test_a_vault_write_cut_off_halfway_can_be_written_again
+- test_note_names_stay_inside_the_vault_and_apart
+- test_svg_draws_the_most_linked_files_and_says_when_it_left_some_out
+- test_cli_writes_beside_the_index_and_reports_json
+
+Also run: `tests/test_docs.py` (README command table, ARCHITECTURE module list), `tests/test_cli.py` and
+`tests/test_ui.py` (the shared scrubber).
+
+## 49. Commit, diff and revision search (D76, 2026-09-30)
+
+### 49.1 Why
+
+"When did `retry_budget` appear, and when did it go?" had no answer. `analyze` treats "when was X added" as a
+history question, but it only reads `git log -L` over the span of a symbol the index still has (a removed name
+has no span), and `map --view history` lists the last 30 commits. Git answers the question exactly
+(`git log -S`), and the answer needs no inference: the commit is the evidence.
+
+### 49.2 Decisions
+
+- **One module, `verinoda/history.py`, three functions, read only.**
+  - `text_history(repo, text, regex=False, path=None)`: `git log -S<text>` (with `regex`, `-G<regex>`), zero
+    context patches (`-p -U0`), at most 200 commits, read oldest first. Per commit and file it counts the text
+    in the added and removed lines and keeps the first line of each (the new file's line for an addition, the
+    parent's for a removal). It says:
+    - the commit that first added it: the oldest commit with an added occurrence, with its `file:line`;
+    - when `git grep` at HEAD finds none: the commit that last removed it, with the line it was removed from;
+      when no commit read removed it (a merge's conflict resolution, or a binary file), an `unknown` for the
+      disappearance with `git log -m --first-parent -S` as the next step;
+    - otherwise, where it is at HEAD (`at_head`: the count from `git grep -c`, and up to 10 sites read from the
+      first 10 files only, so a common text does not parse the whole tree);
+    - every commit that added or removed it (`events`, with per-file counts).
+  - `commits(repo, message, author, path, since, until, diff, limit=20)`: `git log --grep`, `--author`,
+    `--since`, `--until`, `-G` (diff content) and a pathspec, case ignored (`--regexp-ignore-case`, which git
+    also applies to `-G`) and all three patterns extended (`--extended-regexp`; without it `--grep` and
+    `--author` read basic regexes, so `a|b` matched nothing), newest first, at most 100, each commit with the
+    files it changed (with `diff`, the files whose lines matched) and its `git_history` evidence (a dict, as
+    elsewhere).
+- **One regex dialect: git's.** With `regex`, git selects the commits (`-G`, POSIX extended) and the changed
+  lines are matched by git as well: they are written to a temporary file and read with
+  `git grep --no-index -E`, the same engine. So a POSIX class (`[[:digit:]]`) finds its lines, a pattern git
+  selects never ends up with no counted line, and no pattern runs in Python's backtracking `re` (a pattern like
+  `(a|a)+c|a`, exponential there, held the GIL and, under MCP, the server lock; tested). A pattern git cannot
+  read is a `ValueError` before any history is read.
+- **A project in a folder of its git repository** (`treestate.project_prefix`): every search is limited to that
+  folder (pathspec `.`, or the path given, relative to it) and every path is relative to it (`--relative`, and
+  `git grep` from that folder), as the index's paths are. Before, `git log -S` searched the whole repository
+  and a claim could cite a file outside the project, with two path bases in one answer.
+  - `compare(repo, base, head="HEAD", path=None)`: the commits of `base..head` (at most 100), how many commits
+    only `base` has, the merge base, and the files that differ between the two trees with their added and
+    removed line counts (`git diff --numstat`, binary files `null`).
+- **Claims with the commit as evidence.** The first appearance and the disappearance are `history` claims
+  (`kind`, `status`, `text`, `evidence`, `subjects`) returned inline, not stored. Their evidence is
+  `git_history`, the type `analyze` already uses for `git log -L`: `locator` "commit <sha> <file>:<line>" (for a
+  removal "commit <sha> removed from <sha>^:<file>:<line>", since the line is the parent's),
+  `commit_sha`, the diff line as `excerpt` (`+RETRY_BUDGET = 3`), and date, author, subject, file, line and
+  change in `meta`. The text names the commit, so `entail` grades the evidence `partial` (attribution), which is
+  what `claims.check_status` needs for `primary_source_verified` on a documentary kind; a test checks every
+  claim the module states against `check_status`.
+- **Status.** A disappearance is `primary_source_verified`: it is the newest removal, and HEAD has no
+  occurrence. A first appearance is `primary_source_verified` only when the history read is complete; in a
+  shallow clone, or when more than 200 commits changed the text (the oldest are the ones cut), it is
+  `strong_inference` with the reason in `uncertainties`. Nothing found is an `unknown` with a next step, and
+  its reason says what happened: no commit selected, commits selected that changed it only in binary files, or
+  (at HEAD but never added) a shallow clone when the clone is shallow and a merge otherwise.
+- **Arguments never become git options.** Every user value reaches git as one `--option=value` or
+  `-S<text>` word, or as a path after `--`; a revision must not start with `-` and must name a commit
+  (`rev-parse --verify <rev>^{commit}`) before it is used. No external diff, no text conversion, no colour, no
+  rename detection (`--no-ext-diff --no-textconv --no-color --no-renames`), and git's own safe options
+  (`treestate._GIT_SAFE`: no optional locks, no fsmonitor, paths unquoted).
+- **Zero-context diff parsing.** A removed line `-- note` shows as `--- note`; the file header is read only
+  between `diff --git` and the first hunk, so such a line is not taken for a file name (tested).
+- **CLI: `verinoda history text|commits|compare`** with `--json`; exit 0 found (or the same commit for
+  `compare`), 2 nothing found or not a git work tree, 1 a bad argument (an unknown revision, a bad regex).
+- **MCP: `history_search`**, one tool: with `text` the appear/disappear answer, with `base` the comparison,
+  otherwise the commit search. A parameter of another mode (`text` with `base`, `message` with `text`, `head`
+  without `base`, `regex` without `text`) is `invalid_argument`, not silently dropped; `path` goes with any
+  mode. `head` in a comparison is the other revision; the text answer's HEAD sites are `at_head`. A comparison keeps `commits_truncated` and `files_truncated`: it
+  has two lists that are cut separately. It is in
+  `CORE_TOOLS` behind `run_tool` (the listed menu stays at five tools)
+  and in the full profile. The core menu grew from 4,078 to 4,272 characters (limit 4,500 in
+  `test_mcp`), the core instructions from 1,178 to 1,260 (limit 1,400); the full menu is about 42,900.
+- **Skills**: `Bash/PowerShell(verinoda history *)` is allowed in the Claude skill; both skills name the
+  question ("When did X appear or disappear?") and `history_search` behind `run_tool`.
+
+### 49.3 Measured
+
+On Verinoda's own repository (375 commits): `history text "import json"` 3.0 s (70 commits changed it),
+`_git_info_legacy` 1.4 s, `VERINODA_NO_AUTO_INDEX` 1.3 s, each with its first commit and file:line.
+
+### 49.4 Not done
+
+- Only the history reachable from HEAD; other branches are not searched.
+- Merge commits are not diffed: a text only a merge's conflict resolution introduced or removed is not seen
+  (a removal is then an `unknown`, tested).
+- No rename detection: a moved file's text is removed from the old path and added at the new one; the first
+  appearance stays the older commit.
+- A regex is git's POSIX extended one: `\d` is not a digit class there (use `[0-9]` or `[[:digit:]]`); some
+  GNU extensions such as `\b` may work, depending on git's regex library.
+- Binary files have no lines: a text only in binary files is `not_found`, with that reason.
+- A text is one line; the working tree is not searched (HEAD only).
+- `analyze` does not call it yet: "when was X added / removed" still uses `git log -L` on the span of an
+  indexed symbol. Routing a history sub-question whose name is not in the index (or asks "removed") to
+  `text_history` is the natural next step; the claims are already in the shape `analysis` records.
+- Claims are returned, not stored (no `--store`), so they are not listed by `claim list` and do not go stale.
+- Other items of the same block build on it: 4.7 (commit rationale per symbol) and 4.6 (pattern trends) can
+  reuse `_parse_patches` and `commits`.
+
+### 49.5 Tests
+
+`tests/test_history.py` (20 tests, a five-commit repository built in the test, and small ones for the cases
+below):
+
+- a text that came and went: both commits, oldest first, per-file counts, the evidence (`locator`, `excerpt`,
+  `meta.change`), both claims `primary_source_verified`;
+- a text still at HEAD: only the first appearance, and the HEAD site;
+- `--path` narrows the history (first appearance in the other file);
+- a regex over changed lines; a regex Python cannot compile is a `ValueError`;
+- a removed SQL comment `-- note` is a line, not a file header;
+- nothing found: `not_found` with an unknown and a next step; empty or multi-line text rejected;
+- a shallow clone: the first appearance is `strong_inference` with the reason;
+- a cut history (`MAX_EVENTS` lowered to 2): the first appearance is `strong_inference` ("cut at 2"), the
+  disappearance still verified;
+- a regex with a POSIX class (`[[:digit:]]`) is found; `\d` is `not_found` without blaming a shallow clone;
+  `(a|a)+c|a` over a line of 34 `a`s answers at once (git's engine);
+- a text a merge's conflict resolution removed: the first appearance plus an `unknown` disappearance;
+- a text only in a binary file: `not_found` whose reason says binary;
+- a project in a folder (with a space) of its repository: the history of a text also outside it cites only the
+  project's file, paths relative to the project in events, HEAD sites, commits and compare;
+- HEAD sites: 24 lines in 12 files are counted, 10 listed, `truncated`;
+- the removal locator names the parent, whose file holds the quoted line;
+- commits by message (case ignored, alternation), author (alternation), path, date range, diff content (the
+  matching file only), limit, the evidence dict;
+- compare: commits, merge base, changed files with counts, a path, the same commit, an unknown revision, a
+  revision that looks like an option;
+- not a git work tree: `not_git` for all three;
+- every claim passes `claims.check_status` for its own evidence;
+- the CLI (`--json` and text, exit codes 0, 2, 1) and the MCP tool (`history_search` in its three modes, an
+  unknown revision is `invalid_argument`, and so is a parameter of another mode).
+
+`tests/test_mcp.py`: the new tool's parameters, read-only annotation, the not-initialised call, 13 core tools.
+
+Run: `PYTHONPATH=. python -m pytest tests/test_history.py tests/test_mcp.py tests/test_cli.py tests/test_when.py
+tests/test_docs.py tests/test_agents.py`. `test_agents.py` has 25 failures that also fail on the base commit in
+a worktree (the `verinoda` on PATH is another build); `test_docs.py` fails the one tool-count test above.
+
+## 50. Mermaid diagrams and a wiki outline (D77, 2026-09-30)
+
+### 50.1 Decisions
+
+- **Claims and status.** Every arrow is a claim with the edge lines it was drawn from (an extracted edge's
+  line first, up to three). Graph edges are extractions, never verification: an arrow with at least one
+  `EXTRACTED` edge is `strong_inference`, one drawn only from `INFERRED` edges `weak_inference`, drawn
+  dashed (`-.->`) or, in a sequence, with an open arrow (`-)`).
+- **Nested pages.** A file listed by several pages counts, in the architecture diagram, for the deepest
+  of them (a sub-page over the parent that lists the whole folder), then for the first; a page whose files
+  are all in its sub-pages has no box. A parent page listing `src/` and sub-pages listing its folders
+  therefore draws the arrows between the sub-pages.
+- **The steering file is checked, not trusted.** A value of the wrong type (a `parent` that is not text,
+  `paths` or `flows` that are not lists, a path that is not text), a page without a title and a title an
+  earlier page already has are each a line under `problems`, and the value (or the duplicate page) is left
+  out; nothing in the file can stop `wiki`, the MCP view or the export. The file may start with a UTF-8
+  BOM. A path is relative to the repository root: a leading `./` is dropped, a dot-folder (`.github/`)
+  keeps its dot.
+- **No guessing.** An endpoint resolves through `naming.resolve` / `trace`: a name that names nothing is
+  `unresolved` with no diagram (`mermaid: null`), its hints and a next step; a name resolved by similarity
+  says so (`fuzzy`, and a `%%` comment in the text form). Whatever the steering file names that the index
+  does not have (a path matching no file, a parent no page has, a malformed flow, a flow that does not
+  resolve) is listed under `problems`; a broken file falls back to the default outline and says why.
+- **The steering file is not code.** `freshness` reports a new or edited `.verinoda-wiki.json` as changed
+  since the index; the outline leaves it out of the stale list it hands to `naming.resolve`, so a flow's
+  name spelled only there is not reported `not_indexed`.
+- **Text, not a renderer.** The export's Content-Security-Policy allows only its own script and style and
+  no connections; Mermaid's renderer is about 3 MB and would have to be vendored. The diagrams travel as
+  Mermaid text, which GitHub, GitLab, Obsidian and mermaid.live draw; the `wiki --markdown` output renders
+  as diagrams wherever Markdown with Mermaid is shown.
+- **Label safety.** Label text passes through one translation table: `"`, `#`, `;`, `<`, `>`, `|` and
+  newlines become Mermaid entities, so a symbol or file name cannot end a label or a statement. Node ids
+  are generated (`n0`, `p0`), never taken from names.
+- **Bounded.** At most 30 boxes and 60 arrows per diagram (the best connected first; `truncated` and
+  `left_out` say how many were dropped), 60 files listed per page (`file_count` has the total).
+- **Small registry footprint.** Two CLI parser entries, one `map_view` view (the `VIEWS` tuple, the
+  argument's `Literal`, two description strings), one UI route, one export field.
+
+### 50.2 Not done
+
+- Pages have no generated prose: a page's text is its `purpose` as written in the steering file (or a
+  one-line default). The wiki is an outline with diagrams, not a written wiki.
+- The architecture diagram counts edges between files; dynamic dispatch, reflection, dependency
+  injection and callbacks the graph does not have are not drawn.
+- A sequence diagram shows one path, one message per call, no returns or loops; a flow without a target
+  follows only `calls` edges to files of the project.
+- The default parts are folders (first two levels); a project laid out differently wants a steering file.
+- The page ids are slugs of the titles: renaming a page changes its `#/w/` address.
+- The exported page shows Mermaid text; drawing it needs a Mermaid viewer.
+
+### 50.3 Tests
+
+`tests/test_diagrams.py` (orders_app scanned once per module):
+
+- `test_architecture_counts_edges_between_parts_with_their_lines`
+- `test_flow_between_two_symbols_marks_an_inferred_call`
+- `test_flow_of_one_symbol_is_what_it_calls`
+- `test_sequence_is_messages_between_owners`
+- `test_a_name_that_names_nothing_gives_no_diagram`
+- `test_labels_cannot_break_the_diagram`
+- `test_as_text_is_a_mermaid_file_with_its_evidence_as_comments`
+- `test_default_outline_is_an_overview_and_a_page_per_folder`
+- `test_a_repo_file_steers_the_pages`
+- `test_a_broken_steering_file_falls_back_and_says_so`
+- `test_cli_diagram_and_wiki`
+- `test_mcp_map_view_outline`
+- `test_the_html_export_carries_the_diagrams`
+- `test_two_files_with_one_name_are_two_participants`
+- `test_a_steering_path_may_name_a_dot_folder`
+- `test_nested_pages_draw_the_arrows_between_the_sub_pages`
+- `test_a_mistyped_steering_file_is_listed_under_problems` (also: a BOM, a duplicate title, the export)
+- `test_a_flow_cut_to_its_boxes_says_how_many_were_left_out`
+- `test_a_flow_of_a_symbol_that_calls_nothing_says_so`
+- `test_mcp_outline_with_targets_gives_only_those_pages`
+- `test_the_export_escapes_a_flow_diagrams_markup` (a steered export with a flow: `<br/>` escaped)
+
+The small second repository (two `utils.py`, a `.ci/` folder, under a path with a space and `ğ`) is
+scanned once per module. The page's JavaScript that shows a wiki page is not run under test (no browser
+in the suite); the tests check the data it reads and the route it answers.
+
+Existing suites run against the change: `tests/test_mcp.py` (the `map_view` enum equals `VIEWS`, the core
+profile counts), `tests/test_ui.py` (the export's policy, scripts and links), `tests/test_cli.py`,
+`tests/test_architecture_map.py`, `tests/test_docs.py` (README commands table, ARCHITECTURE module table).
+
+## 51. Agent instruction file lint (D78, 2026-09-30)
+
+### 51.1 Decisions
+
+- **Statuses**: what the tree or a manifest shows is `statically_verified`; name-to-package mapping, a module
+  from a declared package, and command disagreement are `strong_inference` at most (a heuristic). A path that is
+  missing but git-ignored (a build output, a local file), or on a line that says to create or write it, is
+  `unknown`, never wrong. Gradle tasks and Maven goals are `unknown` (the build script defines them in code).
+- **What counts as a path in prose**: only a token with a folder in it and either a known extension or a first
+  folder that exists; placeholders (`<id>`, `{x}`, `$VAR`), URLs, domains, `ns:id`, options, slash commands and
+  `origin/main`-style refs are not paths. A bare file name counts only in a code span or link, and is ok if the
+  project has a file of that name anywhere.
+- **Case**: a path found only in another case is wrong (it works on Windows/macOS disks, not on Linux or in
+  git), with the spelling on disk.
+- **CLI only, no MCP tool yet**: the full profile could take it (it would not touch the five core tools), but
+  `tests/test_docs.py` requires README, ARCHITECTURE and UPGRADING to state the same MCP tool count, and
+  UPGRADING.md is not edited on this branch; with other items in flight the count would also conflict. The
+  adapter was written and tested, then taken out; it is below for the merge.
+- **Outside the repository**: a per-user path (`~/.config/...`) or an absolute path outside the checkout is
+  `unknown` (a record, not skipped): whether it exists depends on the machine that runs the lint, and a CI
+  run must not fail on it. A memory file is this user's own notes, so its `~/...` is checked against their
+  home. `/docs/x.md` is root-relative the same on every OS.
+- **`cd` in a shell block** carries to the block's next lines (a block is read as one shell session); a folder
+  it cannot follow makes the rest unknown rather than checked against the wrong package.json.
+
+### 51.2 Not done
+
+- A name in plain words ("run the tests with pytest") is not read; only code spans, links, imports, fences and
+  prose paths with a folder.
+- Subcommands of the project's own console script are not checked.
+- The tool-to-package table is fixed (Python and JS tools listed in `PY_TOOLS` / `JS_TOOLS`); any other `npx X`
+  looks for a package named X.
+- Makefile parsing is line-based: targets from `include`d files or `$(eval)` are unknown, not found.
+- Memory files are found by Claude Code's folder naming; other agents' memory is not read.
+
+### 51.3 Tests
+
+`tests/test_agentlint.py` (8): every kind of check on a fixture project (prose, code-span and link paths,
+`file:LINE` past the end, a git-ignored path, placeholders and URLs skipped, npm scripts, make targets, modules,
+extras, packages, tools, a tree diagram not read, CLAUDE.md imports, a case mismatch); every reported record has
+its line, text and a status; agreement on test commands and the package manager against the lock file; memory
+files and their links (`--no-memory`); a moved file's new place; what is not a path; no instruction files; the
+CLI (text, `--json`, `--file`, exit codes 3 / 0 / 2). Also run: `tests/test_docs.py`, `tests/test_cli.py`.
+
+After review (10 more tests, one per fix): `cd` carrying through a shell block and a `cd $DIR` making the rest
+unknown; `pnpm -r`, `npm --workspaces`, `bun test` / `bun build`; `src/**/*.ts` matching `src/a.ts`; a nested
+AGENTS.md not compared with the root one; a dependency's evidence on its declaration, not a comment or a
+`[tool.pytest]` table; `~/...`, `/etc/...` unknown and `/docs/x.md` read from the root; `uv run --extra dev
+ruff`; `just` aliases; a path with a space in a link and a code span; 1,500 missing paths settled quickly and
+the listed records capped.
+
+## 52. Filter syntax in query (D79, 2026-09-30)
+
+### 52.1 Decisions
+
+- **Where it is read.** `verinoda/query_filters.py` parses the question; `retrieval.retrieve(..., filters=True)`
+  applies it. Only `verinoda query` and `project_query` pass `filters=True`. `analyze`, the UI, `research` and
+  the benchmarks pass their question through as before, so filters never change what they rank.
+- **A question with no filter atom is not parsed.** Filter atoms are `key:value` with a known key, or a
+  `/regex/` token. Without one, the question is ranked exactly as written: an upper-case `OR` or `NOT` in prose
+  stays a word, an `is:` token whose value is not a filter (`the value is:null`) stays a word, a single path
+  segment between slashes (`/health/`, `/tmp/`) stays a word, and so every question without a filter atom gives
+  the same result as before. A `path:`, `file:`, `lang:` or `symbol:` token is a filter by design (the GitHub
+  and Sourcegraph syntax), also when it was meant as prose (`file:line`); quoting the question part does not
+  help, so such a question has to be reworded.
+- **With filters, the text part is ranked as written.** Words keep the parentheses of a call written in them
+  (`parse()`, `foo(bar)`): a `(` inside a word and the `)` that closes it belong to the word, so the
+  exact-identifier boost (`named_identifiers`) still sees `parse()`. Only a `(` that opens a token, and a `)`
+  that closes no `(` of its word, group filters.
+- **Atoms.**
+  - `path:` (alias `file:`): a glob (`*`, `?`, `[..]`) matches the whole repository path from the root, `*`
+    crosses folders, and `**/` also matches no folder. A plain value matches from the root or after any `/`
+    (`path:search_index`, `path:tests/`). Case-insensitive.
+  - `lang:` (alias `language:`): by suffix. It knows common names and aliases (`py`, `kt`, `ts`, `js`, `jvm`
+    = Java/Kotlin/Scala/Groovy, ...). An unknown name is taken as a suffix (`lang:mcfunction`).
+  - `symbol:`: a symbol unit (not a module block, prose section or data unit) whose name or qualified name is
+    the value, or ends in `.value` (`take`, `PriceCache.take`), or matches it as a glob (`symbol:test_*`). A
+    non-glob value is also added to the ranked text, so D40's exact-identifier boost ranks the symbol first.
+  - `path:` also takes an absolute path inside the repository (`path:"C:/work/repo/src"`), read from the
+    root; an absolute path outside it is an error, not a silent empty result.
+  - `is:vendored` (vendored, minified or generated), `is:generated`, `is:minified`, `is:test` (`is_test_file`,
+    D40). An unknown `is:` value is an error when the question writes another filter, and a word otherwise.
+  - `/regex/` and `/regex/i`: Python syntax, matched line by line over the unit's span. A token with an
+    unescaped `/` inside (`/api/users/`) is a word, and so is one path segment between slashes (`/health/`,
+    `/tmp/`), so a URL path or folder in a question is not a regex. To search such a word as a regex, add the
+    flag (`/TODO/i`) or any regex syntax (`/\bTODO/`).
+  - **A regex runs in a child process with a time limit.** Python's `re` has no timeout, and a pattern that
+    backtracks badly (`/(a|aa)+b/` on a long minified line) would hang `verinoda query` and block the MCP
+    `project_query` call. The regex atoms are searched by `python -I -c <stdlib-only script>` over the files
+    that need them, and the child is stopped after `REGEX_SECONDS` (10 s): `FilterError` ("took longer than
+    10 s over N files; narrow it with path: or lang:"). Only files of units whose outcome the regex can still
+    change are searched: the expression is first evaluated with every regex unknown (three-valued), so
+    `path:src /x/` searches only `src`. A PDF or Office document is sent in its text view.
+- **Boolean logic.** Atoms side by side are ANDed. `OR` joins alternatives, `NOT` or a leading `-` negates, and
+  parentheses group; `-(...)` negates a group like `NOT (...)`. `AND` binds tighter than `OR`, as in GitHub.
+  A leading or trailing `OR`/`AND`, an unclosed `(`, a `)` that closes nothing, a value that opens a group
+  (`path:(a)`) and nesting deeper than 32 levels are errors, not silently dropped. A plain word beside an operator (`cache OR
+  memo`, `NOT legacy`) becomes a content atom: a line of the unit holds it as a case-insensitive substring, so
+  `legacy` also meets `price_of_legacy`. The words stay ranked text unless they are negated. Every other plain
+  word is only ranked text.
+- **Filters combine with the ranking; they do not replace it.** `search_index.rank` takes a `where` hook. The
+  whole ranking (BM25F, the graph prior, tests yielding) runs on the text as before. The hook then keeps the
+  subset the filters accept, before the order is taken and the limit applied, so the kept units stay in their
+  ranked order and the 60-unit limit counts only kept units. Filters never add score.
+- **A question of filters only** (for example `/TODO\(/ lang:py`) has no ranked text. Every indexed unit is
+  then a candidate at score 0, and the matching ones come in path and line order. The same holds when the text
+  part has no words the ranker weighs (only stop words). Text that has words but matches no unit (`zzqqxx
+  lang:java`, a misspelling) still counts: the result is empty and says so. It is not dropped in favour of the
+  filters alone, which would widen the result exactly when the text is rarest.
+- **Evidence.** A unit kept by a regex or word atom carries `regex /x/ at file:N` (or `word 'x' at file:N`) in
+  its `why`. Its excerpt (JSON) and its first text window are centred on that line. Other atoms are exact
+  predicates on the path, suffix, name or vendored rule, and the result's `filters` block states them.
+- **Output.** JSON gets a `filters` block, `{"expression", "ranked_text", "matched", "text_matched"}`.
+  `expression` is the expression as read, `ranked_text` what was ranked, `matched` the number of candidates
+  the filters kept, and `text_matched` (only when there is ranked text) the number of units the text matched
+  before the filters applied. The block is charged to the budget. Plain text opens with
+  `filters: <expression> (N matching)`. With nothing kept it says which side emptied the result:
+  `- no indexed unit matches them` (filters only), `- the ranked text (T) matches no indexed unit`, or
+  `- none of the N units the ranked text matches passes them`. A query result is still a list of leads, not
+  claims, as before.
+- **Errors.** A bad regex, a regex that runs out of time, an unknown `is:` value beside another filter, a
+  dangling `OR`/`AND`/`NOT`, unbalanced parentheses, too deep nesting, or an absolute `path:` outside the
+  repository raises `FilterError`. The CLI prints
+  `error: ...` and exits non-zero. MCP returns `{"error": "invalid_argument", "message", "hint"}`, and the
+  hint lists the syntax.
+- **MCP exposure.** `project_query` is one of the core five and already takes the question, so there is no new
+  tool and no `run_tool` entry. Its `question` argument description names the filters (one line).
+
+### 52.2 Not done
+
+- A regex matches one line at a time. Multi-line patterns, and patterns across a unit boundary, are not
+  supported. A regex over a filters-only question reads every indexed file once, in the child process (about
+  0.1 s to start it). There is no trigram index (backlog 1.7). The 10 s limit is for the whole search, so a
+  regex over a very large repository with no `path:` or `lang:` beside it can hit it without backtracking.
+- A `path:`/`file:`/`lang:`/`symbol:` token written as prose is read as a filter (see Decisions).
+- Filters see what the search index holds. Files the index skips (too large, binary, lock files, bulk data) are
+  never matched, and a `path:` that names only such files matches nothing.
+- `symbol:` matches the unit's own name and qualified name as the index stores them (`Class.method`). It does
+  not use the module path (`pkg.mod.func`); combine it with `path:` for that.
+- Nested units (a class and its methods) each match a regex on a shared line. The same-text folding of the
+  result keeps this small, but both can appear.
+- `is:vendored` follows the extractor's rules, not the project's `.gitignore` or `linguist-vendored`
+  attributes.
+- `-word` (a negated plain word) is not a filter: `-` negates only an atom. Write `NOT word`.
+- A value with spaces needs quotes only for `key:"..."`. Regexes may contain spaces (`/TODO: round/`).
+- `include_tests` is not exposed on the CLI. `NOT is:test` covers it.
+
+### 52.3 Tests
+
+`tests/test_query_filters.py`:
+
+- `test_a_question_without_a_filter_is_not_parsed`
+- `test_filters_leave_the_rest_as_ranked_text`
+- `test_operators_negation_groups_and_words_beside_an_operator`
+- `test_a_regex_is_read_whole_and_flags_are_kept`
+- `test_a_filter_that_cannot_be_read_is_an_error` (12 cases)
+- `test_prose_that_looks_like_a_filter_stays_prose`
+- `test_a_call_written_in_the_text_keeps_its_parentheses`
+- `test_a_negated_group_and_a_negated_regex`
+- `test_aliases_are_the_same_filter`
+- `test_path_lang_and_symbol_matching`
+- `test_without_filter_parsing_the_question_is_ranked_as_written`
+- `test_a_path_filter_keeps_the_ranked_order_of_what_it_keeps`
+- `test_lang_and_symbol_filters`
+- `test_is_vendored_and_its_negation`
+- `test_or_between_filters`
+- `test_a_regex_alone_lists_every_matching_unit_with_its_line`
+- `test_words_beside_an_operator_are_content_filters`
+- `test_no_match_is_said`
+- `test_ranked_text_that_matches_nothing_keeps_nothing`
+- `test_a_filter_leaves_the_ranking_of_the_text_unchanged`
+- `test_symbol_glob_is_minified_and_is_test`
+- `test_negated_regex_and_negated_group_through_retrieve`
+- `test_an_absolute_path_inside_the_repository_is_read_from_its_root`
+- `test_a_regex_that_backtracks_badly_is_stopped`
+- `test_rank_where_hook_is_optional`
+- `test_cli_query_reads_filters_and_reports_a_bad_one`
+- `test_mcp_project_query_reads_filters`
+
+## 53. Secret scrubbing (D80, 2026-09-30)
+
+### 53.1 Decisions
+
+1. **One module, applied where text is written.** `verinoda/scrub.py` holds the rules and `redact(text)`. It is
+   called at the four places where Verinoda keeps text it did not write itself, and nowhere else:
+   - `experiments.run`: stdout and stderr right after decoding, so the files under `.verinoda/runs/<id>/`, the
+     summary lines, the `experiments.summary` column and the evidence excerpt all come from redacted text. The
+     evidence `content_hash` is now the hash of the kept (redacted) logs.
+   - `debug` agent-reported runs (`observed_output`): the kept `observed_output.txt` and the excerpt. When nothing
+     matches, the bytes are kept exactly as given (and `output_sha256` is unchanged); when something matches, the
+     file and `output_sha256` are the redacted text's.
+   - `trace-log`: a log outside the repository is copied to `.verinoda/logs/` redacted; the cited lines (the
+     evidence excerpt) and the claim text (a trace's header or marker) are redacted too. A log inside the
+     repository is the user's file and is never changed; only what Verinoda stores from it is redacted.
+   - `ui --export`: every text of the embedded data, after the existing machine-path scrub, with the same key
+     exemption (note ids are never rewritten).
+   The live `verinoda ui` server is not changed: it shows the user's own files on 127.0.0.1 and nothing leaves.
+2. **Line structure is kept.** A match is replaced by `<redacted:RULE>` plus the line breaks it spanned (a private
+   key block becomes one marker and empty lines). Line numbers a claim cites in a kept log stay right, and `--fix`
+   on an old log does not move later lines.
+   An output longer than what is kept (5 MB) is cut before it is redacted, and `scrub.cut` moves the cut back to
+   the start of the word it falls in (at most 4 KB): a token cut in two no longer has its rule's shape, and its
+   first part would otherwise be kept.
+3. **Only the secret part goes.** For a URL only the password (`postgres://app:<redacted:url-password>@db/x`), for an
+   Authorization header only its value, for `password = "..."` only the value. The marker names the rule, never
+   the value.
+4. **Rules (patterns, no network, no model).** Private key blocks; AWS access key ids; GitHub, GitLab, Slack, npm
+   and PyPI tokens; Slack webhooks; `sk-...` API keys (Anthropic/OpenAI shape); Stripe keys; Google API keys; JWTs;
+   URL passwords; Authorization header values; a value assigned to a password/secret/token/api_key/access_key/
+   private_key/credential name (quoted, or unquoted with letters and digits; placeholders such as `${X}`,
+   `<your-token>`, `changeme`, `NEO4J_PASSWORD` and calls such as `getpass()` stay; so does a name whose last word
+   says the value is something else: `token_count`, `tokens_used`, `secret_hash`, `password_file`, `secret_name`,
+   `passwordEncoder`, and a Java `toString` such as `Encoder@1a2b3c4d`); e-mail addresses (personal
+   data; not `git@host:`, Kotlin `this@Outer`, `icon@2x.png`, `example.com`, `\n@pytest.fixture` in escaped text,
+   or the user/host part of a URL); and the value of every secret-looking variable of the current environment
+   (a name with a word such as `KEY`/`API_KEY`, `*TOKEN`, `*SECRET`, `PASSW*`, `PASSPHRASE`, `CREDENTIAL(S)`,
+   `AUTH` or `PAT`, split at `_`, `-` and case changes, so `GIT_AUTHOR_NAME`, `CERT_AUTHORITY` and `KEYBOARD_*`
+   are not; value of 8+ characters that is not a path), wherever it occurs.
+   Text escaped as a JSON string (the export's embedded data, JSON log lines) is also read unescaped: a token after
+   `\n`, an address in `\u003c...\u003e` or a value in `\"...\"` is found, and the span is mapped back to the
+   escaped text, so `--fix` also cleans an export an earlier version wrote.
+5. **Findings are `strong_inference`.** A match is a pattern, not a check of the value (the backlog rule for
+   heuristics). Each finding of `secret-scan` carries `file:line` as its evidence plus column, rule and length.
+6. **Speed.** Each rule has literal anchors (`AKIA`, `ghp_`, `://`, `@`, `password`, ...) found with `str.find`,
+   and its pattern is matched only there, once per anchor. A 7 MB ordinary log redacts in about 0.45 s, a 6 MB log
+   of JSON lines (read twice: as it is and unescaped) in about 1 s (first version, one regex pass per rule over the
+   text: 8 s). Text dense with one anchor stays linear: a token rule's left boundary excludes the token's own
+   characters (`-` included), so in `sk-sk-sk-...`, `glpat-glpat-...` or `eyJ-eyJ-...` only the run's first anchor
+   is matched to its end; an address starts where the run of `[\w.%+-]` before its `@` starts (one attempt per
+   `@`, none for an `@` after a space or another `@`); the other patterns are bounded. 100 to 200 KB of one anchor
+   (`@`, `sk-`, `xoxb-`, `a@b `, `Bearer `, `\n` ...) redacts in well under 2 s (before: 5 to 100 s); the densest
+   remaining case, `password=` repeated, costs about 3 s per MB.
+   The export reads the environment once per build (`scrub.redactor()`), not once per text (on a large repo that
+   was 2.3 times the build time).
+7. **CLI, no new MCP tool.** `verinoda secret-scan [FILE ...] [--fix] [--json]`: with no files it scans what
+   Verinoda stored (`.verinoda/runs/**` and `.verinoda/logs/**` text files: `.txt .log .out .err`) and the export at
+   its default place; exit 1 on a finding (0 after `--fix`), and also when a file was skipped (over 64 MB, not
+   readable, or with `--fix` not writable, e.g. read-only or locked): a file that was not checked does not pass.
+   `--fix` keeps every other byte of the file, bytes that are not UTF-8 included (a cp1252 log is read with
+   `surrogateescape` and written back the same way); `trace-log` and an agent-reported output keep the bytes the
+   same way. The debug ledger's `change.patch` and `runs/blobs/` are code the ledger re-applies, not logs, and are
+   left out. Redaction is automatic at write time, so an agent
+   has nothing to call; the scan is the user's check before sharing (or for data an earlier version stored).
+   It could be put behind `run_tool` later if agents need it; kept out to keep the tool tables unchanged.
+
+### 53.2 Not done
+
+- Pattern-based: a secret with no recognisable shape (a bare random password in prose, a custom token format) is
+  not found; a pattern can also hit a harmless value (then it is redacted in the kept log or export only).
+- Personal data covered: e-mail addresses only. Names, phone numbers, IP addresses and street addresses are not.
+- Not redacted: claim texts and evidence excerpts written by other paths (for example a claim an agent adds with a
+  secret in its text), source-code evidence excerpts in `atlas.db`, and rows an earlier version stored in
+  `atlas.db` (`secret-scan --fix` rewrites files, not the database).
+- No user configuration of extra patterns or an allowlist yet.
+- The assigned-secret rule's list of "not the secret" name endings (`_count`, `_hash`, `Encoder`, `_file` ...) is
+  fixed; another harmless `name: value` pair with letters and digits in its value is still redacted.
+- Only JSON string escapes are read (`\n`, `\"`, `\uXXXX` ...); HTML entities (`&lt;`), URL encoding (`%40`) and
+  base64 are not decoded.
+- Text dense with the `password`/`token` anchors (the same `password=` repeated) costs about 3 s per MB: linear,
+  but the slowest shape.
+- The cut of an over-long output drops at most the last 4 KB word; a token longer than that and cut in two keeps
+  its first part.
+- The export redacts e-mail addresses in the project's own docs too (an author line in a README becomes
+  `<redacted:email>`); there is no opt-out.
+
+### 53.3 Tests
+
+`tests/test_scrub.py` (66 tests):
+- every rule redacts its shape, names itself, and its marker is never a finding; findings carry no value;
+- only the secret part goes; LF and CRLF line structure and line numbers kept; a key block keeps its lines;
+- secret environment values redacted wherever they occur; paths, short values and `PWD`/`SSH_AUTH_SOCK` are not;
+  only a variable named for a secret counts (`GIT_AUTHOR_NAME`, `CERT_AUTHORITY`, `KEYBOARD_LAYOUT` do not);
+- 22 negatives (placeholders, env lookups, calls, constant names, git remotes, Kotlin labels, `@2x.png`,
+  `example.com`, escaped decorators, `Object@hash`, placeholder URL passwords, certificates, `passwordEncoder:
+  X@1a2b3c4d`, `token_count=`, `secret_hash:`, `tokens_used=`/`password_file=`, an escaped Windows path);
+- a token after `\n`, an AWS key after `\n`, an address in `<...>` and after `\n`, a quoted password and a key
+  block, each in `json.dumps` and in the export's HTML-safe JSON: found once, redacted, still the same JSON;
+- ten texts of 100 to 200 KB made of one anchor (`@`, `sk-`, `-sk-x1`, `glpat-`, `xoxb-`, `eyJ-`, `a@b `,
+  `password=`, `Bearer `, `\n`) each redact in under 2 s;
+- `cut` drops the part of a token at the cut;
+- the ui page's own static files pass the scan; a 5 MB log redacts in under 5 s;
+- `secret-scan`: default files (runs, copied logs; `change.patch` skipped), JSON findings with `file:line` and
+  `strong_inference`, text output, exit 1, `--fix` keeps line endings and then exits 0; named files; a missing file;
+  `--fix` keeps bytes that are not UTF-8; a read-only file under `--fix` is reported as skipped (no traceback) and
+  exits 1; a file too large to scan exits 1;
+- `trace-log` copy of an outside log kept redacted with its lines, the user's file untouched; a cp1252 log's copy
+  keeps its bytes;
+- an experiment printing a token and an address: logs, evidence and experiments rows carry neither;
+- an agent-reported output kept redacted; one with nothing to redact kept byte for byte;
+- the HTML export of `examples/glow_mod` plus a doc and a claim with secrets: written without redaction, the scan
+  finds the token and the address in the HTML file (the positive control); written with it, the file passes
+  `scan_files`, the environment is read once for the whole build, and the default export is among the files
+  `secret-scan` checks.
+
+Run: `python -m pytest tests/test_scrub.py tests/test_ui.py tests/test_trace_log.py tests/test_experiments.py
+tests/test_debug.py tests/test_docs.py -q -p no:cacheprovider`
+
+## 54. Rename preview (D81, 2026-09-30)
+
+### 54.1 Decisions
+
+- **Evidence, not an edit plan.** The command reads the code and the index. It writes no file, no claim and
+  no index (except the first-use index build above). The CLI test compares file hashes and the claim count
+  before and after.
+- **Line numbers as git counts them.** The module splits files at `\n` only. `str.splitlines` (used by
+  `index._file_lines` and elsewhere) also splits at form feed and similar characters, which moves every later
+  line. The shared reader is not changed here.
+- **Sites carry `strong_inference` or better.** An INFERRED edge that grades no better than
+  `weak_inference` is a guess. On Verinoda's own repository, renaming `when.guards` drew `indirect_call`
+  edges from `self.guards = guards` and keyword arguments named `guards` in other modules. So these lines
+  go to the mentions with the edge named, not to the sites: a list of lines the rename changes should not
+  hold lines that a guess alone ties to the symbol.
+- **Call grading reuses `entail.call_site`,** so `rename-preview` and `analyze` agree on what a verified call
+  is.
+- **A changed file caps its lines at `strong_inference`.** Its edges may point at lines that moved. The why
+  says so and names `verinoda update`.
+- **The mention scan is bounded.** It reads the files the search index says may spell the name (token in a
+  passage or a unit name), every unindexed or changed file, and never generated output. The scan stops
+  after 10 s and says so. When the search index is missing or describes another graph, it reads every file.
+- **CLI only for now.** The MCP tool (`rename_preview`, read-only, behind `run_tool` in the core profile, so
+  the core menu stays at five tools) was written and tested. It is held back because it changes the tool
+  count from 37 to 38. `tests/test_docs.py` checks that count in README, ARCHITECTURE and UPGRADING, and this
+  item does not edit UPGRADING.md. The wiring is in `docs/drafts/2.5-mcp.patch` (server.py and
+  test_mcp.py). To merge it, apply the patch and change "37 tools" to "38 tools" in README.md (status row
+  and `mcp serve` row, where `rename_preview` also joins the `run_tool` list), in docs/ARCHITECTURE.md
+  (diagram and `mcp/` row) and in docs/UPGRADING.md. Also add the MCP test to tests/test_rename_preview.py:
+
+  ```python
+  def test_mcp_rename_preview(repo):
+      from verinoda.mcp.server import AtlasTools
+
+      t = AtlasTools(repo)
+      res = t.rename_preview("shop/pricing.py::compute_total", "price_items")
+      assert res["status"] == "found" and any(s["kind"] == "definition" for s in res["sites"])
+      assert t.rename_preview("compute_total", "x")["status"] == "ambiguous"
+  ```
+
+### 54.2 Not done
+
+- Bindings come from the index, not from a type checker or language server. A Python call is verified only
+  when `entail.call_site` shows the line calls the name. For other languages it is `strong_inference`.
+- Keyword arguments (`f(compute_total=...)`), attribute access through `getattr`, string-built names and
+  code outside the repository are mentions at best.
+- An import line is not in the search index. A file that spells the name only on an import line, with no
+  import edge to the symbol, is skipped by the prefilter (the coverage line says so).
+- Overrides are found by name through the class edges the index has. An interface method implemented by
+  name without an `implements` edge is not found.
+- The "bound by place" rule marks every spelling inside a tied caller, in a file that imports the name, or in
+  its own module, comments and docstrings included. A Python parameter or local of the same name is found
+  (`shadowed`); in other languages a local of the same name there becomes a `bound` site
+  (`strong_inference`, with the reason).
+- Receiver types are read from the caller's lines by pattern (annotation, declaration, constructor
+  assignment), not by a type checker. A receiver of an unknown type (a class outside the index) is
+  unresolved, not ruled out.
+- A file or module rename is not previewed (`not_a_symbol`).
+
+### 54.3 Tests
+
+`tests/test_rename_preview.py` (20 cases):
+
+- Python function sites and statuses: definition, import, verified call, the second call in a caller
+  (`bound`), own module, alias import, and the alias call listed as `not_spelled`.
+- Mentions (a string in another file), another symbol of the same name left alone with its call line,
+  conflicts (a local in an edited file, a module-level name).
+- Java overrides above and beside, a Java call never `statically_verified`, a sibling member conflict.
+- Invalid new names (4 parametrised cases), unresolved and ambiguous names, a file.
+- CLI: `--json` and text output, exit codes 0/2/3, the tree's file hashes and the claim count unchanged.
+- A changed file keeps `strong_inference` at most.
+- A line only a guessed INFERRED edge ties to it is a mention (`inferred`), not a site.
+- A line calling `self.area()` and `Other().area()`: only the first is a site of `Sq.area`.
+- Declared receiver types (`s: Sq, o: Other`) split a line between `Sq.area` and `Other.area`; an INFERRED
+  call on an undeclared receiver is a mention.
+- A parenthesized multi-line import: the name's line is the import site, module-level calls in importing
+  files are `bound`, `helper` on its own import line too.
+- A parameter of the same name in the symbol's own module is `shadowed`, not a site.
+- A file over 1 MB is named in `coverage.unread` and in the text output.
+- A form feed does not move the reported line.
+- The new name in a comment is no conflict; in code it is.
+- New names by language (`price$` refused for Python, `ğtoplam` accepted, `$yüzey` for Java).
+- A git repository with no code files: a clean `could not be indexed` error.
+
+Run together with tests/test_docs.py and tests/test_cli.py: 130 passed (Windows 11, Python 3.12, 2026-09-30). tests/test_mcp.py is unchanged (the MCP wiring is held back).
+
 ## Sources
 
 - **Retrieval:**

@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D71)
+## Upgrading from 0.3.2 (D60-D81)
 
 ### D63: Running a project's own tests safely
 
@@ -205,9 +205,88 @@ load and then holds the `datapack` edges; `when`, `trace`, impact, `analyze` and
 method's calls into a datapack function. A function id with a folder (`ns:dir/name`) now resolves to the function
 instead of `not_found`. `verinoda datapack` itself is unchanged.
 
+### D72: Translation keys in Minecraft lang files
+
+New command `verinoda lang`: translation keys missing from a locale or only in it, written twice, placeholders
+that differ from the default locale, keys the code asks for that no lang file defines, keys nothing names. Each
+finding cites both files. Exit 3 when something is found, 2 when nothing could be compared (no lang file, or no
+file of the `--default` locale). Nothing else changes.
+
+### D73: Extract the definition around a location
+
+- New command `verinoda extract <path:LINE|path#Symbol ...> [--from FILE|-]`: the whole function or class around a
+  location, or around each location of a compiler's, linter's or test run's output. Reads the file as it is now;
+  needs no index; nothing changes on disk. `--json` gives each definition as a claim with its lines as evidence.
+  Exit 2 when a location is not found. No change to the store, the index or the MCP tools.
+
+### D74: Dependency cycles and a minimal break set
+
+`verinoda map` (all views) and `map --json` now include a `cycles` view; programs that iterate the views of the
+all-views map see one more key. `map --view cycles` and the MCP `map_view {view: "cycles"}` are new. Nothing else
+changes; the index is not rebuilt.
+
+### D75: Graph exports: GraphML, Cypher, Obsidian and SVG
+
+`verinoda export [--format graphml|cypher|obsidian|svg] [--out PATH] [--json]` is new. It writes
+`.verinoda/index/export/` by default, which is derived and disposable like the rest of `index/`.
+`verinoda index export ...` is unchanged. Use the new command when direction, parallel edges and each
+edge's location matter.
+
+### D76: Commit, diff and revision search
+
+- New command `verinoda history`: `history text "<text>" [--regex] [--path P]` (the commit that first added a
+  text and, when HEAD has none, the one that last removed it, each a claim with the commit as evidence),
+  `history commits [--message RE] [--author RE] [--path P] [--since D] [--until D] [--diff RE] [--limit N]`,
+  `history compare BASE [HEAD] [--path P]`. Read only; exit 2 when nothing is found.
+- The MCP server has 38 tools: `history_search` is new, served by the core profile behind `run_tool` and by
+  the full profile. Reinstalled skills allow `verinoda history` and mention it.
+
+### D77: Mermaid diagrams and a wiki outline
+
+- New commands `verinoda diagram` and `verinoda wiki`; nothing existing changed behaviour.
+- MCP `map_view` accepts the view `outline` (`targets` = page ids for their diagrams).
+- `verinoda ui --export` files now carry a `wiki` field and are larger by the size of the diagrams; the
+  export's summary line names the pages and diagrams.
+- An optional `.verinoda-wiki.json` at the repository root steers the outline; commit it with the code.
+
+### D78: Agent instruction file lint
+
+- New command `verinoda agent-lint`: AGENTS.md, CLAUDE.md, GEMINI.md, Copilot/Cursor/Windsurf/Cline rules and
+  Claude Code's memory checked against the tree (paths, scripts, targets, modules, packages, extras, tools, and
+  whether the files agree). Read-only, no index needed, no schema change. Exit 3 when something is wrong: a CI
+  step that runs it fails on a stale instruction file.
+- If the MCP tool below is added: the server has one more tool (full profile only); update the tool counts.
+
+### D79: Filter syntax in query
+
+`verinoda query` and MCP `project_query` read filters in the question: `path:GLOB`, `lang:NAME`,
+`symbol:NAME`, `is:vendored|generated|minified|test`, `/regex/`, and `AND` / `OR` / `NOT` / `-` / parentheses.
+Filters narrow the ranked results and add no score. A question of filters only lists every matching unit. A
+question with no `key:value` filter and no `/regex/` token ranks exactly as before (`/word/`, one path
+segment between slashes, and an `is:` value that is not a filter are words). JSON results with filters
+carry a new `filters` block. An unreadable filter is an error: exit code 1 on the CLI, `invalid_argument` on
+MCP. No re-index is needed.
+
+### D80: Secret scrubbing
+
+- Experiment logs, agent-reported outputs and logs copied by `trace-log` are now stored with secrets and e-mail
+  addresses replaced by `<redacted:RULE>` markers (line numbers unchanged); the evidence excerpts and summaries made
+  from them are redacted too. An experiment's evidence `content_hash` (and an agent-reported run's
+  `output_sha256` when something was redacted) is now the hash of the kept, redacted text.
+- `verinoda ui --export` also replaces secrets and e-mail addresses in the embedded text.
+- New command `verinoda secret-scan [FILE ...] [--fix] [--json]`. Logs stored by an earlier version may still hold
+  secrets: run `verinoda secret-scan` and, if it reports findings, `verinoda secret-scan --fix`.
+
+### D81: Rename preview
+
+New command `verinoda rename-preview <symbol> <new_name> [--max-sites N] [--json]`: every line a rename
+would touch, each with its status, why and the line, plus mentions, other symbols of the same name and
+conflicts. It edits and records nothing. Exit 2 when the symbol does not resolve or the new name is
+invalid, 3 on a conflict. No schema or index change. No MCP tool yet (see above).
+
 ### D60-D62
 
-- D62: the server has 37 tools; the new one, `grep_context`, is what an optional Claude Code Grep hook calls
+- D62: `grep_context`, the server's 37th tool then, is what an optional Claude Code Grep hook calls
   (through run_tool in the core profile). Nothing calls it unless that hook is configured
   (`verinoda/agents/templates/claude_hooks.json`); no migration.
 

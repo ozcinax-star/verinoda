@@ -149,7 +149,11 @@ def _waiting_note(holder: dict | None) -> None:
 
 
 def _need_graph(repo: Path) -> None:
-    if not _auto_index(repo):
+    try:
+        indexed = _auto_index(repo)
+    except RuntimeError as e:  # the first-use build failed (a repository with no code files, say)
+        raise SystemExit(f"error: {repo} could not be indexed: {e}") from None
+    if not indexed:
         why = "" if (repo / ".git").exists() else " (not a git work tree, so it is not indexed on its own)"
         raise SystemExit(f"error: {repo} has no index yet - run `verinoda scan {repo}` first{why}")
 
@@ -653,7 +657,8 @@ def cmd_ui(args) -> int:
             return 2
         uri = Path(out["path"]).as_uri()
         print(f"wrote {out['path']} ({out['bytes'] / 1e6:.1f} MB: {out['graph_files']} files in the graph, "
-              f"{out['notes']} file notes, no code); open it in a browser, no server needed:\n  {uri}")
+              f"{out['notes']} file notes, {out['wiki_pages']} wiki pages with {out['diagrams']} Mermaid diagrams, no "
+              f"code); open it in a browser, no server needed:\n  {uri}")
         if args.open:
             import webbrowser
 
@@ -833,18 +838,68 @@ def cmd_review(args) -> int:
 
 
 def cmd_query(args) -> int:
-    from verinoda import freshness, index, retrieval
+    from verinoda import freshness, index, query_filters, retrieval
 
     repo = _repo(args)
     _need_graph(repo)
     g = index.load(repo)
     chars = args.max_chars or retrieval.question_chars(args.question, repo)
-    res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=chars))
+    try:
+        res = retrieval.retrieve(g, args.question, retrieval.Budget(max_items=args.max_items, max_chars=chars),
+                                 filters=True)
+    except query_filters.FilterError as exc:
+        raise SystemExit(f"error: {exc}") from None
     retrieval.attach_freshness(res, g, freshness.check(repo))  # never silently answer from an older tree
     if args.json:
         _write(_dump(res))
     else:  # the skeleton-first plain text a model reads (docs/DESIGN.md D20)
         _write(retrieval.render_text(res, budget_chars=chars))
+    return 0
+
+
+def cmd_diagram(args) -> int:
+    from verinoda import diagrams, freshness, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    try:
+        res = diagrams.diagram(index.load(repo), args.kind, args.source, args.target, mode=args.mode,
+                               stale=fresh["files"])
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from None
+    res.update(freshness.summary(fresh))
+    if args.json:
+        _write(_dump(res))
+    elif res.get("mermaid"):
+        _write(diagrams.as_text(res))  # a Mermaid file: the stale files are a %% comment in it
+    else:
+        print(f"no diagram: {res.get('status')}" + "".join(f"\n  {side}: {note}" for k in ("not_found", "not_indexed",
+              "ambiguous", "not_a_symbol") for side, note in (res.get(k) or {}).items()))
+        if res.get("next_step"):
+            print(f"next step: {res['next_step']}")
+    return 0 if res.get("status") == "found" else 2
+
+
+def cmd_wiki(args) -> int:
+    from verinoda import diagrams, freshness, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    full = args.json or args.markdown or bool(args.page)
+    res = diagrams.outline(index.load(repo), repo, pages=args.page, diagrams=full, stale=fresh["files"])
+    res.update(freshness.summary(fresh))
+    if args.json:
+        _write(_dump(res))
+        return 0
+    if full:
+        _write(diagrams.as_markdown(res))
+    else:
+        _write(diagrams.render(res))
+        print(f"the pages with their Mermaid diagrams: --markdown (some pages: --page ID); steer them with "
+              f"{diagrams.STEERING_FILE}")
+    _stale_note(res)
     return 0
 
 
@@ -860,6 +915,24 @@ def cmd_trace(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_export(args) -> int:
+    from verinoda import graph_export
+
+    repo = _repo(args)
+    _need_graph(repo)
+    try:
+        res = graph_export.write(repo, args.format, args.out)
+    except OSError as exc:
+        print(f"error: cannot write {args.out or graph_export.default_path(repo, args.format)}: {exc}",
+              file=sys.stderr)
+        return 2
+    except ValueError as exc:  # a file or folder an earlier export did not write: refused
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(graph_export.render(r)))
+    return 0
+
+
 def cmd_backlog(args) -> int:
     from verinoda import backlog, freshness, index
 
@@ -868,6 +941,14 @@ def cmd_backlog(args) -> int:
                          stale=lambda: freshness.check(repo)["files"])
     _emit(args, res, lambda r: print(backlog.render(r)))
     return 0 if res["status"] == "found" else 2
+
+
+def cmd_agent_lint(args) -> int:
+    from verinoda import agentlint
+
+    res = agentlint.lint(_repo(args), extra=args.file, memory=not args.no_memory, include_ok=args.all)
+    _emit(args, res, lambda r: _write(agentlint.render(r)))
+    return {"wrong": 3, "no_files": 2}.get(res["status"], 0)
 
 
 def cmd_datapack(args) -> int:
@@ -903,6 +984,19 @@ def cmd_trace_log(args) -> int:
     return 0 if res["traces"] or res["results"] else 2
 
 
+def cmd_secret_scan(args) -> int:
+    from verinoda import scrub
+
+    repo = _repo(args)
+    paths = [Path(p) for p in args.paths]
+    missing = [str(p) for p in paths if not p.is_file()]
+    if missing:
+        raise SystemExit(f"error: not a file: {', '.join(missing)}")
+    res = scrub.scan_files(repo, paths or None, fix=args.fix)
+    _emit(args, res, lambda r: print(scrub.render(r)))
+    return 0 if res["clean"] else 1
+
+
 def cmd_shader(args) -> int:
     from verinoda import shaders
 
@@ -911,6 +1005,16 @@ def cmd_shader(args) -> int:
     if res["kind"] == "check":
         return 3 if res["issues"] else 0
     return 0 if res["status"] == "found" else 2
+
+
+def cmd_lang(args) -> int:
+    from verinoda import langkeys
+
+    res = langkeys.lookup(_repo(args), args.default, unused=not args.no_unused)
+    _emit(args, res, lambda r: print(langkeys.render(r)))
+    if res["findings"]:
+        return 3
+    return 0 if res["status"] == "found" else 2   # no lang file, or no file of the default locale: nothing compared
 
 
 def cmd_when(args) -> int:
@@ -928,6 +1032,65 @@ def cmd_when(args) -> int:
 
     _emit(args, res, render)
     return 0 if res["status"] == "found" else 2
+
+
+def cmd_extract(args) -> int:
+    from verinoda import extract
+
+    if not args.target and args.from_file is None:
+        raise SystemExit("error: give a location (path:LINE, path#Symbol) or --from FILE")
+    if args.max_lines < 0:
+        raise SystemExit("error: --max-lines is a number of lines (0: all)")
+    output = None
+    if args.from_file == "-":
+        output = sys.stdin.read()
+    elif args.from_file is not None:
+        f = Path(args.from_file)
+        if not f.is_file():
+            raise SystemExit(f"error: {args.from_file} is not a file")
+        output = f.read_text(encoding="utf-8", errors="replace")
+    res = extract.run(_repo(args), args.target, output=output, cwd=Path.cwd(),
+                      max_lines=args.max_lines or None, limit=max(1, args.limit))
+    _emit(args, res, lambda r: _write(extract.render(r, numbers=not args.no_numbers)))
+    return 0 if res["status"] == "found" else 2
+
+
+def cmd_history(args) -> int:
+    from verinoda import history
+
+    repo = _repo(args)
+    if args.history_cmd == "text":
+        res = history.text_history(repo, args.text, regex=args.regex, path=args.path)
+    elif args.history_cmd == "commits":
+        res = history.commits(repo, message=args.message, author=args.author, path=args.path, since=args.since,
+                              until=args.until, diff=args.diff, limit=args.limit)
+    else:
+        res = history.compare(repo, args.base, args.head, path=args.path)
+    _emit(args, res, lambda r: print(history.render(r)))
+    return 0 if res["status"] in ("found", "same") else 2
+
+
+def cmd_rename_preview(args) -> int:
+    from verinoda import freshness, index, rename_preview
+
+    if args.max_sites < 1:
+        print("error: --max-sites must be a positive number", file=sys.stderr)
+        return 2
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    res = rename_preview.run(index.load(repo), args.symbol, args.new_name, stale=fresh["files"],
+                             max_sites=args.max_sites)
+    res.update(freshness.summary(fresh))
+
+    def render(r: dict) -> None:
+        print(rename_preview.render(r))
+        _stale_note(r)
+
+    _emit(args, res, render)
+    if res["status"] != "found":
+        return 2
+    return 3 if res["conflicts"] else 0
 
 
 # -- question plans (docs/DESIGN.md D1-D9) ----------------------------------------
@@ -2575,7 +2738,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                       "dead"])
+                                       "cycles", "dead"],
+                    help="cycles: dependency cycles between files and the fewest file dependencies to cut; "
+                         "dead: code no entry point reaches (asked for by name)")
     sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); default: git changes")
     sp.add_argument("--base", help="impact view: diff base (default HEAD + untracked)")
     sp.add_argument("--max-lines", type=int, default=None,
@@ -2598,7 +2763,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
     sp = add("query", cmd_query, "bounded, justified retrieval for a question (plain text; --json for programs)")
-    sp.add_argument("question")
+    sp.add_argument("question", help="text to rank; filters narrow it: path:GLOB lang:NAME symbol:NAME "
+                                     "is:vendored /regex/, joined by AND, OR, NOT (or -filter) and parentheses")
     sp.add_argument("--max-items", type=int, default=10)
     sp.add_argument("--max-chars", type=int, default=None,
                     help="character budget (default 6000; with query.shape_budget on, 4800 for a single-clause "
@@ -2607,9 +2773,35 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("export", cmd_export, "the graph for other tools: GraphML (Gephi, yEd), Neo4j Cypher, an Obsidian vault "
+                                   "or an SVG drawing; each edge with its location and the status it can carry "
+                                   "unchecked, no code, no machine paths")
+    sp.add_argument("--format", choices=["graphml", "cypher", "obsidian", "svg"], default="graphml")
+    sp.add_argument("--out", metavar="PATH",
+                    help="the file (for obsidian: the vault folder; default .verinoda/index/export/graph.<format> "
+                         "or .verinoda/index/export/obsidian)")
+    sp = add("diagram", cmd_diagram, "a Mermaid diagram with its evidence as %% comments: architecture (the parts "
+                                     "of the project and their edges), flow (the call paths from SOURCE to TARGET, "
+                                     "or what SOURCE calls), sequence (the first call path as messages)")
+    sp.add_argument("kind", choices=["architecture", "flow", "sequence"])
+    sp.add_argument("source", nargs="?")
+    sp.add_argument("target", nargs="?")
+    sp.add_argument("--mode", choices=["flow", "any"], default="flow", help="flow with a target: as for trace")
+    sp = add("wiki", cmd_wiki, "the wiki outline: an overview page and a page per part (or the pages "
+                               ".verinoda-wiki.json names), each with its Mermaid diagrams")
+    sp.add_argument("--markdown", action="store_true", help="every page as Markdown with its diagrams")
+    sp.add_argument("--page", action="append", metavar="ID", help="only this page, as Markdown; repeatable")
     sp = add("backlog", cmd_backlog, "a backlog item and the code comments that cite it, or the items that explain "
                                      "a line or symbol (docs/BACKLOG.md rows and headings)")
     sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")
+    sp = add("agent-lint", cmd_agent_lint, "AGENTS.md, CLAUDE.md, Copilot/Cursor/Windsurf rules and Claude Code "
+                                           "memory checked against the tree: paths, scripts and targets, modules, "
+                                           "declared packages, and whether the files agree (exit 3 = something "
+                                           "wrong, 2 = no such file)")
+    sp.add_argument("--file", action="append", metavar="PATH", help="one more instruction file to check; repeatable")
+    sp.add_argument("--no-memory", action="store_true",
+                    help="leave out Claude Code's memory files for the project (~/.claude/projects/.../memory)")
+    sp.add_argument("--all", action="store_true", help="list the checks that passed too")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
                                        "but never read, calls to missing functions (from mcfunction or Java); or "
                                        "one tag, score or function across mcfunction and Java (a function's Java "
@@ -2621,14 +2813,66 @@ def build_parser() -> argparse.ArgumentParser:
                                          "succeed/fail tied to that test; stored as claims with the log as evidence")
     sp.add_argument("file", help="the log (latest.log, a GameTest run's output, a pasted trace)")
     sp.add_argument("--no-store", action="store_true", help="report only; record no claim")
+    sp = add("secret-scan", cmd_secret_scan, "secrets and e-mail addresses left in files (default: the run logs and "
+                                             "copied logs under .verinoda/ and the `ui --export` file): exit 1 on a "
+                                             "finding; values are never printed")
+    sp.add_argument("paths", nargs="*", help="files to scan instead of the stored ones")
+    sp.add_argument("--fix", action="store_true", help="redact the findings in place (line numbers are kept)")
     sp = add("shader", cmd_shader, "GLSL uniform blocks and the Java that fills them: where a field (Weather.y) comes "
                                    "from; --check: blocks and writers that differ, mirrored constants that disagree")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
     sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
+    sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
+                               "placeholders that differ from the default locale, keys the code asks for that no "
+                               "lang file defines, keys nothing names (exit 3 when something is found)")
+    sp.add_argument("--default", default="en_us", help="the locale the others are compared with (default en_us)")
+    sp.add_argument("--no-unused", action="store_true", help="skip the search for keys nothing names")
     sp = add("when", cmd_when, "when a method runs: the events and callers that lead to it, with the conditions "
                                "around each call")
     sp.add_argument("symbol")
     sp.add_argument("--depth", type=int, default=6, help="caller hops to walk back (default 6)")
+    sp = add("extract", cmd_extract, "the whole function or class around a location: path:LINE, path#Symbol, or "
+                                     "the locations in a compiler's or test run's output (the file as it is now; "
+                                     "no index needed; exit 2 = a location not found)")
+    sp.add_argument("target", nargs="*", help="path:LINE, path:LINE-LINE, path#Symbol (or path::Symbol), or an "
+                                              "error line as a tool printed it")
+    sp.add_argument("--from", dest="from_file", metavar="FILE",
+                    help="read the locations from a compiler's, linter's or test run's output ('-': stdin)")
+    sp.add_argument("--max-lines", type=int, default=0, help="print at most N lines of each definition (0: all)")
+    sp.add_argument("--limit", type=int, default=20, help="at most N locations of the project (default 20); "
+                                                          "the others are only counted")
+    sp.add_argument("--no-numbers", action="store_true", help="the source as it is, without line numbers")
+
+    sp = sub.add_parser("history", help="git history: when a text appeared or disappeared (the commits as "
+                                         "evidence), commit search, two revisions compared (exit 2: nothing found)")
+    hsub = sp.add_subparsers(dest="history_cmd", required=True)
+    c = add("text", cmd_history, "the commit that first added TEXT and, when HEAD has none, the one that last "
+                                 "removed it (git log -S; -G with --regex), each with its file:line", parent=hsub)
+    c.add_argument("text", help="the text to look for (a name, a string, a line of code)")
+    c.add_argument("--regex", action="store_true", help="TEXT is an extended regular expression matched against "
+                                                        "added and removed lines")
+    c.add_argument("--path", help="only the history of this file or folder (a git pathspec)")
+    c = add("commits", cmd_history, "commits by message, author, path, date and diff content, newest first",
+            parent=hsub)
+    c.add_argument("--message", help="a regular expression the commit message matches (case ignored)")
+    c.add_argument("--author", help="a regular expression the author's name or e-mail matches (case ignored)")
+    c.add_argument("--path", help="commits that touch this file or folder")
+    c.add_argument("--since", help="commits after this date (2026-01-31, '2 weeks ago')")
+    c.add_argument("--until", help="commits before this date")
+    c.add_argument("--diff", metavar="REGEX", help="commits whose added or removed lines match (case ignored)")
+    c.add_argument("--limit", type=int, default=20, help="commits to list (default 20, at most 100)")
+    c = add("compare", cmd_history, "what HEAD_REV has that BASE_REV has not: commits, merge base, files changed "
+                                    "with line counts", parent=hsub)
+    c.add_argument("base", help="the base revision (branch, tag, sha, HEAD~3)")
+    c.add_argument("head", nargs="?", default="HEAD", help="the other revision (default HEAD)")
+    c.add_argument("--path", help="only this file or folder")
+    sp = add("rename-preview", cmd_rename_preview, "every line a rename of a symbol would touch (definition, calls, "
+                                                   "imports, overrides), each with its status and the line, and "
+                                                   "the mentions nothing ties to it; edits nothing (exit 3 = "
+                                                   "conflicts with the new name)")
+    sp.add_argument("symbol", help="the symbol: Class.method, path/file.py::name or a node id")
+    sp.add_argument("new_name", help="the new name (an identifier)")
+    sp.add_argument("--max-sites", type=int, default=300, help="entries per list (default 300)")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",

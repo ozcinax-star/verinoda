@@ -179,8 +179,49 @@ def _dead(v: dict, cap: int) -> list[str]:
     return out
 
 
+def _cycles(v: dict, cap: int) -> list[str]:
+    """At most ``cap`` lines: a cycle's cuts take two lines each, and a line is kept for saying what was left out."""
+    cycles = v.get("cycles", [])
+    total = v.get("cycles_total", len(cycles))
+    if not total:
+        return [f"no dependency cycles between the {v.get('files_with_dependencies', 0)} files with dependencies"]
+    exact = v.get("exact_break_sets", sum(c.get("break_method") == "exact" for c in cycles))
+    out = [f"{total} cycles over {v.get('files_in_cycles', 0)} files; cutting {v.get('break_set_size', 0)} "
+           f"file dependencies breaks them all (the smallest set for {exact} of {total})"]
+    for i, c in enumerate(cycles):
+        if len(out) + 2 > cap:   # this cycle's header and the line that says how many more
+            break
+        files = ", ".join(c["files"][:4]) + (f" ... {c['size'] - 4} more" if c["size"] > 4 else "")
+        out.append(f"   cycle {i + 1}: {c['size']} files, {c['dependencies_total']} dependencies ({c['status']}"
+                   + (f", {c['in']}" if c.get("in") else "") + f"): {files}")
+        breaks = c.get("break_set", [])
+        n_cuts = c.get("break_set_total", len(breaks))
+        room = cap - len(out) - (1 if i + 1 < total else 0)
+        m = min(len(breaks), room // 2)
+        if m < n_cuts:
+            m = min(m, (room - 1) // 2)
+        for b in breaks[:max(m, 0)]:
+            rel = ", ".join(b.get("relations", {}))
+            at = ", ".join(b.get("at", [])[:2])
+            refs = f"{b['references']} ref" + ("s" if b["references"] != 1 else "")
+            flag = "" if b.get("extracted", 1) else "  [INFERRED edges only]"
+            out.append(f"     cut {b['from']} -> {b['to']}  ({refs}: {rel}; {at}){flag}")
+            ring = " -> ".join(b["closes"][:6]) + (" ..." if len(b["closes"]) > 6 else "")
+            out.append(f"       closes {ring}" + ("  (weak_inference)" if b.get("closes_status") == "weak_inference"
+                                                  else ""))
+        if n_cuts > max(m, 0):
+            out.append(f"     ... {n_cuts - max(m, 0)} {'more ' if m > 0 else ''}cuts in --json")
+    else:
+        i = len(cycles)
+    listed = i if i < len(cycles) else len(cycles)
+    if total > listed:
+        out.append(f"   ... {total - listed} more cycles" + (" in --json" if listed < len(cycles) else ""))
+    return out
+
+
 RENDERERS = {"hierarchy": _hierarchy, "dependencies": _dependencies, "dataflow": _dataflow,
-             "config": _config, "tests": _tests, "history": _history, "impact": _impact, "dead": _dead}
+             "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles,
+             "dead": _dead}
 
 
 def render(res: dict, cap: int) -> str:

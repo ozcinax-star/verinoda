@@ -44,7 +44,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 2.2 | **SCIP indexers run by Verinoda (opt-in)** | Detect the build and run scip-java, scip-typescript, scip-python and others instead of asking the user for a SCIP file | Sourcegraph auto-indexing | `scan --precise` on a Gradle project produces and adopts a SCIP index |
 | 2.3 | **Compiler frontends (opt-in)** | javac/JDT, Roslyn, go/types, libclang as resolvers where no language server is installed | code-graph-rag, Eclipse JDT | one non-Python language resolved without an LSP |
 | 2.4 | **Full type and name check through tsc, pyright or mypy** | Run the project's own checker and turn its diagnostics into `check` sites | narsil-mcp, common practice | `check` on TypeScript reports members and calls, not only imports |
-| 2.5 | **Rename preview** | Every site a rename would touch, each with its evidence, without editing | Serena, GitNexus | `verinoda rename-preview A B` lists all sites; nothing is written |
 | 2.6 | **Import JVM checker findings** | Error Prone and NullAway results, and jdeps' JDK-internal API use, read as evidence | Error Prone, NullAway, jdeps | their findings appear as claims with the tool named |
 
 ## 3 - Structural search and query language
@@ -54,15 +53,12 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 3.1 | **Structural (AST pattern) search** | Code-shaped patterns with metavariables (`foo($A, $$$REST)`), YAML rule files, over the tree-sitter trees Verinoda already has | ast-grep, Semgrep, Comby, Sourcegraph structural search, Probe | `verinoda grep-ast` finds a pattern across Python, Java and TypeScript |
 | 3.2 | **Code query language** | A small declarative query language over the graph (nodes, edges, paths) that answers with evidence | CodeQL, Glean Angle, jQAssistant Cypher, NDepend CQLinq, Joern | a query such as "functions that write storage and are reachable from an HTTP handler" returns its sites |
 | 3.3 | **Derived facts** | A verified claim or query result stored as a fact other queries use, recomputed when its evidence goes stale | Glean derived predicates, jQAssistant concepts | a derived fact goes stale with the code it rests on |
-| 3.4 | **Filter syntax in `query`** | `symbol:`, `path:` globs, `lang:`, `is:vendored`, boolean AND/OR/NOT, `/regex/` | GitHub code search, Sourcegraph | filters combine with ranked text search |
 | 3.5 | **Scripted aggregation over results** | A sandboxed script counts and cross-references search hits (inventories computed, not estimated) | Sourcegraph MCP evaluator | an inventory question answered by a count with its sites |
-| 3.6 | **Extract by location** | `file:line`, `file#symbol` or compiler output in, the whole enclosing function or class out | Probe | `verinoda extract src/a.py:40` prints the enclosing definition |
 
 ## 4 - Git history mining
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 4.1 | **Commit, diff and revision search** | Search commits by message, author, path and date; search diff content; compare two revisions | Sourcegraph MCP | "when did X appear or disappear" answered with the commit as evidence |
 | 4.2 | **Hotspots** | Change frequency times complexity, per file and per function | CodeScene, CodeCharta | `map --view hotspots`; `review` ranks `read_first` with it |
 | 4.3 | **Temporal coupling** | Files and functions that change together without a static edge | CodeScene | impact lists history-coupled files as `strong_inference` with their commit count |
 | 4.4 | **Ownership and knowledge map** | Main authors, bus factor, knowledge loss, CODEOWNERS resolution | CodeScene, Sourcegraph Own, Glean | "who knows this code" answered from blame and CODEOWNERS |
@@ -84,7 +80,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 6.1 | **Dead code** | Symbols and files no entry point reaches; zero-caller functions; orphan modules | codebase-memory-mcp, CodeGraphContext, dependency-cruiser, Madge, Sonargraph | each dead symbol is a claim naming the entry points searched and the dynamic uses that could keep it alive |
 | 6.2 | **Complexity, code health and clones** | Cyclomatic and cognitive complexity, nesting, duplicate code with a similarity score | CodeScene, SonarQube, Understand, Sonargraph, CodePrism | `review` reports a health drop on changed functions |
-| 6.3 | **Cycles and a minimal break set** | Dependency cycles and the smallest set of edges to cut | Sonargraph, Madge, dependency-cruiser | `map --view cycles` |
 | 6.4 | **Declared vs used dependencies** | Packages missing, unused, transitive-only or in the wrong group (dev vs runtime) | deptry | `check --deps` for pyproject, package.json and Gradle |
 | 6.5 | **Reachable vulnerable dependencies and SBOM (opt-in)** | Advisories filtered to library functions the code actually calls; CycloneDX output; licenses | Semgrep Supply Chain, narsil-mcp | an advisory is reported only with a call path to the vulnerable function |
 | 6.6 | **Affected projects in a monorepo** | The workspace packages and build targets a diff affects | nx affected | `review` names affected packages |
@@ -147,7 +142,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 12.1 | **Docs coupled to code, drift check and trivial auto-fix** | Code references in ordinary repo docs checked on each change; renames and moved lines fixed, the rest flagged; a CI check | Swimm | `verinoda docs check` fails on a broken reference and `--fix` repairs a rename |
-| 12.2 | **Agent instruction file lint** | AGENTS.md, CLAUDE.md and memory files: paths exist, scripts and targets exist, packages declared, files agree | agents-lint, ContextCov | each sentence that names something is checked and wrong ones reported |
 | 12.3 | **What a merged change made stale** | The claims, notes and decision records a PR made stale, as a comment or report | Mintlify, Dosu (without a model here) | `review` lists them |
 | 12.4 | **Decision record lifecycle** | Supersede with status updated on both records, links with reverse links, a graph of records, a table of contents, a timeline site | adr-tools, Log4brains | `decide supersede` and a timeline in `ui` |
 | 12.5 | **Undocumented decisions** | Find structural choices no decision record covers (a single storage path, an exclusive library) | Codex ADR workflow | candidates listed as `weak_inference` for the user to record or dismiss |
@@ -171,8 +165,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 14.1 | **Evidence-backed code tours** | A tour built from `trace` or the dataflow view, pinned to a commit, re-anchored when code moves; CodeTour format | CodeTour | `verinoda tour` writes a `.tour` file that opens in VS Code |
 | 14.2 | **Named flow maps** | A `trace` or map result saved under a name, shareable and citable by agents | Windsurf/Devin Codemaps | `verinoda map save NAME` and an MCP read by name |
-| 14.3 | **Mermaid diagrams and a wiki outline** | Architecture, call-flow and sequence diagrams exported as Mermaid; a page tree steered by a repo file; an outline over MCP | DeepWiki, Google Code Wiki | the HTML export carries the diagrams |
-| 14.4 | **Graph exports** | GraphML, Neo4j Cypher, Obsidian vault, SVG | Graphify | `verinoda export --format graphml` |
 | 14.5 | **Butterfly view** | Callers and callees, or the inheritance tree, centred on one symbol | Understand, Sourcetrail | a view in `ui` |
 
 ## 15 - Runtime evidence import
@@ -181,7 +173,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 15.1 | **Runtime flaws from traces** | N+1 queries, repeated SQL and slow paths found in recorded test runs | AppMap, Digma | `observe` reports an N+1 with its call path |
 | 15.2 | **Error and trace import** | Sentry events and OpenTelemetry spans read from a file as observed evidence (the general form of `trace-log`) | Sentry Seer, Bito | a stack trace from an exported event maps onto the code |
-| 15.3 | **Secret scrubbing** | Secrets and personal data removed from traces, logs and exports before they are stored or shared | AppMap sanitize, Repomix Secretlint, mclo.gs | the HTML export and stored logs pass a secret scan |
 
 ## 16 - Minecraft: vanilla source and mappings
 
@@ -208,7 +199,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 17.7 | **Crash diagnosis rules and suspect scoring** | Known crash patterns (memory, watchdog, missing dependency, Mixin apply failure, wrong Java) and suspect mods scored from their frames | mclo.gs Codex, mc-crash-doctor, NotEnoughCrashes | `trace-log` names the rule and the suspect with its score |
 | 17.8 | **Shaderpack lint and include graph** | GLSL checked with Iris and OptiFine macros; `#include` edges | mcshader-lsp | `shader --check` reports a GLSL error with its line |
 | 17.9 | **Client and server separation** | Client-only code reachable from server code | Fabric Loom split source sets | a path from server code to a client-only class is reported |
-| 17.10 | **Translation keys** | Missing, duplicate and unused lang keys; placeholder mismatches with the default locale | MinecraftDev, validate-minecraft-lang | each key finding cites both files |
 
 ## 18 - Flow analysis
 

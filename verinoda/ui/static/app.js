@@ -85,7 +85,10 @@
         imported_by: "Imported by", references: "References", referenced_by: "Referenced by",
         names_data: "Names (resource ids)", named_by: "Named by", other_out: "Other links", other_in: "Other backlinks",
         claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes", answerMore: "Also relevant",
+        wiki: "Wiki", diagrams: "Diagrams", wikiFiles: "Files", problems: "Problems",
       },
+      wikiMermaid: "Mermaid text: paste it into a Mermaid viewer (GitHub, GitLab, Obsidian, mermaid.live) to draw it. A dashed arrow comes from an inferred edge.",
+      copy: "Copy", copied: "Copied", evidence: "Evidence", wikiNone: "No page named so.",
       kind: {
         class: "class", method: "method", function: "function", file: "file", doc: "document", section: "section",
         data: "data file", symbol: "symbol", external: "external", claim: "claim",
@@ -166,8 +169,11 @@
         imported_by: "İçe aktaranlar", references: "Başvurdukları", referenced_by: "Başvuranlar",
         names_data: "Adlandırdığı kaynaklar", named_by: "Adlandıranlar", other_out: "Diğer bağlantılar",
         other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
-        myNotes: "Notlarım", answerMore: "Ayrıca ilgili",
+        myNotes: "Notlarım", answerMore: "Ayrıca ilgili", wiki: "Wiki", diagrams: "Diyagramlar", wikiFiles: "Dosyalar",
+        problems: "Sorunlar",
       },
+      wikiMermaid: "Mermaid metni: çizmek için bir Mermaid görüntüleyicisine (GitHub, GitLab, Obsidian, mermaid.live) yapıştırın. Kesikli ok çıkarım yapılmış bir bağlantıdan gelir.",
+      copy: "Kopyala", copied: "Kopyalandı", evidence: "Kanıt", wikiNone: "Bu adda sayfa yok.",
       kind: {
         class: "sınıf", method: "metot", function: "fonksiyon", file: "dosya", doc: "belge", section: "bölüm",
         data: "veri dosyası", symbol: "sembol", external: "dış", claim: "iddia",
@@ -615,7 +621,7 @@
   }
 
   // the start page is what the address shows when it names nothing else
-  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h.startsWith("#/n/") || (h.startsWith("#/q/") && !OFFLINE)); };
+  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h.startsWith("#/n/") || h.startsWith("#/w/") || (h.startsWith("#/q/") && !OFFLINE)); };
   async function renderHome() {
     current = null;
     document.title = "Verinoda";
@@ -646,11 +652,73 @@
       }
       return li;
     })) : el("p", { class: "muted small", text: t("noNotes") });
+    const wiki = await wikiList();
+    if (!onHome()) return;
     setMain(el("div", { class: "home" }, el("h1", { text: s.project }), el("p", { class: "muted", text: t("welcome") }),
       OFFLINE ? el("p", { class: "muted small", text: `${t("offlineHome")} ${OFFLINE.generated || ""}` }) : null,
-      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs));
+      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs, wiki));
     $("#outline").replaceChildren();
     local.setData([], []);
+  }
+
+  // -- the wiki outline: its pages and their Mermaid diagrams (as text: no renderer is loaded) -------
+  const wikiHref = (id) => "#/w/" + encodeURIComponent(id);
+  async function wikiList() {
+    let w;
+    try { w = await api("/api/wiki"); } catch (_) { return null; }
+    const pages = w.pages || [];
+    if (!pages.length) return null;
+    return el("div", {}, sectionHeader("wiki", pages.length), el("ul", { class: "links" }, pages.map((p) => {
+      const li = el("li", {}, el("a", { href: wikiHref(p.id) }, p.title),
+        el("span", { class: "at", text: `${p.file_count} ${t("filesN")} · ${(p.diagram_kinds || []).join(", ")}` }));
+      li.style.paddingLeft = `${p.depth * 18}px`; // a property, not a style attribute: the export's policy allows it
+      return li;
+    })));
+  }
+  function fileNotes(tree) { // path -> the note of that file, from the file tree
+    const out = new Map(), stack = tree ? [tree] : [];
+    while (stack.length) { const n = stack.pop(); if (n.children) stack.push(...n.children); else if (n.path) out.set(n.path, n.id); }
+    return out;
+  }
+  function diagramBlock(d) {
+    if (!d.mermaid) return el("p", { class: "muted small", text: `${d.kind} ${d.from || ""} → ${d.to || ""}: ${d.status}` });
+    const code = el("pre", { class: "code mermaid-src" }, el("code", { text: d.mermaid }));
+    const btn = el("button", { class: "small" }, t("copy"));
+    btn.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(d.mermaid); btn.textContent = t("copied"); } catch (e) { btn.textContent = e.message || "—"; }
+    });
+    const claims = el("ul", { class: "links" }, (d.claims || []).map((c) => el("li", {},
+      el("span", { class: "status st-" + c.status, text: c.status.replace(/_/g, " ") }), el("span", { text: c.text }),
+      ...(c.evidence || []).map(atLink))));
+    const head = ["flow", "sequence"].includes(d.kind) ? `${d.kind}: ${d.title}` : d.title;
+    return el("div", { class: "diagram" }, el("h3", {}, head, " ", btn), code,
+      d.truncated ? el("p", { class: "muted small", text: JSON.stringify(d.left_out || {}) }) : null,
+      el("details", {}, el("summary", { text: `${t("evidence")} (${(d.claims || []).length})` }), claims));
+  }
+  async function renderWiki(id) {
+    current = null;
+    setMain(el("div", { class: "empty", text: t("loading") }));
+    $("#outline").replaceChildren(); local.setData([], []); markTree(null);
+    let w;
+    try { w = await api("/api/wiki?page=" + encodeURIComponent(id)); } catch (e) { showError(e); return; }
+    const tree = treeData || await api("/api/tree").catch(() => null); // the tree may still be on its way
+    if (location.hash !== wikiHref(id)) return; // another page was opened meanwhile
+    const pages = w.pages || [], p = pages.find((x) => x.id === id);
+    if (!p) { setMain(el("div", { class: "empty", text: t("wikiNone") })); return; }
+    document.title = `${p.title} · Verinoda`;
+    const parent = pages.find((x) => x.id === p.parent), kids = pages.filter((x) => x.parent === p.id), notes = fileNotes(tree);
+    const parts = [el("div", { class: "crumbs" }, el("a", { href: "#/" }, t("sec.wiki")),
+      parent ? [" / ", el("a", { href: wikiHref(parent.id) }, parent.title)] : null), el("h1", { text: p.title })];
+    if (p.purpose) parts.push(el("p", { text: p.purpose }));
+    if (kids.length) parts.push(el("ul", { class: "links" }, kids.map((k) => el("li", {}, el("a", { href: wikiHref(k.id) }, k.title)))));
+    if (p.files.length) {
+      parts.push(sectionHeader("wikiFiles", p.file_count), el("ul", { class: "links" }, p.files.map((f) =>
+        el("li", {}, notes.has(f) ? el("a", { href: noteHref(notes.get(f)) }, f) : el("span", { text: f })))));
+    }
+    const ds = p.diagrams || [];
+    if (ds.length) parts.push(sectionHeader("diagrams", ds.length), el("p", { class: "muted small", text: t("wikiMermaid") }), ...ds.map(diagramBlock));
+    if ((w.problems || []).length) parts.push(sectionHeader("problems", w.problems.length), el("ul", { class: "links" }, w.problems.map((x) => el("li", { text: x }))));
+    setMain(el("div", { class: "wiki" }, parts));
   }
 
   // -- file tree -------------------------------------------------------------------------------
@@ -1807,6 +1875,7 @@
         return D.notes[id];
       }
       case "/api/search": return { results: offlineSearch(p.get("q") || "") };
+      case "/api/wiki": return D.wiki || { pages: [] }; // every page with its diagrams
       case "/api/global": return offlineGlobal(flag("tests"), flag("data"));
       case "/api/impact": return offlineImpact(p.get("id") || "", flag("tests"));
       case "/api/path": return offlinePath(p.get("from") || "", p.get("to") || "");
@@ -2034,6 +2103,7 @@
     beforeGraph = h;
     if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)));
     else if (h.startsWith("#/q/") && !OFFLINE) renderAnswer(decodeURIComponent(h.slice(4)));
+    else if (h.startsWith("#/w/")) renderWiki(decodeURIComponent(h.slice(4)));
     else renderHome();
   }
   window.addEventListener("hashchange", route);

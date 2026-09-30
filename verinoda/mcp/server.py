@@ -79,6 +79,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "node_inspect",
     "relation_trace",
     "run_when",
+    "history_search",
     "map_view",
     "change_review",
     "question_plan_draft",
@@ -121,7 +122,8 @@ EXCERPT_MAX_LINES = 30
 EDGE_CAP = 25
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
-VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "dead")
+VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline",
+         "dead")
 DEAD_FIRST_CUT = ("searched.entry_points", "searched.entry_modules")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
@@ -798,7 +800,7 @@ class AtlasTools:
 
     def project_query(self, question: str, max_items: int = 8, format: str = "text") -> dict:
         def go():
-            from verinoda import retrieval
+            from verinoda import query_filters, retrieval
 
             q = _text(question, "question")
             n = _clamp(max_items, 1, 25, "max_items")
@@ -813,7 +815,12 @@ class AtlasTools:
                 self._query_memo.move_to_end(key)
                 self.cache_stats["query_memo_hits"] += 1
                 return hit[1]
-            res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget))
+            try:
+                res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget), filters=True)
+            except query_filters.FilterError as exc:
+                raise ToolFailure("invalid_argument", str(exc),
+                                  "filters: path:GLOB lang:NAME symbol:NAME is:vendored|generated|minified|test "
+                                  "/regex/, AND OR NOT, -filter, parentheses") from None
             retrieval.attach_freshness(res, g, fresh)
             if fmt == "json":
                 out = _jsonable(res)
@@ -999,6 +1006,38 @@ class AtlasTools:
             return res
         return self._run("run_when", go, need="graph")
 
+    def history_search(self, text: str | None = None, regex: bool = False, message: str | None = None,
+                       author: str | None = None, path: str | None = None, since: str | None = None,
+                       until: str | None = None, diff: str | None = None, base: str | None = None,
+                       head: str | None = None, limit: int = 20) -> dict:
+        def go():
+            from verinoda import history
+
+            # three modes; a parameter of another mode is an error, not silently dropped
+            given = {k for k, v in (("text", text), ("message", message), ("author", author), ("since", since),
+                                    ("until", until), ("diff", diff), ("base", base), ("head", head))
+                     if _opt_text(v)} | ({"regex"} if regex else set())
+            mode, own = (("base", {"base", "head"}) if "base" in given else
+                         ("text", {"text", "regex"}) if "text" in given else
+                         ("commit search", {"message", "author", "since", "until", "diff"}))
+            if given - own:
+                raise ValueError(f"{', '.join(sorted(given - own))}: not used with {mode} (history_search has "
+                                 "three modes: text (+regex), base (+head), or the commit filters; path goes with "
+                                 "any of them)")
+            if _opt_text(base):
+                return history.compare(self.repo, base, _opt_text(head) or "HEAD", path=_opt_text(path))
+            if _opt_text(text):
+                res = history.text_history(self.repo, text, regex=bool(regex), path=_opt_text(path))
+            else:
+                res = history.commits(self.repo, message=_opt_text(message), author=_opt_text(author),
+                                      path=_opt_text(path), since=_opt_text(since), until=_opt_text(until),
+                                      diff=_opt_text(diff), limit=_clamp(limit, 1, 100, "limit"))
+            if res["status"] == "not_found":
+                res.setdefault("next_step", "fewer filters, no path, or a shorter text; regex=true matches "
+                                            "changed lines")
+            return res
+        return self._run("history_search", go, keep=("status", "claims", "unknowns", "appeared", "disappeared"))
+
     def map_view(self, view: str, targets: list[str] | None = None) -> dict:
         def go():
             from verinoda import architecture_map as am
@@ -1023,6 +1062,16 @@ class AtlasTools:
                 elif res.get("unresolved") and source == "argument":
                     res["next_step"] = ("a target did not name one symbol exactly (see resolution): pass it as "
                                         "'path/file.py::Name' or a node id; nothing was assumed for it")
+                res.update(freshness.summary(fresh))
+                return res
+            if view == "outline":  # the wiki page tree; the pages named in targets with their Mermaid diagrams
+                from verinoda import diagrams
+
+                # with targets only those pages: the whole tree would crowd their diagrams out of the budget
+                res = diagrams.outline(g, self.repo, pages=tg or None, diagrams=bool(tg), only=bool(tg),
+                                       stale=fresh.get("files") or ())
+                if not tg:
+                    res["next_step"] = "targets=[page id] for a page's Mermaid diagrams and their evidence"
                 res.update(freshness.summary(fresh))
                 return res
             res = am.VIEWS[view](g)
@@ -1811,7 +1860,7 @@ def _error_hint(exc: BaseException, repo: Path) -> str:
 # experiments, runtime tracing, claim re-checks) is served with `--profile full` (or config mcp.profile)
 CORE_TOOLS: tuple[str, ...] = (
     "project_query", "analyze", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
-    "evidence_inspect", "index_update", "code_check", "decision_check", "change_review",
+    "evidence_inspect", "index_update", "code_check", "decision_check", "change_review", "history_search",
 )
 PROFILES: dict[str, tuple[str, ...]] = {"core": CORE_TOOLS, "full": TOOL_NAMES}
 DEFAULT_PROFILE = "core"
@@ -1824,12 +1873,15 @@ GATEWAY = "run_tool"
 GATEWAY_CATALOG: dict[str, str] = {
     "node_inspect": "node_inspect {name}: one symbol's definition and edges with file:line",
     "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between two symbols",
-    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|dead, targets?}",
+    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead, "
+                "targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
                   "their evidence re-checked",
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
                      "change touches",
     "decision_check": "decision_check {changed_only?: true}: the tree against accepted decision records",
+    "history_search": "history_search {text, regex?, path?}: the commits where text appeared and disappeared; "
+                      "{message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two revisions",
 }
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
@@ -1853,6 +1905,8 @@ the default branch for a named version; ask only questions_for_user. reference_r
 reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - plan_audit: re-judge an analysis later. lexicon_show: the code words the repository ties to a word.
 - run_when: when a method runs - the event or caller that starts it and the conditions on the way (not evaluated).
+- history_search: when a text appeared or disappeared (the commit is the evidence), commits by message, author,
+  path, date or diff content, two revisions compared.
 - claim_verify / claim_challenge: re-check a claim's lines; adversarial check. resolve_call: which definition
   a call binds to (only 'definitive' verifies). api_members: the real members of a module or class.
 - runtime_observe: selected tests under the call tracer. experiment_run: one allowlisted command in a copy.
@@ -1872,8 +1926,8 @@ Questions: project_query (where is X; hits are leads) or analyze (claims with ev
 understood_as, one block per sub-question; never state weak_inference or unknown as fact). Cite the narrowest lines
 that support a claim (source lines are numbered), not the whole span of a header. index_update after editing;
 code_check only on code you wrote or edited, not to read code. run_tool reaches node_inspect, relation_trace,
-map_view, claim_list, claim_inspect, evidence_inspect and change_review (before and after editing: report every
-concern)."""
+map_view, claim_list, claim_inspect, evidence_inspect, change_review (before and after editing: report every
+concern) and history_search (when a text appeared or disappeared: the commit is the evidence)."""
 
 _INSTRUCTIONS_CORE_DECISIONS = """ Through run_tool, decision_check(changed_only=true) before finishing - on
 VIOLATED fix the code or ask the user."""
@@ -1961,10 +2015,17 @@ DESCRIPTIONS: dict[str, str] = {
         "registrations and lambdas: 'at the end of every server tick', '80 ticks later'), each call with the "
         "conditions around it as written (if/for/while blocks, early returns) and file:line. Conditions are not "
         "evaluated; a path that ends at a method nothing calls is an entry point or dead code."),
+    "history_search": (
+        "Git history. With text: the commit that first added it and, when HEAD has none, the one that last "
+        "removed it, each a claim with the commit as evidence and file:line (regex=true: a pattern over changed "
+        "lines). Without text: commits by message, author, path, since/until dates and diff content (a regex), "
+        "newest first. With base: what head (default HEAD) has that base has not - commits and changed files. "
+        "Regexes are git's (POSIX extended). A parameter of another mode is an error."),
     "map_view": (
         "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, impact "
-        "(dependents of targets; default the working-tree changes), or dead (code no entry point reaches, as "
-        "claims). 'coverage' states the method and its limits."),
+        "(dependents of targets; default the working-tree changes), cycles (file dependency cycles and the "
+        "fewest dependencies to cut), outline (the wiki page tree; targets = page ids for their Mermaid "
+        "diagrams), or dead (code no entry point reaches, as claims). 'coverage' states the method and its limits."),
     "change_review": (
         "What a change touches, by concern: the working tree vs HEAD (base=REV, staged), or planned targets "
         "('path.py[::Name]') + change. Dependents, findings ('no finding' is not 'safe'), tests reaching it, "
@@ -2115,9 +2176,9 @@ DESCRIPTIONS: dict[str, str] = {
         "processes or change global state (allow_side_effects is the user's decision). Never edits code."),
 }
 
-_READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "map_view", "claim_inspect", "claim_list",
-              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
-              "debug_status", "grep_context"}
+_READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
+              "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
+              "code_check", "api_members", "debug_status", "grep_context"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -2306,7 +2367,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
     @register("project_query")
     def project_query(
-        question: Annotated[str, Field(description="Question, symbol or file names to look up.")],
+        question: Annotated[str, Field(description="Question, symbol or file names to look up; filters narrow it: "
+                                                   "path:GLOB lang: symbol: is:vendored /regex/ AND OR NOT.")],
         max_items: Annotated[int, Field(description="Maximum code locations to return (1-25).")] = 8,
         format: Annotated[Literal["text", "json"], Field(description="'text' (default): plain text for reading, "
                                                                       "skeleton first; 'json': structured items.")]
@@ -2336,13 +2398,34 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     ) -> dict[str, Any]:
         return emit(t.run_when(symbol, depth=depth))
 
+    @register("history_search")
+    def history_search(
+        text: Annotated[OptStr, Field(description="A text (a name, a line) to find when it appeared and "
+                                                  "disappeared.")] = None,
+        regex: Annotated[bool, Field(description="text is a regular expression over added and removed lines.")]
+        = False,
+        message: Annotated[OptStr, Field(description="Without text: a regex the commit message matches.")] = None,
+        author: Annotated[OptStr, Field(description="Without text: a regex the author's name or e-mail matches.")]
+        = None,
+        path: Annotated[OptStr, Field(description="Only the history of this file or folder.")] = None,
+        since: Annotated[OptStr, Field(description="Commits after this date ('2026-01-31', '2 weeks ago').")] = None,
+        until: Annotated[OptStr, Field(description="Commits before this date.")] = None,
+        diff: Annotated[OptStr, Field(description="Commits whose added or removed lines match this regex.")] = None,
+        base: Annotated[OptStr, Field(description="Compare: the base revision (branch, tag, sha).")] = None,
+        head: Annotated[OptStr, Field(description="Compare: the other revision (default HEAD).")] = None,
+        limit: Annotated[int, Field(description="Commits to list (1-100).")] = 20,
+    ) -> dict[str, Any]:
+        return emit(t.history_search(text=text, regex=regex, message=message, author=author, path=path, since=since,
+                                     until=until, diff=diff, base=base, head=head, limit=limit))
+
     @register("map_view")
     def map_view(
         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                "dead"],
+                                "cycles", "outline", "dead"],
                         Field(description="Which architecture view to return.")],
-        targets: Annotated[list[str] | None, Field(description="impact view only: changed files or symbols; "
-                                                               "default = git working-tree changes.")] = None,
+        targets: Annotated[list[str] | None, Field(description="impact view: changed files or symbols (default = "
+                                                               "git working-tree changes); outline view: page ids "
+                                                               "whose diagrams to return.")] = None,
     ) -> dict[str, Any]:
         return emit(t.map_view(view, targets=targets))
 

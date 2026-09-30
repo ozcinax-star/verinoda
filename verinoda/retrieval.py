@@ -45,7 +45,7 @@ from pathlib import Path, PurePosixPath
 
 import networkx as nx
 
-from verinoda import search_index, testcode
+from verinoda import query_filters, search_index, testcode
 from verinoda.index import Graph, file_lines
 from verinoda.search_index import named_identifiers, stem  # noqa: F401 - re-exported API
 from verinoda.textnorm import fold_tr
@@ -291,7 +291,7 @@ def _why(g: Graph, h: "search_index.Hit", hit_line: int | None, higher: dict[str
 
 def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_tests: bool = True,
              seeds: dict[str, str] | None = None, expansions: dict[str, list[str]] | None = None,
-             handle: search_index.Handle | None = None) -> dict:
+             handle: search_index.Handle | None = None, filters: bool = False) -> dict:
     """Rank, then pack a JSON result into ``budget`` (see the module docstring).
 
     ``seeds`` maps graph node ids to the reason they were linked (for example by
@@ -299,10 +299,16 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     question word to extra words to search for (weighted below the question's
     own words). Both are reported in the items' ``why`` / the ``expansions`` list.
     ``handle``: an index already open (the notes view's, which never writes search.db).
+    ``filters``: read the question's filter syntax (``path:``, ``lang:``, ``symbol:``, ``is:``, ``/regex/``,
+    AND/OR/NOT; :mod:`verinoda.query_filters`): the rest is ranked, and only units the filters keep are
+    returned. The result's ``filters`` block says what was read. A bad filter raises ``FilterError``.
     """
     budget = budget or Budget()
-    rk = search_index.rank(g, question, include_tests=include_tests, seeds=seeds, expansions=expansions,
-                           limit=RANK_LIMIT, handle=handle)
+    fl = query_filters.parse(question) if filters else None
+    ranked_text = fl.text if fl is not None else question
+    rk = search_index.rank(g, ranked_text, include_tests=include_tests, seeds=seeds, expansions=expansions,
+                           limit=RANK_LIMIT, handle=handle,
+                           where=query_filters.Selector(fl, g.root) if fl is not None else None)
     q = rk.query
     ranked_files = {x.file for x in rk.hits[:40]}
     # the question's content words (folded), as the index saw them before tokenizing
@@ -312,6 +318,12 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     while terms and _cost({"question": question, "terms": terms}) + ENVELOPE_CHARS > budget.max_chars:
         terms.pop()
     budget.used_chars += _cost({"question": question, "terms": terms}) + ENVELOPE_CHARS
+    fblock = None
+    if fl is not None:  # what the filters were read as: always returned, so always charged
+        fblock = {"expression": fl.describe(), "ranked_text": fl.text, "matched": rk.candidates}
+        if rk.text_matched is not None:  # how many units the text ranked before the filters applied
+            fblock["text_matched"] = rk.text_matched
+        budget.used_chars += _cost(fblock) + len(', "filters": ')
     budget.truncated = budget.used_chars > budget.max_chars
     exps = [f"{e['from']}->{e['to']} ({e['via']})" for e in q.expansions]
     if exps and not budget.take(_cost(exps) + len(', "expansions": ')):
@@ -319,8 +331,8 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     expanded = {e["to"]: e["from"] for e in q.expansions}
     all_terms = set(q.weights)
     win = max(1, budget.excerpt_lines)
-    flow = bool(FLOW_RX.search(fold_tr(question)))
-    impact = bool(IMPACT_RX.search(fold_tr(question)))
+    flow = bool(FLOW_RX.search(fold_tr(ranked_text)))
+    impact = bool(IMPACT_RX.search(fold_tr(ranked_text)))
     items: list[dict] = []
     seen_text: dict[str, dict] = {}
     prose, prose_skipped = 0, 0
@@ -343,6 +355,8 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
         best = h.passages[0] if h.passages else None
         hits = _hit_lines(lines, best[2], best[3], all_terms) if best else []
         focus = (hits[0], hits[-1]) if hits else ((best[2], best[3]) if best and best[0] > 0 else None)
+        if h.match_line and not (focus and focus[0] <= h.match_line <= focus[1]):
+            focus = (h.match_line, h.match_line)  # the line a filter's regex matched is the item's evidence
         n = len(items)
         tier = win if n < JSON_FULL_ITEMS else (max(1, win // 2) if n < JSON_EXCERPT_ITEMS else min(win, JSON_TAIL_LINES))
         if h.kind == "module" and hits:
@@ -458,8 +472,8 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     if stale and budget.take(_cost(stale) + 40):
         out_budget["stale_files"] = stale
     out_budget["used_chars"] = budget.used_chars
-    res = RetrievalResult({"question": question, "terms": terms, "items": items, "edges": edges,
-                           "budget": out_budget})
+    res = RetrievalResult({"question": question, "terms": terms, **({"filters": fblock} if fblock else {}),
+                           "items": items, "edges": edges, "budget": out_budget})
     res.render = _RenderData(g, question, rk, all_terms, stale, flow, impact)
     return res
 
@@ -575,6 +589,19 @@ def stale_lines(result: dict) -> list[str]:
     return out
 
 
+def _filters_line(fb: dict) -> str:
+    """The plain-text line that says what the filters were read as and what they kept, or why nothing."""
+    head = f"filters: {fb['expression']}"
+    if fb.get("matched"):
+        return f"{head} ({fb['matched']} matching)"
+    ranked = fb.get("text_matched")
+    if ranked is None:
+        return f"{head} - no indexed unit matches them"
+    if ranked == 0:
+        return f"{head} - the ranked text ({fb.get('ranked_text', '')}) matches no indexed unit"
+    return f"{head} - none of the {ranked} units the ranked text matches passes them"
+
+
 def render_text(result: dict, budget_chars: int = 6000) -> str:
     """Plain text for a model, skeleton first, packed to ``budget_chars``.
 
@@ -602,6 +629,9 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     expansions = (result.get("budget") or {}).get("expansions")
     if expansions:
         add(_clip(_expanded_line(expansions), 300))
+    fb = result.get("filters")
+    if fb:
+        add(_clip(_filters_line(fb), 300))
     for line in stale_lines(result):
         add(line)
     if rd is None:
@@ -664,6 +694,8 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
             wins = [(a, b)]
         else:
             k = 2 if full else 1
+            if h.match_line:  # a filter's regex matched here: that line is shown first
+                wins.append((max(a, h.match_line - 2), min(b, h.match_line + TEXT_PASSAGE_LINES - 3)))
             for s, _pid, pa, pb in h.passages:
                 # a symbol's leading comment lies above its span: that passage is printed where it is
                 pa, pb = (max(a, pa - 1), min(b, pb + 1)) if pa >= a else (pa, min(pb, a - 1))

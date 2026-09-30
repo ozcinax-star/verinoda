@@ -265,9 +265,15 @@ def _log_in_repo(repo: Path, log: Path) -> tuple[str, list[str]]:
     cited and re-checked) and its lines."""
     import hashlib
 
+    from verinoda.scrub import redact
+
     data = log.read_bytes()
+    text = data.decode("utf-8", "surrogateescape")
+    clean = redact(text)  # what is cited and kept carries no secret the run printed (the lines stay where they were)
+    kept = data if clean == text else clean.encode("utf-8", "surrogateescape")  # the other bytes as they were
+    lines = kept.decode("utf-8", "replace").splitlines()
     try:
-        return log.resolve().relative_to(repo.resolve()).as_posix(), data.decode("utf-8", "replace").splitlines()
+        return log.resolve().relative_to(repo.resolve()).as_posix(), lines
     except ValueError:
         pass
     from verinoda.paths import atlas_dir
@@ -275,8 +281,8 @@ def _log_in_repo(repo: Path, log: Path) -> tuple[str, list[str]]:
     dest = atlas_dir(repo) / "logs" / f"{log.stem}-{hashlib.sha256(data).hexdigest()[:10]}{log.suffix or '.log'}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not dest.exists():
-        dest.write_bytes(data)
-    return dest.relative_to(repo).as_posix(), data.decode("utf-8", "replace").splitlines()
+        dest.write_bytes(kept)
+    return dest.relative_to(repo).as_posix(), lines
 
 
 def store(st, repo: Path, log: Path, res: dict) -> list[dict]:
@@ -286,6 +292,7 @@ def store(st, repo: Path, log: Path, res: dict) -> list[dict]:
 
     from verinoda import workflow
     from verinoda.claims import Claims
+    from verinoda.scrub import redact
 
     snap, _refresh = workflow._current_snapshot(st, repo)
     if snap is None:
@@ -310,7 +317,7 @@ def store(st, repo: Path, log: Path, res: dict) -> list[dict]:
               "excerpt": excerpt[:400],
               "meta": {"run_by": "user", "log": str(log), "kept_at": rel, "lines": [a_ln, b_ln],
                        "scope": "a log Verinoda did not produce: it observes a run and never verifies a claim"}}
-        what = t.get("marker") or t["header"]
+        what = redact(t.get("marker") or t["header"])
         text = (f"The log {log.name} (line {t['log_line']}) shows `{what[:80]}` "
                 + (f"reached through `{gt['via']}` while the test `{gt['test']}` finished" if gt else
                    f"inside `{top['node']}`"))
