@@ -1438,6 +1438,28 @@ def _r_decide(res: dict) -> None:
               f"`verinoda decide accept {res['id']} {' '.join(proposed)}`")
 
 
+def _r_undocumented(r: dict) -> None:
+    s = r["searched"]
+    print(f"undocumented decisions: {len(r['candidates'])} candidate(s), weak_inference - for the user to record "
+          f"or dismiss ({s['records']} live record(s) and {s['documents']} ADR-like document(s) searched; "
+          f"{len(r['covered'])} covered, {len(r['dismissed'])} dismissed)")
+    for c in r["candidates"]:
+        print(f"  {c['id']}: {c['candidate']}")
+        print(f"    fact ({c['fact']['status']}): {c['fact']['text']}")
+        for e in c["fact"]["evidence"]:
+            print(f"      {e['locator']}  {e['excerpt']}")
+        if c.get("guard"):
+            print(f"    guard that would keep it: {c['guard']}")
+        print(f"    record: {c['record_with']}")
+        print(f"    dismiss: {c['dismiss_with']}")
+    for c in r["covered"]:
+        by = c["by"][0]
+        print(f"  covered {c['id']}: {by.get('record') or by.get('document')} {by['via']} ({by['at']})")
+    for d in r["dismissed"]:
+        print(f"  dismissed {d['id']} ({d.get('date')}): {d.get('reason')}"
+              + ("" if d.get("current") else " - no longer a candidate"))
+
+
 def _r_toc(tl: dict) -> None:
     from verinoda import decisions as dm
 
@@ -1689,6 +1711,21 @@ def cmd_decide(args) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         _emit(args, res, _r_toc)
+        return 0
+    if args.decide_cmd in ("undocumented", "dismiss"):  # reads the files only: no store needed
+        from verinoda import undocumented as ud
+
+        try:
+            if args.decide_cmd == "undocumented":
+                res = ud.find(repo, args.decisions_dir)
+            else:
+                res = ud.dismiss(repo, args.id, args.reason, undo=args.undo, directory=args.decisions_dir)
+        except (ud.UndocumentedError, dm.DecisionError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        _emit(args, res, _r_undocumented if args.decide_cmd == "undocumented" else
+              lambda r: print(f"{r['id']}: dismissal removed" if r.get("undone") else
+                              f"dismissed {r['id']} (the user's reason: {r['reason']}); kept in {r['file']}"))
         return 0
     if args.decide_cmd in ("brief", "answer"):
         from verinoda import decision_brief as dbr
@@ -3329,6 +3366,16 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c.add_argument("--write", metavar="FILE.md", help="write it to this file in the repository (only a file "
                                                       "`decide toc` wrote before is overwritten)")
+    c = add("undocumented", cmd_decide, "structural choices no decision record covers (one storage path, a library "
+                                        "behind one file, one config reader): weak_inference candidates for the "
+                                        "user to record or dismiss", parent=dsub)
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
+    c = add("dismiss", cmd_decide, "the user dismisses an undocumented-decision candidate: it is no longer listed "
+                                   "(kept in .verinoda/dismissed_decisions.json)", parent=dsub)
+    c.add_argument("id", metavar="CANDIDATE", help="the candidate id, e.g. library:requests")
+    c.add_argument("--reason", help="why, in the user's words (needed unless --undo)")
+    c.add_argument("--undo", action="store_true", help="remove the dismissal: the candidate is listed again")
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED; exit 3 when "
                                  "something could not be checked - no record while ADR-like files exist, a guard "
                                  "that checked no file, edge or manifest: usable in CI)", parent=dsub)

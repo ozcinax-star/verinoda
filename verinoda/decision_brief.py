@@ -416,6 +416,7 @@ class _Probe:
         ordered = sorted(found.values(), key=lambda s: (s[0], s[1]))
         sinks = [(rel, i, kind) for rel, i, kind, _ in ordered]
         self.facts["sinks"] = sinks
+        self.facts["sink_sites"] = ordered  # with the needle each site's evidence re-checks
         self.facts["connections"] = conns
         files = sorted({s[0] for s in sinks})
         pats = [kind for _rx, kind in SINK_PATTERNS]
