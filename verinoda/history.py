@@ -623,15 +623,17 @@ def _head_lines(repo: Path, rel: str, a: int, b: int) -> tuple[tuple[int, int] |
                                   f"{min(old)}-{max(old)} by a text diff")
 
 
-def symbol_commits(repo: Path, rel: str, a: int, b: int, *, limit: int = 10, rev: str | None = None) -> dict:
+def symbol_commits(repo: Path, rel: str, a: int, b: int, *, limit: int = 10, rev: str | None = None,
+                   probe: bool = True) -> dict:
     """The commits reachable from HEAD that changed lines ``a``-``b`` of ``rel`` (working-tree lines), newest
     first, as git's ``log -L`` follows the range back through the file's history, each with its whole message
     (subject, and the body up to :data:`MAX_BODY_LINES` lines) and ``git_history`` evidence quoting it.
     ``{"status": "found" | "not_found" | "not_committed" | "not_git", "commits", "head_lines", "note",
-    "truncated", "shallow"}``. ``rev`` (a commit sha): the lines are that commit's and its history is read."""
+    "truncated", "shallow"}``. ``rev`` (a commit sha): the lines are that commit's and its history is read. ``probe=False``: the caller
+    already knows this is a git work tree (no ``rev-parse`` per call; ``shallow`` is then not read)."""
     repo = Path(repo)
     limit = max(1, min(int(limit), MAX_COMMITS))
-    if not _is_git(repo):
+    if probe and not _is_git(repo):
         return _not_git("symbol", repo)
     if rev:
         span, note = (a, b), None
@@ -672,7 +674,7 @@ def symbol_commits(repo: Path, rel: str, a: int, b: int, *, limit: int = 10, rev
         c["evidence"]["meta"]["head_lines"] = list(span)
         found.append(c)
     return {"status": "found" if found else "not_found", "commits": found[:limit], "truncated": len(found) > limit,
-            "head_lines": list(span), "note": note, "shallow": _shallow(repo)}
+            "head_lines": list(span), "note": note, "shallow": _shallow(repo) if probe else None}
 
 
 def _project_rel(repo: Path, path: str) -> str:

@@ -90,8 +90,15 @@ def test_the_authors_of_the_changed_base_lines_are_suggested_and_the_change_auth
     assert c["evidence"][0]["source_type"] == "git_history" and c["evidence"][0]["locator"].startswith(
         "git blame -w -L2,5 ")
     assert who["excluded"]["author"] == "Me" and who["excluded"]["lines"] == 1
-    assert who["declared"] == [{"owners": ["@pricing-team"], "files": ["shop/pricing.py"], "rule": "shop/ @pricing-team",
-                                "at": ".github/CODEOWNERS:1", "status": "statically_verified"}]
+    (dec,) = who["declared"]
+    assert (dec["owners"], dec["files"], dec["at"], dec["status"]) == (["@pricing-team"], ["shop/pricing.py"],
+                                                                      ".github/CODEOWNERS:1", "statically_verified")
+    assert dec["evidence"][0]["excerpt"] == "shop/ @pricing-team"
+    from verinoda.claims import check_status
+
+    for claim in [alice["claim"], *(x["claim"] for x in who["related_commits"])]:
+        evs = [{**e, "relation": "supports", "id": f"evd_{i}"} for i, e in enumerate(claim["evidence"])]
+        assert check_status(claim["status"], evs, claim={"kind": claim["kind"], "text": claim["text"]}, repo=r)             is None, claim
     related = {x["commit"]: x for x in who["related_commits"]}
     assert set(related) == {third, first}           # Bob's commit changed tax(), not total()
     assert related[first]["claim"]["status"] == "primary_source_verified"
@@ -121,7 +128,7 @@ def test_added_code_and_planned_changes_name_no_one(repo):
         planned = rv.review(r, store=st, targets=["shop/pricing.py::total"], change="body")
     finally:
         st.close()
-    assert planned["reviewers"]["not_checked"] == "a planned change has no base lines to blame"
+    assert planned["reviewers"]["not_checked"] == ["a planned change has no base lines to blame"]
 
 
 def test_cli_json_carries_the_block(repo, capsys):
@@ -143,3 +150,33 @@ def test_the_mcp_response_carries_a_compact_block(repo):
     assert who["suggested"] == [{"author": "Bob", "lines": 1, "of": 1, "status": "strong_inference"}]
     assert who["related_commits"][0]["commit"] == second[:12] and "claim" not in who["related_commits"][0]
     assert "review --json" in who["note"]
+
+
+def test_inserted_lines_name_no_one_and_mailmap_keeps_the_user_out(repo):
+    r, _ = repo
+    text = (r / "shop/pricing.py").read_text(encoding="utf-8")
+    # only an inserted line inside tax(): no base line is modified, so nobody's lines are claimed
+    (r / "shop/pricing.py").write_bytes(text.replace("def tax(x):\n", "def tax(x):\n    x = float(x)\n").encode())
+    who = _review(r)["reviewers"]
+    assert who["suggested"] == [] and "excluded" not in who
+    # the user's configured address, mapped by .mailmap to their canonical one, is still the user
+    (r / ".mailmap").write_bytes(b"Me <me@example.org> <me-old@example.org>\n")
+    _git(r, "config", "user.email", "me-old@example.org")
+    _git(r, "config", "user.name", "Me")
+    (r / "shop/pricing.py").write_bytes(text.replace("    s = 0  # start\n", "    s = 1  # start\n").encode())
+    who = _review(r)["reviewers"]
+    assert who["suggested"] == [] and who["excluded"]["author"] == "Me"
+
+
+def test_the_cap_says_how_much_was_blamed(repo, monkeypatch):
+    from verinoda import reviewers
+
+    r, _ = repo
+    monkeypatch.setattr(reviewers, "MAX_RANGES", 1)
+    text = (r / "shop/pricing.py").read_text(encoding="utf-8")
+    (r / "shop/pricing.py").write_bytes(text.replace("        s += i\n", "        s -= i\n")
+                                        .replace("round(x * 0.2, 2)", "round(x * 0.5, 2)").encode())
+    who = _review(r)["reviewers"]
+    assert who["truncated"] and "1 of 2 modified base line range(s) blamed" in who["notes"][0]
+    assert "blamed base line(s) of the 2 this change modifies" in who["suggested"][0]["claim"]["text"]
+    assert "note: 1 of 2" in "\n".join(reviewers.render(who))
