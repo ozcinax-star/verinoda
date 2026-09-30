@@ -160,8 +160,14 @@ def test_with_a_mods_folder(repo, mods):
     assert not any(r["path"].endswith("lang/en_us.json") for r in res["collisions"])
     rows = {(r["kind"], r["mod"], r["dependency"]): r for r in res["dependencies"]["problems"]}
     assert set(rows) == {("version", "wings", "fabric-api"), ("missing", "wings", "trinkets"),
-                         ("breaks", "wings", "optifabric"), ("missing", "wings", "curios")}
+                         ("breaks", "wings", "optifabric")}
+    # curios is a dependency of the Forge build, and the folder holds only Fabric mods: not checked, not missing
+    ext = res["dependencies"]["external"]
+    assert [(r["dependency"], r["loader"]) for r in ext] == [("curios", "forge")]
     assert "0.90.0+1.21" in rows[("version", "wings", "fabric-api")]["found"]
+    light = next(r for r in res["collisions"] if r["path"] == "data/wings/tags/item/light.json")
+    assert light["replace"] == [f"{PACK}/data/wings/tags/item/light.json"]
+    assert "dropped only when they load below it" in packset.collision_line(light)
     assert all(r["status"] == "strong_inference" for r in rows.values())
     # fabric-api-base comes from a jar fabric-api bundles: met, not missing
     assert ("missing", "wings", "fabric-api-base") not in rows
@@ -177,6 +183,14 @@ def test_with_a_mods_folder(repo, mods):
     ("1.20.4", ["1.20.x"], "semver", True),
     ("1.5", [">=1.0 <1.4", "1.5"], "semver", True),
     ("1.0.0-beta.1", [">=1.0.0"], "semver", False),
+    ("0.92.0+1.20.1", ["^0.90.0"], "semver", True),     # ^ keeps the major only, 0.x included
+    ("1.0.0", ["^0.90.0"], "semver", False),
+    ("1.0.0-beta.10", [">=1.0.0-beta.9"], "semver", True),  # numeric identifiers compare as numbers
+    ("11.0.0-beta.2", [">=11.0.0-beta.10"], "semver", False),
+    ("1.20.1-47.2.0", ["[1.20.1,)"], "maven", True),    # a Maven suffix that is not a qualifier sorts above
+    ("1.2.3-forge", ["[1.2.3,)"], "maven", True),
+    ("1.2.3-beta.1", ["[1.2.3,)"], "maven", False),
+    ("1.2.3-SNAPSHOT", ["[1.2.3,)"], "maven", False),
     ("1.5", ["[1.0,2.0)"], "maven", True),
     ("2.0", ["[1.0,2.0)"], "maven", False),
     ("47.1.0", ["[47,)"], "maven", True),
@@ -212,3 +226,64 @@ def test_no_pack(tmp_path):
     (tmp_path / "main.py").write_text("print(1)\n", encoding="utf-8")
     assert datapack.lookup(tmp_path)["status"] == "no_datapack"
     assert datapack.lookup(tmp_path, "packs")["status"] == "no_datapack"
+
+
+@pytest.mark.parametrize("text,loader", [
+    ('{"schemaVersion": 1, "id": "x", "depends": ["fabric-api"]}', "fabric"),
+    ('{"id": "x", "depends": "a"}', "fabric"),
+    ('{"id": "x", "breaks": [1], "provides": "y"}', "fabric"),
+    ('{"quilt_loader": {"id": "x", "depends": 5}}', "quilt"),
+    ('{"quilt_loader": {"id": "x", "provides": 5, "breaks": {"a": "*"}}}', "quilt"),
+    ('mods = 5', "forge"),
+    ('[[mods]]\nmodId = "x"\n[dependencies]\nx = 5', "forge"),
+])
+def test_malformed_manifest_declares_nothing(text, loader):
+    mods = packset.parse_manifest(text, loader, "f")
+    assert all(m.depends == [] and m.breaks == [] for m in mods)
+
+
+def test_malformed_manifest_keeps_the_summary(tmp_path):
+    _write(tmp_path, {f"{RES}/data/ns/function/a.mcfunction": "say hi\n",
+                      f"{RES}/fabric.mod.json": '{"schemaVersion": 1, "id": "x", "depends": ["fabric-api"]}'})
+    assert cli.main(["datapack", "--repo", str(tmp_path)]) == 0
+
+
+def test_font_definitions_merge(tmp_path):
+    folder = tmp_path / "mods"
+    for n in "ab":
+        _jar(folder / f"emoji-{n}.jar", {"fabric.mod.json": json.dumps({"id": f"emoji_{n}", "version": "1.0.0"}),
+                                         "assets/minecraft/font/default.json": f'{{"providers": ["{n}"]}}',
+                                         "assets/minecraft/font/x.ttf": n})
+    (tmp_path / "empty").mkdir()
+    found, _ = packset.collisions(packset.sources(tmp_path / "empty", [str(folder)]))
+    assert [r["path"] for r in found] == ["assets/minecraft/font/x.ttf"]
+
+
+def test_other_loader_does_not_meet_a_dependency(tmp_path):
+    folder = tmp_path / "mods"
+    _jar(folder / "fabric-api.jar", {"fabric.mod.json": json.dumps({"id": "fabric-api", "version": "0.92.0"})})
+    _jar(folder / "trinkets-forge.jar", {"META-INF/mods.toml": '[[mods]]\nmodId="trinkets"\nversion="3.0.0"\n'})
+    repo = tmp_path / "r"
+    _write(repo, {f"{RES}/fabric.mod.json": json.dumps({"id": "m", "depends": {"trinkets": "*",
+                                                                               "fabric-api": "^0.90.0"}})})
+    dep = packset.check(repo, [str(folder)])["dependencies"]
+    assert [(r["kind"], r["dependency"]) for r in dep["problems"]] == [("missing", "trinkets")]
+
+
+def test_unreadable_with_path_checks_nothing(repo, tmp_path, capsys):
+    res = packset.check(repo, [str(tmp_path / "no such mods")])
+    assert res["dependencies"]["problems"] == []
+    assert {r["dependency"] for r in res["dependencies"]["external"]} >= {"trinkets", "curios"}
+    assert res["unreadable"] == [(tmp_path / "no such mods").as_posix()]
+    summary = datapack.lookup(repo, with_paths=[str(tmp_path / "no such mods")])
+    assert summary["unreadable"] and summary["problems"]["mod_dependencies"] == []
+    assert summary["problems"]["pack_copies"][0]["path"] == "data/wings/loot_table/nest.json"
+    assert cli.main(["datapack", "--repo", str(repo), "--with", str(tmp_path / "no such mods")]) == 0
+    out = capsys.readouterr().out
+    assert "--with sources that could not be read (1)" in out
+    assert "not checked (4; no fabric, forge mod was read from --with)" in out
+
+
+def test_with_is_refused_on_a_lookup(repo):
+    with pytest.raises(SystemExit):
+        cli.main(["datapack", "tag", "foo", "--repo", str(repo), "--with", "mods"])

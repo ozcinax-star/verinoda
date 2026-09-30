@@ -8,14 +8,15 @@ datapack folder, a mods folder: its jars are one source each), and lists
 
 * **collisions**: a resource path two sources ship with different bytes, with both files as evidence. Files the
   game merges are left out: tags (unless one of the copies says ``"replace": true``), language files,
-  ``sounds.json``, atlases, ``pack.mcmeta``. The same bytes in two places are a copy, counted apart. Two sources
+  ``sounds.json``, atlases, font definitions, ``pack.mcmeta``. The same bytes in two places are a copy, counted apart. Two sources
   that never load together are not compared: builds of the same mod id (a Fabric and a Forge subproject, a copy
   of the project), and mods of different loaders (Fabric or Quilt against Forge against NeoForge);
 * **dependencies**: what ``fabric.mod.json`` / ``quilt.mod.json`` ``depends`` / ``breaks`` and
   ``META-INF/[neoforge.]mods.toml`` ``[[dependencies.<id>]]`` declare, checked against the mods of the set (their
-  ``id``, ``provides`` and the manifests of jars nested one level deep): a required mod no source provides, a
-  version outside the declared range, a mod the set holds that another declares it breaks. The game, Java and the
-  loaders are the platform and are not checked. Without ``--with`` the set is the repository alone, so a
+  ``id``, ``provides`` and the manifests of jars nested one level deep) of the same loader family: a required
+  mod no source provides, a version outside the declared range, a mod the set holds that another declares it
+  breaks. The game, Java and the loaders are the platform and are not checked. Without ``--with``, or when no
+  ``--with`` source read holds a mod of that loader family, the set is not the one this mod loads with, so a
   dependency found nowhere in it is listed as external (not checked), not as missing.
 
 Read from the files as written: which copy of a collision wins, and whether two sources load together at all, the
@@ -114,6 +115,15 @@ def _alts(v) -> list[str]:
     return [v] if isinstance(v, str) and v.strip() not in ("", "*") else []
 
 
+def _list(v) -> list:
+    """A manifest field that should be a list: any other type (an old schema, a typo) declares nothing."""
+    return v if isinstance(v, list) else []
+
+
+def _dict(v) -> dict:
+    return v if isinstance(v, dict) else {}
+
+
 def parse_manifest(text: str, loader: str, at: str) -> list[Mod]:
     """The mods one manifest declares. ``at`` is the manifest's evidence path (``file`` or ``x.jar!/file``)."""
     lines = text.splitlines()
@@ -127,13 +137,13 @@ def parse_manifest(text: str, loader: str, at: str) -> list[Mod]:
         if loader == "quilt":
             ql = data.get("quilt_loader") if isinstance(data.get("quilt_loader"), dict) else {}
             mid, ver = ql.get("id"), ql.get("version")
-            provides = [p.get("id") if isinstance(p, dict) else p for p in ql.get("provides") or []]
-            deps_raw = [(d, False) for d in ql.get("depends") or []] + [(d, True) for d in ql.get("breaks") or []]
+            provides = [p.get("id") if isinstance(p, dict) else p for p in _list(ql.get("provides"))]
+            deps_raw = [(d, False) for d in _list(ql.get("depends"))] + [(d, True) for d in _list(ql.get("breaks"))]
         else:
             mid, ver = data.get("id"), data.get("version")
-            provides = data.get("provides") or []
-            deps_raw = [({"id": k, "versions": v}, False) for k, v in (data.get("depends") or {}).items()] + \
-                       [({"id": k, "versions": v}, True) for k, v in (data.get("breaks") or {}).items()]
+            provides = _list(data.get("provides"))
+            deps_raw = [({"id": k, "versions": v}, False) for k, v in _dict(data.get("depends")).items()] + \
+                       [({"id": k, "versions": v}, True) for k, v in _dict(data.get("breaks")).items()]
         if not isinstance(mid, str) or not mid:
             return []
         mod = Mod(mid, _concrete(ver), loader, f"{at}:{_line_of(lines, _q(mid)) or 1}",
@@ -162,13 +172,13 @@ def parse_manifest(text: str, loader: str, at: str) -> list[Mod]:
                                  for d in ds if isinstance(d, dict)):
         loader = "neoforge"
     out = []
-    for m in data.get("mods") or []:
+    for m in _list(data.get("mods")):
         mid = m.get("modId") if isinstance(m, dict) else None
         if not isinstance(mid, str) or not mid:
             continue
         mod = Mod(mid, _concrete(m.get("version")), loader, f"{at}:{_line_of(lines, _q(mid)) or 1}")
         head = _line_of(lines, f"dependencies.{mid}]")
-        for d in deps.get(mid) or []:
+        for d in _list(deps.get(mid)):
             if not isinstance(d, dict) or not isinstance(d.get("modId"), str):
                 continue
             kind = str(d.get("type", "")).lower()
@@ -282,9 +292,12 @@ def sources(repo: Path, with_paths: list[str] | None = None) -> list[Source]:
 
 
 def _merged(res: str) -> bool:
-    """Files the game merges across packs rather than replacing (tags are checked for ``replace`` apart)."""
+    """Files the game merges across packs rather than replacing (tags are checked for ``replace`` apart). A font
+    definition (``assets/<ns>/font/*.json``) joins the providers of every pack's copy; a ``.ttf`` beside it does
+    not merge."""
     parts = res.split("/")
-    return (parts[0] == "assets" and len(parts) > 2 and parts[2] in ("lang", "atlases")) or \
+    return (parts[0] == "assets" and len(parts) > 2 and (parts[2] in ("lang", "atlases") or
+                                                        (parts[2] == "font" and res.endswith(".json")))) or \
         res.endswith(("/sounds.json", "pack.mcmeta", "pack.png"))
 
 
@@ -330,30 +343,60 @@ def collisions(srcs: list[Source]) -> tuple[list[dict], list[dict]]:
                                          **({"mod": ss[i].mods[0].id} if ss[i].mods else {})}
                                         for i in sorted(involved or range(len(ss)))]}
         if involved:
+            if "/tags/" in res:  # replace drops only the copies loaded below the replacing one
+                row["replace"] = [ss[i].files[res] for i in sorted(involved) if _replaces(blobs[i])]
             found.append({**row, "status": "verified"})
         elif len(set(digest)) == 1 and digest[0]:
             copies.append(row)
     return found, copies
 
 
-def _ver(s: str) -> tuple[tuple[int, ...], str] | None:
-    core, _, pre = s.strip().lstrip("vV").split("+", 1)[0].partition("-")
+# Maven qualifiers that sort below the release; any other suffix (``1.20.1-47.2.0``, ``1.2.3-forge``) sorts above
+_MAVEN_PRE = ("alpha", "a", "beta", "b", "milestone", "m", "rc", "cr", "snapshot")
+_MAVEN_RELEASE = ("", "ga", "final", "release")
+
+
+def _ver(s: str, style: str = "semver") -> tuple[tuple[int, ...], int, tuple[str, ...]] | None:
+    """``(numbers, rank, suffix identifiers)``: rank -1 a pre-release, 0 the release, 1 above it. Fabric and Quilt
+    read anything after ``-`` as a pre-release; Maven only its pre-release qualifiers."""
+    core, _, suffix = s.strip().lstrip("vV").split("+", 1)[0].partition("-")
     nums = core.split(".")
     if not all(n.isdigit() for n in nums):
         return None
-    return tuple(int(n) for n in nums), pre
+    ids = tuple(x for x in re.split(r"[.-]", suffix) if x) if suffix else ()
+    if not ids:
+        rank = 0
+    elif style != "maven":
+        rank = -1
+    else:
+        head = ids[0].lower().rstrip("0123456789")
+        rank = -1 if head in _MAVEN_PRE else 0 if head in _MAVEN_RELEASE and len(ids) == 1 else 1
+        if rank == 0:
+            ids = ()
+    return tuple(int(n) for n in nums), rank, ids
 
 
-def _cmp(a: tuple[tuple[int, ...], str], b: tuple[tuple[int, ...], str]) -> int:
+def _cmp_ids(a: tuple[str, ...], b: tuple[str, ...]) -> int:
+    """Suffix identifiers one by one: numbers numerically and below words, a shorter prefix first."""
+    for x, y in zip(a, b):
+        if x == y:
+            continue
+        if x.isdigit() and y.isdigit():
+            return -1 if int(x) < int(y) else 1
+        if x.isdigit() != y.isdigit():
+            return -1 if x.isdigit() else 1
+        return -1 if x < y else 1
+    return (len(a) > len(b)) - (len(a) < len(b))
+
+
+def _cmp(a, b) -> int:
     n = max(len(a[0]), len(b[0]))
     x, y = a[0] + (0,) * (n - len(a[0])), b[0] + (0,) * (n - len(b[0]))
     if x != y:
         return -1 if x < y else 1
-    if a[1] == b[1]:
-        return 0
-    if not a[1] or not b[1]:
-        return 1 if not a[1] else -1  # a release is above its pre-releases
-    return -1 if a[1] < b[1] else 1
+    if a[1] != b[1]:
+        return -1 if a[1] < b[1] else 1  # pre-release < release < a post-release suffix
+    return _cmp_ids(a[2], b[2])
 
 
 def _semver_term(term: str, v) -> bool | None:
@@ -376,10 +419,7 @@ def _semver_term(term: str, v) -> bool | None:
         return {">=": c >= 0, ">": c > 0, "<=": c <= 0, "<": c < 0}[op]
     if c < 0:
         return False
-    if op == "^":  # same major (0.x: same minor)
-        keep = 2 if r[0] and r[0][0] == 0 and len(r[0]) > 1 else 1
-    else:          # ~: same minor
-        keep = 2
+    keep = 1 if op == "^" else 2  # ^: same major, 0.x included (Fabric's rule, not npm's); ~: same minor
     return v[0][:keep] == (r[0] + (0, 0))[:keep]
 
 
@@ -391,7 +431,7 @@ def _maven(spec: str, v) -> bool | None:
     for m in re.finditer(r"([\[(])\s*([^,\])]*?)\s*(?:(,)\s*([^\])]*?)\s*)?([\])])", spec):
         lo_inc, lo, comma, hi, hi_inc = m.group(1) == "[", m.group(2), m.group(3), m.group(4), m.group(5) == "]"
         if not comma:  # [1.0] exact
-            r = _ver(lo)
+            r = _ver(lo, "maven")
             if r is None:
                 return None
             any_ok |= _cmp(v, r) == 0
@@ -400,7 +440,7 @@ def _maven(spec: str, v) -> bool | None:
         for bound, inc, low in ((lo, lo_inc, True), (hi, hi_inc, False)):
             if not bound:
                 continue
-            r = _ver(bound)
+            r = _ver(bound, "maven")
             if r is None:
                 return None
             c = _cmp(v, r)
@@ -414,7 +454,7 @@ def satisfies(version: str, wants: list[str], style: str) -> bool | None:
     ANDed); None when the version or the range cannot be read."""
     if not wants:
         return True
-    v = _ver(version)
+    v = _ver(version, style)
     if v is None:
         return None
     results = []
@@ -429,29 +469,37 @@ def satisfies(version: str, wants: list[str], style: str) -> bool | None:
     return None if None in results else False
 
 
+def _family(m: Mod) -> str:
+    return _LOADER_FAMILY.get(m.loader, m.loader)
+
+
 def dependencies(srcs: list[Source], checked: bool) -> dict:
-    """``{"problems", "external", "unchecked"}``: required mods the set lacks (only when ``checked``: the set was
-    given with ``--with``), versions outside a declared range, mods the set holds that another declares it breaks;
-    without ``--with`` a dependency the repository does not provide is external, not missing."""
-    provided: dict[str, list[tuple[Mod, Source]]] = {}
+    """``{"problems", "external", "unchecked"}``: required mods the set lacks, versions outside a declared range,
+    mods the set holds that another declares it breaks. A mod is checked only against mods of its loader family
+    (Fabric/Quilt, Forge, NeoForge), and a missing mod is reported only when ``checked`` (the set was given with
+    ``--with``) and a ``--with`` source was read with a mod of that family; otherwise a dependency the set does not
+    provide is external, not missing."""
+    provided: dict[tuple[str, str], list[tuple[Mod, Source]]] = {}
     for s in srcs:
         for m in s.mods + s.nested:
             for pid in [m.id, *m.provides]:
-                provided.setdefault(pid, []).append((m, s))
+                provided.setdefault((_family(m), pid), []).append((m, s))
+    given = {_family(m) for s in srcs if s.kind != "repo" for m in s.mods + s.nested} if checked else set()
     problems, external, unchecked = [], [], []
     for s in srcs:
         for mod in s.mods:
+            fam = _family(mod)
             for d in mod.depends:
                 if d.id in PLATFORM:
                     continue
                 wants = " || ".join(d.wants) or "any"
-                have = provided.get(d.id)
+                have = provided.get((fam, d.id))
                 row = {"mod": mod.id, "dependency": d.id, "wants": wants, "at": d.at}
                 if not have:
-                    if checked:
+                    if fam in given:
                         problems.append({"kind": "missing", **row, "status": "strong_inference"})
                     else:
-                        external.append(row)
+                        external.append({**row, "loader": fam})
                     continue
                 fits = [satisfies(m.version, d.wants, d.style) if m.version else None for m, _ in have]
                 if True in fits:
@@ -462,7 +510,7 @@ def dependencies(srcs: list[Source], checked: bool) -> dict:
                 elif d.wants:
                     unchecked.append({**row, "found": found})
             for d in mod.breaks:
-                for other, src in provided.get(d.id, []):
+                for other, src in provided.get((fam, d.id), []):
                     if other is mod:
                         continue
                     fit = satisfies(other.version, d.wants, d.style) if other.version else (None if d.wants else True)
@@ -481,13 +529,15 @@ def check(repo: Path, with_paths: list[str] | None = None) -> dict:
     found, copies = collisions(srcs)
     return {"sources": [s.record() for s in srcs if s.files or s.mods or s.kind == "unreadable"],
             "collisions": found, "copies": copies, "dependencies": dependencies(srcs, bool(with_paths)),
-            "with": list(with_paths or [])}
+            "with": list(with_paths or []), "unreadable": [s.label for s in srcs if s.kind == "unreadable"]}
 
 
 def collision_line(r: dict) -> str:
     """``data/ns/recipe/x.json: a/data/ns/recipe/x.json (moda) <> b.jar!/data/ns/recipe/x.json (modb)``."""
+    tail = " [tag with replace: the other copies are dropped only when they load below it, else merged]" \
+        if r.get("replace") else ""
     return f"{r['path']}: " + " <> ".join(f"{s['at']}" + (f" ({s['mod']})" if s.get("mod") else "")
-                                          for s in r["sources"])
+                                          for s in r["sources"]) + tail
 
 
 def dependency_line(r: dict) -> str:
@@ -514,16 +564,28 @@ def render(res: dict) -> list[str]:
         out.append(f"same file with the same bytes in several places ({len(res['copies'])}, not a collision): "
                    + ", ".join(r["path"] for r in res["copies"][:3]) + (" ..." if len(res["copies"]) > 3 else ""))
     dep = res["dependencies"]
+    if res.get("unreadable"):
+        out.append(unreadable_line(res["unreadable"]))
     out.append(f"mod dependencies not met ({len(dep['problems'])}):")
     out += ["  " + dependency_line(r) for r in dep["problems"]]
     if dep["external"]:
-        out.append(external_line(dep["external"]))
+        out.append(external_line(dep["external"], bool(res["with"])))
     for r in dep["unchecked"]:
         out.append(f"  unchecked: {r['mod']} needs {r['dependency']} {r['wants']}, found {r['found']} ({r['at']})")
     return out
 
 
-def external_line(rows: list[dict]) -> str:
+def external_line(rows: list[dict], given: bool = False) -> str:
     names = sorted({r["dependency"] for r in rows})
-    return (f"dependencies outside the repository, not checked ({len(names)}; give --with the mods folder): "
+    if given:  # --with was read, but held no mod of these loaders (or could not be read)
+        fams = ", ".join(sorted({r.get("loader", "?") for r in rows}))
+        why = f"no {fams} mod was read from --with"
+    else:
+        why = "give --with the mods folder"
+    return (f"dependencies outside the repository, not checked ({len(names)}; {why}): "
             + ", ".join(names[:8]) + (" ..." if len(names) > 8 else ""))
+
+
+def unreadable_line(labels: list[str]) -> str:
+    return (f"--with sources that could not be read ({len(labels)}): " + ", ".join(labels[:5])
+            + (" ..." if len(labels) > 5 else ""))

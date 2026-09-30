@@ -980,6 +980,9 @@ def cmd_agent_lint(args) -> int:
 def cmd_datapack(args) -> int:
     from verinoda import datapack
 
+    if args.with_paths and args.what not in (None, "packs"):
+        raise SystemExit("error: --with applies to the summary and `datapack packs`, not to a tag, score or "
+                         "function lookup")
     res = datapack.lookup(_repo(args), args.what, args.name, with_paths=args.with_paths)
     _emit(args, res, lambda r: print(datapack.render(r)))
     return 0 if res["status"] == "found" else 2

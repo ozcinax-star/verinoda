@@ -691,8 +691,13 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None,
         pr["mod_dependencies"] = dep["problems"]
         if dep["external"]:  # the repository alone is not the set the game loads: said, not called missing
             pr["dependencies_not_checked"] = dep["external"]
+        if dep["unchecked"]:  # a version or range that could not be read
+            pr["dependencies_unchecked"] = dep["unchecked"]
+        if packs["copies"]:
+            pr["pack_copies"] = packs["copies"]
         return {**base, "status": "found", "kind": "summary", "problems": pr,
                 "packs": len(packs["sources"]), **({"with": packs["with"]} if packs["with"] else {}),
+                **({"unreadable": packs["unreadable"]} if packs["unreadable"] else {}),
                 **({"java": _java_summary(ix["java"])} if ix.get("java") is not None else {}),
                 "note": "read from the text: a name built at run time is not a name (a function's is listed as "
                         "dynamic, a Java tag's matched as a pattern); a mismatch is a lead; which file of a "
@@ -793,11 +798,16 @@ def render(res: dict) -> str:
         out += ["  " + packset.collision_line(r) for r in rows[:15]]
         if len(rows) > 15:
             out.append(f"  (+{len(rows) - 15} more: datapack packs)")
+        if res.get("unreadable"):
+            out.append(packset.unreadable_line(res["unreadable"]))
         rows = pr.get("mod_dependencies") or []
         out.append(f"mod dependencies not met ({len(rows)}):")
         out += ["  " + packset.dependency_line(r) for r in rows[:15]]
         if pr.get("dependencies_not_checked"):
-            out.append(packset.external_line(pr["dependencies_not_checked"]))
+            out.append(packset.external_line(pr["dependencies_not_checked"], bool(res.get("with"))))
+        if pr.get("dependencies_unchecked"):
+            out.append(f"dependency versions that could not be read ({len(pr['dependencies_unchecked'])}): "
+                       "datapack packs")
         if pr.get("tags_added_by_macros"):
             out.append("tags a macro fills in (not matched): " + ", ".join(pr["tags_added_by_macros"][:3]))
         built = pr.get("tags_added_dynamically") or []
