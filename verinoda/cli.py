@@ -1096,6 +1096,15 @@ def cmd_history(args) -> int:
     return 0 if res["status"] in ("found", "same") else 2
 
 
+def cmd_owners(args) -> int:
+    from verinoda import ownership
+
+    repo = _repo(args)
+    res = ownership.owners(repo, args.target, days=args.days, max_files=args.max_files)
+    _emit(args, res, lambda r: print(ownership.render(r)))
+    return 0 if res["status"] == "found" else 2
+
+
 def cmd_rename_preview(args) -> int:
     from verinoda import freshness, index, rename_preview
 
@@ -2911,6 +2920,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("base", help="the base revision (branch, tag, sha, HEAD~3)")
     c.add_argument("head", nargs="?", default="HEAD", help="the other revision (default HEAD)")
     c.add_argument("--path", help="only this file or folder")
+    sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
+                                   "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
+    sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
+    sp.add_argument("--days", type=int, default=365,
+                    help="an author with no commit in this many days before HEAD's date is inactive (default 365)")
+    sp.add_argument("--max-files", type=int, default=200, help="files of a folder to blame at most (default 200)")
     sp = add("rename-preview", cmd_rename_preview, "every line a rename of a symbol would touch (definition, calls, "
                                                    "imports, overrides), each with its status and the line, and "
                                                    "the mentions nothing ties to it; edits nothing (exit 3 = "

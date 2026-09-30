@@ -24,6 +24,7 @@ exactly what the evidence supports.
 - "Why is it built this way?" (git history and design docs are searched)
 - "When did X appear or disappear?" (`verinoda history text X`: the commits are the evidence;
   `history commits`, `history compare BASE`)
+- "Who knows / owns this code?" (`verinoda owners <path|path#Symbol>`: CODEOWNERS and git blame)
 - "Should we switch to X / which one should we pick / how will this scale?" (the code's side; the user decides)
 - "What breaks if I change X?" (`verinoda review --target`; before you finish a change: `verinoda review`)
 - Re-checking an earlier conclusion (yours or the user's), or comparing with a reference repo or doc.
