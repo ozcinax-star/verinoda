@@ -45,6 +45,7 @@ from pathlib import Path
 from verinoda import evidence as evmod
 from verinoda import experiments, failsig, looprules, testcode, treestate
 from verinoda.paths import load_config, runs_dir
+from verinoda.scrub import cut, redact
 from verinoda.store import Store, new_id, now
 
 MAX_OUTPUT_BYTES = 5 * 1024 * 1024
@@ -528,12 +529,16 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
     duration = None
     if agent:
         data = observed_output.encode("utf-8") if isinstance(observed_output, str) else bytes(observed_output)
-        data = data[:MAX_OUTPUT_BYTES]
+        data = cut(data, MAX_OUTPUT_BYTES)  # not inside a word: a token cut in two would not be found
+        text = data.decode("utf-8", "surrogateescape")
+        clean = redact(text)  # the kept output carries no secret the run printed; untouched bytes when none
+        if clean != text:
+            data = clean.encode("utf-8", "surrogateescape")  # the other bytes as given, UTF-8 or not
+        stdout = data.decode("utf-8", "replace")
         output_sha = hashlib.sha256(data).hexdigest()
         d = runs_dir(repo) / aid
         d.mkdir(parents=True, exist_ok=True)
         (d / "observed_output.txt").write_bytes(data)
-        stdout = data.decode("utf-8", "replace")
         if kind == "differential":  # the agent ran the repro on the prepared copy of the base
             source = {"kind": "agent_base", "commit": base}
             ids = treestate.commit_files(repo, base)

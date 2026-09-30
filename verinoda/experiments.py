@@ -1478,8 +1478,12 @@ def run(
     duration = time.monotonic() - t0
     if not timed_out and stopped_now:
         left_running = stopped_now if not left_running else left_running + max(0, stopped_now)
-    stdout = so[:MAX_LOG_BYTES].decode("utf-8", "replace")
-    stderr = se[:MAX_LOG_BYTES].decode("utf-8", "replace")
+    # what is kept of the run (the logs, their summary, the evidence excerpt) carries no secret it printed
+    # (cut first, and not inside a word: a token cut in two would not be found)
+    from verinoda.scrub import cut, redact
+
+    stdout = redact(cut(so, MAX_LOG_BYTES).decode("utf-8", "replace"))
+    stderr = redact(cut(se, MAX_LOG_BYTES).decode("utf-8", "replace"))
     # Bytes, not write_text: on Windows the child's "\r\n" would become "\r\r\n".
     (out_dir / "stdout.txt").write_bytes(stdout.encode("utf-8"))
     (out_dir / "stderr.txt").write_bytes(stderr.encode("utf-8"))
