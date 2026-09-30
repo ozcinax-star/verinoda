@@ -3046,14 +3046,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="leave out Claude Code's memory files for the project (~/.claude/projects/.../memory)")
     sp.add_argument("--all", action="store_true", help="list the checks that passed too")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
-                                       "but never read, calls to missing functions (from mcfunction or Java), "
-                                       "resource collisions across packs and mods, unmet mod dependencies; or "
-                                       "one tag, score or function across mcfunction and Java (a function's Java "
-                                       "callers: command strings, identifier lookups, the project's helpers)")
-    sp.add_argument("what", nargs="?", choices=["tag", "score", "function", "packs"],
+                                       "but never read, objectives, teams and boss bars used but never declared, "
+                                       "calls to missing functions (from mcfunction or Java), names that break "
+                                       "the datapack.naming rules of the config, resource collisions across "
+                                       "packs and mods, unmet mod dependencies; or one tag, score, team, boss bar "
+                                       "or function across mcfunction and Java (a function's Java callers: "
+                                       "command strings, identifier lookups, the project's helpers)")
+    sp.add_argument("what", nargs="?", choices=["tag", "score", "team", "bossbar", "function", "packs"],
                     help="look one up, or packs: the packs and mods, resource collisions, mod dependencies "
                          "(default: the summary)")
-    sp.add_argument("name", nargs="?", help="the tag, objective or function id (ns:path)")
+    sp.add_argument("name", nargs="?", help="the tag, objective, team, boss bar or function id (ns:path)")
     sp.add_argument("--with", dest="with_paths", action="append", metavar="PATH",
                     help="a mod jar, a datapack or a mods folder loaded beside the project: its resources are "
                          "checked for collisions and its mods meet dependencies; repeatable")

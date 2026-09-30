@@ -18,6 +18,11 @@ exist is a mismatch too. Read from the text as written: a Java tag constant is t
 "_at"``) is a pattern (``*_at``) that marks a checked tag as maybe added, never as added; an objective name built at
 run time or a macro ``$(name)`` is not seen, so a mismatch is a lead to check, not a proof; a function name built at
 run time is listed as dynamic.
+
+Teams and boss bars are read the same way (:func:`parse_symbols`), and :func:`problems` lists the objectives, teams
+and boss bars something uses that nothing declares (``scoreboard objectives add``, ``team add``, ``bossbar add``;
+in Java ``addObjective`` / ``addPlayerTeam``), and, when ``datapack.naming`` in the config sets a rule, the names
+that break it.
 """
 from __future__ import annotations
 
@@ -41,6 +46,38 @@ _PLAYERS = re.compile(r"(?:^|\s)scoreboard\s+players\s+(set|add|remove|reset|get
                       r"(\S+)(?:\s+([A-Za-z0-9_.+-]+))?(?:\s+(\S+)\s+(\S+)(?:\s+([A-Za-z0-9_.+-]+))?)?")
 _IF_SCORE = re.compile(r"\b(?:if|unless)\s+score\s+\S+\s+([A-Za-z0-9_.+-]+)(?:\s+(?:[<>=]+)\s+\S+\s+([A-Za-z0-9_.+-]+))?")
 _STORE_SCORE = re.compile(r"\bstore\s+(?:result|success)\s+score\s+\S+\s+([A-Za-z0-9_.+-]+)")
+_OBJ_MODIFY = re.compile(r"(?:^|\s)scoreboard\s+objectives\s+modify\s+([A-Za-z0-9_.+-]+)")
+_OBJ_DISPLAY = re.compile(r"(?:^|\s)scoreboard\s+objectives\s+setdisplay\s+\S+\s+([A-Za-z0-9_.+-]+)")
+# trigger, team and bossbar are English words too: read only where a command starts (the line or the command
+# string, or after `run`), so "Click to trigger the door" in a tellraw or a log message is not a command
+_AT_CMD = r"(?:^/?|\brun\s+)"
+_TRIGGER = re.compile(rf"{_AT_CMD}trigger\s+([A-Za-z0-9_.+-]+)")
+_TEAM_CMD = re.compile(rf"{_AT_CMD}team\s+(add|remove|join|modify|empty|list)\s+([A-Za-z0-9_.+-]+)")
+_SEL_TEAM = re.compile(r"[\[,]\s*team\s*=\s*!?([A-Za-z0-9_.+-]+)")
+_BAR_ID = r"([a-z0-9_.-]+(?::[a-z0-9_./-]+)?)"
+_BOSSBAR = re.compile(rf"{_AT_CMD}bossbar\s+(add|remove|set|get)\s+{_BAR_ID}")
+_STORE_BAR = re.compile(rf"\bstore\s+(?:result|success)\s+bossbar\s+{_BAR_ID}")
+# a string in Java starts with any word (a log line: "trigger fired for player"): there the rest of the string
+# must be the rest of the command too
+_TRIGGER_TAIL = r"(?:\s+(?:add|set)\s+-?\d+)?\s*"
+_TEAM_TAIL = {"add": r"(?:\s+(?:[\"'{\[].*|\S+))?\s*", "remove": r"\s*", "empty": r"\s*", "list": r"\s*",
+              "join": r"(?:\s+(?:@[a-z](?:\[[^\]]*\])?|[^\s@]\S*))?\s*",
+              "modify": r"\s+(?:color|displayName|friendlyFire|seeFriendlyInvisibles|nametagVisibility"
+                        r"|deathMessageVisibility|collisionRule|prefix|suffix)\s+\S.*"}
+_BAR_TAIL = {"add": r"\s+(?:[\"'{\[].*|\S+)\s*", "remove": r"\s*",
+             "set": r"\s+(?:color|max|name|players|style|value|visible)(?:\s+\S.*)?",
+             "get": r"\s+(?:max|players|value|visible)\s*"}
+# a text's click runs a command: {"clickEvent":{"action":"run_command","value":"/trigger vote set 1"}}
+_CLICK_TRIGGER = re.compile(r"""\b(?:value|command)["']?\s*:\s*["']/?trigger\s+([A-Za-z0-9_.+-]+)""")
+_OBJ_DECL = r"scoreboard\s+objectives|team|bossbar"
+_MACRO_DECL = re.compile(rf"(?:{_AT_CMD}|(?<=\s)(?=scoreboard\s))({_OBJ_DECL})\s+add\s+\$\(")
+_MACRO_TOKEN = re.compile(r"(?<![A-Za-z0-9_.+:/-])[A-Za-z0-9_.+:/-]*\$\([^)]{0,64}\)"
+                          r"(?:[A-Za-z0-9_.+:/-]|\$\([^)]{0,64}\))*")
+# a declaration a Java command string leaves open for a concatenation: "scoreboard objectives add " + NAME
+_DECL_OPEN = re.compile(rf"(?:{_AT_CMD}|(?<=\s)(?=scoreboard\s))({_OBJ_DECL})\s+add\s+([A-Za-z0-9_.+:-]*)$")
+# a declaration whose name a format fills in with a value that is not read (marked \x01): a pattern
+_DECL_FILLED = re.compile(rf"(?:{_AT_CMD}|(?<=\s)(?=scoreboard\s))({_OBJ_DECL})\s+add\s+(\S*\x01\S*)")
+_FORMAT_SPEC = re.compile(r"%(?:(\d+)\$)?[-#+ 0,(]*\d*(?:\.\d+)?([sSdn%])")
 
 # Java: tags through the entity API (the methods, or the live set `entityTags()` returns), objectives by name
 _J_TAG_CALL = re.compile(r"\.(addTag|removeTag|addScoreboardTag|removeScoreboardTag)\s*\("
@@ -124,17 +161,19 @@ def tag_members(root: Path, tag: str) -> list[str]:
     return []
 
 
-def parse_function(text: str) -> tuple[list[tuple[int, str, str, str | None]], list[tuple[int, str, str]],
-                                        list[tuple[int, str, str]]]:
+def parse_function(text: str, *, command_string: bool = False
+                   ) -> tuple[list[tuple[int, str, str, str | None]], list[tuple[int, str, str]],
+                              list[tuple[int, str, str]]]:
     """``(calls, tag sites, objective sites)`` of one mcfunction's text: calls ``(line, target, how, delay)``, tag
-    sites ``(line, name, add|remove|check)``, objective sites ``(line, name, define|write|read)``."""
+    sites ``(line, name, add|remove|check)``, objective sites ``(line, name, define|write|read)``.
+    ``command_string``: the text is a string of Java code, which may be a message, not a command."""
     calls, tags, objs = [], [], []
     for i, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        if line.startswith("$"):  # a macro line: its $(names) are filled at run time
-            line = line[1:]
+        if line.startswith("$"):  # a macro line: its $(names) are filled at run time, a name part-filled too
+            line = _unmacro(line)
         for m in _SCHEDULE.finditer(line):
             calls.append((i, m.group(1), "schedule", m.group(2)))
         sched = {m.start(1) for m in _SCHEDULE.finditer(line)}
@@ -148,7 +187,8 @@ def parse_function(text: str) -> tuple[list[tuple[int, str, str, str | None]], l
         for m in _NBT_TAGS.finditer(line):  # summon ... {Tags:["a","b"]}, data merge entity ... {Tags:[...]}
             for name in re.findall(r'"?([A-Za-z0-9_.+-]+)"?', re.sub(r'\$\([^)]*\)', '', m.group(1))):
                 tags.append((i, name, "add"))
-        if "$(" in line and re.search(r"(?:Tags\s*:\s*\[[^\]]*\$\(|\s(?:add|remove)\s+\$\()", line):
+        if "$(" in line and re.search(r"(?:Tags\s*:\s*\[[^\]]*\$\(|(?:^|\s)tag\s+\S+(?:\[[^\]]*\])?\s+(?:add|remove)"
+                                      r"\s+\$\()", line):
             tags.append((i, "*", "add"))  # a macro fills in the tag
         for m in _SEL_TAG.finditer(line):
             if m.group(2):
@@ -161,7 +201,16 @@ def parse_function(text: str) -> tuple[list[tuple[int, str, str, str | None]], l
         for m in _OBJ_ADD.finditer(line):
             objs.append((i, m.group(1), "define"))
         for m in _OBJ_REMOVE.finditer(line):
-            objs.append((i, m.group(1), "define"))
+            objs.append((i, m.group(1), "remove"))
+        for m in _OBJ_MODIFY.finditer(line):
+            objs.append((i, m.group(1), "modify"))
+        for m in _OBJ_DISPLAY.finditer(line):
+            objs.append((i, m.group(1), "read"))
+        for m in _TRIGGER.finditer(line):
+            if not command_string or re.fullmatch(_TRIGGER_TAIL, line[m.end():]):
+                objs.append((i, m.group(1), "write"))
+        for m in _CLICK_TRIGGER.finditer(line):
+            objs.append((i, m.group(1), "write"))
         for m in _PLAYERS.finditer(line):
             verb, obj = m.group(1), m.group(3)
             if obj:
@@ -175,6 +224,48 @@ def parse_function(text: str) -> tuple[list[tuple[int, str, str, str | None]], l
         for m in _STORE_SCORE.finditer(line):
             objs.append((i, m.group(1), "write"))
     return calls, tags, objs
+
+
+def _unmacro(line: str) -> str:
+    """A macro line without its ``$``, and each name a macro fills in, even in part (``red_$(s)``), made ``$(m)``:
+    no reader takes the spelled part for the name."""
+    return _MACRO_TOKEN.sub("$(m)", line[1:])
+
+
+def bossbar_id(name: str) -> str:
+    """A boss bar id as the game reads it: ``x`` is ``minecraft:x``."""
+    return name if ":" in name else f"minecraft:{name}"
+
+
+def parse_symbols(text: str, *, command_string: bool = False) -> list[tuple[int, str, str, str]]:
+    """The teams and boss bars of one mcfunction's text, and the objectives, teams and boss bars a macro declares:
+    ``(line, what, name, kind)``, ``what`` being ``team``, ``bossbar`` or ``objective`` and ``kind`` ``define``
+    (``team add``, ``bossbar add``), ``remove``, ``check`` (``team=`` in a selector) or ``use``; a name a macro fills
+    in (``team add $(t)``) is ``*``. ``command_string`` as for :func:`parse_function`."""
+    out = []
+    for i, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("$"):
+            line = _unmacro(line)
+            for m in _MACRO_DECL.finditer(line):
+                what = m.group(1).split()[0]
+                out.append((i, "objective" if what == "scoreboard" else what, "*", "define"))
+        for m in _TEAM_CMD.finditer(line):
+            if command_string and not re.fullmatch(_TEAM_TAIL[m.group(1)], line[m.end():]):
+                continue
+            out.append((i, "team", m.group(2), {"add": "define", "remove": "remove"}.get(m.group(1), "use")))
+        for m in _SEL_TEAM.finditer(line):
+            out.append((i, "team", m.group(1), "check"))
+        for m in _BOSSBAR.finditer(line):
+            if command_string and not re.fullmatch(_BAR_TAIL[m.group(1)], line[m.end():]):
+                continue
+            out.append((i, "bossbar", bossbar_id(m.group(2)),
+                        {"add": "define", "remove": "remove"}.get(m.group(1), "use")))
+        for m in _STORE_BAR.finditer(line):
+            out.append((i, "bossbar", bossbar_id(m.group(1)), "use"))
+    return out
 
 
 def functions(repo: Path) -> dict[str, Function]:
@@ -261,6 +352,40 @@ def _top_level(expr: str, chars: str) -> list[int]:
 def _split(expr: str, ch: str) -> list[str]:
     cuts = _top_level(expr, ch)
     return [expr[a + 1:b] for a, b in zip([-1] + cuts, cuts + [len(expr)])]
+
+
+def _formatted(s: str, t: str, b: str, start: int, end: int, value) -> str:
+    """Command string ``s`` (the literal at ``t[start:end]``, ``b`` the blanked text) as ``String.format(s, ...)`` or
+    ``s.formatted(...)`` fills it in: each ``%s`` / ``%d`` takes its argument's one value, or ``\\x01`` when that
+    is not a single value read through ``value`` (a constant binding). ``s`` itself when it is no format."""
+    after = re.match(r"\s*\.\s*formatted\s*\(", b[end:end + 80])
+    before = re.search(r"\bformat\s*\(\s*(?:[\w.]+\s*,\s*)?$", b[max(0, start - 120):start])
+    if after:
+        paren = end + after.end() - 1
+        close = _close(b, paren)
+        args = _split(t[paren + 1:close], ",") if close > 0 else None
+    elif before:
+        paren = max(0, start - 120) + before.start() + before.group().index("(")
+        close = _close(b, paren)
+        args = _split(t[end:close], ",")[1:] if close > end else None
+    else:
+        return s
+    if args is None:
+        return s
+    nxt = iter(range(len(args)))
+
+    def fill(m: re.Match) -> str:
+        if m.group(2) == "%":
+            return "%"
+        if m.group(2) == "n":
+            return " "
+        k = int(m.group(1)) - 1 if m.group(1) else next(nxt, len(args))
+        if not 0 <= k < len(args):
+            return "\x01"
+        vals, pats = _values(args[k], value)
+        return next(iter(vals)) if len(vals) == 1 and not pats else "\x01"
+
+    return _FORMAT_SPEC.sub(fill, s)
 
 
 class _Consts:
@@ -418,6 +543,7 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
     funcs = functions(repo)
     tags: dict[str, list[Site]] = {}
     objs: dict[str, list[Site]] = {}
+    symbols: dict[str, dict[str, list[Site]]] = {"objective": objs, "team": {}, "bossbar": {}}
     for fn in funcs.values():
         f = fn.files[0]
         try:
@@ -429,6 +555,8 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
             tags.setdefault(name, []).append(Site(f, ln, "mcfunction", kind, lines[ln - 1].strip()[:160]))
         for ln, name, kind in os_:
             objs.setdefault(name, []).append(Site(f, ln, "mcfunction", kind, lines[ln - 1].strip()[:160]))
+        for ln, what, name, kind in parse_symbols("\n".join(lines)):
+            symbols[what].setdefault(name, []).append(Site(f, ln, "mcfunction", kind, lines[ln - 1].strip()[:160]))
     if java_files is None:
         from verinoda.snapshot import listed_files
 
@@ -448,7 +576,66 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
     known_objs = set(objs)
     helpers = _tag_helpers(texts)
     patterns: list[tuple[str, Site]] = []   # tag names Java builds at run time: (pattern, the add)
+    declared: list[tuple[str, str, Site]] = []  # objectives and teams Java declares by a built name: (what, pattern)
+    bar_creates: list[Site] = []                # boss bars Java creates (their ids are not read)
     helper_rx = re.compile(rf"(?<![\w$.])({'|'.join(map(re.escape, sorted(helpers)))})\s*\(") if helpers else None
+    decl_helpers = _declare_helpers(texts)
+    decl_rx = re.compile(rf"(?<![\w$.])({'|'.join(map(re.escape, sorted(decl_helpers)))})\s*\(") \
+        if decl_helpers else None
+
+    def line_in(t: str, pos: int) -> tuple[int, str]:
+        ln = t.count("\n", 0, pos) + 1
+        return ln, t.splitlines()[ln - 1].strip()[:160]
+
+    def declare_site(f: str, t: str, pos: int, expr: str, what: str, kind: str, handed_on: bool) -> None:
+        """A Java declaration (or use) of objective, team or boss bar ``expr``: its names, and a name built at run
+        time as a pattern; a method's own parameter handed on is named by its callers."""
+        ln, text = line_in(t, pos)
+        site = Site(f, ln, "java", kind, text)
+        names, pats = _values(expr, lambda e, d: cx.value(e, f, pos, d))
+        for name in sorted(names):
+            symbols[what].setdefault(bossbar_id(name) if what == "bossbar" else name, []).append(site)
+        if kind == "define" and not (handed_on and pats == ["*"]):
+            declared.extend((what, p, site) for p in dict.fromkeys(pats))
+
+    def _concat_declare(f: str, t: str, lit_end: int, s: str, ln: int) -> None:
+        """``"scoreboard objectives add " + NAME + " dummy"``: the name the concatenation after the literal builds."""
+        m = _DECL_OPEN.search(s)
+        if not m:
+            return
+        what = {"scoreboard": "objective"}.get(m.group(1).split()[0], m.group(1))
+        b, depth, stop = cx.blank(f), 0, lit_end
+        while stop < len(b):  # to the end of the expression: a closing bracket, a comma or a semicolon
+            c = b[stop]
+            if c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+                if depth < 0:
+                    break
+            elif c in ",;" and depth == 0:
+                break
+            stop += 1
+        options, pattern, exact = [m.group(2)], m.group(2), True
+        for part in _split(t[lit_end:stop], "+")[1:]:
+            vals, pats = _values(part, lambda e, d: cx.value(e, f, lit_end, d))
+            if vals and not pats and len(options) * len(vals) <= 16:
+                cut = [re.split(r"\s", v, maxsplit=1) for v in sorted(vals)]
+                options = list(dict.fromkeys(o + c[0] for o in options for c in cut))
+                pattern += cut[0][0].replace("*", "") if len(vals) == 1 else "*"
+                if any(len(c) > 1 for c in cut):  # the name ends at a space
+                    break
+            else:
+                exact = False
+                pattern += "*"
+        site = Site(f, ln, "java", "define", t.splitlines()[ln - 1].strip()[:160])
+        if exact:
+            for name in options:
+                if name:
+                    symbols[what].setdefault(bossbar_id(name) if what == "bossbar" else name, []).append(site)
+        else:
+            declared.append((what, re.sub(r"\*+", "*", pattern), site))
+
     for f, t in texts.items():
         lines = t.splitlines()
         starts = [0] + [m.end() for m in _NEWLINE.finditer(t)]
@@ -494,16 +681,73 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
                 if h[1] < len(args):
                     tag_site(m.start(), args[h[1]], h[0])
         # commands written as strings in Java (run through the server's command dispatcher)
-        for m in re.finditer(r'"((?:[^"\\\n]|\\.){6,})"', t):
-            s = m.group(1).replace('\\"', '"')
-            if not re.search(r"(?:^|\s)(?:tag|scoreboard|summon|execute|function|data)\s", s):
+        literals = []  # (text, its offset, the literal's start and end, in a text block)
+        for m in _J_NOISE.finditer(t):  # string literals paired as Java pairs them, comments skipped
+            lit = m.group()
+            if lit.startswith('"""'):  # a text block: one command a line
+                if not lit.endswith('"""') or len(lit) < 6:
+                    continue
+                at = m.start() + 3
+                for part in lit[3:-3].split("\n"):
+                    literals.append((part, at, m.start(), m.end(), True))
+                    at += len(part) + 1
+            elif lit.startswith('"') and len(lit) >= 8 and lit.endswith('"'):
+                literals.append((lit[1:-1], m.start(), m.start(), m.end(), False))
+        for raw_s, s_start, lit_start, lit_end, text_block in literals:
+            s = raw_s.replace('\\"', '"')
+            if not re.search(r"(?:^|\s)(?:tag|scoreboard|summon|execute|function|data|team|bossbar|trigger|tellraw)"
+                             r"\s", s):
                 continue
-            ln = line_of(m.start())
-            _c, ts, os_ = parse_function(s)
+            ln = line_of(s_start)
+            site_text = lines[ln - 1].strip()[:160]
+            if "%" in s:  # String.format("... add %s dummy", NAME) or "... add %s dummy".formatted(NAME)
+                s = _formatted(s, t, cx.blank(f), lit_start, lit_end, lambda e, d: cx.value(e, f, lit_start, d))
+                for dm in _DECL_FILLED.finditer(s):
+                    what = {"scoreboard": "objective"}.get(dm.group(1).split()[0], dm.group(1))
+                    declared.append((what, re.sub(r"[^A-Za-z0-9_.+:*-]+", "*", dm.group(2).replace("\x01", "*")),
+                                     Site(f, ln, "java", "define", site_text)))
+                s = re.sub(r"\S*\x01\S*", "\x01", s)  # a word a value fills in that is not read is no name
+            joined = not text_block and re.match(r"\s*\+", t[lit_end:lit_end + 40])
+            if joined:  # "... add " + NAME: the name is the concatenation's, not the literal's last word
+                _concat_declare(f, t, lit_end, s, ln)
+                s = re.sub(r"\S+$", "", s)
+            if not text_block and re.search(r"\+\s*$", t[max(0, lit_start - 40):lit_start]):
+                s = re.sub(r"^\S+", "", s)  # PREFIX + "_x ...": "_x" is part of one
+            s = s.strip()
+            _c, ts, os_ = parse_function(s, command_string=True)
             for _l, name, kind in ts:
-                tags.setdefault(name, []).append(Site(f, ln, "java", kind, lines[ln - 1].strip()[:160]))
+                tags.setdefault(name, []).append(Site(f, ln, "java", kind, site_text))
             for _l, name, kind in os_:
-                objs.setdefault(name, []).append(Site(f, ln, "java", kind, lines[ln - 1].strip()[:160]))
+                objs.setdefault(name, []).append(Site(f, ln, "java", kind, site_text))
+            for _l, what, name, kind in parse_symbols(s, command_string=True):
+                symbols[what].setdefault(name, []).append(Site(f, ln, "java", kind, site_text))
+        # objectives and teams declared through the scoreboard API (or a project method handing its name on to it)
+        mojang = "net.minecraft.world.scores" in t and "net.minecraft.scoreboard" not in t
+        if _J_DECLARE.search(t) or (decl_rx is not None and decl_rx.search(t)):
+            b = cx.blank(f)
+            own = [(m.start(), {p.split()[-1] for p in m.group(2).split(",") if "String" in p and p.split()})
+                   for m in _J_METHOD.finditer(b)]
+            for m in _J_DECLARE.finditer(b):
+                end = _close(b, m.end() - 1)
+                # getPlayerTeam takes a team name in Mojang's mappings, a player's in Yarn's (to 1.20.2)
+                if end < 0 or (m.group(1) == "getPlayerTeam" and not mojang):
+                    continue
+                what, kind = _J_DECLARE_KIND[m.group(1)]
+                arg = _split(t[m.end():end], ",")[0]
+                handed = next((ps for at, ps in reversed(own) if at < m.start()), set())
+                declare_site(f, t, m.start(), arg, what, kind, arg.strip() in handed)
+            for m in decl_rx.finditer(b) if decl_rx is not None else ():
+                h = decl_helpers.get(m.group(1))
+                end = _close(b, m.end() - 1) if h else -1
+                if end < 0 or re.match(r"\s*(?:\{|throws\b)", b[end + 1:end + 40]):  # the declaration itself
+                    continue
+                args = _split(t[m.end():end], ",")
+                if h[1] < len(args):
+                    handed = next((ps for at, ps in reversed(own) if at < m.start()), set())
+                    declare_site(f, t, m.start(), args[h[1]], h[0], "define", args[h[1]].strip() in handed)
+        for m in _J_BAR_CREATE.finditer(t):
+            ln = line_of(m.start())
+            bar_creates.append(Site(f, ln, "java", "define", lines[ln - 1].strip()[:160]))
         if not known_objs:
             continue
         # an objective named in a call: `helper(server, "k_durum")`, `sb.getObjective("k")`; read or write by what
@@ -524,7 +768,19 @@ def index(repo: Path, *, java_files: list[str] | None = None, java_calls: bool =
                 elif _READ_HINT.search(probe):
                     kind = "read"
             objs.setdefault(name, []).append(Site(f, ln, "java", kind, stmt.strip()[:160]))
-    return {"functions": funcs, "tags": tags, "objectives": objs, "java": java, "tag_patterns": patterns}
+    return {"functions": funcs, "tags": tags, "objectives": objs, "teams": symbols["team"],
+            "bossbars": symbols["bossbar"], "java": java, "tag_patterns": patterns, "declare_patterns": declared,
+            "java_bossbar_creates": bar_creates}
+
+
+_J_DECLARE = re.compile(r"\.(addObjective|addPlayerTeam|addTeam|getPlayerTeam)\s*\(")
+_J_DECLARE_KIND = {"addObjective": ("objective", "define"), "addPlayerTeam": ("team", "define"),
+                   "addTeam": ("team", "define"), "getPlayerTeam": ("team", "use")}
+_J_BAR_CREATE = re.compile(r"\b(?:getCustomBossEvents|customBossEvents|getBossBarManager|bossBarManager)\b"
+                           r"(?:\s*\(\s*\))?\s*\.\s*(?:create|add)\s*\(")
+_TABLES = {"objective": "objectives", "team": "teams", "bossbar": "bossbars"}
+_NAMING_KINDS = {"objective": "objectives", "team": "teams", "bossbar": "bossbars", "tag": "tags",
+                 "function": "functions"}
 
 
 def _tag_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
@@ -536,8 +792,8 @@ def _tag_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
         if not _TAG_API.search(text):  # a helper's body calls the tag API
             continue
         for m in decl.finditer(text):
-            body = _method_body(text, m.group(1)) or ""
-            if len(body) > 1500:
+            body = _body_at(text, m.end() - 1, 1500)
+            if body is None:
                 continue
             params = [(k, p.split()[-1]) for k, p in enumerate(m.group(2).split(",")) if "String" in p and p.split()]
             live = r"(?:entityTags|getTags|getScoreboardTags|getCommandTags)\s*\(\s*\)\s*\.\s*"
@@ -550,6 +806,40 @@ def _tag_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
                 elif re.search(rf"{live}contains{arg}", body):
                     out.setdefault(m.group(1), set()).add(("check", k))
     return {k: next(iter(v)) for k, v in out.items() if len(v) == 1}
+
+
+def _declare_helpers(texts: dict[str, str]) -> dict[str, tuple[str, int]]:
+    """Methods of the project that declare the objective or team they are given (``ensure(sb, name)`` calling
+    ``sb.addObjective(name, ...)``): name -> (``objective`` or ``team``, index of the name parameter); a name two
+    methods use differently is dropped."""
+    out: dict[str, set[tuple[str, int]]] = {}
+    decl = re.compile(r"\b(?:static\s+)?(?:boolean|void|[A-Z][\w<>]*)\s+([a-z][\w$]*)\s*\(([^)]*String[^)]*)\)\s*\{")
+    for text in texts.values():
+        if not re.search(r"\.(?:addObjective|addPlayerTeam|addTeam)\s*\(", text):
+            continue
+        for m in decl.finditer(text):
+            body = _body_at(text, m.end() - 1, 1500)
+            if body is None:
+                continue
+            for k, p in enumerate(m.group(2).split(",")):
+                if "String" not in p or not p.split():
+                    continue
+                arg = rf"\s*\(\s*{re.escape(p.split()[-1])}\s*[,)]"
+                if re.search(rf"\.addObjective{arg}", body):
+                    out.setdefault(m.group(1), set()).add(("objective", k))
+                elif re.search(rf"\.(?:addPlayerTeam|addTeam){arg}", body):
+                    out.setdefault(m.group(1), set()).add(("team", k))
+    return {k: next(iter(v)) for k, v in out.items() if len(v) == 1}
+
+
+def _body_at(text: str, open_pos: int, limit: int) -> str | None:
+    """The body of the brace at ``open_pos`` (brace-matched), or None when it is longer than ``limit``."""
+    depth = 0
+    for m in re.finditer(r"[{}]", text[open_pos:open_pos + limit + 2]):
+        depth += 1 if m.group() == "{" else -1
+        if depth == 0:
+            return text[open_pos + 1:open_pos + m.start()]
+    return None
 
 
 def _method_body(text: str, name: str) -> str | None:
@@ -569,11 +859,12 @@ def _method_body(text: str, name: str) -> str | None:
     return None
 
 
-def problems(ix: dict) -> dict:
+def problems(ix: dict, naming: dict[str, re.Pattern] | None = None) -> dict:
     """Tags something checks that nothing adds, tags added that nothing checks, objectives written that nothing
     reads (a Java ``use`` of an objective counts as a possible read), and calls to functions that do not exist:
     from mcfunction, and from Java into a namespace the datapacks define (``getFunctions().get`` of a missing
-    function returns nothing and the call does nothing, silently)."""
+    function returns nothing and the call does nothing, silently); objectives, teams and boss bars used but never
+    declared (:func:`undeclared`); with ``naming`` rules, the names that break them."""
     out: dict[str, list] = {"tags_checked_never_added": [], "tags_added_never_checked": [],
                             "scores_written_never_read": [], "missing_functions": []}
     macro = [s.at for s in ix["tags"].get("*", [])]
@@ -611,6 +902,158 @@ def problems(ix: dict) -> dict:
             out["missing_functions"].append({"name": c.target, "called_at": c.at, "how": f"java {c.via}",
                                              "caller": c.caller, **({"helper": c.helper} if c.helper else {}),
                                              **({"tree": c.tree} if c.tree else {})})
+    out.update(undeclared(ix))
+    if naming:
+        out["naming"] = naming_problems(ix, naming)
+    return out
+
+
+def undeclared(ix: dict) -> dict:
+    """The objectives, teams and boss bars something uses that nothing in the datapacks or the Java declares
+    (``<kind>s_used_never_declared``): each with the sites that use it. ``strong_inference``: the game fails the
+    command (or finds nothing), unless the name is declared where the text does not show it - a macro, a name built
+    at run time, another pack, a player's command; those declarations are listed beside."""
+    out: dict[str, list] = {}
+    macro = []
+    for what, table in _TABLES.items():
+        rows = []
+        for name, sites in sorted((ix.get(table) or {}).items()):
+            if name == "*":
+                macro += [{"kind": what, "at": s.at} for s in sites]
+                continue
+            if any(s.kind == "define" for s in sites):
+                continue
+            row = {"name": name, "status": "strong_inference", "sites": [s.at for s in sites][:10],
+                   "uses": len(sites)}
+            maybe = _maybe_declared_by(ix, what, name)
+            if maybe:  # a name Java builds at run time may be this one: a lead, not "never"
+                row["maybe_declared_by"] = maybe
+            rows.append(row)
+        out[f"{table}_used_never_declared"] = rows
+    if macro:
+        out["declared_by_macros"] = macro[:10]
+    built = [{"kind": w, "at": s.at, "pattern": p} for w, p, s in ix.get("declare_patterns") or []]
+    if built:
+        out["declared_dynamically"] = built
+    bars = [s.at for s in ix.get("java_bossbar_creates") or []]
+    if bars:  # the ids Java gives them are not read: a boss bar listed above may be one of them
+        out["bossbars_created_in_java"] = bars
+    return out
+
+
+def _maybe_declared_by(ix: dict, what: str, name: str) -> list[dict]:
+    """The Java declarations whose name, built at run time, fits ``name`` (``a_*`` fits ``a_board``); a name nothing
+    about is known (``*``) fits every one and is listed in the summary only (``declared_dynamically``)."""
+    return [{"at": s.at, "pattern": p} for w, p, s in ix.get("declare_patterns") or []
+            if w == what and p != "*" and _pattern_rx(p).fullmatch(name)]
+
+
+def naming_rules(repo: Path) -> tuple[dict[str, re.Pattern], list[dict]]:
+    """``datapack.naming`` in ``.verinoda/config.json``: ``{"objective": "^[a-z0-9_.]+$", ...}`` for objectives,
+    teams, boss bars (the whole id), entity tags and functions (``ns:path``). None is set by default. Returns the
+    rules and the entries that could not be read."""
+    try:
+        from verinoda.paths import load_config
+
+        dp = load_config(Path(repo)).get("datapack") or {}
+    except Exception:  # noqa: BLE001 - an unreadable config: no rules
+        return {}, []
+    raw = dp.get("naming") if isinstance(dp, dict) else None
+    if raw is None:
+        return {}, []
+    if not isinstance(raw, dict):
+        return {}, [{"kind": "naming", "rule": raw, "why": "datapack.naming is an object: {kind: regex}"}]
+    rules, bad, spelled = {}, [], {}
+    for key, rx in raw.items():
+        kind = str(key)
+        kind = kind[:-1] if kind.endswith("s") and kind[:-1] in _NAMING_KINDS else kind  # "teams" is "team"
+        if kind not in _NAMING_KINDS or not isinstance(rx, str):
+            bad.append({"kind": kind, "rule": rx, "why": f"a rule is a regex for one of {', '.join(_NAMING_KINDS)}"})
+            continue
+        if kind in spelled:
+            bad.append({"kind": kind, "rule": rx, "why": f"set twice ({spelled[kind]} and {key}): the first is applied"})
+            continue
+        spelled[kind] = key
+        try:
+            rules[kind] = re.compile(rx)
+        except re.error as e:
+            bad.append({"kind": kind, "rule": rx, "why": f"not a regex: {e}"})
+            continue
+        why = _risky_rule(rx)
+        if why:  # a name could take too long to match: the rule is not applied
+            del rules[kind]
+            bad.append({"kind": kind, "rule": rx, "why": why})
+    return rules, bad
+
+
+def _risky_rule(rx: str) -> str | None:
+    """Why matching ``rx`` could take exponential or high polynomial time on one long name, or None. Read from
+    Python's own parse of the pattern, and conservative: a repeat around anything that itself varies (``(a+)*``,
+    ``(a|aa)*``, ``(a?){30}``), more than four parts of varying length (five ``[a-z]*`` in a row), or
+    alternatives that multiply past 64 ways."""
+    try:
+        from re import _parser as sre_parse  # Python 3.11+
+    except ImportError:  # pragma: no cover - Python 3.10
+        import sre_parse  # type: ignore[no-redef]
+    counts = {"varying": 0, "ways": 1}
+
+    def subs(av):
+        for sub in (av if isinstance(av, (tuple, list)) else ()):
+            if isinstance(sub, sre_parse.SubPattern):
+                yield sub
+            elif isinstance(sub, list):
+                yield from (x for x in sub if isinstance(x, sre_parse.SubPattern))
+
+    def walk(items, inside: bool) -> bool:
+        for op, av in items:
+            name = str(op)
+            if name.endswith("REPEAT"):
+                lo, hi = av[0], av[1]
+                if inside and lo != hi:
+                    return True
+                if lo != hi:
+                    counts["varying"] += 1
+                if walk(av[2], inside or hi > 1):
+                    return True
+                continue
+            if name == "BRANCH":
+                if inside:
+                    return True
+                counts["ways"] *= max(1, len(av[1]))
+            if any(walk(sub, inside) for sub in subs(av)):
+                return True
+        return False
+
+    try:
+        nested = walk(sre_parse.parse(rx), False)
+    except Exception:  # noqa: BLE001 - a pattern the parser rejects fails to compile first
+        return None
+    if nested:
+        return ("a repeat around a part that itself repeats, is optional or chooses between alternatives can take "
+                "exponential time; write it without nesting")
+    if counts["varying"] > 4:
+        return (f"{counts['varying']} parts of varying length can take high polynomial time on a long name; "
+                "use at most four")
+    if counts["ways"] > 64:
+        return f"alternatives multiply to {counts['ways']} ways; use at most 64"
+    return None
+
+
+def naming_problems(ix: dict, rules: dict[str, re.Pattern]) -> list[dict]:
+    """The names a rule of :func:`naming_rules` does not match in full, each with the site that declares it (or its
+    first site). ``verified``: the name is read as written and the rule is the project's."""
+    out = []
+    for kind, rx in rules.items():
+        table = ix.get(_NAMING_KINDS[kind]) or {}
+        for name in sorted(table):
+            if name == "*" or rx.fullmatch(name):
+                continue
+            if kind == "function":
+                at = f"{table[name].files[0]}:1"
+            else:
+                sites = table[name]
+                at = next((s for s in sites if s.kind in ("define", "add")), sites[0]).at if sites else ""
+            out.append({"kind": kind, "name": name, "rule": rx.pattern, "at": at, "status": "verified"})
     return out
 
 
@@ -676,8 +1119,8 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None,
                 "note": "a collision's files are both read; which one the game uses is its load order. Dependencies "
                         "are read from the manifests; the game, Java and the loaders are not checked"}
     ix = index(repo, java_calls=what in (None, "", "function"))
-    base = {"functions": len(ix["functions"]), "tags": len([t for t in ix["tags"] if t != "*"]),
-            "objectives": len(ix["objectives"])}
+    base = {"functions": len(ix["functions"]),
+            **{k: len([n for n in ix[k] if n != "*"]) for k in ("tags", "objectives", "teams", "bossbars")}}
     if ix.get("java") is not None:
         base["java_calls"] = len([c for c in ix["java"].calls if not c.dynamic])
     if not what:
@@ -686,7 +1129,10 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None,
         if not ix["functions"] and not ix["tags"] and not packs["collisions"] and not dep["problems"]:
             return {**base, "status": "no_datapack", "note": "no data/<namespace>/function[s]/*.mcfunction and no "
                                                             "entity tags in Java"}
-        pr = problems(ix)
+        rules, bad_rules = naming_rules(repo)
+        pr = problems(ix, rules)
+        if bad_rules:
+            pr["naming_rules_unreadable"] = bad_rules
         pr["pack_collisions"] = packs["collisions"]
         pr["mod_dependencies"] = dep["problems"]
         if dep["external"]:  # the repository alone is not the set the game loads: said, not called missing
@@ -700,21 +1146,29 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None,
                 **({"unreadable": packs["unreadable"]} if packs["unreadable"] else {}),
                 **({"java": _java_summary(ix["java"])} if ix.get("java") is not None else {}),
                 "note": "read from the text: a name built at run time is not a name (a function's is listed as "
-                        "dynamic, a Java tag's matched as a pattern); a mismatch is a lead; which file of a "
+                        "dynamic, a Java tag's matched as a pattern); a mismatch is a lead (a name used but never "
+                        "declared may be declared by another pack or by hand in the world); which file of a "
                         "collision the game uses is its load order"}
-    if what in ("tag", "score", "objective"):
-        table = ix["tags"] if what == "tag" else ix["objectives"]
+    if what in ("tag", "score", "objective", "team", "bossbar"):
+        table = {"tag": ix["tags"], "team": ix["teams"], "bossbar": ix["bossbars"]}.get(what, ix["objectives"])
+        if what == "bossbar" and name:
+            name = bossbar_id(name)
         sites = table.get(name or "")
-        maybe = _maybe_added_by(ix, name or "") if what == "tag" else []
+        if what == "tag":
+            maybe, mkey = _maybe_added_by(ix, name or ""), "maybe_added_by"
+        else:  # a name Java builds at run time may declare it: said beside "never declared", as in the summary
+            maybe = _maybe_declared_by(ix, "objective" if what in ("score", "objective") else what, name or "")
+            mkey = "maybe_declared_by"
         if not sites:
             from difflib import get_close_matches
 
             return {**base, "status": "not_found", "kind": what, "name": name,
                     "nearest": get_close_matches(name or "", [k for k in table if k != "*"], n=5),
-                    **({"maybe_added_by": maybe} if maybe else {})}
+                    **({mkey: maybe} if maybe else {})}
         return {**base, "status": "found", "kind": what, "name": name,
                 "sites": [{"at": s.at, "lang": s.lang, "kind": s.kind, "text": s.text} for s in sites],
-                **({"maybe_added_by": maybe} if maybe else {})}
+                **({mkey: maybe} if maybe else {}),
+                **({"declared": any(s.kind == "define" for s in sites)} if what != "tag" else {})}
     if what == "function":
         fn = ix["functions"].get(name or "")
         java_calls, maybe, bare = _java_rows(ix, name or "")
@@ -731,7 +1185,7 @@ def lookup(repo: Path, what: str | None = None, name: str | None = None,
                                "how": how, **({"delay": d} if d else {})}
                               for f, ln, how, d in _called_by(ix["functions"], fn.id)] + java_calls,
                 "dynamic": maybe, "dynamic_any": bare}
-    raise ValueError(f"datapack: unknown lookup {what!r} (tag, score, function, packs)")
+    raise ValueError(f"datapack: unknown lookup {what!r} (tag, score, team, bossbar, function, packs)")
 
 
 def _java_line(c: dict) -> str:
@@ -758,6 +1212,7 @@ def render(res: dict) -> str:
             return "no pack or mod found: no data/<ns>/<kind> or assets/<ns>/<kind> files and no mod manifest"
         return "\n".join(packset.render(res) + [f"note: {res['note']}"])
     head = f"{res['functions']} function(s), {res['tags']} entity tag(s), {res['objectives']} objective(s)"
+    head += "".join(f", {res[k]} {w}(s)" for k, w in (("teams", "team"), ("bossbars", "boss bar")) if res.get(k))
     if "java_calls" in res:
         head += f", {res['java_calls']} Java call(s) into the functions"
         js = res.get("java")
@@ -780,15 +1235,21 @@ def render(res: dict) -> str:
         labels = {"tags_checked_never_added": "tags checked but never added",
                   "tags_added_never_checked": "tags added but never checked",
                   "scores_written_never_read": "objectives written but never read",
+                  "objectives_used_never_declared": "objectives used but never declared",
+                  "teams_used_never_declared": "teams used but never declared",
+                  "bossbars_used_never_declared": "boss bars used but never declared",
                   "missing_functions": "calls to functions that do not exist"}
         for key, label in labels.items():
+            if key in ("teams_used_never_declared", "bossbars_used_never_declared") and not pr.get(key):
+                continue  # most datapacks have neither: an empty section is noise
             rows = pr.get(key) or []
             out.append(f"{label} ({len(rows)}):")
             for r in rows[:15]:
                 where = r.get("called_at") or ", ".join(r.get("sites", [])[:2])
                 java = f" (Java {r['caller']}, {r['how'][5:].replace('-', ' ')})" if r.get("caller") else ""
                 tree = f" [reference tree {r['tree']}]" if r.get("tree") else ""
-                out.append(f"  {r['name']}  {where}{java}{tree}{_maybe_note(r.get('maybe_added_by'))}")
+                out.append(f"  {r['name']}  {where}{java}{tree}{_maybe_note(r.get('maybe_added_by'))}"
+                           f"{_maybe_note(r.get('maybe_declared_by'), 'declared')}")
             if len(rows) > 15:
                 out.append(f"  (+{len(rows) - 15} more: --json)")
         from verinoda import packset
@@ -808,6 +1269,24 @@ def render(res: dict) -> str:
         if pr.get("dependencies_unchecked"):
             out.append(f"dependency versions that could not be read ({len(pr['dependencies_unchecked'])}): "
                        "datapack packs")
+        if pr.get("declared_by_macros"):
+            out.append("objectives, teams or boss bars a macro declares (not matched): "
+                       + ", ".join(f"{d['kind']} {d['at']}" for d in pr["declared_by_macros"][:3]))
+        if pr.get("declared_dynamically"):
+            d = pr["declared_dynamically"]
+            out.append(f"objective or team names Java builds at run time ({len(d)}): "
+                       + ", ".join(_built_add(r).replace(" adds ", " declares ") for r in d[:3])
+                       + (" ..." if len(d) > 3 else ""))
+        if pr.get("bossbars_created_in_java"):
+            out.append("boss bars Java creates (ids not read): " + ", ".join(pr["bossbars_created_in_java"][:3]))
+        if "naming" in pr:
+            rows = pr["naming"]
+            out.append(f"names that break the naming rules ({len(rows)}):")
+            out += [f"  {r['kind']} {r['name']}  {r['at']} (rule {r['rule']})" for r in rows[:15]]
+            if len(rows) > 15:
+                out.append(f"  (+{len(rows) - 15} more: --json)")
+        for r in pr.get("naming_rules_unreadable") or []:
+            out.append(f"naming rule not read: {r['kind']} {r['rule']!r}: {r['why']}")
         if pr.get("tags_added_by_macros"):
             out.append("tags a macro fills in (not matched): " + ", ".join(pr["tags_added_by_macros"][:3]))
         built = pr.get("tags_added_dynamically") or []
@@ -855,9 +1334,13 @@ def render(res: dict) -> str:
         if not res["calls"] and not res["called_by"] and not res["events"] and not res.get("dynamic") and not bare:
             out.append("  no call in or out found in the datapacks or in Java")
         return "\n".join(out)
-    out = [f"{res['kind']} {res['name']}: {len(res['sites'])} site(s)"]
+    out = [f"{res['kind']} {res['name']}: {len(res['sites'])} site(s)"
+           + ("" if res.get("declared", True) else ", never declared by name" if res.get("maybe_declared_by")
+              else ", never declared")]
     out += [f"  {s['kind']:<6} {s['lang']:<10} {s['at']}: {s['text']}" for s in res["sites"][:40]]
     out += [f"  maybe  java       {_built_add(d)} (a name built at run time)" for d in res.get("maybe_added_by") or []]
+    out += [f"  maybe  java       {_built_add(d).replace(' adds ', ' declares ')} (a name built at run time)"
+            for d in res.get("maybe_declared_by") or []]
     return "\n".join(out)
 
 
@@ -865,9 +1348,9 @@ def _built_add(d: dict) -> str:
     return f"{d['at']} adds " + (d["pattern"] if d["pattern"] != "*" else "a name the text does not spell")
 
 
-def _maybe_note(maybe: list[dict] | None) -> str:
+def _maybe_note(maybe: list[dict] | None, verb: str = "added") -> str:
     """``  (maybe added by Atlilar.java:751: *_at)`` after a tag checked but never added by name."""
     if not maybe:
         return ""
     shown = ", ".join(f"{d['at']}: {d['pattern']}" for d in maybe[:2])
-    return f"  (maybe added by {shown}" + (f" +{len(maybe) - 2} more" if len(maybe) > 2 else "") + ")"
+    return f"  (maybe {verb} by {shown}" + (f" +{len(maybe) - 2} more" if len(maybe) > 2 else "") + ")"
