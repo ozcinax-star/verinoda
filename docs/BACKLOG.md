@@ -117,7 +117,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 11.1 | **Bi-temporal claims** | Each claim records when it held (commits) and when it was recorded; invalidated, never deleted | Zep Graphiti, mem0 | "which claims held at v0.2" answered |
 | 11.2 | **Memory event history and expiry** | ADD, UPDATE and DELETE events per learning; a time-to-live | mem0 | `memory history ID` shows the events |
 | 11.3 | **Background consolidation** | Between sessions: re-verify stale claims, merge duplicates | Letta sleep-time agents, Cognee memify | stale claims re-checked by the background update |
-| 11.4 | **Project brief** | A small, bounded, always-current summary built from verified claims (build and test commands, layout, conventions) | Letta memory blocks, Cline Memory Bank, Zencoder repo info | `verinoda brief` under a character budget, each line with evidence |
 | 11.5 | **Typed notes and wikilinks** | Notes with `[category] fact #tag` lines and `[[symbol]]` links; two-way sync with Markdown files | Basic Memory | a note edited in an editor updates the index |
 | 11.6 | **Glob-scoped context** | Decisions, notes and claims attached to globs surface when an agent touches matching files | Kiro steering, Cursor rules | an MCP read of a file returns its scoped notes |
 
