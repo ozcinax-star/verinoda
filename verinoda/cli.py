@@ -780,6 +780,9 @@ def cmd_map(args) -> int:
         targets = args.target or am.changed_files_from_git(repo, args.base)
         res = {"impact": am.impact(g, targets, stale=fresh["files"])}
         failed = bool(args.target and res["impact"]["unresolved"])
+    elif args.view == "repo":   # the files in play: the targets named, else the working-tree changes
+        focus = args.target or am.changed_files_from_git(repo, args.base)
+        res = {"repo": am.repo_map(g, focus, max_tokens=args.max_tokens or am.REPO_MAP_TOKENS)}
     elif args.view:
         res = {args.view: am.VIEWS[args.view](g)}
     else:
@@ -793,6 +796,8 @@ def cmd_map(args) -> int:
 
     # all views at once: a short summary of each; one view: more lines of it
     cap = args.max_lines or (40 if args.view else 12)
+    if args.view == "repo" and not args.max_lines:   # the token budget bounds the repo map
+        cap = sys.maxsize
     for name, v in res.items():
         _write(map_text.render({name: v}, cap).rstrip("\n"))
         _stale_note(v)
@@ -3032,13 +3037,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                       "cycles", "dead", "hotspots", "sides"],
+                                       "cycles", "dead", "hotspots", "sides", "repo"],
                     help="cycles: dependency cycles between files and the fewest file dependencies to cut; "
                          "dead: code no entry point reaches; hotspots: files and functions by changes x "
                          "complexity; sides: client-only code (Minecraft) reachable from server code, with the "
-                         "path (dead, hotspots and sides are asked for by name)")
-    sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); default: git changes")
-    sp.add_argument("--base", help="impact view: diff base (default HEAD + untracked)")
+                         "path; repo: the files to read first (PageRank toward the files in play) and their "
+                         "signatures under --max-tokens (dead, hotspots, sides and repo are asked for by name)")
+    sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); repo view: a file "
+                                                      "in play; default: git changes")
+    sp.add_argument("--base", help="impact and repo views: diff base (default HEAD + untracked)")
+    sp.add_argument("--max-tokens", type=int, default=None,
+                    help="repo view: the map's budget in estimated tokens (default 1024)")
     sp.add_argument("--max-lines", type=int, default=None,
                     help="summary lines per view (default 12 for all views, 40 for one --view)")
     sp = add("review", cmd_review, "what a change touches, by concern: changed symbols, dependents, persistence, "

@@ -10,7 +10,8 @@ decision records), impact (reverse dependencies of a change), cycles (dependency
 cycles between files and the fewest dependencies to cut), dead (code no entry point
 reaches, :mod:`verinoda.deadcode`), hotspots (change frequency times complexity,
 :mod:`verinoda.hotspots`), sides (client-only code reachable from server code,
-:mod:`verinoda.sides`).
+:mod:`verinoda.sides`), repo (files ranked by PageRank toward the files in play, with their signatures, under
+a token budget).
 """
 
 from __future__ import annotations
@@ -1355,10 +1356,163 @@ def cycles(g: Graph) -> dict:
     }
 
 
+# -- 9. repo map -----------------------------------------------------------------------------
+
+REPO_MAP_TOKENS = 1024        # default budget of `map --view repo` (estimated tokens of the rendered map)
+REPO_MAP_DAMPING = 0.85
+REPO_MAP_SIGNATURE_CHARS = 160
+REPO_MAP_UNRESOLVED_SHOWN = 20
+# data files whose keys the extractor emits as symbols: no signatures to show
+REPO_MAP_DATA_SUFFIXES = (".json", ".toml", ".ini", ".cfg", ".yml", ".yaml", ".properties", ".xml")
+
+
+def repo_tokens(text: str) -> int:
+    """The budget's token estimate of one rendered line: four characters a token, the newline counted."""
+    return (len(text) + 4) // 4
+
+
+def repo_map_lines(row: dict) -> list[str]:
+    """How the repo view renders a file: its path, then each signature with its line (map_text uses this)."""
+    return [f"{row['file']}:"] + [f"  L{s['at'].rsplit(':', 1)[1]} {s['text']}" for s in row["signatures"]]
+
+
+def _pagerank(nodes: list[str], edges: dict[tuple[str, str], float], focus: set[str]) -> dict[str, float]:
+    """Weighted PageRank by power iteration; the random jump lands on the files in play ten times as often as
+    on any other file (uniform without them). A file without dependencies spreads its rank like a jump."""
+    n = len(nodes)
+    jump = {f: (10.0 if f in focus else 1.0) for f in nodes}
+    total = sum(jump.values())
+    jump = {f: w / total for f, w in jump.items()}
+    out_w: dict[str, float] = defaultdict(float)
+    for (a, _b), w in edges.items():
+        out_w[a] += w
+    rank = dict(jump)
+    for _ in range(100):
+        dangling = sum(rank[f] for f in nodes if not out_w.get(f))
+        nxt = {f: (1 - REPO_MAP_DAMPING + REPO_MAP_DAMPING * dangling) * jump[f] for f in nodes}
+        for (a, b), w in edges.items():
+            nxt[b] += REPO_MAP_DAMPING * rank[a] * w / out_w[a]
+        if sum(abs(nxt[f] - rank[f]) for f in nodes) < 1e-10 * n:
+            return nxt
+        rank = nxt
+    return rank
+
+
+def _signature(g: Graph, sym: str, lines: list[str]) -> tuple[int, str] | None:
+    """The definition line of a symbol (its indentation kept): its own line, or past its decorators the first
+    line naming it."""
+    ln = g.line(sym)
+    if not ln or ln > len(lines):
+        return None
+    name = g.label(sym).lstrip(".").split("(")[0]
+    for i in range(ln, min(ln + 12, len(lines) + 1)):
+        text = lines[i - 1].rstrip()
+        if text.strip() and not text.lstrip().startswith("@") and (not name or name in text):
+            if len(text) > REPO_MAP_SIGNATURE_CHARS:
+                text = text[:REPO_MAP_SIGNATURE_CHARS - 3] + "..."
+            return i, text
+    return None
+
+
+def _outer_symbols(g: Graph, f: str) -> list[str]:
+    """The symbols of a file that no function or method holds: classes, their methods, module functions."""
+    kept, stack = [], []   # stack: (end line, holds_code) of the enclosing symbols
+    for s in g.symbols_in(f):
+        ln = g.line(s) or 0
+        while stack and stack[-1][0] < ln:
+            stack.pop()
+        if stack and stack[-1][1]:
+            continue
+        kept.append(s)
+        sp = g.span(s)
+        if sp:
+            stack.append((sp[1], g.label(s).endswith(")")))
+    return kept
+
+
+def repo_map(g: Graph, focus: list[str] | None = None, max_tokens: int = REPO_MAP_TOKENS) -> dict:
+    """The files most worth reading first and their signatures, under a token budget (Aider's repo map).
+
+    Files are ranked by PageRank over the dependencies view's file-to-file edges (weighted by the square root
+    of their references), the random jump weighted toward the files in play (``focus``). A file's rank is shared
+    among its outer symbols by the references other files make to each. Symbols are taken by that score until
+    the estimated tokens of the rendered map reach ``max_tokens``: everything shown outranks everything left
+    out. The files in play are left out of the map (they are already being read). The ranking is
+    ``strong_inference``; each signature is the source line at its ``at``."""
+    from verinoda.index import PROSE_SUFFIXES
+
+    code = [f for f in _files(g) if not f.lower().endswith(PROSE_SUFFIXES + REPO_MAP_DATA_SUFFIXES)
+            and g.symbols_in(f)]
+    known = set(_files(g))
+    in_play, unresolved = [], []
+    for t in focus or []:
+        rel = str(t).replace("\\", "/").split("::")[0].strip()
+        rel = rel[2:] if rel.startswith("./") else rel
+        (in_play if rel in known else unresolved).append(rel if rel in known else str(t))
+    in_play = sorted(set(in_play))
+    deps, _stdlib = _file_deps(g)
+    edges = {e: d["references"] ** 0.5 for e, d in deps.items()}
+    nodes = sorted(set(code) | {f for e in edges for f in e})
+    rank = _pagerank(nodes, edges, set(in_play)) if nodes else {}
+    inbound: Counter = Counter()
+    for u, v, _d in g.edges(CYCLE_RELATIONS):
+        if g.file(u) != g.file(v) and g.is_symbol(v):
+            inbound[v] += 1
+    scored = []
+    for f in code:
+        if f in in_play:
+            continue
+        syms = _outer_symbols(g, f)
+        share = sum(inbound[s] for s in syms) + len(syms)
+        for s in syms:
+            scored.append((-rank.get(f, 0.0) * (1 + inbound[s]) / share, f, g.line(s) or 0, s))
+    scored.sort()
+    rows: dict[str, dict] = {}
+    used, shown = 0, 0
+    for _score, f, _ln, s in scored:
+        sig = _signature(g, s, _read(g.root, f))
+        if not sig:
+            continue
+        entry = {"symbol": g.label(s), "at": f"{f}:{sig[0]}", "text": sig[1]}
+        cost = repo_tokens(repo_map_lines({"file": f, "signatures": [entry]})[1])
+        cost += 0 if f in rows else repo_tokens(f"{f}:")
+        if used + cost > max_tokens:
+            break
+        used += cost
+        shown += 1
+        rows.setdefault(f, {"file": f, "rank": round(rank.get(f, 0.0), 5), "status": "strong_inference",
+                            "signatures": []})["signatures"].append(entry)
+    files = sorted(rows.values(), key=lambda r: (-r["rank"], r["file"]))
+    for r in files:
+        r["signatures"].sort(key=lambda e: int(e["at"].rsplit(":", 1)[1]))
+    return {
+        "view": "repo",
+        "coverage": {
+            "method": "PageRank over the dependencies view's file edges, the random jump weighted toward the "
+                      "files in play; outer symbols by references from other files; tokens = characters / 4",
+            "limits": ["the ranking is strong_inference: a heuristic of what to read first, not of what matters",
+                       "graph edges are extractions, never verification; dynamic dispatch, reflection and DI "
+                       "containers are not resolved",
+                       "a signature is the definition's first line (a multi-line signature is cut there)",
+                       "the files in play are left out of the map; their dependents rank only through what "
+                       "they use (the impact view lists dependents)"],
+        },
+        "focus": in_play,
+        **({"focus_unresolved": unresolved[:REPO_MAP_UNRESOLVED_SHOWN],
+            "focus_unresolved_total": len(unresolved)} if unresolved else {}),
+        "max_tokens": max_tokens,
+        "tokens": used,
+        "files": files,
+        "files_ranked": len(nodes),
+        "symbols_shown": shown,
+        "symbols_total": len(scored),
+    }
+
+
 VIEWS = {
     "hierarchy": hierarchy, "dependencies": dependencies, "dataflow": dataflow,
     "config": config, "tests": tests_view, "history": history, "cycles": cycles, "dead": dead,
-    "hotspots": hotspots, "sides": sides,
+    "hotspots": hotspots, "sides": sides, "repo": repo_map,
 }
 
 
