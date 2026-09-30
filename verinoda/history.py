@@ -623,22 +623,27 @@ def _head_lines(repo: Path, rel: str, a: int, b: int) -> tuple[tuple[int, int] |
                                   f"{min(old)}-{max(old)} by a text diff")
 
 
-def symbol_commits(repo: Path, rel: str, a: int, b: int, *, limit: int = 10) -> dict:
+def symbol_commits(repo: Path, rel: str, a: int, b: int, *, limit: int = 10, rev: str | None = None,
+                   probe: bool = True) -> dict:
     """The commits reachable from HEAD that changed lines ``a``-``b`` of ``rel`` (working-tree lines), newest
     first, as git's ``log -L`` follows the range back through the file's history, each with its whole message
     (subject, and the body up to :data:`MAX_BODY_LINES` lines) and ``git_history`` evidence quoting it.
     ``{"status": "found" | "not_found" | "not_committed" | "not_git", "commits", "head_lines", "note",
-    "truncated", "shallow"}``."""
+    "truncated", "shallow"}``. ``rev`` (a commit sha): the lines are that commit's and its history is read. ``probe=False``: the caller
+    already knows this is a git work tree (no ``rev-parse`` per call; ``shallow`` is then not read)."""
     repo = Path(repo)
     limit = max(1, min(int(limit), MAX_COMMITS))
-    if not _is_git(repo):
+    if probe and not _is_git(repo):
         return _not_git("symbol", repo)
-    span, note = _head_lines(repo, rel, a, b)
-    if span is None:
-        return {"status": "not_committed", "commits": [], "note": note}
+    if rev:
+        span, note = (a, b), None
+    else:
+        span, note = _head_lines(repo, rel, a, b)
+        if span is None:
+            return {"status": "not_committed", "commits": [], "note": note}
     fmt = f"--format={_HDR}%H%x1f%an%x1f%aI%x1f%P%x1f%B"
     out = _git(repo, "log", f"-n{limit + 1}", f"-L{span[0]},{span[1]}:{rel}", "--no-patch", "--no-ext-diff",
-               "--no-textconv", "--no-color", fmt)
+               "--no-textconv", "--no-color", fmt, *([rev] if rev else []))
     if out is None:
         raise ValueError(f"git log -L could not read {rel}:{span[0]}-{span[1]} at HEAD (or it took over "
                          f"{_GIT_TIMEOUT} s)")
@@ -669,7 +674,7 @@ def symbol_commits(repo: Path, rel: str, a: int, b: int, *, limit: int = 10) -> 
         c["evidence"]["meta"]["head_lines"] = list(span)
         found.append(c)
     return {"status": "found" if found else "not_found", "commits": found[:limit], "truncated": len(found) > limit,
-            "head_lines": list(span), "note": note, "shallow": _shallow(repo)}
+            "head_lines": list(span), "note": note, "shallow": _shallow(repo) if probe else None}
 
 
 def _project_rel(repo: Path, path: str) -> str:

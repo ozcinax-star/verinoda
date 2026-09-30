@@ -4973,6 +4973,9 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     if stale.get("error"):
         unknown.append({"kind": "made_stale", "at": None, "what": "which claims and notes the change makes stale",
                         "why": stale["error"], "next_step": "run `verinoda update`, then `verinoda notes`"})
+    from verinoda import reviewers
+
+    who = reviewers.suggest(repo, changes, None if targets else base_info)
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
     res = {
         "review_id": None,
@@ -4998,6 +5001,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "budget": budget,
         "decisions": reach,
         "made_stale": stale,
+        "reviewers": who,
         "coverage": {"method": "changed definitions from symbol facts of both versions; dependents over the last "
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
                                "(verinoda/review_rules.py)",
@@ -5738,6 +5742,9 @@ def render_text(res: dict) -> str:
     from verinoda import stale_reach
 
     out += stale_reach.render_lines(res.get("made_stale") or {})
+    from verinoda import reviewers
+
+    out += reviewers.render(res.get("reviewers") or {})
     if res.get("read_first"):
         b = res["budget"]
         out.append("")

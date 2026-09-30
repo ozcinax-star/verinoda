@@ -195,12 +195,15 @@ def owner_rule(co: dict, repo_path: str) -> dict | None:
 
 # -- blame ---------------------------------------------------------------------------------------------------
 
-def _blame(repo: Path, rel: str, span: tuple[int, int] | None) -> dict | None:
-    """Lines per commit of one file as it is on disk, and each commit's author (mailmap applied by git);
-    None when git cannot blame it (a file deleted from the work tree, a range past its end)."""
+def _blame(repo: Path, rel: str, span: tuple[int, int] | None, rev: str | None = None) -> dict | None:
+    """Lines per commit of one file as it is on disk (or at commit ``rev``, a sha), and each commit's author
+    (mailmap applied by git); None when git cannot blame it (a file deleted from the work tree, a range past its
+    end)."""
     args = ["blame", "--porcelain", "-w", "--no-textconv"]
     if span:
         args.append(f"-L{span[0]},{span[1]}")
+    if rev:
+        args.append(rev)
     out = _git(repo, *args, "--", rel)
     if out is None:
         return None
