@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D101)
+## Upgrading from 0.3.2 (D60-D102)
 
 ### D63: Running a project's own tests safely
 
@@ -446,6 +446,14 @@ your conventions (off by default). In `--json`, an `objectives remove` site now 
 `define`). On a macro line, a name a macro fills in part (`a_$(x)`) is no longer read as its spelled part:
 `$tag @s add a_$(x)` is a tag a macro fills in (it was the tag `a_`), and `$function ns:do_$(x)` is no longer a
 call to the missing function `ns:do_`. No MCP tool was added; the tool counts in UPGRADING do not change.
+
+### D102: Client and server separation
+
+`verinoda map --view sides` (and MCP `map_view` with `view: sides`, through `run_tool`) lists client-only code
+(the `src/client` source set, `@Environment(EnvType.CLIENT)` / `@OnlyIn(Dist.CLIENT)` classes and methods,
+`net.minecraft.client` classes) that the mod's server-side entry points reach, each path a `strong_inference`
+claim at most (`weak_inference` through an inferred edge) with every hop at `file:line`. Plain `verinoda map` is unchanged. No new MCP tool: the tool counts in
+UPGRADING, README and ARCHITECTURE do not change.
 
 ### D60-D62
 
