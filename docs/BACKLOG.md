@@ -137,7 +137,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 12.4 | **Decision record lifecycle** | Supersede with status updated on both records, links with reverse links, a graph of records, a table of contents, a timeline site | adr-tools, Log4brains | `decide supersede` and a timeline in `ui` |
 | 12.5 | **Undocumented decisions** | Find structural choices no decision record covers (a single storage path, an exclusive library) | Codex ADR workflow | candidates listed as `weak_inference` for the user to record or dismiss |
 | 12.6 | **Specs traced to code and tests** | Requirement criteria (EARS style) linked to code and tests through claims; criteria with no evidence reported | Kiro specs, GitHub spec-kit, Tessl | `verinoda spec check` lists unevidenced criteria |
-| 12.7 | **Installed-version library docs** | Usage docs for the exact installed version, read offline from site-packages, jars or node_modules | Context7, Ref | `api NAME --docs` quotes the installed docstring or README section |
 | 12.8 | **Issue and chat sources (opt-in)** | PR, issue, Jira and Slack threads as "why" evidence, with contradictions between sources shown | Unblocked, Glean, Tabnine | a why-answer cites a PR discussion |
 
 ## 13 - Agent integration
