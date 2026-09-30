@@ -1664,10 +1664,44 @@ def _decide_baseline(args, repo: Path) -> int:
     return 0
 
 
+def _decide_ask(args, repo: Path) -> int:
+    """``decide ask SOURCE TARGET``: may SOURCE depend on TARGET under the accepted guards (exit 1 forbidden,
+    3 unknown, 2 an error)."""
+    from verinoda import decisions as dm
+    from verinoda import dependency_ask as da
+
+    try:
+        res = da.ask(repo, args.source, args.target, decisions_dir=getattr(args, "decisions_dir", None))
+    except (da.AskError, dm.DecisionError) as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    def render(r: dict) -> None:
+        tgt = r["target"] + (f" ({r['target_path']})" if r.get("target_path") and r["target_path"] != r["target"]
+                             else "" if r["target_kind"] == "file" else " (package)")
+        print(f"{r['verdict']}: {r['source']} -> {tgt}")
+        for x in r["rules"]:
+            print(f"  [{x['verdict']}] {x['decision']} {x['guard']} {x['spec']}: {x['why']}"
+                  + (f" ({x['evidence']})" if x.get("evidence") else ""))
+        for u in r.get("unknown") or []:
+            print(f"  unknown: {u}")
+        sc = r["scope"]
+        print(f"  read: {sc['decisions']} record(s), {sc['guards']} accepted guard(s), {sc['not_applicable']} "
+              "not applying")
+        print(f"  next: {r['next_step']}")
+
+    _emit(args, res, render)
+    return da.exit_code(res)
+
+
 def cmd_decide(args) -> int:
     from verinoda import decisions as dm
 
     repo = _repo(args)
+    if args.decide_cmd == "ask":  # reads the records only: no store or index needed
+        return _decide_ask(args, repo)
     if args.decide_cmd == "check":
         try:
             return _decide_check(args, repo)
@@ -3329,6 +3363,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c.add_argument("--write", metavar="FILE.md", help="write it to this file in the repository (only a file "
                                                       "`decide toc` wrote before is overwritten)")
+    c = add("ask", cmd_decide, "before writing a dependency: may SOURCE depend on TARGET under the accepted guards "
+                               "(allowed / restricted / forbidden with the rule; exit 1 forbidden, 3 unknown)",
+            parent=dsub)
+    c.add_argument("source", help="the project file that would depend (it may not exist yet)")
+    c.add_argument("target", help="a project file, a module (app.db.store) or a package (psycopg)")
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED; exit 3 when "
                                  "something could not be checked - no record while ADR-like files exist, a guard "
                                  "that checked no file, edge or manifest: usable in CI)", parent=dsub)

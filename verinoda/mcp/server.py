@@ -105,6 +105,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "index_update",
     "decision_record",
     "decision_check",
+    "dependency_ask",
     "decision_brief",
     "experiment_run",
     "debug_start",
@@ -1709,6 +1710,18 @@ class AtlasTools:
             return res
         return self._run("decision_check", go, keep=("status", "exit", "violations", "next_step"))
 
+    def dependency_ask(self, source: str, target: str) -> dict:
+        def go():
+            from verinoda import decisions as dm
+            from verinoda import dependency_ask as da
+
+            try:
+                return da.ask(self.repo, source, target)
+            except (da.AskError, dm.DecisionError) as exc:
+                raise ToolFailure("invalid_argument", str(exc)[:600], "source: a project path such as "
+                                  "src/ui/view.py; target: a project file, a module or a package name") from None
+        return self._run("dependency_ask", go, keep=("verdict", "rules", "next_step"))
+
     # -- index ----------------------------------------------------------------------
     def index_update(self) -> dict:
         if not atlas_dir(self.repo).is_dir():
@@ -1898,7 +1911,8 @@ def _error_hint(exc: BaseException, repo: Path) -> str:
 # experiments, runtime tracing, claim re-checks) is served with `--profile full` (or config mcp.profile)
 CORE_TOOLS: tuple[str, ...] = (
     "project_query", "analyze", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
-    "evidence_inspect", "index_update", "code_check", "decision_check", "change_review", "history_search",
+    "evidence_inspect", "index_update", "code_check", "decision_check", "dependency_ask", "change_review",
+    "history_search",
 )
 PROFILES: dict[str, tuple[str, ...]] = {"core": CORE_TOOLS, "full": TOOL_NAMES}
 DEFAULT_PROFILE = "core"
@@ -1918,6 +1932,7 @@ GATEWAY_CATALOG: dict[str, str] = {
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
                      "change touches",
     "decision_check": "decision_check {changed_only?: true}: the tree against accepted decision records",
+    "dependency_ask": "dependency_ask {source, target}: before an import, may source use target (file, module, package)",
     "history_search": "history_search {text, regex?, path?}: when text appeared/disappeared; {symbol}: its "
                       "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two "
                       "revisions",
@@ -1931,8 +1946,8 @@ Cite the narrowest lines that support a claim (source lines are numbered), not t
 Editing: change_review before and after (report every concern); index_update after editing; code_check only on
 code you wrote or edited, not to read code."""
 
-_INSTRUCTIONS_DECISIONS = """ decision_check(changed_only=true) before finishing - on VIOLATED fix the code
-or ask the user."""
+_INSTRUCTIONS_DECISIONS = """ dependency_ask(source, target) before adding an import; decision_check(changed_only=true)
+before finishing - on VIOLATED fix the code or ask the user."""
 
 _INSTRUCTIONS_FULL = """
 Understand the question first: question_plan_draft(question) -> edit the plan (split compound questions, gloss
@@ -1968,8 +1983,8 @@ code_check only on code you wrote or edited, not to read code. run_tool reaches 
 map_view, claim_list, claim_inspect, evidence_inspect, change_review (before and after editing: report every
 concern) and history_search (when a text appeared or disappeared: the commit is the evidence)."""
 
-_INSTRUCTIONS_CORE_DECISIONS = """ Through run_tool, decision_check(changed_only=true) before finishing - on
-VIOLATED fix the code or ask the user."""
+_INSTRUCTIONS_CORE_DECISIONS = """ Through run_tool, dependency_ask before adding an import and
+decision_check(changed_only=true) before finishing - on VIOLATED fix the code or ask the user."""
 
 _INSTRUCTIONS_CORE = """
 More tools (question plans, references, feedback, decision records and briefs, the debug ledger, experiments,
@@ -1983,7 +1998,7 @@ call index_update."""
 
 def instructions(profile: str = DEFAULT_PROFILE, *, decisions: bool = True) -> str:
     """The server instructions for a profile (``{repo}`` still to be filled in); ``decisions=False``: the
-    menu has no decision_check (:func:`served_tools`), so they do not name it."""
+    menu has no decision_check or dependency_ask (:func:`served_tools`), so they do not name them."""
     if profile == "core":
         return (_INSTRUCTIONS_CORE_HEAD + (_INSTRUCTIONS_CORE_DECISIONS if decisions else "") + _INSTRUCTIONS_CORE
                 + _INSTRUCTIONS_TAIL)
@@ -2004,11 +2019,11 @@ def _has_decision_records(repo: Path) -> bool:
 
 def served_tools(repo: Path, profile: str) -> tuple[str, ...]:
     """The tools a profile lists for ``repo``. The core menu is standing context in every request, so it
-    leaves out decision_check in a project without decision records (nothing to check; `--profile full`
+    leaves out decision_check and dependency_ask in a project without decision records (nothing to check; `--profile full`
     always lists it). The menu is read at startup: records added later show after a restart."""
     names = PROFILES[profile]
     if profile == "core" and not _has_decision_records(Path(repo)):
-        names = tuple(n for n in names if n != "decision_check")
+        names = tuple(n for n in names if n not in ("decision_check", "dependency_ask"))
     if profile == "core":
         names = (*names, "grep_context")  # the Grep hook's call (D62), reached through run_tool, never listed
     return names
@@ -2178,6 +2193,10 @@ DESCRIPTIONS: dict[str, str] = {
         "The working tree against the guards of accepted decision records: VIOLATED, possible, reviews, "
         "triggers, ok, unknown. changed_only=true (or base=REV) counts only new findings. exit 3: something "
         "was not checked - never ok. Never edits code or records."),
+    "dependency_ask": (
+        "Before writing an import: may source (a project file, new or not) depend on target (a project file, "
+        "module or package)? forbidden / restricted / allowed / unknown, with each accepted decision guard that "
+        "applies and its record line. Reads the records, not the code."),
     "experiment_run": (
         "Run one command as a recorded experiment in a throw-away copy of the working tree (or of commit ref, "
         "with overlay files): allowlisted test runners under process isolation, anything else needs "
@@ -2222,7 +2241,7 @@ DESCRIPTIONS: dict[str, str] = {
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
               "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-              "code_check", "api_members", "debug_status", "grep_context"}
+              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -2779,6 +2798,13 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
                                                    "(no_edge, layers, allow_edges, public) needs the graph.")] = True,
     ) -> dict[str, Any]:
         return emit(t.decision_check(base=base, changed_only=changed_only, refresh=refresh))
+
+    @register("dependency_ask")
+    def dependency_ask(
+        source: Annotated[str, Field(description="The project file that would depend (may not exist yet).")],
+        target: Annotated[str, Field(description="A project file, a module (app.db.store) or a package.")],
+    ) -> dict[str, Any]:
+        return emit(t.dependency_ask(source, target))
 
     @register("decision_brief")
     def decision_brief(

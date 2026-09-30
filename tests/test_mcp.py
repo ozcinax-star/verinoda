@@ -82,6 +82,7 @@ EXPECTED_PARAMS = {
                          "revisit_when", "supersedes", "link", "guard_ids", "at", "reason", "until", "document",
                          "user_statement", "question_id"}, {"action"}),
     "decision_check": ({"base", "changed_only", "refresh"}, set()),
+    "dependency_ask": ({"source", "target"}, {"source", "target"}),
     "decision_brief": ({"question", "options", "quotes", "agent_arguments"}, {"question"}),
     "experiment_run": ({"command", "hypothesis", "expect", "timeout", "claim_id", "ref", "overlay"},
                        {"command", "hypothesis"}),
@@ -96,7 +97,7 @@ EXPECTED_PARAMS = {
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
              "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-             "code_check", "api_members", "debug_status", "grep_context"}
+             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -259,6 +260,7 @@ def _all_calls(t: AtlasTools) -> dict:
         "index_update": lambda: t.index_update(),
         "decision_record": lambda: t.decision_record("list"),
         "decision_check": lambda: t.decision_check(),
+        "dependency_ask": lambda: t.dependency_ask("app.py", "sqlite3"),
         "decision_brief": lambda: t.decision_brief("should we move to PostgreSQL?"),
         "experiment_run": lambda: t.experiment_run(["python", "-m", "pytest", "-q"], "the tests pass"),
         "debug_start": lambda: t.debug_start("totals are wrong", ["python", "-m", "pytest", "-q"]),
@@ -332,12 +334,12 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
                 for t in anyio.run(srv.list_tools)]
 
     core = listing(mcp_server.build_server(repo))
-    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 13
+    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 14
     assert set(CORE_TOOLS) <= set(TOOL_NAMES) and GATEWAY not in TOOL_NAMES
     gate = next(t for t in core if t["name"] == GATEWAY)
     behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
-    # no decision records in the example: nothing for decision_check to check, so run_tool does not offer it
-    assert behind == set(CORE_TOOLS) - set(CORE_DIRECT) - {"decision_check"} | {"grep_context"}
+    # no decision records in the example: nothing for decision_check or dependency_ask, so run_tool offers neither
+    assert behind == set(CORE_TOOLS) - set(CORE_DIRECT) - {"decision_check", "dependency_ask"} | {"grep_context"}
     assert all(n in gate["description"] for n in behind - {"grep_context"})  # the hook's own: not advertised
     assert gate["annotations"]["readOnlyHint"] is False  # change_review can run tests
     # the core analyze and code_check take the arguments a question or an edit needs
@@ -358,7 +360,8 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     (rec / ".verinoda" / "decisions").mkdir(parents=True, exist_ok=True)
     (rec / ".verinoda" / "decisions" / "0001-x.md").write_text("---\nverinoda-decision: 1\n---\n", encoding="utf-8")
     gate = next(t for t in listing(mcp_server.build_server(rec)) if t["name"] == GATEWAY)
-    assert "decision_check" in gate["inputSchema"]["properties"]["name"]["enum"]
+    assert {"decision_check", "dependency_ask"} <= set(gate["inputSchema"]["properties"]["name"]["enum"])
+    assert "dependency_ask {source, target}" in gate["description"]
     full = mcp_server.build_server(repo, profile="full")
     assert full.verinoda_profile == "full" and len(listing(full)) == len(TOOL_NAMES)
     # the project's config picks the profile when the command line does not
