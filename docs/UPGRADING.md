@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D100)
+## Upgrading from 0.3.2 (D60-D101)
 
 ### D63: Running a project's own tests safely
 
@@ -437,6 +437,15 @@ entry checked against the class files of the build's classpath (`code_check.clas
 each with its `path:line`: `exists`, `absent` with the nearest real names, `malformed` or `unknown`. Exit 3 when
 an entry is absent or malformed, 4 when one is unknown, 2 when there is no such file. No MCP change; the tool
 count stays the same.
+
+### D101: Undeclared symbols and naming rules
+
+`verinoda datapack` lists objectives (and, when there are any, teams and boss bars) used but never declared, and
+takes `team NAME` / `bossbar ID` lookups. Set `datapack.naming` in `.verinoda/config.json` to check names against
+your conventions (off by default). In `--json`, an `objectives remove` site now has kind `remove` (it was
+`define`). On a macro line, a name a macro fills in part (`a_$(x)`) is no longer read as its spelled part:
+`$tag @s add a_$(x)` is a tag a macro fills in (it was the tag `a_`), and `$function ns:do_$(x)` is no longer a
+call to the missing function `ns:do_`. No MCP tool was added; the tool counts in UPGRADING do not change.
 
 ### D60-D62
 
