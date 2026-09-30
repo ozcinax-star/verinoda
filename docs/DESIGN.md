@@ -8081,6 +8081,389 @@ change's author left out; the CODEOWNERS rule; related commits limited to the de
 message body; added code and a planned change name no one; the text section and `--json`; a project path with a
 space and non-ASCII.
 
+## 78. Ask before writing a dependency (D105, 2026-10-01)
+
+### 78.1 Why
+
+`decide check` finds a forbidden dependency after the code exists: the agent has written the import, the
+check fails, the code is rewritten. Sonargraph's MCP `check_proposed_dependency` answers first. Verinoda
+already has the rules (the accepted decision guards of `verinoda/guards.py`); this decision lets an agent ask
+them about a dependency it has not written yet.
+
+### 78.2 Decisions
+
+- One function, `dependency_ask.ask(repo, source, target)`, in a new module `verinoda/dependency_ask.py`; CLI
+  `verinoda decide ask SOURCE TARGET [--json] [--decisions-dir DIR]`; MCP `dependency_ask {source, target}`.
+- The rules are exactly the ones `decide check` enforces: every accepted guard of every enforced record
+  (`decisions.load_all`, `Decision.enforced`, guard status `accepted`). Proposed guards and records that are not
+  enforced are not rules; a record that cannot be read makes the answer `unknown` (as it makes `check` exit 3).
+- `source` is one project file (it may not exist yet; a glob or a folder is refused). `target` is a project
+  path (an existing file or folder, a code suffix, `./x` / `../x` read from the source's folder, or a path
+  whose first folder is the project's; `web/ui/utils` finds `web/ui/utils.ts`), a dotted name read from the
+  root, `src/`, `lib/` or a JVM source root (the longest leading part naming a file or folder:
+  `app.ui.views.show` -> `app/ui/views.py`, `app.ui` -> the namespace folder, `com.acme.db.Store` ->
+  `src/main/java/com/acme/db/Store.java`), else a package (`psycopg`, `lodash/fp`, `@angular/core`,
+  `github.com/pkg/errors`). A same-named file deeper in the tree (`app/api/logging.py` for `logging`) is not
+  the target. A typed path is read in the letter case of the existing file or folder it names.
+- Per kind, matched the way `check` places a file:
+  - `no_edge`: forbidden when source matches `from` and target matches `to`.
+  - `layers`: each path in the highest layer it matches; forbidden when the target's layer is above the
+    source's, `allows` when it is the same or lower; a layer left with no file of its own is `unknown` (as
+    `check`).
+  - `allow_edges`: for a source in `from` (test files out unless `scope=all`), `allows` when the target is in
+    `from` or an allowed glob, else forbidden.
+  - `public`: for a source outside the module (tests out unless `scope=all`) and a target inside it, `allows`
+    for an api file, else forbidden.
+  - `tag:NAME` globs come from `decisions.architecture_tags`; an undefined tag makes that rule `unknown`.
+  - Edge rules do not judge a package outside the project (it is no node, as in `check`); a limit says so.
+  - `only_in calls=` / `sink=`: a target the calls go through (`sqlite3` for `sqlite3.connect`, a project
+    module whose dotted name prefixes the call, a JVM class by its simple name) is `restricted` in a source
+    outside `allowed` and inside the guard's scope (`guards.scope_files`, as `check`: tests, sample/fixture
+    folders, reference trees, detected copies, `exclude` and non-code files out unless `scope=all`): the
+    dependency may be fine, the named calls are not. A `pattern=` naming a dotted call counts as that call;
+    another pattern naming the target is `unknown`.
+  - `dependency absent=NAME`: a package target of that name (its npm package, Go module prefix, Maven
+    artifact, dotted prefixes, and the distribution of a known import name - `yaml` -> PyYAML, the table of
+    `depcheck.PY_ALIASES`) is forbidden. A package target no absent= guard matched carries a limit that the
+    match is by manifest name. `present=` is not judged.
+- A waiver of the whole source file for a guard turns its `forbidden` / `restricted` into `waived`.
+- Verdict: `forbidden` > `restricted` > `unknown` (a rule that could not be judged, an unreadable record, or no
+  accepted guard at all: "allowed" never stands for "nothing was asked") > `allowed` (no accepted rule forbids
+  it). Each rule that applies carries its decision, guard id, spec, verdict, why, `evidence` (the record's
+  `guards:` line as `path:line`) and `status` (`statically_verified`: a match of the path or name against the
+  record's own text; `strong_inference` for an edge rule when the target path was read from a dotted name
+  that names several files or no file yet; `unknown` for a rule not judged). Rules that do not apply are only counted
+  (`scope.not_applicable`), keeping the response small.
+- Exit codes: 1 forbidden, 3 unknown, 2 an error, 0 allowed or restricted; the result carries it as `exit`.
+  A decisions folder that was configured (flag, config) but does not exist is named as the `unknown` reason.
+- MCP: a core tool reached through `run_tool` (not listed directly), read-only; like `decision_check` it is
+  served only when the project has decision records, so the default menu of a project without records does
+  not change. `cap_response` keeps `verdict`, `rules` and `next_step`.
+
+### 78.3 Measured
+
+- Core menu JSON of a project without decision records: 4,499 characters before and after (unchanged; the
+  limit tested is 4,500).
+- Core menu JSON of a project with decision records: 4,594 characters (4,598 before this decision, already
+  above 4,500 because of `decision_check`'s line). The `dependency_ask` line and enum entry are paid for by
+  shorter gateway wording and the code_check description; `tests/test_mcp.py` now asserts it stays below
+  4,600.
+- Core instructions: 1,303 characters (limit 1,400).
+- Core menu JSON of a project without decision records: 4,439 characters after the review round.
+- `tests/test_dependency_ask.py`: 17 tests, about 10 s.
+
+Review round: a bare name matched any same-named file at any depth (`logging` -> `app/api/logging.py`,
+`psycopg` -> `scripts/psycopg.py`, turning a forbidden package into an allowed file); npm, scoped and Go
+package paths were read as new project files; namespace packages, symbols in a module and JVM classes fell
+to `package` and escaped the edge rules; relative targets were read from the root; typed paths were matched
+case-sensitively; a folder was accepted as source; `only_in pattern=` guards were skipped silently; the
+`only_in` scope differed from `check`'s; import names of other distributions (`yaml`) were not matched;
+overlapping layers were `allows` where `check` says unknown; a missing decisions folder was not named; the
+menu with records grew. All fixed with a test each. Not changed: the per-rule `allows` stays (a rule that
+permits it, distinct from the overall `allowed`), no `status` key is added to the JSON (the verdict is the
+status; `exit` is added), and docs/UPGRADING.md's tool count is left to the merge (below).
+
+### 78.4 Not done
+
+- It judges the proposal from paths and names against the records' text only: no code, graph or store is read.
+  A guard's `relations` (calls, imports, ...) are taken to cover the dependency proposed.
+- A package outside the project is judged only by `dependency absent=` and `only_in`; edge rules cannot see it
+  (the same as `check`).
+- A module name that matches several files is judged at the first (the others are named in the limits,
+  and the edge rules on it are `strong_inference`).
+- A `pattern=` only_in guard that names neither a dotted call nor the target is not judged for a proposal.
+- `allowed` means no accepted rule forbids it now; `decide check` after the code is written still checks the
+  code itself.
+
+### 78.5 Tests
+
+- `tests/test_dependency_ask.py`: a lower layer reaching up is forbidden and cited at the record line; a
+  module name resolves to its file and a downward use is allowed; public interface (outside, api file, inside
+  the module, test code); a tag in `no_edge` and `allow_edges`; `only_in` restricted and allowed; `dependency
+  absent=` forbidden; an unknown package is allowed with the limit; an undefined tag, a waiver, no records and
+  a proposed guard; bad sources and targets refused; CLI exit codes and JSON; the MCP tool and its error.
+  Review round: a bare name is not a deeper same-named file; package paths (`lodash/fp`, scoped, Go);
+  namespace folders, symbols, new modules and JVM classes; relative targets and letter case; folders refused
+  as source; `pattern=` only_in guards and the only_in scope; import names of other distributions;
+  overlapping layers; a missing decisions folder and `exit` in the JSON.
+- `tests/test_mcp.py`: `EXPECTED_PARAMS`, read-only tools, the not-initialised call, 14 core tools, the gateway
+  enum and description with and without decision records, and the menu size with records.
+
+## 79. What-if refactoring (D106, 2026-10-01)
+
+### 79.1 Why
+
+Before moving a module or a folder, a team wants to know what the move does to its architecture rules and its
+dependency cycles, without doing it first and running `decide check` on a branch. Sonargraph and Lattix let the
+architect move elements in a virtual model and re-check the rules; Verinoda already has the rules (the edge guards
+of the decision records) and the cycles view, both computed from the graph's edges, so a move is a relabelling of
+file paths in the loaded graph.
+
+### 79.2 Decisions
+
+- **`verinoda what-if --move OLD=NEW [--move ...] [--decisions-dir DIR] [--json]`.** OLD is a file or a folder
+  of the index; NEW is its new path, normalised (`app/./ui//x.py` is `app/ui/x.py`); `NEW/`, `.` (the root) or
+  an existing folder moves a file or a folder into it, as `git mv` does; a file moved onto an existing file is a
+  merge (listed under `merges`). A path outside the project, a move that moves nothing, OLD not in the index, a
+  file two moves would move, a folder moved into itself and a file put under an indexed file or onto an indexed
+  folder are refused (exit 2, JSON error with `--json`).
+- **Simulated in memory, never on disk.** `whatif.MovedGraph` is the loaded `index.Graph` whose `file()` answers
+  with the new path. Node data, labels and each edge's own `source_file` stay as they are (an edge without one is
+  given the file it leaves), so every line a finding or a cycle cites is read and quoted where the code is now.
+- **Rules: the edge guards, compared.** `guards.check` runs twice (the graph as it is, then moved), with the
+  decision records reduced to their edge guards (`no_edge`, `layers`, `allow_edges`, `public`) and without the
+  baseline. Findings (VIOLATED, POSSIBLE) are keyed by (decision, guard, cited line, level): the result lists
+  those the move adds and removes, each as the guard reports it (level, status, line, why with the new path),
+  counts the unchanged ones, and lists the checks that could not be completed after the move, `new` when the
+  guard ran before the move (a layer glob that no longer matches any file; an unknown whose text only counts
+  files differently is not new). A guard the move leaves unable to run reports no finding: its findings from
+  before are counted as `not_rechecked`, not listed as removed. An added finding exists only if the move updates
+  the imports as assumed, so its status is capped at strong_inference (the guard's statically_verified is about
+  the line as it reads today).
+- **The code still names the old file.** `guards._edge_hits` takes the name the cited line must spell from the
+  node's own file (the stem the import names today), not from the simulated path, so a renamed target keeps its
+  VIOLATED level instead of dropping to POSSIBLE. For a graph that is not simulated the two are the same file.
+  `guards._edge_scan` lists the indexed files through `graph.file()` (the same set for a real graph).
+- **Cycles: every cycle, compared by its files.** `architecture_map.cycle_components` (split out of `cycles`, which
+  now calls the same `_cycle_parts`) returns every cycle uncapped and the file-to-file dependencies. A cycle before
+  is renamed as the move renames its files; a cycle after that shares no file with any before is `added`, one
+  before that shares no file with any after is `removed`, and a cycle after that differs from the ones before it
+  shares files with is `changed` (`grows`, when it takes in files or joins cycles, and/or `shrinks`; `was` gives
+  the sizes of those cycles; `grows` counts as adding), each with
+  its status (strong_inference when the EXTRACTED edges alone connect it, as in the cycles view), a claim, and its
+  heaviest dependencies with a cited line. Renaming alone never changes the cycles (the file graph keeps its
+  shape); a merge does, since the merged files' dependency on each other disappears and their other dependencies
+  meet. The standard-library import check of the cycles view now reads the edge's own file (the file its line is
+  in), which is the same file for a real graph.
+- **Status and exit.** `adds` (a finding, a cycle or a new unknown) exits 3, `removes` or `no_change` exits 0.
+  No claim is recorded and nothing is written. Not an MCP tool: the core menu stays at five tools.
+
+### 79.3 Measured
+
+Tests only: a three-layer project, a folder that becomes a cycle when two files merge, and a two-file cycle a merge
+breaks.
+
+Review round: the review found added findings kept statically_verified for a site that exists only under the
+move's assumption (now capped at strong_inference); a cycle that a merge grows or joins listed as broken (now
+`changed`); an existing unknown whose file count changed counted as new (now keyed by guard); a guard the move
+stops listing its old findings as removed (now `not_rechecked`); NEW paths with `.` or `//` inside not normalised,
+so the globs missed them (now normalised); `a.py=.` and `a.py=pkg/b.py/` accepted (now the root is a folder and a
+file under a file is refused); a folder onto an existing folder merged into it (now moved into it, as `git mv`).
+Each has a test.
+
+### 79.4 Not done
+
+- The move is assumed to update the code that names the moved files (imports, package declarations), so every
+  edge stays as the index extracted it; a module the new path would no longer resolve is not seen.
+- Only the edge guards and the file-level cycles are re-checked. `only_in`, `dependency`, `governs` and
+  `revisit_when` read files at their current paths and are named in the limits as not re-checked.
+- File level only: moving a symbol (a function or a class) from one file to another is not simulated.
+- Findings are compared without the baseline; waivers still apply to the sites where the code is now.
+- The index is used as it is (like `rename-preview`): changed files since the index are named, not refreshed.
+
+### 79.5 Tests
+
+`tests/test_whatif.py`: the move plan (a file, a folder, into a folder with `NEW/` or an existing folder, a rename
+with Windows separators, a merge; refused: no `=`, not in the index, outside the project, absolute, a drive, a
+move to itself, a file moved twice, a folder into itself, a file under a file, a path leaving the root after
+normalising); NEW paths are normalised; the root and an existing folder take a file or folder into them; a move
+that breaks the layers adds a violation at the importing line, capped at strong_inference, and a renamed target
+keeps VIOLATED; an unknown that was there before is not new; a guard the move stops counts its findings as not
+re-checked; a move that fixes a `no_edge` violation removes it; moving a
+layer's whole folder is a new unknown; without edge guards only the cycles are compared; other guard kinds are
+named as not re-checked; a rename leaves the cycles as they are, a merge closes a cycle (added, with its cited
+lines), another breaks one (removed) and another grows one (changed, not removed); the cycles view is unchanged by the refactor; the CLI (exit 3 with the
+text output, `--json` exit 0, a bad move exit 2), and no file of the project changes, in a path with a space and
+non-ASCII. `tests/test_cycles.py`, `tests/test_arch_rules.py`, `tests/test_baseline.py`,
+`tests/test_architecture_map.py`, `tests/test_decide*.py`, `tests/test_cli.py` and `tests/test_docs.py` pass.
+
+## 80. Project brief (D107, 2026-10-01)
+
+### 80.1 Why
+
+Letta's memory blocks, Cline's Memory Bank and Zencoder's repo info give an agent a small, always-loaded summary
+of the project: what it is, how to build and test it, where the code is, the conventions. Written by hand, such
+a summary goes stale the way instruction files do (`verinoda agent-lint` finds that after the fact). Verinoda
+already reads the manifests, scripts, targets and lock files for `agent-lint`; `verinoda brief` turns the same
+reads into the summary itself, rebuilt from the files on every call, each line citing the `file:line` it came
+from, under a character budget so it fits a memory block.
+
+### 80.2 Decisions
+
+- New command `verinoda brief` (module `verinoda/project_brief.py`). `verinoda decide brief` (the decision brief)
+  is unchanged; the help text of `brief` names it ("Not the decision brief: that is `decide brief`"), and the
+  README row says the same.
+- Sources, root of the repository only: `pyproject.toml` (`[project]` name, version, `requires-python`,
+  `[project.scripts]`, `[build-system] build-backend`, `[tool.pytest.ini_options]`, `[tool.ruff|black|isort|
+  flake8] line-length`, `[tool.mypy] strict`), `package.json` (name, version, `engines.node`, `bin`, `scripts`),
+  `Makefile`/`GNUmakefile`/`makefile`, `justfile`, `pytest.ini` / `tox.ini [pytest]` / `setup.cfg [tool:pytest]`,
+  `.github/workflows/*.yml` (`run:`: one line, or a `|` block's lines with a backslash-continued line joined to
+  the next, or a `>` block's paragraphs folded into one command each), `.gitlab-ci.yml` (`script:`,
+  `before_script:`, `after_script:`: a block list, its items allowed at the key's own column, or a flow list
+  `[...]`), `.editorconfig [*]`, `.gitattributes` text/eol rules (first two),
+  `tsconfig.json compilerOptions.strict`, `.pre-commit-config.yaml` hook ids, the agent instruction files, and
+  git's file list (tracked plus untracked, not ignored) for the layout.
+- Reuse: `agentlint.Tree` reads the package.json scripts, Makefile targets, justfile recipes and lock files (the
+  package manager in `npm run X` is the one a lock file pins, else npm); `agentlint._name_role` decides which
+  scripts, targets and recipes are listed (build, test, lint, format, typecheck and their `x:y` / `x-y` forms), and
+  `agentlint.TOOL_ROLES` which CI commands run a test tool.
+- Every line is one record `{section, text, status, evidence: [...]}` with status `statically_verified`: it
+  states what the cited lines say. A table key's line is the key inside that table (a header with a comment
+  after it or a `[[array]]` header counts); a package.json key's line is found by its path of keys from the
+  root (so `name` is the top-level one, not `author.name`, and a `bin` entry is the line inside `bin`).
+  tsconfig.json is read as JSONC (comments, trailing commas). A manifest table of an unexpected type declares
+  nothing (no crash). The only reading beyond the file is the section a script or target is
+  listed under, which follows its name; this is said in `limits`. No score, ranking or guess is stated as a fact:
+  the layout's order is "what a manifest says the folder is" (the package a console script runs, pytest
+  `testpaths`, a folder with `__init__.py`), then file count, and the line says which.
+- CI: shell plumbing (`echo`, `cd`, `export`, `mkdir`, `printf`, `git config`, control words) is not listed;
+  a `run:` that is only a `${{ ... }}` expression is not a command; commands that run a test tool (not ones that
+  install it) come first; at most 10 distinct commands, the rest counted in `omitted` and `ci_omitted` and named
+  in the text ("N more CI command(s) past the first 10") and in `limits`.
+- Layout: at most 8 top-level folders, each with its file count and three main extensions; the rest in one
+  "N more folders" line. A file count is git's file list, so its evidence is the folder itself (`data/`), after
+  the manifest line that names the folder's role if one does; a folder with an `__init__.py` cites that file by
+  path (it may be empty). An empty agent instruction file is cited by path, not `:1`. The pre-commit line cites
+  every hook it names (at most 8, then "(+N more)").
+- Budget: `--max-chars` (default 2,000, clamped to 200-20,000) bounds the rendered text, header and the "N more
+  line(s)" note included. Lines are taken in priority order (project, build, test, check, layout, conventions,
+  CI): the first two of each section, then the rest, stopping at the first line that does not fit (a shorter line
+  further down never takes its place). The JSON has `lines`, `total_lines`, `omitted`, `truncated`,
+  `ci_omitted` (when CI commands were cut), `chars`, `budget`, the rendered `text` and `limits`.
+- Always current: nothing is stored or cached; every call reads the files again.
+- Exit 2 when nothing was found (no manifest, CI file, folder or convention file); 0 otherwise.
+- No MCP tool: the row asks for a CLI command, the core menu stays at five tools and TOOL_NAMES is unchanged.
+
+### 80.3 Measured
+
+On Verinoda's own repository (this branch): 25 lines, 2,122 characters without a budget (project 2, build 1,
+test 1, check 0, CI 10, layout 9, conventions 2), 0.7 s. At the default 2,000 characters: 22 lines, 1,940
+characters, 3 CI lines left out. The CI lines found are the three pytest runs of `.github/workflows/ci.yml`
+(lines 37, 62, 102) first; the layout names `verinoda/` as the package of console script `verinoda`
+(`pyproject.toml:205`) and `tests/` as pytest `testpaths` (`pyproject.toml:225`) before the larger `benchmarks/`.
+Not measured: whether an agent given the brief does better than one without it.
+
+Review round: the CI commands past the 10 cap were dropped without a count; GitLab items at the key's column,
+backslash-continued and folded blocks, `${{ }}`-only steps and flow lists were misread; the build-backend line
+added a `python -m build` no file states; some lines cited a line that does not say what they claim (TOML
+headers with a comment, `[[array]]` tables, a nested package.json `name`, a `bin` named like the package, a
+folder's count on `file:1`, an empty file's line 1, a hook list on its first hook); a pyproject table of an
+unexpected type crashed; tsconfig with comments lost `strict`; key lines were looked up by rereading the file
+per key. All fixed, each with a test. After it, on this repository: 52 lines in all (25 kept at 20,000
+characters, 27 CI commands past the cap counted), and at the default 2,000 characters 23 lines, 1,977
+characters, 29 left out and said so; 1.6 s for both calls. 3,000 package.json scripts plus 3,000 console
+scripts: within the test's 8 s bound (the brief's own lookups are now read once per file; agentlint's
+package.json script lookup, reused here, still scans from `"scripts"` for each script).
+
+### 80.4 Not done
+
+- Only the root manifests are read: a nested `package.json` (a monorepo's packages), Gradle, Maven, Cargo, Go
+  modules, tox environments, nox sessions and other CI systems (Azure, CircleCI, Jenkins) are not.
+- A script, target or recipe whose name does not say build/test/lint/format/typecheck is not listed (`start`,
+  `deploy`, `ci`, `check`).
+- CI commands are the lines as written; the job, matrix entry, `if:` condition and `working-directory` are not
+  read, and YAML anchors, `extends:` and `!reference` are not expanded; a GitLab `script:` given as one string
+  on the next lines is not read.
+- tsconfig `extends` is not followed: `strict` set in a base config is not listed.
+- `.gitattributes` and `.editorconfig` are read for the root rule set only (`[*]`, the first two text/eol rules).
+- The brief summarises; it does not check. Whether the agent instruction files agree with it is `agent-lint`'s
+  job.
+
+### 80.5 Tests
+
+`tests/test_project_brief.py` (18 tests, 21 cases): every fact of a fixture with pyproject.toml, package.json, Makefile,
+justfile, a GitHub workflow, .gitlab-ci.yml, .editorconfig, .gitattributes, pre-commit, tsconfig and AGENTS.md
+is listed with its section and exact `file:line`, every cited line exists, names with no role and shell plumbing
+are left out; CI test commands come before the install of a test tool; layout order (console-script package,
+testpaths, then by file count); the text stays under the budget, `omitted` counts the rest and CI is the first
+section given up; a changed package.json shows in the next call; an empty project; the CLI (`--json`,
+`--max-chars`, exit 2); the help names `decide brief`. Review round: CI commands past the cap are counted;
+GitLab items at the key's column, flow lists and `- |` items; continued and folded `run:` blocks as one command
+and a `${{ }}`-only step left out; the top-level package.json `name` and the `bin` entry's own line; TOML headers
+with a comment and `[[array]]` tables; four pyproject shapes that used to crash; empty files cited by path;
+every pre-commit hook cited; JSONC tsconfig; 3,000 scripts stay fast. Also run: `tests/test_docs.py`, `tests/test_cli.py`,
+`tests/test_agentlint.py`, `tests/test_line_endings.py`.
+
+## 81. Docs coupled to code, drift check and trivial auto-fix (D108, 2026-10-01)
+
+### 81.1 Why
+
+A repository's documents cite its code: "the loader is `src/load.py`", "setup is at `src/load.py:40-52`", a link
+to `../src/api.py#L10`. The code moves on and the sentences keep pointing at a file that was renamed or at lines
+that now hold something else. Swimm couples docs to code and fixes the trivial breaks; here the same check runs
+locally, from the documents as written and from git, with no model.
+
+### 81.2 Decisions
+
+- **`verinoda docs check [PATHS] [--fix] [--exclude GLOB]`**, a CLI command with `--json`; exit 1 while anything
+  is broken, renamed, moved or changed, so it can gate CI. Not an MCP tool (the tool count is unchanged).
+- **What is a reference.** Markdown link targets (percent-encoding decoded, `#section` anchors dropped), and
+  inline code spans that read as a path: a `/` and a file extension, or a trailing `/` for a folder; never a URL,
+  a glob, a flag, a placeholder (`<id>`), anything in fenced code (fences matched by character and length), or a
+  link written inside inline code (a Markdown example). Code spans are found by matching backtick runs by
+  length in one pass, so a line of thousands of backticks costs linear time. Lines: `path:12`, `path:12-30`, `path#L12-L30`. Documents: tracked `.md`, `.markdown`, `.rst`,
+  `.adoc` files (plain `.txt` files here are mostly tool output, not prose).
+- **Where a path is read from.** A link from its document's folder (a leading `/` from the root), as Markdown
+  renders it. A code span from the root, then the document's folder, then each folder above it (a skill's
+  `references/x.md` is relative to the skill folder, not the document's). A missing link target is this
+  repository's; a missing code-span path is this repository's only when its first folder exists under the base
+  it was read from, or when git recorded it as renamed (a whole folder moved). Otherwise it is another project's example (`orders/api.py` in a tutorial) or, when git
+  ignores it, a runtime file (`.verinoda/config.json`): both are counted as not checked, never as broken.
+- **Kinds.** `broken`: the path does not exist, or the cited lines are past the file's end. `renamed`: git recorded
+  the path as renamed (`git log -M --diff-filter=R -z`, so non-ASCII names are not quoted; followed to its last
+  name, a chain that comes back to an earlier name included) to a file that exists; its lines are compared too.
+  `moved`: the cited lines, compared with the file at the document's last commit through the hotspots view's text
+  diff, are the same lines at other numbers. `changed`: some of them changed or went.
+- **Drift only for what the commit wrote.** A reference is compared with the document's last commit only when
+  that commit already had it, written the same; one the document gained or changed since (a hand fix, or `--fix`
+  itself) was written against the tree as it is and is only checked against the file's length. So `--fix` run
+  twice changes nothing the second time, and a corrected reference is never "fixed" again. Each is `statically_verified`
+  (read from the tree and git) at the document line.
+- **`--fix`** rewrites only `renamed` (the path written the way the reference wrote it: from the same base, with
+  its separators, its `./` or `/`) and `moved` (the numbers, in the reference's own style), the reference's own
+  columns and nothing else; each line keeps its own line end, a fix that would change nothing is not reported as
+  done, and a document with no applicable edit is not written. A document argument that names no tracked
+  document is an error (exit 2), never "0 documents, ok". `broken` and `changed` stay for a person: which lines were meant is their
+  call.
+- **Cost.** One `git ls-files`, one `git check-ignore -z --stdin` for every missing path at once (NUL-separated
+  bytes: no CR added to the input on Windows), one `git log -M` for renames, and per document with line
+  references one `git log -1` and one `git show` per cited file.
+
+### 81.3 Measured
+
+This repository (355 documents, 1,685 references): 3.8 s. 403 references ok, 696 not checked as ignored runtime
+paths (`.verinoda/...`, `graphify-out/...`), 411 as other projects' paths (examples in the design notes, vendored
+upstream docs), 175 broken. The broken ones are real: vendored
+skill files whose `references/*.md` exist only where the skill is installed, a harness script that lives on
+another branch (`tools/update_equality.py`), test files that were removed, and illustrative paths in the design
+notes (`tests/foo.py`); `--exclude` leaves a folder out.
+
+Review round (two reviewers): fixed a non-idempotent `--fix` that moved correct references again (drift measured
+for references the document had changed), backslash references reported fixed while unchanged, renames written
+from the root instead of the reference's base, whole documents converted to CRLF, documents written without an
+edit, quoted non-ASCII names in the rename log, folder renames taken for another project, a rename chain back to
+an earlier name, a renamed reference's lines never compared, `#Section` anchors and `%20` targets, fences inside
+longer fences and links inside inline code, a quadratic code-span pattern, document arguments that matched
+nothing, and the shallow-clone limit.
+
+### 81.4 Not done
+
+- Symbols named without a path (`Class.method`) are not checked.
+- A path whose first folder is not under the root, the document's folder or a folder above it is taken for
+  another project's; a typo in the first folder is therefore not reported.
+- A document written for another location (a template copied elsewhere at install time) is read where it is.
+- Drift needs the document and the file in git history; a reference the document has not committed yet is only
+  checked against the file's length. In a shallow clone renames and earlier versions before the boundary are
+  missing (said as a limit).
+
+### 81.5 Tests
+
+`tests/test_docrefs.py`: a matching tree is ok and another project's path is not checked; a missing path is
+broken and an ignored one not checked; a rename found in git and fixed through a relative link; moved lines
+renumbered in both styles by `--fix`, then changed lines flagged; a line past the end; `--exclude`; fences, URLs,
+globs and placeholders are not references; CLI text, `--json` and exit codes; a project path with a space and
+non-ASCII.
+
 ## Sources
 
 - **Retrieval:**
