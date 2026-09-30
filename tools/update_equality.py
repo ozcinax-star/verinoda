@@ -125,7 +125,7 @@ under ``stat_index_clock``; the lock files by content) except the SQLite ``-wal`
 content is read with their database, and the atomic replace's leftover backups (``.gfy-replace-bak-*.tmp``:
 the number each step added, per folder, is compared instead, ``replace_bak_leftovers``, rule
 ``replace_bak_leftover``: the baseline leaves some now and then, when a rename is refused at that moment, so a
-difference of up to ``REPLACE_BAK_TOLERANCE`` per step is tolerated and listed at the end), and every folder
+difference of up to ``REPLACE_BAK_TOLERANCE`` in all, summed over a case's steps per side pair, is tolerated and listed at the end), and every folder
 under it (``verinoda_dirs``, an empty one included): as
 bytes, after the named volatile rules below replaced ONLY the volatile value in the
 raw text (the rest of the file, spacing and key order included, is compared byte for byte; the report gives the
@@ -204,8 +204,8 @@ compared (``repr(time.time())`` has 3 or fewer about once in 3000 values: the ba
 itself), so rounding a clock to milliseconds is not caught, dropping the fraction is. When the candidate changes the
 extractor files, the stamps differ by design and are each accepted on their own side only. The background build
 of ``update --fast`` runs in isolated mode (``-I``), so ``PYTHONHASHSEED`` does not reach it. Leftover backups of
-the atomic replace are compared by the number each step added, with a tolerance (``REPLACE_BAK_TOLERANCE`` per
-step): a candidate that leaves one or two more in a step, or different bytes in them, is not caught (the
+the atomic replace are compared by the number each step added, with a tolerance (``REPLACE_BAK_TOLERANCE`` in all
+over a case's steps, per side pair): a candidate that leaves one or two more in a whole case, or different bytes in them, is not caught (the
 baseline itself differs in them). A backup folder written under the date of an EARLIER run of the side is merged like a
 midnight crossing, so it is not caught. Sides M and BM run one repository per process (the MCP server serves one;
 ``relocate`` moves it): a process memo that leaves the repository root out of its key is exercised only by the
@@ -265,7 +265,8 @@ _REPLACE_BAK = re.compile(r"(^|/)\.gfy-replace-bak-[^/]+\.tmp$")
 # how many such leftovers (summed over the folders under .verinoda) two sides may differ by: the baseline leaves
 # one only when a rename is refused at that moment (a file held open), so two baseline runs differ in it now and
 # then; a candidate that leaves one on every write piles them up (rule replace_bak_leftover)
-REPLACE_BAK_TOLERANCE = 2  # per step: the leftovers a step added on one side and not on the other
+REPLACE_BAK_TOLERANCE = 2  # per case and side pair, summed over the steps: leftovers one side added and not the other
+BAK_SPENT: dict = {}  # (case runner id, side pair) -> leftover differences tolerated so far
 TOLERATED: list[str] = []  # the tolerated differences of this invocation (printed at the end)
 BASELINE_SIDES = ("B", "B2", "B0", "BM")
 
@@ -787,7 +788,7 @@ RULES: list[Rule] = [
     Rule("replace_bak_leftover", ("replace_bak_leftovers",),
          "the atomic replace's fallback leaves .gfy-replace-bak-<random>.tmp when a rename is refused at that "
          "moment (a file held open): the number each step added, per folder, is compared, a difference of up to "
-         "REPLACE_BAK_TOLERANCE per step tolerated (and reported); their names and bytes are not compared"),
+         "REPLACE_BAK_TOLERANCE summed over the case tolerated (and reported); their names and bytes are not compared"),
     Rule("atlas_clock_columns", ("atlas.db",),
          "every *_at / *_at_ns column (snapshots.created_at, file_stat.recorded_at_ns - the racy-clean check "
          "reads it -, claims.created_at/updated_at, evidence.collected_at, ...) and ISO clocks inside text cells: "
@@ -2331,10 +2332,11 @@ def replace_bak_difference(a: dict, b: dict) -> int:
     return sum(abs(a.get(k, 0) - b.get(k, 0)) for k in set(a) | set(b))
 
 
-def compare(b: Side, c: Side, skip=(), tolerated: list | None = None) -> list[tuple[str, str]]:
+def compare(b: Side, c: Side, skip=(), tolerated: list | None = None, bak_key=None) -> list[tuple[str, str]]:
     """``[(artifact, where)]`` for each artifact that differs. ``replace_bak_leftovers`` (what the step added)
-    differs only when the counts differ by more than ``REPLACE_BAK_TOLERANCE``; a smaller difference is appended
-    to ``tolerated``."""
+    differs once the differences of the pair ``bak_key`` names, summed over its steps (``BAK_SPENT``), exceed
+    ``REPLACE_BAK_TOLERANCE`` (one extra leftover per step is caught by the third step); a difference within it
+    is appended to ``tolerated``."""
     out = []
 
     def order(n):
@@ -2349,9 +2351,11 @@ def compare(b: Side, c: Side, skip=(), tolerated: list | None = None) -> list[tu
         if name == "replace_bak_leftovers" and kb == kc == "json" and vb != vc:
             n = replace_bak_difference(vb, vc)
             where = f"{_short(vb)} != {_short(vc)}"
-            if n > REPLACE_BAK_TOLERANCE:
-                out.append((name, f"{where} (the step added {n} more on one side; tolerated: "
-                                  f"{REPLACE_BAK_TOLERANCE})"))
+            total = BAK_SPENT.get(bak_key, 0) + n
+            BAK_SPENT[bak_key] = total
+            if total > REPLACE_BAK_TOLERANCE:
+                out.append((name, f"{where} (the step added {n} more on one side, {total} over the case; "
+                                  f"tolerated: {REPLACE_BAK_TOLERANCE})"))
             else:
                 _hit(["replace_bak_leftover"])
                 if tolerated is not None:
@@ -2664,7 +2668,7 @@ class Runner:
         self.t_end = time.time()
         sides = self.observe(("B", "B2", "C"), runs)
         tolerated_det: list = []
-        det = compare(sides["B"], sides["B2"], (), tolerated_det)
+        det = compare(sides["B"], sides["B2"], (), tolerated_det, bak_key=(id(self), "B2"))
         TOLERATED.extend(f"{self.tag} step=scan B2: {a}: {w}" for a, w in tolerated_det)
         if det and not self.no_rules:
             raise HarnessError(f"{self.tag}: the two BASELINE scans differ, so the baseline is not deterministic "
@@ -2673,7 +2677,7 @@ class Runner:
         rmtree(self.store["B2"])
         self.make_derived()
         tolerated: list = []
-        diffs = compare(sides["B"], sides["C"], self.skip, tolerated)
+        diffs = compare(sides["B"], sides["C"], self.skip, tolerated, bak_key=(id(self), "C"))
         TOLERATED.extend(f"{self.tag} step=scan C: {a}: {w}" for a, w in tolerated)
         res.diffs += [f"{self.tag} step=scan: {a}: {w}" for a, w in diffs]
         print(f"  {self.tag}: scan (+ {len(targets)} claims, {len(records)} decision record): "
@@ -2808,7 +2812,8 @@ class Runner:
             if s not in self.reference:
                 continue
             tolerated: list = []
-            diffs += [(s, a, w) for a, w in compare(sides[self.reference[s]], sides[s], self.skip, tolerated)]
+            diffs += [(s, a, w) for a, w in compare(sides[self.reference[s]], sides[s], self.skip, tolerated,
+                                                             bak_key=(id(self), s))]
             TOLERATED.extend(f"{self.tag} step={name} {s}: {a}: {w}" for a, w in tolerated)
         res.compared += 1
         note = " (after the long-lived processes exited)" if name in EXIT_STEPS else ""
