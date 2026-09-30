@@ -1009,21 +1009,31 @@ class AtlasTools:
     def history_search(self, text: str | None = None, regex: bool = False, message: str | None = None,
                        author: str | None = None, path: str | None = None, since: str | None = None,
                        until: str | None = None, diff: str | None = None, base: str | None = None,
-                       head: str | None = None, limit: int = 20) -> dict:
+                       head: str | None = None, limit: int = 20, symbol: str | None = None) -> dict:
         def go():
             from verinoda import history
 
-            # three modes; a parameter of another mode is an error, not silently dropped
+            # four modes; a parameter of another mode is an error, not silently dropped
             given = {k for k, v in (("text", text), ("message", message), ("author", author), ("since", since),
-                                    ("until", until), ("diff", diff), ("base", base), ("head", head))
+                                    ("until", until), ("diff", diff), ("base", base), ("head", head),
+                                    ("symbol", symbol), ("path", path))
                      if _opt_text(v)} | ({"regex"} if regex else set())
-            mode, own = (("base", {"base", "head"}) if "base" in given else
-                         ("text", {"text", "regex"}) if "text" in given else
-                         ("commit search", {"message", "author", "since", "until", "diff"}))
+            mode, own = (("symbol", {"symbol"}) if "symbol" in given else
+                         ("base", {"base", "head", "path"}) if "base" in given else
+                         ("text", {"text", "regex", "path"}) if "text" in given else
+                         ("commit search", {"message", "author", "since", "until", "diff", "path"}))
             if given - own:
                 raise ValueError(f"{', '.join(sorted(given - own))}: not used with {mode} (history_search has "
-                                 "three modes: text (+regex), base (+head), or the commit filters; path goes with "
-                                 "any of them)")
+                                 "four modes: symbol, text (+regex), base (+head), or the commit filters; path goes "
+                                 "with the last three)")
+            if isinstance(symbol, str) and symbol and not symbol.strip():
+                raise ValueError("symbol is empty: pass a name or path:A-B")
+            if _opt_text(symbol):
+                t = _opt_text(symbol)
+                g = stale = None
+                if not history._SPAN.match(t):
+                    g, stale = self._graph(), self._freshness().get("files") or ()
+                return history.symbol_history(self.repo, g, t, stale=stale or (), limit=_clamp(limit, 1, 100, "limit"))
             if _opt_text(base):
                 return history.compare(self.repo, base, _opt_text(head) or "HEAD", path=_opt_text(path))
             if _opt_text(text):
@@ -1892,8 +1902,9 @@ GATEWAY_CATALOG: dict[str, str] = {
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
                      "change touches",
     "decision_check": "decision_check {changed_only?: true}: the tree against accepted decision records",
-    "history_search": "history_search {text, regex?, path?}: the commits where text appeared and disappeared; "
-                      "{message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two revisions",
+    "history_search": "history_search {text, regex?, path?}: when text appeared/disappeared; {symbol}: its "
+                      "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two "
+                      "revisions",
 }
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
@@ -2032,6 +2043,7 @@ DESCRIPTIONS: dict[str, str] = {
         "removed it, each a claim with the commit as evidence and file:line (regex=true: a pattern over changed "
         "lines). Without text: commits by message, author, path, since/until dates and diff content (a regex), "
         "newest first. With base: what head (default HEAD) has that base has not - commits and changed files. "
+        "With symbol (a name or path:A-B): the commits that changed its lines, each message quoted. "
         "Regexes are git's (POSIX extended). A parameter of another mode is an error."),
     "map_view": (
         "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, impact "
@@ -2427,9 +2439,11 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         base: Annotated[OptStr, Field(description="Compare: the base revision (branch, tag, sha).")] = None,
         head: Annotated[OptStr, Field(description="Compare: the other revision (default HEAD).")] = None,
         limit: Annotated[int, Field(description="Commits to list (1-100).")] = 20,
+        symbol: Annotated[OptStr, Field(description="Alone: a symbol or path:A-B; the commits that changed it.")]
+        = None,
     ) -> dict[str, Any]:
         return emit(t.history_search(text=text, regex=regex, message=message, author=author, path=path, since=since,
-                                     until=until, diff=diff, base=base, head=head, limit=limit))
+                                     until=until, diff=diff, base=base, head=head, limit=limit, symbol=symbol))
 
     @register("map_view")
     def map_view(
