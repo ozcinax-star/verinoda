@@ -59,7 +59,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 4.2 | **Hotspots** | Change frequency times complexity, per file and per function | CodeScene, CodeCharta | `map --view hotspots`; `review` ranks `read_first` with it |
 | 4.3 | **Temporal coupling** | Files and functions that change together without a static edge | CodeScene | impact lists history-coupled files as `strong_inference` with their commit count |
 | 4.5 | **Suggested reviewers and related changes** | Reviewers and earlier commits or PRs that touched the same code | CodeRabbit | `review` lists them |
 | 4.6 | **Pattern trends and code monitors** | A search pattern's count over history (migration progress); a saved pattern that fails CI when new matches appear | Sourcegraph Code Insights and Code Monitoring | `verinoda monitor` exits 1 on a new match |
