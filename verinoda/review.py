@@ -20,8 +20,10 @@ the staged changes, or a planned change (``targets`` + ``change``):
    config (environment and config values read on changed lines, changed config keys) and entry points
    (entries that reach the change). Each public definition added, removed or with a changed signature
    gets an ``api_changes`` verdict - breaking (with the call sites it breaks), compatible or unknown.
-4. **Tests**: static reach, observed reach from the runtime tracer's latest run or ``observe``, and a
-   run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`.
+4. **Tests**: static reach, observed reach from the runtime tracer's latest run or ``observe``, a
+   run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`, and the changed lines a
+   coverage report (lcov, Cobertura, JaCoCo, coverage.py JSON: :mod:`verinoda.coverage_import`) shows no test
+   ran, in any language.
 5. **Unknowns** with a next step, and a **read_first** list packed to ``max_chars``.
 
 Honesty rules: a dependent is "possibly affected"; a finding never says "safe" or "no impact" - an empty
@@ -97,6 +99,8 @@ RULES = {
                "against thresholds) lower than in the base", "an added function below full health",
                "a changed function now a near-duplicate of another function of its file (similarity >= 0.9)"],
 }
+NO_LINE_COVERAGE = ("which changed lines the tests execute is not measured (the call tracer records calls, not lines; "
+                    "no coverage report was read)")
 LIMITS = [
     "static analysis: dynamic dispatch, reflection, dependency injection and callbacks are not resolved; "
     "a dependent is possibly affected, not proven broken",
@@ -105,7 +109,7 @@ LIMITS = [
     "registrations by method reference (Owner::name) and hot-path/entry tables are text rules: inference",
     "the graph is the last snapshot's: the changed files are re-read from the working tree; a new caller in an "
     "unchanged file appears only after `verinoda update`",
-    "which changed lines the tests execute is not measured (the call tracer records calls, not lines)",
+    NO_LINE_COVERAGE,
     "findings are not stored as claims; the review record is stored in the analyses table",
 ]
 
@@ -4670,9 +4674,10 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
 def review(repo: Path, *, store=None, graph=None, base: str | None = None, staged: bool = False,
            targets: list[str] | None = None, change: str | None = None, concerns: list[str] | None = None,
            run_tests: bool = False, observe: bool = False, max_chars: int = DEFAULT_MAX_CHARS,
-           record: bool = True) -> dict:
+           record: bool = True, coverage_reports: list[str] | None = None) -> dict:
     """Review the working tree against ``base`` (default HEAD), the staged changes, or a planned change
-    (``targets`` as ``file`` or ``file::Qual.name`` with ``change`` body | signature | remove)."""
+    (``targets`` as ``file`` or ``file::Qual.name`` with ``change`` body | signature | remove).
+    ``coverage_reports``: the coverage reports to read (default: the ones found at the usual paths)."""
     from verinoda import index, treestate
 
     t0 = time.perf_counter()
@@ -4696,6 +4701,10 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         base_sha = treestate.resolve_commit(repo, base or "HEAD")
         base_info = {"ref": treestate.check_ref(base or "HEAD"), "commit": base_sha}
         diffs, skipped = (_diff_staged if staged else _diff_worktree)(repo, base_sha)
+        # a coverage report is the test runner's output about the change, not a part of it
+        reports = _report_paths(repo, coverage_reports)
+        skipped += [{"file": fd.rel, "why": "a coverage report"} for fd in diffs if fd.rel in reports]
+        diffs = [fd for fd in diffs if fd.rel not in reports]
     base_texts = {fd.rel: fd.old for fd in diffs}
     ctx = _Ctx(repo, g, store, base_texts)
     if staged and not targets:
@@ -4768,6 +4777,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     shown = {k: v[:MAX_PER_CONCERN] for k, v in found.items()}
     # tests
     tests = _tests(ctx, changes, run_tests=run_tests, observe=observe, unknown=unknown)
+    line_cov = None if targets else _line_coverage(ctx, changes, tests, coverage_reports, unknown)
     unknown += _callers_unknown(ctx, changes)
     cited = {c.file for c in changes} | {d["at"].rsplit(":", 1)[0] for d in dependents} | \
         {a.rsplit(":", 1)[0] for fs in shown.values() for f in fs for a in [f["at"], *f["evidence_at"]]
@@ -4809,20 +4819,26 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "decisions": reach,
         "coverage": {"method": "changed definitions from symbol facts of both versions; dependents over the last "
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
-                               "(verinoda/review_rules.py)", "limits": list(LIMITS),
+                               "(verinoda/review_rules.py)",
+                     "limits": [x for x in LIMITS if not (line_cov and x == NO_LINE_COVERAGE)]
+                     + (line_cov or {}).get("limits", []),
                      "not_checked": ([] if "security" in want and not targets else
                                      ["security (a planned change has no diff to compare)"] if targets else [])
                      + (["health (a planned change has no new version to measure)"]
                         if targets and "health" in want else []) + health_notes},
         "counts": {"changes": len(changes), "findings": sum(len(v) for v in found.values()),
                    "strong_or_verified": n_strong, "unknown": len(unknown),
+                   "uncovered_changed_lines": (line_cov or {}).get("uncovered_lines", 0),
                    "api_breaking": sum(1 for a in api if a["verdict"] == "breaking")},
     }
     res["summary"] = _summary(res)
     if len(api) > MAX_API_CHANGES:   # breaking first: what is cut is the tail of compatible and unknown ones
         res["api_changes"], res["api_changes_total"] = api[:MAX_API_CHANGES], len(api)
     res["seconds"] = round(time.perf_counter() - t0, 3)
-    res["exit"] = 3 if (n_strong or unknown) else 0
+    # changed lines a fresh coverage report shows no test ran are something to report, like a finding
+    uncovered_strong = any(u["status"] == "strong_inference" for u in (tests.get("coverage") or {}).get("uncovered")
+                           or [])
+    res["exit"] = 3 if (n_strong or unknown or uncovered_strong) else 0
     if record and store is not None:
         res["review_id"] = _record(store, repo, res)
     return res
@@ -5119,6 +5135,97 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
 MAX_RUN_TESTS = 50
 
 
+def _report_paths(repo: Path, given: list[str] | None) -> set[str]:
+    """Repository-relative paths of the coverage reports the review reads."""
+    from verinoda import coverage_import as ci
+
+    paths = [Path(p) if Path(p).is_absolute() else repo / p for p in given] if given else ci.find_reports(repo)
+    out = set()
+    for p in paths:
+        try:
+            out.add(p.resolve().relative_to(repo).as_posix())
+        except (OSError, ValueError):
+            continue
+    return out
+
+
+def _line_coverage(ctx: _Ctx, changes: list[Change], tests: dict, reports: list[str] | None,
+                   unknown: list[dict]) -> dict | None:
+    """The changed lines of code (not tests) a coverage report measured, and the ones no test ran, as
+    ``tests["coverage"]``. A changed symbol a fresh report shows run leaves ``no_test_reaches`` and
+    ``reach_unknown``. None when no report was read."""
+    from verinoda import coverage_import as ci
+
+    cov = ci.load(ctx.repo, reports)
+    errors = [r for r in cov.reports if r.get("error")]
+    if reports and errors:
+        unknown.append({"kind": "coverage_report", "what": "which changed lines the tests ran",
+                        "why": "; ".join(f"{r['file']}: {r['error']}" for r in errors)[:400],
+                        "next_step": "pass a readable lcov, Cobertura XML, JaCoCo XML or coverage.py JSON report"})
+    if not cov.read:
+        return None
+    code = [c for c in changes if not c.test and c.new_changed and c.kind != "config_key"
+            and _suffix(c.file) not in DATA_SUFFIXES]
+    measured = covered = n_uncovered = 0
+    uncovered: list[dict] = []
+    covered_by: dict[str, list[str]] = {}
+    ran_symbols: set[str] = set()
+    not_in, ambiguous = set(), set()
+    # an outer definition's changed lines hold its nested definitions' too: each line counts once, for the
+    # innermost change around it
+    owner: dict[tuple[str, int], tuple[int, int, int]] = {}
+    for i, c in enumerate(code):
+        span = (c.lines[1] - c.lines[0], -c.lines[0]) if c.lines else (1 << 30, 0)
+        for ln in c.new_changed:
+            if (c.file, ln) not in owner or (*span, i) < owner[(c.file, ln)]:
+                owner[(c.file, ln)] = (*span, i)
+    for i, c in enumerate(code):
+        fc = cov.lines_of(c.file)
+        if fc is None:
+            (ambiguous if cov.resolve(c.file)[1] == "ambiguous" else not_in).add(c.file)
+            continue
+        lines = {ln for ln in c.new_changed if ln in fc.lines and owner[(c.file, ln)][2] == i}
+        ran = {ln for ln in lines if fc.lines[ln] > 0}
+        measured += len(lines)
+        covered += len(ran)
+        status = ci.status_for(cov, c.file)
+        if ran:
+            names = ci.tests_of(fc, ran)
+            if names:
+                covered_by[c.symbol] = names[:ci.MAX_TESTS_PER_LINE]
+            if status == "strong_inference":
+                ran_symbols.add(c.symbol)
+        miss = lines - ran
+        if miss:
+            n_uncovered += len(miss)
+            at = f"{c.file}:{min(miss)}"
+            uncovered.append({
+                "symbol": c.symbol, "file": c.file, "lines": ci.ranges(miss), "at": at, "status": status,
+                "finding": f"changed line(s) {ci.ranges(miss)} of {c.symbol} ran under no test in "
+                           f"{', '.join(sorted(fc.reports))}" + ("" if status == "strong_inference" else
+                                                                  " (the file changed after the report was written: "
+                                                                  "lines may have moved)"),
+                "evidence_at": [at, *sorted(fc.reports)],
+                "derived_by": "verinoda.coverage_import (a coverage report read by line)"})
+    if ran_symbols:
+        tests["no_test_reaches"] = [s for s in tests.get("no_test_reaches") or [] if s not in ran_symbols]
+        tests["reach_unknown"] = [r for r in tests.get("reach_unknown") or [] if r["symbol"] not in ran_symbols]
+    out = {"reports": [{k: r[k] for k in ("file", "format", "error") if k in r} for r in cov.reports],
+           "patch": {"measured_changed_lines": measured, "covered": covered,
+                     "percent": round(100.0 * covered / measured, 1) if measured else None},
+           "uncovered": uncovered}
+    if covered_by:
+        out["covered_by"] = covered_by
+    if not_in:
+        out["not_in_report"] = sorted(not_in)
+    if ambiguous:
+        out["ambiguous"] = sorted(ambiguous)
+    tests["coverage"] = out
+    return {"uncovered_lines": n_uncovered, "limits": [
+        "changed lines no test ran are read from a coverage report (" + ", ".join(r["file"] for r in cov.read)
+        + "): " + ci.LIMITS[0], ci.LIMITS[1]]}
+
+
 def _has_static_caller(ctx: _Ctx, c: Change) -> bool:
     """Does anything call or reference ``c`` in the static view: the graph's edges into it (or into the function
     it is nested in), or calls in the changed files (a definition the snapshot does not know yet)?"""
@@ -5278,6 +5385,10 @@ def _summary(res: dict) -> str:
     if api:
         by = {v: sum(1 for a in api if a["verdict"] == v) for v in ("breaking", "unknown", "compatible")}
         parts.append(f"Public API: {len(api)} change(s) - " + ", ".join(f"{n} {v}" for v, n in by.items() if n) + ".")
+    uncov = (res.get("tests") or {}).get("coverage", {}).get("uncovered") or []
+    if uncov:
+        parts.append(f"{res['counts']['uncovered_changed_lines']} changed line(s) in {len(uncov)} change(s) ran "
+                     "under no test in the coverage report.")
     if res["unknown"]:
         parts.append(f"{len(res['unknown'])} unknown(s) to report.")
     if others:
@@ -5387,6 +5498,18 @@ def render_text(res: dict) -> str:
         from verinoda import gametests
 
         out += ["  " + ln.strip() for ln in gametests.render(t["gametests"])]
+    if t.get("coverage"):
+        cv = t["coverage"]
+        p = cv["patch"]
+        out.append(f"  coverage ({', '.join(r['file'] for r in cv['reports'] if not r.get('error'))}): "
+                   f"{p['covered']} of {p['measured_changed_lines']} measured changed line(s) ran"
+                   + (f" ({p['percent']}%)" if p["percent"] is not None else ""))
+        for u in cv["uncovered"][:8]:
+            out.append(f"  [{u['status']}] changed lines no test covers: {u['file']}:{u['lines']} ({u['symbol']})")
+        if len(cv["uncovered"]) > 8:
+            out.append(f"  ... {len(cv['uncovered']) - 8} more (--json)")
+        if cv.get("not_in_report"):
+            out.append("  not in the coverage report: " + ", ".join(cv["not_in_report"][:6]))
     if t.get("no_test_reaches"):
         out.append("  no test reaches it in the static graph: " + ", ".join(t["no_test_reaches"][:6]))
     if t.get("reach_unknown"):
