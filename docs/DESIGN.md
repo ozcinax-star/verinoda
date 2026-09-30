@@ -6097,6 +6097,93 @@ reached method; the `zero_callers` wording; every entry point named; unreadable 
 default map without `dead`; the MCP cap cutting the searched lists first with a correct `claims_not_shown`.
 `tests/test_docs.py` covers the README and ARCHITECTURE rows.
 
+## 58. MCP prompts (D85, 2026-09-30)
+
+### 58.1 Why
+
+An agent connected to Verinoda has to work out, each session, which tools to call for a routine task and in
+what order: reviewing a change, getting to know a project, debugging a failure, checking a branch before a
+merge. code-review-graph ships such workflows as MCP prompts. MCP clients show prompts to the user
+(Claude Code as `/mcp__verinoda__review` and so on), so one pick starts the right sequence of calls with the
+reporting rules that go with it.
+
+### 58.2 Decisions
+
+- Four prompts, served by `verinoda mcp serve` over `prompts/list` and `prompts/get`: `review` [base],
+  `onboarding` [topic], `debug` symptom [repro], `pre_merge` [base, default main]. Code:
+  `verinoda/mcp/prompts.py` (steps and text), `server._add_prompts` (registration).
+- A prompt is a fixed sequence of tool calls plus reporting rules. It states nothing about the code, so it
+  carries no claims; the tools it names return the claims and evidence. Every prompt ends with the rule
+  that every statement about the code comes from a tool result (claim, status, file:line) and that missing
+  evidence is 'unknown' plus a next step.
+- Prompts are not tools: the core profile still lists five tools, and the core tool menu is unchanged
+  (`tools/list`, core, on examples/orders_app: 4,478 characters before and after).
+- The text is worded for the served profile, so it only names calls the agent can make: a listed tool is
+  named directly (`code_check {"diff": "HEAD"}`), a tool behind `run_tool` as a `run_tool` call
+  (`run_tool {"name": "change_review", "arguments": {}}`), a tool the profile does not serve as its CLI
+  command (the debug ledger in core: `verinoda debug start "..." -- <repro>`, `verinoda debug try
+  --hypothesis ...`), and a step with neither is left out (decision_check in core when the project has no
+  decision records).
+- Every prompt starts with `index_update`. The steps reuse the existing tools only: review = change_review,
+  code_check on the diff, decision_check; onboarding = map_view hierarchy / dependencies / tests, then
+  analyze; debug = project_query, analyze, debug_start, debug_attempt, code_check; pre_merge =
+  history_search {base}, change_review {base}, code_check {diff: base}, code_check {deps}, decision_check
+  {base}, map_view cycles.
+- The rules the tools already state are repeated where they matter: "'No finding' is not 'safe'" (review),
+  "never say the branch is safe to merge" (pre_merge), "never say 'fixed'" (debug), map views are
+  extractions and heuristics, so what they suggest is inference (onboarding).
+- `verinoda mcp prompts [NAME] [--arg NAME=VALUE] [--profile core|full] [--json]` prints the list or one
+  prompt filled in, with the same text the server sends (for users without a prompt-capable client, and to
+  see what a prompt will do). Exit 2 on an unknown prompt, an unknown or malformed `--arg`, or a missing
+  required argument.
+- The debug `repro` is one string (MCP prompt arguments are strings); it is split into the argument list
+  `debug_start` takes at whitespace, with `'` and `"` grouping, and a backslash kept as it is (no shell
+  escapes), so a Windows path such as `tests\test_x.py` or `"C:\Program Files\py.exe"` survives. In the
+  core profile's CLI fallback each argument is re-quoted with double quotes when it has a space or a shell
+  character, and the symptom is always double-quoted.
+- The server and the CLI check the arguments the same way (`prompts.argument_problems`): a blank required
+  argument or a repro with an unbalanced quote is refused. The CLI exits 2; `prompts/get` answers with a
+  JSON-RPC invalid-params error that carries the reason (not the SDK's generic "Error rendering prompt").
+
+### 58.3 Measured
+
+On examples/orders_app (mcp 2.2.0):
+
+| | core | full |
+|---|---|---|
+| `prompts/list`, compact JSON | 1,253 chars | 1,253 chars |
+| `tools/list`, compact JSON | 4,478 (unchanged) | 43,436 (unchanged) |
+| review / onboarding / debug / pre_merge text | 728 / 1,038 / 1,054 / 997 | 782 / 933 / 930 / 977 |
+
+`prompts/list` is read when the client asks for it, not sent with every request like the tool menu.
+
+### 58.4 Not done
+
+- The steps are fixed; a prompt does not look at the project first (other than which tools the profile
+  serves). An agent that finds a step useless still has to skip it itself.
+- The core tool menu is at 4,478 of its 4,500-character budget before this change; nothing here adds to
+  it, but the margin is small for the next item that touches a core tool.
+- Clients decide how prompts are shown; some list them only on request, some not at all.
+- The CLI command the core debug prompt suggests quotes with double quotes (an inner `"` as `\"`); it
+  keeps a path with spaces together in bash, cmd and PowerShell, but a symptom or argument with `$`, `%`
+  or `"` may still need editing for a particular shell. An unquoted repro path with a space is two
+  arguments, as in a shell.
+- Because backslashes are literal, a repro cannot escape a quote or a space with `\`; quote the argument
+  instead.
+
+### 58.5 Tests
+
+- tests/test_mcp_prompts.py: every step names a real tool with arguments its schema accepts; the full
+  profile names every tool directly; the core profile routes through `run_tool` and the CLI and leaves out
+  decision_check in a project without records; the debug repro becomes an argument list and `symptom` is
+  required; a Windows repro keeps its backslashes and the core CLI fallback quotes each argument; the
+  server refuses a blank symptom and an unbalanced repro quote with the reason, in both profiles, as the
+  CLI does (exit 2); the in-process server lists and fills in the prompts with their descriptions and
+  arguments and its tool menu is unchanged; `verinoda mcp prompts` lists (`--json`), prints and refuses bad
+  arguments (exit 2).
+- tests/test_mcp.py `test_stdio_prompts_list_and_get`: over stdio, initialize announces the prompts
+  capability, `prompts/list` lists the four with their arguments and `prompts/get` fills one in.
+
 ## Sources
 
 - **Retrieval:**

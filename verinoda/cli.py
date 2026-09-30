@@ -2497,6 +2497,52 @@ def cmd_mcp(args) -> int:
     return 0
 
 
+def cmd_mcp_prompts(args) -> int:
+    """``verinoda mcp prompts [NAME] [--arg K=V]``: the MCP server's ready workflows, listed or filled in."""
+    from verinoda.mcp import prompts as P
+    from verinoda.mcp.server import GATEWAY, listed_tools, resolve_profile, served_tools
+
+    repo = _repo(args)
+    try:
+        profile = resolve_profile(repo, args.profile)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    listed, served = listed_tools(repo, profile), served_tools(repo, profile)
+    if not args.name:
+        cat = P.catalog(listed=listed, served=served, gateway=GATEWAY)
+        if args.json:
+            _write(_dump({"profile": profile, "prompts": cat}))
+        else:
+            for c in cat:
+                params = " ".join(f"{a['name']}={'<required>' if a['required'] else '?'}" for a in c["arguments"])
+                _write(f"{c['name']} {params}\n  {c['description']}\n  tools: {', '.join(c['tools'])}")
+        return 0
+    if args.name not in P.PROMPT_NAMES:
+        print(f"error: unknown prompt {args.name!r}; one of {', '.join(P.PROMPT_NAMES)}", file=sys.stderr)
+        return 2
+    known = {a for a, _, _ in P.ARGUMENTS[args.name]}
+    given: dict[str, str] = {}
+    for item in args.arg or []:
+        key, sep, value = item.partition("=")
+        if not sep or key not in known:
+            print(f"error: --arg takes NAME=VALUE with NAME one of {', '.join(sorted(known))} (got {item!r})",
+                  file=sys.stderr)
+            return 2
+        given[key] = value
+    missing = P.missing_required(args.name, given)
+    if missing:
+        print(f"error: {args.name} needs --arg {missing[0]}=...", file=sys.stderr)
+        return 2
+    problems = P.argument_problems(args.name, given)
+    if problems:
+        print(f"error: {problems[0]}", file=sys.stderr)
+        return 2
+    text = P.render(args.name, given, listed=listed, served=served, gateway=GATEWAY)
+    _write(_dump({"name": args.name, "profile": profile, "arguments": given, "text": text}) if args.json else text)
+    return 0
+
+
 # Upstream subcommands that write Graphify-branded skills, hooks, merge drivers or
 # agent configs into the user's home or project (CLAUDE.md, AGENTS.md, .claude/,
 # .codex/, git hooks, .gitattributes, ...). Run through `verinoda index` they would
@@ -3325,6 +3371,14 @@ def build_parser() -> argparse.ArgumentParser:
                        help="serve the nearest folder at or above the start folder whose FILE (a relative path "
                             "such as .mcp.json) registers this server; what project-scope configs use, so "
                             "moving the project keeps them working")
+
+    c = add("prompts", cmd_mcp_prompts, "the ready workflows the server offers as MCP prompts (review, "
+                                        "onboarding, debug, pre_merge): list them, or print one filled in",
+            parent=msub)
+    c.add_argument("name", nargs="?", help="the prompt to print (default: list them all)")
+    c.add_argument("--arg", action="append", metavar="NAME=VALUE", help="a prompt argument (repeatable)")
+    c.add_argument("--profile", choices=("core", "full"), default=None,
+                   help="word the steps for this profile's menu (default: as `mcp serve` would)")
 
     sp = sub.add_parser("index", help="pass-through to the Graphify-derived indexer CLI (advanced; "
                                        "installer/hook commands and commands writing under ~/.graphify are "
