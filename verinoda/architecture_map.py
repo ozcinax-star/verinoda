@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import heapq
 import re
+import sys
 from collections import Counter, defaultdict, deque
 from pathlib import Path, PurePosixPath
 
@@ -915,30 +916,81 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
 CYCLE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits"}   # the dependencies view's edges
 EXACT_BREAK_MAX = 12      # up to this many files the smallest break set is searched exactly (2^n file orderings)
 CYCLE_EDGE_SITES = 3      # reference lines listed per file-to-file dependency
-CYCLE_EDGES_SHOWN = 60    # file-to-file dependencies listed per cycle (the break set is never cut)
+CYCLE_EDGES_SHOWN = 60    # file-to-file dependencies listed per cycle
+CYCLES_SHOWN = 50         # cycles listed; all are counted
+CYCLE_FILES_SHOWN = 100   # files listed per cycle
+CYCLE_CUTS_SHOWN = 60     # cuts listed per cycle, each with a ring it closes; all are counted
+CYCLE_RING_SHOWN = 20     # steps of a ring listed
+LEFT_OUT_SHOWN = 20       # dependencies left out (standard library imports, copies) listed with their lines
+GREEDY_REDUCE_STEPS = 2_000_000   # edges visited while putting cuts back in large cycles; past it the rest stay cut
+_PY_SUFFIXES = (".py", ".pyi")
+_PY_STDLIB = frozenset(getattr(sys, "stdlib_module_names", ())) | frozenset(sys.builtin_module_names)
+_PY_IMPORT_RE = re.compile(r"^\s*import\s+([\w.]+(?:\s+as\s+\w+)?(?:\s*,\s*[\w.]+(?:\s+as\s+\w+)?)*)")
+_PY_FROM_RE = re.compile(r"^\s*from\s+(\.*[\w.]*)\s+import\b")
 
 
-def _file_deps(g: Graph) -> dict[tuple[str, str], dict]:
-    """File -> file dependencies with the references behind them. A type-only import (``import type``) and a
-    deferred ``import(...)`` are left out: neither closes a cycle when the code loads. Prose files are no code."""
+def _py_top_names(g: Graph) -> set[str]:
+    """The top-level names the project's Python files are importable by: from the repository root or ``src/``."""
+    top: set[str] = set()
+    for rel in _files(g):
+        if rel.endswith(_PY_SUFFIXES):
+            parts = PurePosixPath(rel).with_suffix("").parts
+            top.add(parts[0])
+            if parts[0] == "src" and len(parts) > 1:
+                top.add(parts[1])
+    return top
+
+
+def _imports_stdlib(line: str, top: set[str]) -> bool:
+    """A Python import line whose modules are all the standard library's: absolute, and no top-level name of the
+    project shadows them. ``import html`` in ``pkg/security.py`` never loads ``pkg/exporters/html.py``."""
+    m = _PY_IMPORT_RE.match(line)
+    if m:
+        heads = [x.split()[0].split(".")[0] for x in m.group(1).split(",")]
+    elif (m := _PY_FROM_RE.match(line)) and not m.group(1).startswith("."):
+        heads = [m.group(1).split(".")[0]]
+    else:
+        return False
+    return all(h in _PY_STDLIB and h not in top for h in heads)
+
+
+def _sites(d: dict) -> list[str]:
+    return [at for _, at in sorted(d["sites"])]
+
+
+def _file_deps(g: Graph) -> tuple[dict[tuple[str, str], dict], dict[tuple[str, str], dict]]:
+    """File -> file dependencies with the references behind them, and apart from them the Python imports whose
+    line imports the standard library (the graph gave the name to a project module of the same name). A
+    type-only import (``import type``) and a deferred ``import(...)`` are left out: neither closes a cycle when
+    the code loads. Prose files are no code."""
     from verinoda.index import PROSE_SUFFIXES
 
     deps: dict[tuple[str, str], dict] = {}
+    stdlib: dict[tuple[str, str], dict] = {}
+    top: set[str] | None = None
     for u, v, d in g.edges(CYCLE_RELATIONS):
         if d.get("type_only") or d.get("deferred"):
             continue
         fu, fv = g.file(u), g.file(v)
         if not fu or not fv or fu == fv or fu.lower().endswith(PROSE_SUFFIXES) or fv.lower().endswith(PROSE_SUFFIXES):
             continue
-        e = deps.setdefault((fu, fv), {"references": 0, "relations": Counter(), "extracted": 0, "sites": set()})
+        at = _edge_loc(d)
+        into = deps
+        ln = (d.get("source_location") or "")[1:]
+        if d.get("relation") in ("imports", "imports_from") and fu.endswith(_PY_SUFFIXES) and ln.isdigit():
+            lines = _read(g.root, fu)
+            if 0 < int(ln) <= len(lines):
+                top = _py_top_names(g) if top is None else top
+                if _imports_stdlib(lines[int(ln) - 1], top):
+                    into = stdlib
+        e = into.setdefault((fu, fv), {"references": 0, "relations": Counter(), "extracted": 0, "sites": set()})
         e["references"] += 1
         e["relations"][d.get("relation")] += 1
         extracted = d.get("confidence") == "EXTRACTED"
         e["extracted"] += extracted
-        at = _edge_loc(d)
         if at:
             e["sites"].add((not extracted, at))
-    return deps
+    return deps, stdlib
 
 
 def _exact_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]]) -> list[tuple[str, str]]:
@@ -975,10 +1027,14 @@ def _exact_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]])
     return sorted(e for e in cost if pos[e[0]] > pos[e[1]])
 
 
-def _greedy_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]]) -> list[tuple[str, str]]:
+def _greedy_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]],
+                  budget: list[int] | None = None) -> list[tuple[str, str]]:
     """A small feedback edge set of a large component: the Eades-Lin-Smyth ordering (sinks to the end, sources
     to the front, else the file with most outgoing minus incoming edges next), then every cut edge that closes
-    no cycle with what is kept is put back, the heaviest first. An upper bound, not proven the smallest."""
+    no cycle with what is kept is put back, the heaviest first. An upper bound, not proven the smallest.
+
+    ``budget`` (``[edges]``, shared across calls) bounds the searches of the put-back: when it runs out, the
+    cuts not yet tried stay cut (still a break set) and ``budget[0]`` is set to -1."""
     succ: dict[str, set[str]] = defaultdict(set)
     pred: dict[str, set[str]] = defaultdict(set)
     for a, b in cost:
@@ -989,25 +1045,32 @@ def _greedy_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]]
     ind = {x: len(pred[x]) for x in nodes}
     left: list[str] = []
     right: list[str] = []
+    ends = {x for x in nodes if outd[x] == 0 or ind[x] == 0}
+    heap = [(ind[x] - outd[x], x) for x in nodes]   # most outgoing minus incoming first, then by name
+    heapq.heapify(heap)
 
     def remove(x: str) -> None:
         alive.discard(x)
-        for y in succ[x]:
-            ind[y] -= 1
-        for y in pred[x]:
-            outd[y] -= 1
+        for y, deg in [*((y, ind) for y in succ[x]), *((y, outd) for y in pred[x])]:
+            if y in alive:
+                deg[y] -= 1
+                heapq.heappush(heap, (ind[y] - outd[y], y))   # the older entry is stale and skipped
+                if deg[y] == 0:
+                    ends.add(y)
 
     while alive:
-        ends = sorted(x for x in alive if outd[x] == 0 or ind[x] == 0)
         if ends:
-            for x in ends:
+            batch = sorted(ends)
+            ends.clear()
+            for x in batch:
                 if x in alive:
                     (right if outd[x] == 0 else left).append(x)
                     remove(x)
             continue
-        x = max(sorted(alive), key=lambda y: outd[y] - ind[y])
-        left.append(x)
-        remove(x)
+        k, x = heapq.heappop(heap)
+        if x in alive and k == ind[x] - outd[x]:
+            left.append(x)
+            remove(x)
     pos = {x: i for i, x in enumerate(left + right[::-1])}
     cut = [e for e in cost if pos[e[0]] > pos[e[1]]]
     kept: dict[str, set[str]] = defaultdict(set)
@@ -1016,20 +1079,31 @@ def _greedy_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]]
             kept[a].add(b)
     final = []
     for a, b in sorted(cut, key=lambda e: (-cost[e][1], e)):
-        if _reaches(kept, b, a):
+        if budget is not None and budget[0] <= 0:
+            budget[0] = -1
+            final.append((a, b))
+        elif _reaches(kept, b, a, budget):
             final.append((a, b))
         else:
             kept[a].add(b)
+    if budget is not None and budget[0] <= 0:   # the last search may have stopped short too
+        budget[0] = -1
     return sorted(final)
 
 
-def _reaches(succ: dict[str, set[str]], start: str, goal: str) -> bool:
+def _reaches(succ: dict[str, set[str]], start: str, goal: str, budget: list[int] | None = None) -> bool:
+    """Whether ``goal`` is reachable from ``start``; True too when ``budget`` (edges to visit) runs out first."""
     seen, stack = {start}, [start]
     while stack:
         x = stack.pop()
         if x == goal:
             return True
-        for y in succ.get(x, ()):
+        nxt = succ.get(x, ())
+        if budget is not None:
+            budget[0] -= len(nxt)
+            if budget[0] <= 0:
+                return True
+        for y in nxt:
             if y not in seen:
                 seen.add(y)
                 stack.append(y)
@@ -1054,6 +1128,72 @@ def _shortest_back(succ: dict[str, set[str]], start: str, goal: str) -> list[str
     return None
 
 
+def _cycle_row(files: list[str], inner: dict[tuple[str, str], dict], cut: list[tuple[str, str]], method: str,
+               aside: bool) -> tuple[dict, bool]:
+    """One listed cycle: its status, the break set with the ring each cut closes, the heaviest dependencies;
+    and whether any of its lists was cut."""
+    succ: dict[str, set[str]] = defaultdict(set)
+    succ_x: dict[str, set[str]] = defaultdict(set)   # the parser's own edges only
+    for (a, b), d in inner.items():
+        succ[a].add(b)
+        if d["extracted"]:
+            succ_x[a].add(b)
+    xg = nx.DiGraph()
+    xg.add_nodes_from(files)
+    xg.add_edges_from((a, b) for (a, b), d in inner.items() if d["extracted"])
+    strong = nx.is_strongly_connected(xg)
+
+    def row(e: tuple[str, str]) -> dict:
+        d = inner[e]
+        return {"from": e[0], "to": e[1], "references": d["references"],
+                "relations": dict(sorted(d["relations"].items())), "extracted": d["extracted"],
+                "at": _sites(d)[:CYCLE_EDGE_SITES]}
+
+    breaks, long_ring = [], False
+    for a, b in cut[:CYCLE_CUTS_SHOWN]:
+        back = _shortest_back(succ_x, b, a) if inner[(a, b)]["extracted"] else None
+        how = "strong_inference" if back else "weak_inference"
+        back = back or _shortest_back(succ, b, a) or [b, a]
+        loop = [a, *back]
+        shown = loop[:CYCLE_RING_SHOWN + 1]
+        long_ring |= len(loop) > len(shown)
+        steps = [{"from": x, "to": y, "at": _sites(inner[(x, y)])[:1]} for x, y in zip(shown, shown[1:])]
+        breaks.append({**row((a, b)), "closes": shown, "closes_status": how, "steps": steps,
+                       **({"closes_steps_total": len(loop) - 1} if len(loop) > len(shown) else {})})
+    edges = sorted(inner, key=lambda e: (-inner[e]["references"], e))
+    names = ", ".join(files[:4]) + (f" and {len(files) - 4} more" if len(files) > 4 else "")
+    cut_short = long_ring or len(cut) > CYCLE_CUTS_SHOWN or len(edges) > CYCLE_EDGES_SHOWN \
+        or len(files) > CYCLE_FILES_SHOWN
+    return {
+        "files": files[:CYCLE_FILES_SHOWN], "size": len(files),
+        "claim": f"{names} depend on each other in a cycle ({len(files)} files, {len(inner)} dependencies)",
+        "status": "strong_inference" if strong else "weak_inference",
+        **({} if strong else {"note": "the parser's own edges do not connect every file of it: some link "
+                                      "rests on an INFERRED edge (a receiver's type, a name) only"}),
+        "break_set": breaks,
+        "break_set_total": len(cut),
+        "break_method": method,
+        "dependencies": [row(e) for e in edges[:CYCLE_EDGES_SHOWN]],
+        "dependencies_total": len(inner),
+        **({"in": ASIDE} if aside else {}),
+    }, cut_short
+
+
+def _copy_roots(g: Graph, roots: tuple[str, ...]) -> tuple[str, ...]:
+    """Those of ``roots`` that are detected copies of the project, not configured reference trees."""
+    from verinoda import copies
+
+    try:
+        found = {str(c["path"]).strip("/") + "/" for c in copies.load(g.root)}
+    except Exception:  # noqa: BLE001 - no detection result: no copies
+        return ()
+    return tuple(r for r in roots if r in found)
+
+
+def _all_under(files: list[str], roots: tuple[str, ...]) -> bool:
+    return bool(roots) and all(f.startswith(roots) for f in files)
+
+
 def cycles(g: Graph) -> dict:
     """Dependency cycles between files and the smallest set of file-to-file dependencies to cut.
 
@@ -1061,66 +1201,50 @@ def cycles(g: Graph) -> dict:
     ``strong_inference`` when the parser's own (EXTRACTED) edges already connect every file of it, else
     ``weak_inference``: graph edges are extractions, never verification. Each dependency of the break set
     names a cycle it closes (the dependency, then the shortest way back) with the reference lines of every
-    step, so the cut can be read in the code."""
-    deps = _file_deps(g)
+    step, so the cut can be read in the code. Every list is capped: ``truncated`` says one was, and the
+    ``*_total`` keys and ``size`` give the full counts."""
+    deps, stdlib = _file_deps(g)
+    with_deps = {f for e in deps for f in e}
     roots = _aside_roots(g)
-    # a copy of the project and the project never load each other: an edge between them is a name the graph
-    # resolved into the wrong tree, and it would merge the two trees' cycles into one
-    crossing = [e for e in deps if e[0].startswith(roots) != e[1].startswith(roots)] if roots else []
+    copy_roots = _copy_roots(g, roots)
+    # a detected copy is hardly used from outside its folder (that is how it was detected): an edge between it
+    # and the project is a name the graph resolved into the wrong tree, and it would merge the two trees' cycles
+    # into one. A configured reference tree may be vendored code the project does load: its edges stay.
+    crossing = sorted(e for e in deps if e[0].startswith(copy_roots) != e[1].startswith(copy_roots)) \
+        if copy_roots else []
+    left_out = [{"from": a, "to": b, "references": d["references"], "at": _sites(d)[:CYCLE_EDGE_SITES],
+                 "why": "the line imports the standard library"} for (a, b), d in sorted(stdlib.items())]
+    left_out += [{"from": a, "to": b, "references": deps[(a, b)]["references"],
+                  "at": _sites(deps[(a, b)])[:CYCLE_EDGE_SITES], "why": f"between a {ASIDE} and the project"}
+                 for a, b in crossing]
     for e in crossing:
         del deps[e]
     fg = nx.DiGraph()
     fg.add_edges_from(deps)
-    comps = [sorted(c) for c in nx.strongly_connected_components(fg) if len(c) > 1]
-    out = []
-    for files in comps:
-        members = set(files)
-        inner = {e: deps[e] for e in deps if e[0] in members and e[1] in members}
+    comps = sorted((sorted(c) for c in nx.strongly_connected_components(fg) if len(c) > 1),
+                   key=lambda fs: (_all_under(fs, roots), -len(fs), fs))
+    comp_of = {f: k for k, fs in enumerate(comps) for f in fs}
+    inners: list[dict[tuple[str, str], dict]] = [{} for _ in comps]
+    for e, d in deps.items():   # one pass: each dependency goes to the cycle that holds both its files
+        k = comp_of.get(e[0])
+        if k is not None and comp_of.get(e[1]) == k:
+            inners[k][e] = d
+    budget = [GREEDY_REDUCE_STEPS]
+    out, breaks_total, exact_n, unreduced, cut_short = [], 0, 0, 0, len(comps) > CYCLES_SHOWN
+    for i, (files, inner) in enumerate(zip(comps, inners)):
         cost = {e: (1, d["references"]) for e, d in inner.items()}
-        exact = len(files) <= EXACT_BREAK_MAX
-        cut = (_exact_break if exact else _greedy_break)(files, cost)
-        succ: dict[str, set[str]] = defaultdict(set)
-        succ_x: dict[str, set[str]] = defaultdict(set)   # the parser's own edges only
-        for a, b in inner:
-            succ[a].add(b)
-            if inner[(a, b)]["extracted"]:
-                succ_x[a].add(b)
-        xg = nx.DiGraph()
-        xg.add_nodes_from(files)
-        xg.add_edges_from((a, b) for (a, b), d in inner.items() if d["extracted"])
-        strong = nx.is_strongly_connected(xg)
-
-        def row(e: tuple[str, str]) -> dict:
-            d = inner[e]
-            sites = [at for _, at in sorted(d["sites"])]
-            return {"from": e[0], "to": e[1], "references": d["references"],
-                    "relations": dict(sorted(d["relations"].items())), "extracted": d["extracted"],
-                    "at": sites[:CYCLE_EDGE_SITES]}
-
-        breaks = []
-        for a, b in cut:
-            back = _shortest_back(succ_x, b, a) if inner[(a, b)]["extracted"] else None
-            how = "strong_inference" if back else "weak_inference"
-            back = back or _shortest_back(succ, b, a) or [b, a]
-            loop = [a, *back]
-            steps = [{"from": x, "to": y, "at": row((x, y))["at"][:1]} for x, y in zip(loop, loop[1:])]
-            breaks.append({**row((a, b)), "closes": loop, "closes_status": how, "steps": steps})
-        edges = sorted(inner, key=lambda e: (-inner[e]["references"], e))
-        names = ", ".join(files[:4]) + (f" and {len(files) - 4} more" if len(files) > 4 else "")
-        aside = bool(roots) and files[0].startswith(roots)   # a cycle lies wholly on one side
-        out.append({
-            "files": files, "size": len(files),
-            "claim": f"{names} depend on each other in a cycle ({len(files)} files, {len(inner)} dependencies)",
-            "status": "strong_inference" if strong else "weak_inference",
-            **({} if strong else {"note": "the parser's own edges do not connect every file of it: some link "
-                                          "rests on an INFERRED edge (a receiver's type, a name) only"}),
-            "break_set": breaks,
-            "break_method": "exact" if exact else "greedy",
-            "dependencies": [row(e) for e in edges[:CYCLE_EDGES_SHOWN]],
-            "dependencies_total": len(inner),
-            **({"in": ASIDE} if aside else {}),
-        })
-    out.sort(key=lambda c: ("in" in c, -c["size"], c["files"]))
+        if len(files) <= EXACT_BREAK_MAX:
+            cut, method = _exact_break(files, cost), "exact"
+            exact_n += 1
+        else:
+            cut = _greedy_break(files, cost, budget)
+            method = "greedy" if budget[0] >= 0 else "greedy, not reduced"
+            unreduced += budget[0] < 0
+        breaks_total += len(cut)
+        if i < CYCLES_SHOWN:
+            row, short = _cycle_row(files, inner, cut, method, _all_under(files, roots))
+            out.append(row)
+            cut_short |= short
     limits = [
         "graph edges are extractions, never verification: a cycle is strong_inference at most, weak_inference "
         "when only INFERRED edges connect some of its files",
@@ -1130,13 +1254,28 @@ def cycles(g: Graph) -> dict:
         "one at the top of the file",
         f"the break set is the fewest file-to-file dependencies to cut, then the fewest references behind them; "
         f"exact for a cycle of up to {EXACT_BREAK_MAX} files, an upper bound (greedy, no cut can be put back) "
-        f"beyond; it names what to cut, not how",
+        f"beyond; it names what to cut, not how; a dependency on INFERRED edges only (extracted 0) costs the "
+        f"same as one the parser extracted",
         "dynamic dispatch, reflection and DI containers are not resolved; package-level cycles are not computed",
     ]
-    if roots:
-        limits.append("detected copies and reference trees (" + ", ".join(roots[:3]) + ") are kept apart from "
-                      "the project: their cycles come after the project's own, marked \"in\", and the "
-                      f"{len(crossing)} dependencies between them and the project are left out")
+    if unreduced:
+        limits.append(f"{unreduced} large cycles ran past the work limit of the greedy search "
+                      "(\"greedy, not reduced\"): some of their cuts may not be needed")
+    if stdlib:
+        limits.append(f"{len(stdlib)} Python import dependencies are left out (listed in left_out): their line "
+                      "imports the standard library (import html) and the graph gave the name to a project "
+                      "module of the same name")
+    if copy_roots:
+        limits.append("detected copies of the project (" + ", ".join(copy_roots[:3]) + ") are kept apart from "
+                      "it: their cycles come after the project's own, marked \"in\", and the "
+                      f"{len(crossing)} dependencies between them and the project are left out (listed in "
+                      "left_out)")
+    refs = [r for r in roots if r not in copy_roots]
+    if refs:
+        limits.append("configured reference trees (" + ", ".join(refs[:3]) + ") keep their dependencies on the "
+                      "project and back (vendored code can be loaded): a cycle wholly inside one comes after the "
+                      "project's own, marked \"in\"; one that crosses into the project is the project's")
+    cut_short |= len(left_out) > LEFT_OUT_SHOWN
     return {
         "view": "cycles",
         "coverage": {
@@ -1146,9 +1285,13 @@ def cycles(g: Graph) -> dict:
         },
         "level": "file",
         "cycles": out,
-        "files_in_cycles": sum(c["size"] for c in out),
-        "break_set_size": sum(len(c["break_set"]) for c in out),
-        "files_with_dependencies": fg.number_of_nodes(),
+        "cycles_total": len(comps),
+        "exact_break_sets": exact_n,
+        "files_in_cycles": sum(len(c) for c in comps),
+        "break_set_size": breaks_total,
+        "files_with_dependencies": len(with_deps),
+        **({"left_out": left_out[:LEFT_OUT_SHOWN], "left_out_total": len(left_out)} if left_out else {}),
+        **({"truncated": True} if cut_short else {}),
     }
 
 
