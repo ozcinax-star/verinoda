@@ -96,8 +96,8 @@ HOME/USERPROFILE, APPDATA, LOCALAPPDATA, XDG), beside the fixed folder, in the c
 (``outside_files``: entries the harness did not make) and the two checkouts (``checkout_writes``, byte-code
 caches aside). NOT covered, by decision (a candidate's diff is reviewed for these instead): NTFS alternate data
 streams, writes to absolute paths outside the work folder and the redirected user folders, the registry, the
-network, file times under ``.verinoda``, SQLite page contents beyond page_count, freelist_count and
-schema_version, handles a CLI run leaves open (the process exits).
+network, file times under ``.verinoda``, SQLite page contents and page_count (beyond freelist_count and
+schema_version), handles a CLI run leaves open (the process exits).
 
 Not covered: detect's same-tick guard (``_mtime_may_hide_a_rewrite``: an mtime less than 2 s before the
 manifest's ``seen``) cannot be put inside a run on both sides alike (the sides run one after the other); what it
@@ -116,7 +116,7 @@ backup folder the pipeline writes before overwriting a labelled graph (``index/<
 after another date keeps its name, so it differs), and its files are compared under the rules of the files they
 copy. SQLite files (``atlas.db``, ``index/search.db``, found by their header) are read from a copy (with their
 ``-wal``): the pragmas (user_version, application_id, page_size, encoding, auto_vacuum, journal_mode,
-page_count, freelist_count, schema_version),
+freelist_count, schema_version; not page_count, which the baseline varies in),
 ``sqlite_master`` in its own order, and every table (``sqlite_sequence`` included) in ROWID order with the rowid
 itself (a WITHOUT ROWID table in its key order). Also compared, per step:
 
@@ -174,7 +174,8 @@ What is left, found by running the baseline against itself (``--no-rules`` shows
   stale stamp on ``B`` or ``C`` is a difference; ``atlas_written_by`` likewise for the build named in atlas.db's
   ``meta.schema_written_by`` (version and commit)
 
-Known limits: SQLite files are compared by content and the three layout pragmas, not page by page. A clock's fraction digits are not
+Known limits: SQLite files are compared by content and the two layout pragmas (freelist_count, schema_version), not page by page
+and not by page_count (the baseline differs from itself in it). A clock's fraction digits are not
 compared (``repr(time.time())`` has 3 or fewer about once in 3000 values: the baseline would differ from
 itself), so rounding a clock to milliseconds is not caught, dropping the fraction is. When the candidate changes the
 extractor files, the stamps differ by design and are each accepted on their own side only. The background build
@@ -851,9 +852,11 @@ def bytes_diff(a: bytes, b: bytes) -> str | None:
 
 # -- SQLite -----------------------------------------------------------------------------------------------------
 
-# page_count, freelist_count and schema_version: the file's layout (a scratch table made and dropped leaves free
-# pages and a new schema_version even when the content is the same)
-_PRAGMAS = ("user_version", "application_id", "page_size", "encoding", "auto_vacuum", "journal_mode", "page_count",
+# freelist_count and schema_version: the file's layout (a scratch table made and dropped leaves free pages and a
+# new schema_version even when the content is the same). page_count is not compared: the baseline differs from
+# itself in it (calibration 2026-09-30, fixtures: 57 steps, content equal), because the volatile values (random
+# ids, clocks with 1-6 fraction digits) change the row lengths and so the page splits
+_PRAGMAS = ("user_version", "application_id", "page_size", "encoding", "auto_vacuum", "journal_mode",
             "freelist_count", "schema_version")
 
 
@@ -1936,6 +1939,12 @@ def collect_files(repo: Path, sctx: SideCtx, tmp: Path) -> dict:
     ids number the update result's)."""
     atlas = repo / ".verinoda"
     rels = sorted(r for r in tree_paths(atlas) if not excluded(r))
+    if any(_REPLACE_BAK.search(r) for r in rels):
+        # the fallback of the atomic replace (project_index/paths.py) leaves this backup behind only when a
+        # rename was refused at that moment (a file held open): two baseline scans differ in it, so it is not
+        # compared (rule replace_bak_leftover)
+        rels = [r for r in rels if not _REPLACE_BAK.search(r)]
+        _hit(["replace_bak_leftover"])
     names = artifact_names(rels, sctx, atlas)
     if any(n != r and not _REPLACE_BAK.search(r) for r, (n, _k) in names.items()):
         _hit(["backup_dir_date"])
