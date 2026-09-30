@@ -1781,7 +1781,8 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                      "call" if prev is not None else ""),
                              derived_by=by, for_symbol=_sym_for(ctx, rel, line),
                              evidence_at=[flow["entry"]] if flow and flow.get("entry") else (), param_flow=flow,
-                             base_had="call" if same is not None else "kind" if prev is not None else None)
+                             base_had="call" if same is not None else "kind" if prev is not None else None,
+                             op_kind=kind)
                 group = (kind, call_at) if call_at is not None else None
                 i = by_call.get(group) if group is not None else None
                 if i is not None and rr.rank(status) != rr.rank(out[i]["status"]):
@@ -1826,7 +1827,7 @@ def _security(ctx: _Ctx, changes: list[Change]) -> list[dict]:
                                             "removed); the base version's changed lines compared as text",
                                             derived_by="review.TEXT_SECURITY_OPS", for_symbol=_sym_for(ctx, rel, line),
                                             base_had="call" if same_t is not None else "kind" if prev_t is not None
-                                            else None))
+                                            else None, op_kind=kind))
                         break
     out += _guard_diff(ctx, changes)
     out += _check_calls_removed(ctx, changes)
@@ -2713,7 +2714,7 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
                     status = "weak_inference"
                 out.append(_finding("performance", "io-in-loop", text, status, f"{c.file}:{lo}",
                                     evidence_at=ev, basis=basis, derived_by=by, for_symbol=c.symbol,
-                                    **({"bound": bound} if bound else {})))
+                                    base_had=None if io_new else "loop", **({"bound": bound} if bound else {})))
         else:
             tree = ctx.tstree(c.file)
             old_tree = ctx.tstree(c.file, "old") if c.old_lines else None
@@ -2743,7 +2744,8 @@ def _performance(ctx: _Ctx, changes: list[Change], hot: dict[str, dict], unknown
                     out.append(_finding("performance", "io-in-loop", text,
                                         "strong_inference" if io_new else "weak_inference", f"{c.file}:{lo}",
                                         evidence_at=ev, basis="tree-sitter loop; call matched to the graph's edges or "
-                                        "to a class of that name", derived_by=sink["derived_by"], for_symbol=c.symbol))
+                                        "to a class of that name", derived_by=sink["derived_by"], for_symbol=c.symbol,
+                                        base_had=None if io_new else "loop"))
                     continue
                 if not hot_why:
                     continue
@@ -3880,26 +3882,34 @@ def _dedupe(findings: list[dict]) -> list[dict]:
 # -- differential findings: introduced, preexisting and fixed ---------------------------------------------
 
 FINDINGS_SHOWN = ("introduced", "all")
-# rules that find a risk in the code under review, which the base version's changed code can hold as well (a risky
-# operation, IO in a loop); every other rule says what the change touches or does (a write or a config read whose
-# value it changes, a guard removed, a signature that breaks call sites, health that fell): introduced
-STATE_RULES = frozenset({"op-on-changed-line", "security-words", "io-in-loop"})
+# rules that compare what they find with the base version's changed code themselves: a risky operation the base had
+# in the same call (``base_had: call``), a loop that did this IO before the change (``base_had: loop``); only such a
+# finding is preexisting, and only a base-side finding the head did not have (``base_had`` none) is fixed. Every
+# other rule says what the change touches or does (a write or a config read whose value it changes, a word it
+# writes, a guard removed, a signature that breaks call sites, health that fell): introduced
+STATE_RULES = frozenset({"op-on-changed-line", "io-in-loop"})
+STATE_HAD = ("call", "loop")
 STATE_CONCERNS = ("security", "performance")
-DELTA_METHOD = ("the risk rules (security operations and words on changed lines, IO in loops) run a second time with "
-                "the two versions swapped (the base version as the code under review, the head as its base); a head "
-                "finding with a base finding of the same concern, rule, symbol and pattern is preexisting (pairs "
-                "chosen by text similarity), a base finding left unpaired is fixed; every other rule says what the "
-                "change touches or does (writes, config, guards, signatures, health, entries): introduced")
+DELTA_METHOD = ("a risky operation on a changed line or IO in a loop is preexisting when its rule found the same "
+                "call (the base version's changed lines of the file) or the same IO in the loop before the change; "
+                "its base finding (base_at) comes from the rules run a second time with the two versions swapped, "
+                "paired by concern, rule, file and operation kind (text similarity among several); a base-side "
+                "finding the head did not have is fixed; every other rule says what the change touches or does "
+                "(writes, words, config, guards, signatures, health, entries): introduced")
 
 
 def _stateful(f: dict) -> bool:
-    # an operation whose call changed ("changes X: `a` is now `b`") is a change of the operation, not the old one
-    return f["rule"] in STATE_RULES and f.get("base_had") != "kind"
+    """The finding's own rule found it in the base version too (the same call, the same IO in the loop); an
+    operation whose call changed or that a changed line adds is the change's own."""
+    return f["rule"] in STATE_RULES and f.get("base_had") in STATE_HAD
 
 
 def _delta_key(f: dict) -> tuple:
-    where = f.get("for") or (f.get("at") or "").rpartition(":")[0]
-    return f["concern"], f["rule"], where, f.get("derived_by") or ""
+    # the file, not the symbol: the operation rule compares with the base's changed lines of the whole file, so a
+    # renamed function keeps its pair; the kind, not the pattern: one pattern (the import engine, the text rules)
+    # covers every kind of operation
+    return (f["concern"], f["rule"], (f.get("at") or "").rpartition(":")[0],
+            f.get("op_kind") or f.get("derived_by") or "")
 
 
 def _bare(text: str) -> str:
@@ -3926,26 +3936,30 @@ def _base_findings(ctx: _Ctx, diffs: list[FileDiff], want: list[str]) -> list[di
         out += _security(rctx, changes)
     if "performance" in want:
         out += _performance(rctx, changes, {}, [])
-    return [{**f, "side": "base"} for f in _dedupe(out) if _stateful(f)]
+    return [{**f, "side": "base"} for f in _dedupe(out)
+            if f["rule"] in STATE_RULES and (f.get("base_had") is None or _stateful(f))]
 
 
 def _split_delta(found: dict[str, list[dict]], base: list[dict]) -> list[dict]:
-    """Label each head finding ``delta`` introduced or preexisting (``base_at``: its base finding); return the
-    base findings no head finding paired with (fixed)."""
+    """Label each head finding ``delta`` introduced or preexisting (``base_at``: its base finding, when the base
+    side found it); return the base findings the head did not have (fixed)."""
     pool: dict[tuple, list[dict]] = {}
     for f in base:
-        pool.setdefault(_delta_key(f), []).append(f)
+        if _stateful(f):
+            pool.setdefault(_delta_key(f), []).append(f)
     for fs in found.values():
         for f in fs:
-            cands = pool.get(_delta_key(f)) if _stateful(f) else None
-            if not cands:
+            if not _stateful(f):
                 f["delta"] = "introduced"
                 continue
-            me = _bare(f["finding"])
-            best = max(cands, key=lambda b: difflib.SequenceMatcher(None, me, _bare(b["finding"])).ratio())
-            cands.remove(best)
-            f["delta"], f["base_at"] = "preexisting", best["at"]
-    return [{**f, "delta": "fixed"} for fs in pool.values() for f in fs]
+            f["delta"] = "preexisting"
+            cands = pool.get(_delta_key(f))
+            if cands:
+                me = _bare(f["finding"])
+                best = max(cands, key=lambda b: difflib.SequenceMatcher(None, me, _bare(b["finding"])).ratio())
+                cands.remove(best)
+                f["base_at"] = best["at"]
+    return [{**f, "delta": "fixed"} for f in base if not _stateful(f)]
 
 
 def _differential(ctx: _Ctx, diffs: list[FileDiff], want: list[str], found: dict[str, list[dict]],
