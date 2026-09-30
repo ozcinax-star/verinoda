@@ -5682,6 +5682,92 @@ the listed records capped.
 Run: `python -m pytest tests/test_scrub.py tests/test_ui.py tests/test_trace_log.py tests/test_experiments.py
 tests/test_debug.py tests/test_docs.py -q -p no:cacheprovider`
 
+## 54. Rename preview (D81, 2026-09-30)
+
+### 54.1 Decisions
+
+- **Evidence, not an edit plan.** The command reads the code and the index. It writes no file, no claim and
+  no index (except the first-use index build above). The CLI test compares file hashes and the claim count
+  before and after.
+- **Line numbers as git counts them.** The module splits files at `\n` only. `str.splitlines` (used by
+  `index._file_lines` and elsewhere) also splits at form feed and similar characters, which moves every later
+  line. The shared reader is not changed here.
+- **Sites carry `strong_inference` or better.** An INFERRED edge that grades no better than
+  `weak_inference` is a guess. On Verinoda's own repository, renaming `when.guards` drew `indirect_call`
+  edges from `self.guards = guards` and keyword arguments named `guards` in other modules. So these lines
+  go to the mentions with the edge named, not to the sites: a list of lines the rename changes should not
+  hold lines that a guess alone ties to the symbol.
+- **Call grading reuses `entail.call_site`,** so `rename-preview` and `analyze` agree on what a verified call
+  is.
+- **A changed file caps its lines at `strong_inference`.** Its edges may point at lines that moved. The why
+  says so and names `verinoda update`.
+- **The mention scan is bounded.** It reads the files the search index says may spell the name (token in a
+  passage or a unit name), every unindexed or changed file, and never generated output. The scan stops
+  after 10 s and says so. When the search index is missing or describes another graph, it reads every file.
+- **CLI only for now.** The MCP tool (`rename_preview`, read-only, behind `run_tool` in the core profile, so
+  the core menu stays at five tools) was written and tested. It is held back because it changes the tool
+  count from 37 to 38. `tests/test_docs.py` checks that count in README, ARCHITECTURE and UPGRADING, and this
+  item does not edit UPGRADING.md. The wiring is in `docs/drafts/2.5-mcp.patch` (server.py and
+  test_mcp.py). To merge it, apply the patch and change "37 tools" to "38 tools" in README.md (status row
+  and `mcp serve` row, where `rename_preview` also joins the `run_tool` list), in docs/ARCHITECTURE.md
+  (diagram and `mcp/` row) and in docs/UPGRADING.md. Also add the MCP test to tests/test_rename_preview.py:
+
+  ```python
+  def test_mcp_rename_preview(repo):
+      from verinoda.mcp.server import AtlasTools
+
+      t = AtlasTools(repo)
+      res = t.rename_preview("shop/pricing.py::compute_total", "price_items")
+      assert res["status"] == "found" and any(s["kind"] == "definition" for s in res["sites"])
+      assert t.rename_preview("compute_total", "x")["status"] == "ambiguous"
+  ```
+
+### 54.2 Not done
+
+- Bindings come from the index, not from a type checker or language server. A Python call is verified only
+  when `entail.call_site` shows the line calls the name. For other languages it is `strong_inference`.
+- Keyword arguments (`f(compute_total=...)`), attribute access through `getattr`, string-built names and
+  code outside the repository are mentions at best.
+- An import line is not in the search index. A file that spells the name only on an import line, with no
+  import edge to the symbol, is skipped by the prefilter (the coverage line says so).
+- Overrides are found by name through the class edges the index has. An interface method implemented by
+  name without an `implements` edge is not found.
+- The "bound by place" rule marks every spelling inside a tied caller, in a file that imports the name, or in
+  its own module, comments and docstrings included. A Python parameter or local of the same name is found
+  (`shadowed`); in other languages a local of the same name there becomes a `bound` site
+  (`strong_inference`, with the reason).
+- Receiver types are read from the caller's lines by pattern (annotation, declaration, constructor
+  assignment), not by a type checker. A receiver of an unknown type (a class outside the index) is
+  unresolved, not ruled out.
+- A file or module rename is not previewed (`not_a_symbol`).
+
+### 54.3 Tests
+
+`tests/test_rename_preview.py` (20 cases):
+
+- Python function sites and statuses: definition, import, verified call, the second call in a caller
+  (`bound`), own module, alias import, and the alias call listed as `not_spelled`.
+- Mentions (a string in another file), another symbol of the same name left alone with its call line,
+  conflicts (a local in an edited file, a module-level name).
+- Java overrides above and beside, a Java call never `statically_verified`, a sibling member conflict.
+- Invalid new names (4 parametrised cases), unresolved and ambiguous names, a file.
+- CLI: `--json` and text output, exit codes 0/2/3, the tree's file hashes and the claim count unchanged.
+- A changed file keeps `strong_inference` at most.
+- A line only a guessed INFERRED edge ties to it is a mention (`inferred`), not a site.
+- A line calling `self.area()` and `Other().area()`: only the first is a site of `Sq.area`.
+- Declared receiver types (`s: Sq, o: Other`) split a line between `Sq.area` and `Other.area`; an INFERRED
+  call on an undeclared receiver is a mention.
+- A parenthesized multi-line import: the name's line is the import site, module-level calls in importing
+  files are `bound`, `helper` on its own import line too.
+- A parameter of the same name in the symbol's own module is `shadowed`, not a site.
+- A file over 1 MB is named in `coverage.unread` and in the text output.
+- A form feed does not move the reported line.
+- The new name in a comment is no conflict; in code it is.
+- New names by language (`price$` refused for Python, `ğtoplam` accepted, `$yüzey` for Java).
+- A git repository with no code files: a clean `could not be indexed` error.
+
+Run together with tests/test_docs.py and tests/test_cli.py: 130 passed (Windows 11, Python 3.12, 2026-09-30). tests/test_mcp.py is unchanged (the MCP wiring is held back).
+
 ## Sources
 
 - **Retrieval:**

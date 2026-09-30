@@ -44,7 +44,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 2.2 | **SCIP indexers run by Verinoda (opt-in)** | Detect the build and run scip-java, scip-typescript, scip-python and others instead of asking the user for a SCIP file | Sourcegraph auto-indexing | `scan --precise` on a Gradle project produces and adopts a SCIP index |
 | 2.3 | **Compiler frontends (opt-in)** | javac/JDT, Roslyn, go/types, libclang as resolvers where no language server is installed | code-graph-rag, Eclipse JDT | one non-Python language resolved without an LSP |
 | 2.4 | **Full type and name check through tsc, pyright or mypy** | Run the project's own checker and turn its diagnostics into `check` sites | narsil-mcp, common practice | `check` on TypeScript reports members and calls, not only imports |
-| 2.5 | **Rename preview** | Every site a rename would touch, each with its evidence, without editing | Serena, GitNexus | `verinoda rename-preview A B` lists all sites; nothing is written |
 | 2.6 | **Import JVM checker findings** | Error Prone and NullAway results, and jdeps' JDK-internal API use, read as evidence | Error Prone, NullAway, jdeps | their findings appear as claims with the tool named |
 
 ## 3 - Structural search and query language

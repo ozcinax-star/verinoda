@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D80)
+## Upgrading from 0.3.2 (D60-D81)
 
 ### D63: Running a project's own tests safely
 
@@ -276,6 +276,13 @@ MCP. No re-index is needed.
 - `verinoda ui --export` also replaces secrets and e-mail addresses in the embedded text.
 - New command `verinoda secret-scan [FILE ...] [--fix] [--json]`. Logs stored by an earlier version may still hold
   secrets: run `verinoda secret-scan` and, if it reports findings, `verinoda secret-scan --fix`.
+
+### D81: Rename preview
+
+New command `verinoda rename-preview <symbol> <new_name> [--max-sites N] [--json]`: every line a rename
+would touch, each with its status, why and the line, plus mentions, other symbols of the same name and
+conflicts. It edits and records nothing. Exit 2 when the symbol does not resolve or the new name is
+invalid, 3 on a conflict. No schema or index change. No MCP tool yet (see above).
 
 ### D60-D62
 
