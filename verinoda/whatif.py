@@ -7,19 +7,23 @@ the graph says it is in changes. The edge guards of the decision records (``no_e
 cycle_components`) are computed twice, on the graph as it is and on the moved one, and compared:
 
 - **rules**: the findings (VIOLATED and POSSIBLE sites) the move would add or remove, each as the guard reports
-  it, with its status and the line where the code is now (a move changes where a file is, not its code), and the
-  checks that could no longer be completed (a glob that would match no file);
-- **cycles**: the cycles the move would create or break. Only a merge changes them: renaming files leaves the
-  file graph the same shape, but two files moved onto one path (``--move a.py=b.py`` where ``b.py`` exists) are
-  one file, so a dependency between them disappears and their other dependencies meet. A cycle is compared by its
-  files, the old ones renamed as the move renames them.
+  it, with the line where the code is now (a move changes where a file is, not its code), and the checks that
+  could no longer be completed (a glob that would match no file); the findings of a guard the move leaves unable
+  to run are counted as not re-checked, not as removed;
+- **cycles**: the cycles the move would create, break or reshape. Only a merge changes them: renaming files
+  leaves the file graph the same shape, but two files moved onto one path (``--move a.py=b.py`` where ``b.py``
+  exists) are one file, so a dependency between them disappears and their other dependencies meet. A cycle is
+  compared by its files, the old ones renamed as the move renames them: a cycle after the move that shares files
+  with cycles before it is ``changed`` (it grows, joins them or shrinks), neither added nor removed.
 
 The rules and the cycles are strong_inference at most for the same reasons as their own commands (graph edges are
 extractions); a move adds one more assumption: the code that names a moved module (an import) is updated with it,
-so every edge stays as the index extracted it.
+so every edge stays as the index extracted it. A finding the move would add holds only under that assumption, so
+its status is capped at strong_inference (the guard's statically_verified is about the line as it reads today).
 """
 from __future__ import annotations
 
+import posixpath
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
@@ -65,10 +69,11 @@ def moved(g: Graph, moves: dict[str, str]) -> MovedGraph:
 
 
 def _norm(p: str) -> str:
+    """The path with ``/`` separators and no ``.``, empty or trailing parts (``app/./ui//x.py/`` is
+    ``app/ui/x.py``); ``""`` for the project root. A leading ``/`` or ``..`` stays, for :func:`_checked`."""
     s = p.strip().replace("\\", "/")
-    while s.startswith("./"):
-        s = s[2:]
-    return s.rstrip("/")
+    s = posixpath.normpath(s) if s else "."
+    return "" if s == "." else s
 
 
 def _checked(p: str, spec: str) -> str:
@@ -79,9 +84,10 @@ def _checked(p: str, spec: str) -> str:
 
 def plan(files: list[str], specs: list[str]) -> tuple[dict[str, str], list[dict], list[dict]]:
     """``(moves, rows, merges)`` for ``--move OLD=NEW`` specs over the indexed ``files``: ``moves`` maps each file
-    that moves to its new path; OLD is a file or a folder of the index; NEW is the new path, or with a trailing
-    ``/`` (or an existing folder, for a file) the folder it goes into. A file two moves would move, or a move that
-    moves nothing, is refused. ``merges`` lists the paths two or more files would share."""
+    that moves to its new path; OLD is a file or a folder of the index; NEW is the new path, or, with a trailing
+    ``/``, ``.`` (the project root) or an existing folder, the folder it goes into (as ``git mv`` does). A file
+    two moves would move, a move that moves nothing, a folder moved into itself and a file put where an indexed
+    file or folder is are refused. ``merges`` lists the paths two or more files would share."""
     fileset = set(files)
     folders = {str(p) for f in files for p in PurePosixPath(f).parents if str(p) != "."}
     mapping: dict[str, str] = {}
@@ -91,14 +97,19 @@ def plan(files: list[str], specs: list[str]) -> tuple[dict[str, str], list[dict]
         if not sep or not old.strip() or not new.strip():
             raise WhatIfError(f"--move {spec}: a move is OLD=NEW (a file or folder of the index, and where it goes)")
         into = new.strip().replace("\\", "/").endswith("/")
-        old, new = _checked(_norm(old), spec), _checked(_norm(new), spec)
+        old, new = _checked(_norm(old), spec), _norm(new)
+        if new:
+            _checked(new, spec)
+        into = into or not new or new in folders
         if old in fileset:
             kind = "file"
-            dest = f"{new}/{PurePosixPath(old).name}" if into or new in folders else new
-            hits = {old: dest}
+            base = posixpath.join(new, PurePosixPath(old).name) if into else new
+            hits = {old: base}
         elif old in folders:
             kind = "folder"
-            base = f"{new}/{PurePosixPath(old).name}" if into else new
+            base = posixpath.join(new, PurePosixPath(old).name) if into else new
+            if base.startswith(old + "/"):
+                raise WhatIfError(f"--move {spec}: a folder cannot move into itself")
             hits = {f: base + f[len(old):] for f in files if f.startswith(old + "/")}
         else:
             raise WhatIfError(f"--move {spec}: {old} is no file or folder of the index")
@@ -107,9 +118,15 @@ def plan(files: list[str], specs: list[str]) -> tuple[dict[str, str], list[dict]
         twice = sorted(f for f in hits if f in mapping)
         if twice:
             raise WhatIfError(f"--move {spec}: {twice[0]} is moved by an earlier --move too")
+        staying = fileset - set(mapping) - set(hits)
+        for dest in hits.values():
+            if dest in folders:
+                raise WhatIfError(f"--move {spec}: {dest} is a folder of the index, not a file path")
+            under = next((str(q) for q in PurePosixPath(dest).parents if str(q) in staying), None)
+            if under:
+                raise WhatIfError(f"--move {spec}: {under} is a file of the index, not a folder")
         mapping.update({k: v for k, v in hits.items() if k != v})
-        rows.append({"from": old, "to": next(iter(hits.values())) if kind == "file" else base, "kind": kind,
-                     "files": len(hits)})
+        rows.append({"from": old, "to": base, "kind": kind, "files": len(hits)})
     landing: dict[str, list[str]] = defaultdict(list)
     for f in files:
         landing[mapping.get(f, f)].append(f)
@@ -139,8 +156,12 @@ def _fkey(f: dict) -> tuple:
     return (f.get("decision"), f.get("guard"), f.get("at"), f.get("level"))
 
 
-def _finding(f: dict) -> dict:
-    return {k: f[k] for k in ("decision", "guard", "kind", "level", "status", "at", "line", "why") if f.get(k)}
+def _finding(f: dict, *, simulated: bool = False) -> dict:
+    out = {k: f[k] for k in ("decision", "guard", "kind", "level", "status", "at", "line", "why") if f.get(k)}
+    if simulated and out.get("status") == "statically_verified":
+        # the line names the target as it is today; the site exists only if the move updates it as assumed
+        out["status"] = "strong_inference"
+    return out
 
 
 def _findings(res: dict) -> list[dict]:
@@ -153,16 +174,24 @@ def _rules(repo: Path, g: Graph, mg: MovedGraph, recs: list, decisions_dir: str 
     before = guards.check(repo, graph=g, records=recs, decisions_dir=decisions_dir, use_baseline=False)
     after = guards.check(repo, graph=mg, records=recs, decisions_dir=decisions_dir, use_baseline=False)
     fb, fa = _findings(before), _findings(after)
+    # a guard that checks nothing reports no finding: one the move leaves unable to run fixes none of its
+    # findings, they are not re-checked. An unknown is new when its guard ran before the move (its text may
+    # only count files differently)
+    gb = {(u.get("decision"), u.get("guard")) for u in before["unknown"]}
+    ga = {(u.get("decision"), u.get("guard")) for u in after["unknown"]}
+    stopped = ga - gb
     kb, ka = {_fkey(f) for f in fb}, {_fkey(f) for f in fa}
-    added = [_finding(f) for f in fa if _fkey(f) not in kb]
-    removed = [_finding(f) for f in fb if _fkey(f) not in ka]
-    ub = {(u.get("decision"), u.get("guard"), u.get("why")) for u in before["unknown"]}
+    added = [_finding(f, simulated=True) for f in fa if _fkey(f) not in kb]
+    gone = [f for f in fb if _fkey(f) not in ka]
+    removed = [_finding(f) for f in gone if (f.get("decision"), f.get("guard")) not in stopped]
     unknown = [{**{k: u[k] for k in ("decision", "guard", "kind", "why") if u.get(k)},
-                **({"new": True} if (u.get("decision"), u.get("guard"), u.get("why")) not in ub else {})}
+                **({"new": True} if (u.get("decision"), u.get("guard")) in stopped else {})}
                for u in after["unknown"]]
     unknown.sort(key=lambda u: not u.get("new"))
     out = {"added": added[:LISTED], "removed": removed[:LISTED], "unchanged": len(ka & kb),
            "violations_before": len(before["violations"]), "violations_after": len(after["violations"])}
+    if len(gone) > len(removed):
+        out["not_rechecked"] = len(gone) - len(removed)
     if len(added) > LISTED or len(removed) > LISTED:
         out.update({"added_total": len(added), "removed_total": len(removed), "truncated": True})
     if unknown:
@@ -190,21 +219,47 @@ def _cycle(files: list[str], deps: dict, claim: str) -> dict:
 
 
 def _cycles(g: Graph, mg: MovedGraph) -> dict:
+    """The cycles before (renamed as the move renames their files) and after, compared: one after that is one of
+    before is unchanged; one that shares no file with any before is ``added``; one before that shares no file
+    with any after is ``removed``; the others are ``changed``: each cycle after with the cycles before it shares
+    files with (``was``: their sizes), ``grows`` when it holds a file none of them held or joins two of them,
+    ``shrinks`` when one of them has a file it no longer holds, or both."""
     from verinoda import architecture_map as am
 
     cb, db = am.cycle_components(g)
     ca, da = am.cycle_components(mg)
-    before = {frozenset(mg.moves.get(f, f) for f in c): c for c in cb}
-    after = {frozenset(c): c for c in ca}
-    added = [c for k, c in after.items() if k not in before]
-    removed = [c for k, c in before.items() if k not in after]
+    before = [frozenset(mg.moves.get(f, f) for f in c) for c in cb]
+    after = [frozenset(c) for c in ca]
+    same = set(before) & set(after)
+    added = [c for c, k in zip(ca, after) if not any(k & b for b in before)]
+    removed = [c for c, k in zip(cb, before) if not any(k & a for a in after)]
+    changed = []
+    for c, k in zip(ca, after):
+        if k in same:
+            continue
+        was = [(b, len(old)) for b, old in zip(before, cb) if k & b]
+        if not was:
+            continue
+        grows = bool(k - frozenset().union(*(b for b, _ in was))) or len(was) > 1
+        shrinks = any(b - k for b, _ in was)
+        changed.append((c, [n for _, n in was], grows, shrinks))
     out = {"before": len(cb), "after": len(ca),
            "added": [_cycle(c, da, "after the move {names} would depend on each other in a cycle")
                      for c in added[:CYCLES_LISTED]],
            "removed": [_cycle(c, db, "{names} depend on each other in a cycle the move would break")
                        for c in removed[:CYCLES_LISTED]]}
-    if len(added) > CYCLES_LISTED or len(removed) > CYCLES_LISTED:
-        out.update({"added_total": len(added), "removed_total": len(removed), "truncated": True})
+    if changed:
+        out["changed"] = [{**_cycle(c, da, "after the move {names} would depend on each other in one cycle "
+                                          f"(today {'a cycle' if len(was) == 1 else 'cycles'} of "
+                                          f"{', '.join(map(str, was))} file(s))"),
+                           "change": "grows and shrinks" if grows and shrinks else "grows" if grows else "shrinks",
+                           "was": was}
+                          for c, was, grows, shrinks in changed[:CYCLES_LISTED]]
+    if max(len(added), len(removed), len(changed)) > CYCLES_LISTED:
+        out.update({"added_total": len(added), "removed_total": len(removed), "changed_total": len(changed),
+                    "truncated": True})
+    out["_grows"] = any(x[2] for x in changed)
+    out["_shrinks"] = any(x[3] for x in changed)
     return out
 
 
@@ -238,10 +293,12 @@ def run(g: Graph, specs: list[str], *, records=None, decisions_dir: str | None =
         limits.append(f"{n_other} other check(s) of the decision records (only_in, dependency, governs, "
                       "revisit_when) read files at their current paths: not re-checked")
     limits.append("findings are compared without the baseline; waivers apply to the sites where the code is now")
-    res["cycles"] = _cycles(g, mg)
-    ru, cy = res["rules"], res["cycles"]
-    adds = bool(ru.get("added") or cy["added"] or ru.get("unknown_new"))
-    removes = bool(ru.get("removed") or cy["removed"])
+    cy = _cycles(g, mg)
+    grows, shrinks = cy.pop("_grows"), cy.pop("_shrinks")
+    res["cycles"] = cy
+    ru = res["rules"]
+    adds = bool(ru.get("added") or cy["added"] or grows or ru.get("unknown_new"))
+    removes = bool(ru.get("removed") or cy["removed"] or shrinks)
     res["status"] = "adds" if adds else "removes" if removes else "no_change"
     res["limits"] = limits
     if adds:
@@ -262,7 +319,9 @@ def render(res: dict) -> str:
     else:
         out.append(f"  rules: {ru['edge_guards']} edge guard(s); violations {ru['violations_before']} -> "
                    f"{ru['violations_after']}; {ru.get('added_total', len(ru['added']))} finding(s) added, "
-                   f"{ru.get('removed_total', len(ru['removed']))} removed, {ru['unchanged']} unchanged")
+                   f"{ru.get('removed_total', len(ru['removed']))} removed, {ru['unchanged']} unchanged"
+                   + (f", {ru['not_rechecked']} not re-checked (their guard could not run)"
+                      if ru.get("not_rechecked") else ""))
         for word, key in (("+", "added"), ("-", "removed")):
             for f in ru[key]:
                 out.append(f"    {word} {f['level']} {f['decision']}/{f['guard']} {f.get('at')} "
@@ -273,9 +332,9 @@ def render(res: dict) -> str:
             out.append(f"    {'+ ' if u.get('new') else ''}unknown {u.get('decision')}/{u.get('guard')}: {u['why']}")
     cy = res["cycles"]
     out.append(f"  cycles: {cy['before']} -> {cy['after']}")
-    for word, key in (("+", "added"), ("-", "removed")):
-        for c in cy[key]:
-            out.append(f"    {word} [{c['status']}] {c['claim']}")
+    for word, key in (("+", "added"), ("-", "removed"), ("~", "changed")):
+        for c in cy.get(key) or []:
+            out.append(f"    {word} [{c['status']}] {c['claim']}" + (f" ({c['change']})" if c.get("change") else ""))
             for d in c["dependencies"]:
                 out.append(f"        {d['from']} -> {d['to']} ({d['references']} ref.) {', '.join(d['at'])}")
     for lim in res["limits"]:

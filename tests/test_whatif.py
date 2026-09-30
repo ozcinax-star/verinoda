@@ -40,6 +40,9 @@ FILES = {
     "loop/__init__.py": "",
     "loop/p.py": "from loop.q import fq\n\n\ndef fp(n):\n    return fq(n - 1) if n else 0\n",
     "loop/q.py": "from loop.p import fp\n\n\ndef fq(n):\n    return fp(n - 1) if n else 0\n",
+    # s uses p, r uses s: r merged into q makes the p <-> q cycle grow to take s in
+    "loop/s.py": "from loop.p import fp\n\n\ndef fs():\n    return fp(0)\n",
+    "loop/r.py": "from loop.s import fs\n\n\ndef fr():\n    return fs()\n",
 }
 
 
@@ -89,7 +92,7 @@ def _tree(repo: Path) -> dict[str, str]:
 
 # -- the move plan -----------------------------------------------------------------------------------
 
-FILE_LIST = ["app/ui/views.py", "app/db/store.py", "app/db/__init__.py", "lib/util.py"]
+FILE_LIST = ["app/ui/views.py", "app/db/store.py", "app/db/__init__.py", "lib/util.py", "top.py"]
 
 
 def test_a_move_maps_files_and_folders_and_lists_merges():
@@ -106,9 +109,30 @@ def test_a_move_maps_files_and_folders_and_lists_merges():
     assert merges == [{"into": "lib/util.py", "files": ["app/db/store.py", "lib/util.py"]}]
 
 
+@pytest.mark.parametrize("spec", ["app/db/store.py=app/./ui/store.py", "app/db/store.py=app//ui//store.py",
+                                  "./app/db/store.py=app/ui/x/../store.py"])
+def test_a_new_path_is_normalised(spec):
+    # `.` and doubled separators left inside NEW would keep the guards' globs from matching it
+    m, rows, _ = whatif.plan(FILE_LIST, [spec])
+    assert m == {"app/db/store.py": "app/ui/store.py"} and rows[0]["to"] == "app/ui/store.py"
+
+
+def test_the_root_and_an_existing_folder_take_what_moves_into_them():
+    m, _, _ = whatif.plan(FILE_LIST, ["lib/util.py=."])  # the project root is a folder: into it
+    assert m == {"lib/util.py": "util.py"}
+    m, rows, merges = whatif.plan(FILE_LIST, ["app/db=lib"])  # an existing folder, as `git mv` does: into it
+    assert m == {"app/db/store.py": "lib/db/store.py", "app/db/__init__.py": "lib/db/__init__.py"}
+    assert rows[0]["to"] == "lib/db" and not merges
+    m, _, _ = whatif.plan(FILE_LIST, ["app/db=lib/./"])
+    assert m["app/db/store.py"] == "lib/db/store.py"
+
+
 @pytest.mark.parametrize("spec,why", [
     ("app/db", "OLD=NEW"), ("nowhere.py=x.py", "no file or folder"), ("app/db=../out", "inside it"),
     ("app/db=/abs", "inside it"), ("app/db=C:/x", "inside it"), ("app/db/store.py=app/db/store.py", "nothing"),
+    ("top.py=.", "nothing"), ("app/db/store.py=lib/util.py/", "not a folder"),
+    ("app/db/store.py=lib/util.py/x.py", "not a folder"), ("app/db=app/db/sub", "into itself"),
+    ("app/db=a/../..", "inside it"),
 ])
 def test_a_bad_move_is_refused(spec, why):
     with pytest.raises(whatif.WhatIfError, match=why):
@@ -131,7 +155,8 @@ def test_a_move_that_breaks_the_layers_reports_the_added_violation(repo):
     added = {f["at"]: f for f in ru["added"]}
     # the line cited is where the code is now; the rule is judged on the new path
     assert added["app/core/service.py:1"]["level"] == "VIOLATED"
-    assert added["app/core/service.py:1"]["status"] == "statically_verified"
+    # the site exists only if the move updates the import as assumed: capped below statically_verified
+    assert added["app/core/service.py:1"]["status"] == "strong_inference"
     assert "app/ui/store.py" in added["app/core/service.py:1"]["why"]
     assert not ru["removed"]
     assert _tree(repo) == before  # nothing was moved or edited
@@ -157,6 +182,23 @@ def test_a_move_that_empties_a_layer_is_a_new_unknown(repo):
     ru = res["rules"]
     assert ru["unknown_new"] >= 1 and ru["unknown"][0]["new"] and "app/db/**" in ru["unknown"][0]["why"]
     assert res["status"] == "adds"
+
+
+def test_an_unknown_that_was_there_before_is_not_new(repo):
+    # layer 2 has no file of its own before the move and after it: only the count of its files changes
+    res = _run(repo, ["app/db/store.py=app/core/store.py"], "layers order=app/**,app/core/**")
+    ru = res["rules"]
+    assert ru["unknown"] and not ru["unknown"][0].get("new") and ru["unknown_new"] == 0
+    assert "3 file(s)" in ru["unknown"][0]["why"] and res["status"] != "adds"
+
+
+def test_the_findings_of_a_guard_the_move_stops_are_not_removed(repo):
+    res = _run(repo, ["app/core=lib/core"], "no_edge from=app/ui/** to=app/core/**")
+    ru = res["rules"]
+    assert ru["violations_before"] >= 1 and ru["unknown_new"] == 1
+    assert not ru["removed"] and ru["not_rechecked"] == ru["violations_before"]
+    assert res["status"] == "adds"
+    assert "not re-checked" in whatif.render(res)
 
 
 def test_without_edge_guards_only_the_cycles_are_compared(repo):
@@ -206,6 +248,15 @@ def test_a_merge_that_breaks_a_cycle_reports_it_removed(repo):
     assert cy["before"] == 1 and cy["after"] == 0
     assert [set(c["files"]) for c in cy["removed"]] == [{"loop/p.py", "loop/q.py"}]
     assert res["status"] == "removes"
+
+
+def test_a_merge_that_grows_a_cycle_reports_it_changed_not_broken(repo):
+    res = _run(repo, ["loop/r.py=loop/q.py"])
+    cy = res["cycles"]
+    assert not cy["added"] and not cy["removed"]   # p and q are still in a cycle: none is broken
+    assert [(set(c["files"]), c["change"], c["was"]) for c in cy["changed"]] == \
+        [({"loop/p.py", "loop/q.py", "loop/s.py"}, "grows", [2])]
+    assert res["status"] == "adds" and "~ [" in whatif.render(res)
 
 
 def test_the_cycles_view_is_unchanged_by_the_refactor(repo):
