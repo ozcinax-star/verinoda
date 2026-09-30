@@ -10,6 +10,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -47,18 +48,90 @@ def test_replace_spans_refuses_overlaps():
         eq.replace_spans("abcdef", [(0, 3, "x"), (2, 4, "y")])
 
 
+T0 = 1_790_000_000.0  # a run window used below: [T0, T0 + 10]
+
+
+def _ctx(name="B", **kw):
+    kw.setdefault("windows", [("scan", T0, T0 + 10), ("add_function", T0 + 20, T0 + 30)])
+    return eq.SideCtx(name, **kw)
+
+
+def _iso(t: float) -> str:
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(t, timezone.utc).isoformat(timespec="seconds")
+
+
 def test_mask_changes_only_the_volatile_value_and_keeps_the_bytes_around_it():
-    text = '{\n  "graph_seconds": 0.7,\n  "files":null, "at": 17.5,\n  "extraction": "s8-a"\n}\n'
-    sb = eq.SideCtx("B", stamps={"extraction": "s8-a"})
+    text = ('{\n  "graph_seconds": 0.7,\n  "files":null, "at": ' + str(T0 + 5) +
+            ',\n  "extraction": "s8-a"\n}\n')
+    sb = _ctx(stamps={"extraction": "s8-a"})
     out, fired = eq.mask_text("index/build_stats.json", text, sb)
-    assert out == ('{\n  "graph_seconds": "<CLOCK>",\n  "files":null, "at": "<CLOCK>",\n'
+    assert out == ('{\n  "graph_seconds": "<DURATION>",\n  "files":null, "at": "<CLOCK run scan>",\n'
                    '  "extraction": "<EXTRACTION_STAMP>"\n}\n')
-    assert fired == ["build_stats_clock", "extraction_stamp"]
+    assert fired == ["build_stats_clock", "build_stats_duration", "extraction_stamp"]
     # a clock that is not a number is not a clock: kept, so the comparison sees it
     out, _ = eq.mask_text("index/build_stats.json", '{"at": "soon"}', sb)
     assert out == '{"at": "soon"}'
     # text that is not JSON is compared as it is
     assert eq.mask_text("index/build_stats.json", '{"at": 1', sb) == ('{"at": 1', [])
+
+
+def test_clocks_are_accepted_only_inside_a_run_of_this_side_and_named_by_it():
+    s = _ctx()
+    assert eq.clock_run(T0, s) == "scan" and eq.clock_run(T0 + 25.5, s) == "add_function"
+    assert eq.clock_run(T0 + 15, s) is None                          # between two runs
+    assert eq.clock_run(T0 - 1, s) is None                           # before every run (stale)
+    assert eq.clock_run(T0 + 86_400, s) is None                      # a day ahead (future)
+    assert eq.clock_run(T0 - 0.005, s) == "scan"                     # rounding slack
+    # a value truncated to the second may lie before the window's start (ISO text has whole seconds)
+    s2 = eq.SideCtx("B", windows=[("scan", T0 + 0.7, T0 + 3)])
+    assert eq._clock_text(_iso(T0), s2) == "<CLOCK run scan>"
+    assert eq._clock_number(T0, s2) is None
+    # numbers, nanoseconds, ISO text and numbers written as text
+    assert eq._clock_number(T0 + 1, s) == "<CLOCK run scan>"
+    assert eq._clock_ns(int((T0 + 21) * 1e9), s) == "<CLOCK run add_function>"
+    assert eq._clock_ns(int((T0 + 86_421) * 1e9), s) is None
+    assert eq._clock_text(_iso(T0 + 22), s) == "<CLOCK run add_function>"
+    assert eq._clock_text("2026-09-30", s) is None and eq._clock_text(5, s) is None
+    assert eq._clock_numeric_text(str(T0 + 2), s) == "<CLOCK run scan>"
+    assert eq._clock_numeric_text("nan", s) is None and eq._clock_numeric_text(T0, s) is None
+    # the other side's windows do not count
+    other = eq.SideCtx("C", windows=[("scan", T0 + 100, T0 + 110)])
+    assert eq._clock_number(T0 + 1, other) is None
+    assert eq.iso_seconds("2026-09-30T00:23:22") == (eq.iso_seconds("2026-09-30T00:23:22+00:00")[0], True)
+    assert eq.iso_seconds("2026-09-30T00:23:22.5Z")[1] is False
+    assert eq.iso_seconds("not a date") is None
+
+
+def test_manifest_seen_names_the_run_so_a_stale_or_future_one_is_a_difference():
+    man = '{"a.py": {"mtime": 1.5, "seen": %s, "ast_hash": "h"}}'
+    sb, sc = _ctx("B"), _ctx("C")
+    b = eq.mask_text("index/manifest.json", man % (T0 + 25), sb)[0]
+    assert b == man % '"<CLOCK run add_function>"'
+    # the candidate kept the scan's `seen` (mutant g): named by another run, so it differs
+    assert eq.mask_text("index/manifest.json", man % (T0 + 5), sc)[0] == man % '"<CLOCK run scan>"'
+    assert eq.mask_text("index/manifest.json", man % (T0 + 86_400), sc)[0] == man % (T0 + 86_400)
+
+
+def test_replace_clock_texts_and_durations():
+    s = _ctx()
+    text = f"created {_iso(T0 + 3)} and {_iso(T0 - 3600)}"
+    assert eq.replace_clock_texts(text, s) == (f"created <CLOCK run scan> and {_iso(T0 - 3600)}", 1)
+    assert eq.replace_durations("took 1.5s, 30 ms and 2 seconds; v1.2s3 x2s") == \
+        ("took <DURATION>s, <DURATION> ms and <DURATION> seconds; v1.2s3 x2s", 3)
+
+
+def test_random_ids_are_numbered_per_prefix_and_only_this_sides_are_replaced():
+    s = eq.SideCtx("B")
+    eq.number_ids(["snp_0123456789ab", "snp_00000000000f", "ADR-0002", None, "snp_0123456789ab"], s)
+    eq.number_ids(["clm_aaaaaaaaaaaa"], s)
+    eq.number_ids(["snp_111111111111"], s)
+    assert s.ids == {"snp_0123456789ab": "<snp#1>", "snp_00000000000f": "<snp#2>", "clm_aaaaaaaaaaaa": "<clm#1>",
+                     "snp_111111111111": "<snp#3>"}
+    text = '{"id": "clm_aaaaaaaaaaaa", "snapshot_id": "snp_00000000000f", "other": "clm_bbbbbbbbbbbb"}'
+    assert eq.replace_known_ids(text, s) == (
+        '{"id": "<clm#1>", "snapshot_id": "<snp#2>", "other": "clm_bbbbbbbbbbbb"}', 2)
+    assert eq.replace_known_ids("xsnp_0123456789ab snp_0123456789abc", s)[1] == 0  # whole ids only
 
 
 def test_stamps_are_accepted_only_on_their_own_side():
@@ -81,9 +154,9 @@ def test_stamps_are_accepted_only_on_their_own_side():
         assert eq.mask_text(art, text, sb)[0] == json.dumps({"stamp": token, "files": {}})
         assert eq.mask_text(art, text, sc)[0] == text
     upd = '{"extraction": {"was": "s8-cand", "now": "s8-cand"}, "seconds": 1}'
-    assert eq.mask_text("update_result", upd, sc)[0] == \
+    assert eq.mask_text(eq.JSON_OUT, upd, sc)[0] == \
         '{"extraction": {"was": "<EXTRACTION_STAMP>", "now": "<EXTRACTION_STAMP>"}, "seconds": "<DURATION>"}'
-    assert eq.mask_text("update_result", upd, sb)[0].startswith('{"extraction": {"was": "s8-cand"')
+    assert eq.mask_text(eq.JSON_OUT, upd, sb)[0].startswith('{"extraction": {"was": "s8-cand"')
 
 
 def test_graph_mtimes_must_be_ones_this_side_had():
@@ -99,28 +172,45 @@ def test_graph_mtimes_must_be_ones_this_side_had():
 
 
 def test_update_result_rules():
-    sb = eq.SideCtx("B", snapshots={"snp_a": "<SNAPSHOT1>", "snp_b": "<SNAPSHOT2>"})
-    text = ('{"snapshot": {"id": "snp_b", "file_count": 3, "created_at": "2026-09-29T23:17:04+00:00"}, '
+    sb = _ctx(ids={"snp_00000000000a": "<snp#1>", "snp_00000000000b": "<snp#2>", "clm_00000000000c": "<clm#1>"})
+    text = ('{"snapshot": {"id": "snp_00000000000b", "file_count": 3, "created_at": "' + _iso(T0 + 21) + '"}, '
+            '"stale": [{"id": "clm_00000000000c", "text": "t"}], "background": {"started": true, "pid": 4242}, '
             '"index_seconds": 0.6, "derived": {"lexicon": {"seconds": 2, "units": 4}, "anchors": {"ms": 2.4}}}')
-    out, fired = eq.mask_text("update_result", text, sb)
-    assert json.loads(out) == {"snapshot": {"id": "<SNAPSHOT2>", "file_count": 3, "created_at": "<CLOCK>"},
+    out, fired = eq.mask_text(eq.JSON_OUT, text, sb)
+    assert json.loads(out) == {"snapshot": {"id": "<snp#2>", "file_count": 3, "created_at": "<CLOCK run add_function>"},
+                               "stale": [{"id": "<clm#1>", "text": "t"}],
+                               "background": {"started": True, "pid": "<PID>"},
                                "index_seconds": "<DURATION>",
                                "derived": {"lexicon": {"seconds": "<DURATION>", "units": 4},
                                            "anchors": {"ms": "<DURATION>"}}}
-    assert set(fired) == {"update_snapshot", "update_snapshot_clock", "update_timings"}
-    # an id this side's atlas.db does not hold is compared as it is
-    assert '"snp_zzz"' in eq.mask_text("update_result", '{"snapshot": {"id": "snp_zzz"}}', sb)[0]
+    assert set(fired) == {"output_ids", "output_clocks", "update_timings", "update_background_pid"}
+    # an id this side's atlas.db does not hold, or a clock outside its runs, is compared as it is
+    assert '"snp_zzzzzzzzzzzz"' in eq.mask_text(eq.JSON_OUT, '{"snapshot": {"id": "snp_zzzzzzzzzzzz"}}', sb)[0]
+    late = '{"created_at": "' + _iso(T0 + 3600) + '"}'
+    assert eq.mask_text(eq.JSON_OUT, late, sb)[0] == late
+
+
+def test_text_output_and_stderr_rules():
+    s = _ctx(ids={"snp_00000000000a": "<snp#1>"})
+    out, fired = eq.mask_text(eq.TEXT_OUT, "noop: 0 changed file(s); index none; snapshot snp_00000000000a\n", s)
+    assert out == "noop: 0 changed file(s); index none; snapshot <snp#1>\n" and fired == ["output_ids"]
+    out, _ = eq.mask_text(eq.ERR_OUT, "waited 2.5 s for the lock\n", s)
+    assert out == "waited <DURATION> s for the lock\n"
 
 
 def test_manifest_and_lexicon_and_report_rules():
-    s = eq.SideCtx("B")
-    man = '{\n  "a.py": {\n    "mtime": 1.5,\n    "seen": 1790.25,\n    "ast_hash": "h"\n  }\n}'
-    assert eq.mask_text("index/manifest.json", man, s)[0] == man.replace("1790.25", '"<CLOCK>"')
-    lex = '{"version":1,"built_at":"2026-09-29T23:17:05+00:00","units":21}'
-    assert eq.mask_text("index/lexicon.json", lex, s)[0] == '{"version":1,"built_at":"<CLOCK>","units":21}'
-    rep = "# Graph Report - orders  (2026-09-30)\n\nBuilt 2026-09-30\n"
+    s = _ctx()
+    man = '{\n  "a.py": {\n    "mtime": 1.5,\n    "seen": %s,\n    "ast_hash": "h"\n  }\n}' % (T0 + 1.25)
+    assert eq.mask_text("index/manifest.json", man, s)[0] == man.replace(str(T0 + 1.25), '"<CLOCK run scan>"')
+    lex = '{"version":1,"built_at":"' + _iso(T0 + 2) + '","units":21}'
+    assert eq.mask_text("index/lexicon.json", lex, s)[0] == '{"version":1,"built_at":"<CLOCK run scan>","units":21}'
+    day = time.strftime("%Y-%m-%d", time.localtime(T0))
+    rep = f"# Graph Report - orders  ({day})\n\nBuilt {day}\n"
     assert eq.mask_text("index/GRAPH_REPORT.md", rep, s) == \
-        ("# Graph Report - orders  (<DATE>)\n\nBuilt 2026-09-30\n", ["report_date"])
+        (f"# Graph Report - orders  (<DATE>)\n\nBuilt {day}\n", ["report_date"])
+    # a date on which no run of this side ran is compared as it is
+    old = "# Graph Report - orders  (2001-01-01)\n"
+    assert eq.mask_text("index/GRAPH_REPORT.md", old, s) == (old, [])
 
 
 # -- first differences -----------------------------------------------------------------------------------------
@@ -193,41 +283,46 @@ def _atlas(p: Path, ids: list[str], created: str, reverse_files: bool = False):
 
 def test_sqlite_dump_reads_rowid_order_through_the_rules(tmp_path):
     rules = eq._RULES_BY_ARTIFACT["atlas.db"]
-    cb = _atlas(tmp_path / "b.db", ["snp_aaa", "snp_bbb"], "2026-01-01T00:00:00+00:00")
-    cc = _atlas(tmp_path / "c.db", ["snp_zzz", "snp_yyy"], "2026-01-02T00:00:00+00:00")
-    sb, sc = eq.SideCtx("B"), eq.SideCtx("C")
+    cb = _atlas(tmp_path / "b.db", ["snp_00000000000a", "snp_00000000000b"], _iso(T0 + 1))
+    cc = _atlas(tmp_path / "c.db", ["snp_ffffffffffff", "snp_eeeeeeeeeeee"], _iso(T0 + 105))
+    sb, sc = _ctx("B"), eq.SideCtx("C", windows=[("scan", T0 + 100, T0 + 110)])
     db, fired = eq.sqlite_dump(tmp_path / "b.db", rules, sb, tmp_path / "tb")
     dc, _ = eq.sqlite_dump(tmp_path / "c.db", rules, sc, tmp_path / "tc")
     assert db == dc
-    assert set(fired) == {"atlas_clock_columns", "atlas_snapshot_ids"}
-    assert sb.snapshots == {"snp_aaa": "<SNAPSHOT1>", "snp_bbb": "<SNAPSHOT2>"}
+    assert set(fired) == {"atlas_clock_columns", "atlas_random_ids"}
+    assert sb.ids == {"snp_00000000000a": "<snp#1>", "snp_00000000000b": "<snp#2>"}
     assert db["pragmas"]["journal_mode"] == "wal"  # read from a copy that holds the WAL
     assert db["snapshots"]["columns"] == ["<rowid>", "id", "created_at", "n"]
-    assert db["snapshots"]["rows"] == [[1, "<SNAPSHOT1>", "<CLOCK>", 0], [2, "<SNAPSHOT2>", "<CLOCK>", 1]]
-    assert db["snapshot_files"]["rows"][0] == [1, "<SNAPSHOT1>", "a.py"]
+    assert db["snapshots"]["rows"] == [[1, "<snp#1>", "<CLOCK run scan>", 0], [2, "<snp#2>", "<CLOCK run scan>", 1]]
+    assert db["snapshot_files"]["rows"][0] == [1, "<snp#1>", "a.py"]
     assert db["sqlite_sequence"]["rows"] == [[1, "log", 2]]
     assert db["terms"] == {"columns": ["term", "n"], "rows": [["alpha", 2], ["zeta", 1]]}  # WITHOUT ROWID: key order
     assert [r[1] for r in db["sqlite_master"]][:2] == ["snapshots", "sqlite_autoindex_snapshots_1"]
     # the originals were never opened by the dump: no copy is left behind either
     assert not list((tmp_path / "tb").iterdir())
+    # a clock outside this side's runs (a stale or future one) is kept, so it differs
+    dl, _ = eq.sqlite_dump(tmp_path / "c.db", rules, eq.SideCtx("C", windows=[("scan", T0, T0 + 10)]),
+                           tmp_path / "tc")
+    assert dl["snapshots"]["rows"][0][2] == _iso(T0 + 105)
     # rows inserted in another order are a difference (rowid order, not sorted)
-    cr = _atlas(tmp_path / "r.db", ["snp_q", "snp_r"], "2026-01-02T00:00:00+00:00", reverse_files=True)
-    dr, _ = eq.sqlite_dump(tmp_path / "r.db", rules, eq.SideCtx("C"), tmp_path / "tr")
+    cr = _atlas(tmp_path / "r.db", ["snp_000000000001", "snp_000000000002"], _iso(T0 + 1), reverse_files=True)
+    dr, _ = eq.sqlite_dump(tmp_path / "r.db", rules, _ctx("C"), tmp_path / "tr")
     assert eq.first_json_diff(db, dr)[0] == "$.snapshot_files.rows[0][1]"
     # ... unless a named rule says calibration found that table's order nondeterministic
     eq.SORTED_TABLES[("b.db", "snapshot_files")] = eq.SORTED_TABLES[("r.db", "snapshot_files")] = "sorted_test"
     try:
-        db2, fired2 = eq.sqlite_dump(tmp_path / "b.db", rules, eq.SideCtx("B"), tmp_path / "tb")
-        dr2, _ = eq.sqlite_dump(tmp_path / "r.db", rules, eq.SideCtx("C"), tmp_path / "tr")
+        db2, fired2 = eq.sqlite_dump(tmp_path / "b.db", rules, _ctx("B"), tmp_path / "tb")
+        dr2, _ = eq.sqlite_dump(tmp_path / "r.db", rules, _ctx("C"), tmp_path / "tr")
         assert db2["snapshot_files"]["rows"][0][1:] == dr2["snapshot_files"]["rows"][0][1:]
         assert "sorted_test" in fired2
     finally:
         eq.SORTED_TABLES.clear()
     # a real difference survives the rules; so does a changed user_version
-    cc.execute("UPDATE snapshots SET n = 7 WHERE id = 'snp_yyy'")
+    cc.execute("UPDATE snapshots SET n = 7 WHERE id = 'snp_eeeeeeeeeeee'")
     cc.execute("PRAGMA user_version = 3")
     cc.commit()
-    dc, _ = eq.sqlite_dump(tmp_path / "c.db", rules, eq.SideCtx("C"), tmp_path / "tc")
+    dc, _ = eq.sqlite_dump(tmp_path / "c.db", rules, eq.SideCtx("C", windows=[("scan", T0 + 100, T0 + 110)]),
+                           tmp_path / "tc")
     assert eq.first_json_diff(db, dc)[0] == "$.pragmas.user_version"
     dc["pragmas"]["user_version"] = 0
     assert eq.first_json_diff(db, dc)[0] == "$.snapshots.rows[1][3]"
@@ -235,21 +330,53 @@ def test_sqlite_dump_reads_rowid_order_through_the_rules(tmp_path):
         con.close()
 
 
+def _claims_db(p: Path, ids: list[str], recorded_ns: int):
+    con = sqlite3.connect(p)
+    con.execute("CREATE TABLE claims (id TEXT PRIMARY KEY, status TEXT, created_at TEXT, supersedes TEXT)")
+    con.execute("CREATE TABLE claim_history (seq INTEGER PRIMARY KEY AUTOINCREMENT, claim_id TEXT, payload TEXT, "
+                "created_at TEXT)")
+    con.execute("CREATE TABLE file_stat (path TEXT PRIMARY KEY, mtime_ns INTEGER, recorded_at_ns INTEGER)")
+    for i, cid in enumerate(ids):
+        con.execute("INSERT INTO claims VALUES (?,?,?,?)", (cid, "stale", _iso(T0 + 2), ids[0] if i else None))
+        con.execute("INSERT INTO claim_history (claim_id, payload, created_at) VALUES (?,?,?)",
+                    (cid, json.dumps({"claim": cid, "at": _iso(T0 + 22)}), _iso(T0 + 22)))
+    con.execute("INSERT INTO file_stat VALUES (?,?,?)", ("a.py", 5, recorded_ns))
+    con.commit()
+    con.close()
+
+
+def test_claim_ids_are_numbered_in_rowid_order_and_clock_columns_must_fall_in_a_run(tmp_path):
+    rules = eq._RULES_BY_ARTIFACT["atlas.db"]
+    _claims_db(tmp_path / "b.db", ["clm_00000000000a", "clm_00000000000b"], int((T0 + 25) * 1e9))
+    _claims_db(tmp_path / "c.db", ["clm_ffffffffffff", "clm_111111111111"], int((T0 + 25) * 1e9))
+    db, fired = eq.sqlite_dump(tmp_path / "b.db", rules, _ctx("B"), tmp_path / "t")
+    dc, _ = eq.sqlite_dump(tmp_path / "c.db", rules, _ctx("C"), tmp_path / "t")
+    assert db == dc and set(fired) == {"atlas_clock_columns", "atlas_random_ids"}
+    assert db["claims"]["rows"][1] == [2, "<clm#2>", "stale", "<CLOCK run scan>", "<clm#1>"]
+    assert db["claim_history"]["rows"][0][3:] == [
+        json.dumps({"claim": "<clm#1>", "at": "<CLOCK run add_function>"}), "<CLOCK run add_function>"]
+    assert db["file_stat"]["rows"][0][3] == "<CLOCK run add_function>"
+    # recorded_at_ns a day ahead (mutant h) is outside every run: kept, so it differs
+    _claims_db(tmp_path / "h.db", ["clm_ffffffffffff", "clm_111111111111"], int((T0 + 86_425) * 1e9))
+    dh, _ = eq.sqlite_dump(tmp_path / "h.db", rules, _ctx("C"), tmp_path / "t")
+    assert eq.first_json_diff(db, dh)[0] == "$.file_stat.rows[0][3]"
+
+
 def test_search_meta_rules(tmp_path):
     con = sqlite3.connect(tmp_path / "search.db")
     con.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     con.executemany("INSERT INTO meta VALUES (?,?)", [
-        ("graph", '{"mtime_ns": 123, "sha256": "h", "size": 9}'), ("built_at", "1790723822.42"), ("n", "4")])
+        ("graph", '{"mtime_ns": 123, "sha256": "h", "size": 9}'), ("built_at", str(T0 + 4.42)), ("n", "4")])
     con.commit()
     con.close()
     rules = eq._RULES_BY_ARTIFACT["index/search.db"]
-    d, fired = eq.sqlite_dump(tmp_path / "search.db", rules, eq.SideCtx("B", graph_mtimes={123: "scan"}),
-                              tmp_path / "t")
+    d, fired = eq.sqlite_dump(tmp_path / "search.db", rules, _ctx("B", graph_mtimes={123: "scan"}), tmp_path / "t")
     assert d["meta"]["rows"] == [[1, "graph", '{"mtime_ns": "<GRAPH_MTIME after scan>", "sha256": "h", "size": 9}'],
-                                 [2, "built_at", "<CLOCK>"], [3, "n", "4"]]
+                                 [2, "built_at", "<CLOCK run scan>"], [3, "n", "4"]]
     assert set(fired) == {"search_meta_built_at", "search_meta_graph_mtime"}
     d, _ = eq.sqlite_dump(tmp_path / "search.db", rules, eq.SideCtx("C", graph_mtimes={5: "scan"}), tmp_path / "t")
     assert d["meta"]["rows"][0][2].startswith('{"mtime_ns": 123')
+    assert d["meta"]["rows"][1][2] == str(T0 + 4.42)  # no run of C: the clock is compared as it is
 
 
 # -- files -----------------------------------------------------------------------------------------------------------
@@ -276,16 +403,36 @@ def test_tree_state_and_changes(tmp_path):
     (tmp_path / "a" / "x.json").write_bytes(b"1")
     (tmp_path / ".git").mkdir()
     (tmp_path / ".git" / "HEAD").write_bytes(b"ref")
-    before = eq.tree_state(tmp_path, skip_dirs=(".git",))
+    before = eq.tree_state(tmp_path, skip_root=(".git",))
     assert list(before) == ["a/x.json"]
     (tmp_path / "a" / "x.json").write_bytes(b"2")
     (tmp_path / "b.txt").write_bytes(b"")
-    after = eq.tree_state(tmp_path, skip_dirs=(".git",))
+    after = eq.tree_state(tmp_path, skip_root=(".git",))
     assert eq.state_changes(before, after) == ["modified a/x.json", "added b.txt"]
     st = after["b.txt"]
     os.utime(tmp_path / "b.txt", ns=(st[1] + 10**9, st[1] + 10**9))
-    assert eq.state_changes(after, eq.tree_state(tmp_path, skip_dirs=(".git",))) == ["modified b.txt (stat only)"]
+    assert eq.state_changes(after, eq.tree_state(tmp_path, skip_root=(".git",))) == ["modified b.txt (stat only)"]
     assert eq.state_changes(after, before)[1] == "removed b.txt"
+
+
+def test_tree_state_skips_git_and_verinoda_only_at_the_root(tmp_path):
+    for rel in (".git/HEAD", ".verinoda/atlas.db", "sub/.verinoda/x.json", "sub/.git/config", "a.py"):
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_bytes(b"x")
+    assert list(eq.tree_state(tmp_path, skip_root=(".git", ".verinoda"))) == \
+        ["a.py", "sub/.git/config", "sub/.verinoda/x.json"]
+
+
+def test_git_files_leave_out_only_objects_index_logs_and_leftovers(tmp_path):
+    g = tmp_path / ".git"
+    for rel in ("HEAD", "config", "index", "ORIG_HEAD", "FETCH_HEAD", "COMMIT_EDITMSG", "info/exclude",
+                "hooks/pre-commit", "objects/pack/p.pack", "logs/HEAD", "refs/heads/main", "verinoda-eq",
+                "packed-refs"):
+        (g / rel).parent.mkdir(parents=True, exist_ok=True)
+        (g / rel).write_bytes(b"x")
+    assert list(eq.tree_state(g, skip=eq.git_uncompared)) == [
+        "COMMIT_EDITMSG", "HEAD", "config", "hooks/pre-commit", "info/exclude", "packed-refs", "refs/heads/main",
+        "verinoda-eq"]
 
 
 # -- edit plans --------------------------------------------------------------------------------------------------------
@@ -295,11 +442,14 @@ def _orders(r: Path):
     (r / "docs").mkdir()
     (r / "docs" / "a.md").write_text("# A\n", encoding="utf-8")
     (r / "README.md").write_text("# R\n", encoding="utf-8")
+    (r / "orders" / "__init__.py").write_text('"""Orders."""\n', encoding="utf-8")
     (r / "orders" / "pricing.py").write_text("def compute_total(items):\n    return sum(items)\n", encoding="utf-8")
     (r / "orders" / "service.py").write_text("def place(x):\n    return compute_total(x)\n", encoding="utf-8")
-    (r / "orders" / "repository.py").write_text("def save(x):\n    return x\n", encoding="utf-8")
+    (r / "orders" / "repository.py").write_text("class Repo:\n    def save(self, x):\n        return x\n",
+                                                encoding="utf-8")
     (r / "orders" / "api.py").write_text("def create():\n    return 1", encoding="utf-8")
     (r / "orders" / "config.py").write_text("X = 1\n", encoding="utf-8")
+    eq.add_untracked(r)
     for p in r.rglob("*"):
         if p.is_file():
             os.utime(p, (1_700_000_000, 1_700_000_000))
@@ -311,32 +461,81 @@ def test_one_plan_applied_to_both_copies_gives_the_same_trees(tmp_path):
     _orders(c)
     commits = []
     skipped = []
+    start = int(time.time())
     for step, name in enumerate(eq.DEFAULT_EDITS, 1):
         ops = eq.PLANS[name](b)
         if ops is None:
             skipped.append(name)
             continue
-        when = (1_800_000_000 + step) * 10**9
+        when = (start + step) * 10**9
         for r in (b, c):
             eq.apply_plan(r, ops, when, git=lambda repo, *a: commits.append((repo.name, a)))
         assert eq.tree_state(b) == eq.tree_state(c), name
-    assert skipped == ["edit_objc_pair", "edit_go", "edit_go_mod"]
+    assert skipped == ["edit_objc_pair", "edit_go", "edit_go_mod", "edit_java", "edit_rust"]
     assert [n for n, _a in commits] == ["b", "b", "c", "c"]  # add -A and commit, on each side
     assert not (b / "docs").exists() and not (b / "orders" / "config.py").exists()
     assert (b / "orders" / "api_renamed.py").read_text(encoding="utf-8").endswith("# eq: a comment and nothing else\n")
     assert "return (compute_total(x)) if True else None" in (b / "orders" / "service.py").read_text()
+    assert "    def savx(self, x):" in (b / "orders" / "repository.py").read_text()  # same_size: the original file
+    assert (b / "orders" / "api_renamed.py").read_text().startswith("def creatx():")  # racy_same_size
+    assert "changed outside git" in (b / eq.UNTRACKED_REL).read_text()
+    assert (b / "orders" / "__init__.py").read_text() == '"""Orders."""  # eq: edited\n'  # human_edit
+    assert json.loads((b / "eq_config" / "package.json").read_text())["name"] == "eq-config"
+    assert "eqTotal" in (b / "eq_web" / "helpers.ts").read_text()
+    assert "def eq_fast_added():" in (b / "orders" / "service.py").read_text()
 
 
 def test_same_size_edit_puts_the_old_mtime_back(tmp_path):
     _orders(tmp_path)
+    (tmp_path / "eq_dup").mkdir()
+    (tmp_path / "eq_dup" / "pricing.py").write_text("def a():\n    pass\n", encoding="utf-8")
     p = tmp_path / "orders" / "repository.py"
     before = p.stat()
     ops = eq.plan_same_size_keep_mtime(tmp_path)
+    assert [o.rel for o in ops] == ["orders/repository.py"]  # never the harness's own eq_* files
     eq.apply_plan(tmp_path, ops, 1_900_000_000 * 10**9)
     after = p.stat()
-    assert p.read_text(encoding="utf-8").startswith("def savx(x):")
+    assert p.read_text(encoding="utf-8").startswith("class Repo:\n    def savx(self, x):")
     assert (after.st_size, after.st_mtime_ns) == (before.st_size, before.st_mtime_ns)
-    assert "(old mtime)" in eq.plan_text(ops)
+    assert f"(mtime {before.st_mtime_ns // 10**9})" in eq.plan_text(ops)
+
+
+def test_racy_plans_move_the_mtime_ahead_and_keep_it_through_a_same_size_edit(tmp_path):
+    _orders(tmp_path)
+    p = tmp_path / "orders" / "api.py"
+    data = p.read_bytes()
+    assert eq.plan_racy_same_size(tmp_path, now=1_790_000_000) is None  # nothing is ahead yet
+    ops = eq.plan_racy_prepare(tmp_path, now=1_790_000_000)
+    eq.apply_plan(tmp_path, ops, 1_790_000_001 * 10**9)
+    assert p.read_bytes() == data and p.stat().st_mtime_ns == (1_790_000_000 + eq.RACY_AHEAD) * 10**9
+    ops = eq.plan_racy_same_size(tmp_path, now=1_790_000_100)
+    eq.apply_plan(tmp_path, ops, 1_790_000_101 * 10**9)
+    assert p.read_text() == "def creatx():\n    return 1" and len(p.read_bytes()) == len(data)
+    assert p.stat().st_mtime_ns == (1_790_000_000 + eq.RACY_AHEAD) * 10**9
+
+
+def test_json_and_ts_plans_edit_an_existing_file_when_there_is_one(tmp_path):
+    (tmp_path / "sample.json").write_text('{\n  "name": "my-app"\n}\n', encoding="utf-8")
+    (tmp_path / "sample.ts").write_text("function buildHeaders(t: string) {\n    return t;\n}\n", encoding="utf-8")
+    eq.apply_plan(tmp_path, eq.plan_json(tmp_path), 1_790_000_000 * 10**9)
+    eq.apply_plan(tmp_path, eq.plan_ts(tmp_path), 1_790_000_000 * 10**9)
+    assert json.loads((tmp_path / "sample.json").read_text()) == {"eqAdded": "by the equality harness",
+                                                                   "name": "my-app"}
+    assert 'return buildHeaders("eq");' in (tmp_path / "sample.ts").read_text()
+
+
+def test_claim_targets_and_decision_args(tmp_path):
+    _orders(tmp_path)
+    t = eq.claim_targets(tmp_path)
+    assert list(t) == ["body", "defn", "untracked", "steady"]
+    assert t["body"] == ("the function returns its result: contains: return sum(items)", "orders/pricing.py:2") or \
+        t["body"][1] == "orders/service.py:2"
+    assert t["defn"] == ("compute_total is defined here: contains: def compute_total(items):", "orders/pricing.py:1")
+    assert t["untracked"][1] == "eq_local/notes.py:1-2"
+    assert t["steady"] == ('the file starts so: contains: """Orders."""', "orders/__init__.py:1")
+    args = eq.decision_args(tmp_path)
+    assert args[:2] == ["decide", "record"] and args[-2:] == ["--governs", "orders/pricing.py::compute_total"]
+    assert (tmp_path / ".gitignore").read_text() == "eq_local/\n"
 
 
 def test_written_files_get_the_step_time(tmp_path):

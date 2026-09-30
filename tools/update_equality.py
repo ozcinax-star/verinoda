@@ -25,34 +25,52 @@ temporary directory; keep it outside OneDrive and short: Windows paths), ``--kee
 directories; they are always kept when something differs), ``--only EDIT`` (the scan, then that edit alone),
 ``--python EXE`` (default: this interpreter), ``--skip ARTIFACT,...`` (leave artifacts out of the comparison),
 ``--keep-going`` (compare the remaining edits of a case after a difference), ``--no-rules`` (calibration aid,
-below). Every command runs alone (one fixed folder per case), so a case takes minutes (fixtures: about 16
+below). Every command runs alone (one fixed folder per case), so a case takes minutes (fixtures: about 25
 update steps, each two updates and three loads); run cases in parallel as separate invocations with their own
 ``--work``.
 
 Exit status: 0 every case equal, 1 a difference (a summary names the case, the step, the artifact and the first
 differing JSON path or line), 2 a harness error: a checkout that does not import from where it should, a
-baseline ``init``/``scan``/``update`` that fails, the baseline's loader failing on the baseline's own state, two
-baseline scans of the same corpus that differ (then the baseline itself is not deterministic and nothing can be
-proved), the comparison changing the state it compares, or a case in which no update step was compared.
+baseline ``init``/``scan``/``claim add``/``decide record``/``update`` that fails, the baseline's loader failing
+on the baseline's own state, two baseline scans of the same corpus that differ (then the baseline itself is not
+deterministic and nothing can be proved), the comparison changing the state it compares, a background build
+that does not end, or a case in which no update step was compared.
 
 What a case does
 ----------------
-For each corpus and seed a corpus is built once (copied, every file's mtime pinned, ``git init`` and one commit
-with fixed dates and an isolated git config, objects packed). It is copied three times: ``B`` and ``B2`` are set
-up (``verinoda init``, ``verinoda scan``) by the BASELINE, ``C`` by the CANDIDATE (so the candidate's own
-rebuild record and caches are what its updates start from). Every command runs with the copy MOVED INTO ONE
-FIXED FOLDER (``<case>/r/<corpus>``) and moved back afterwards, one copy after the other: absolute paths in the
-state (``.graphify_root``, the rebuild record, ids minted from a path, snapshot rows, the update result) are
-the same on every side, so nothing path-shaped needs a rule. ``B`` against ``B2`` is the determinism check of
-the scan (exit 2 when they differ); ``B`` against ``C`` is step ``scan``.
+For each corpus and seed a corpus is built once (copied, a git-ignored file ``eq_local/notes.py`` added for a
+claim to cite, every file's mtime pinned, ``git init`` and one commit with fixed dates and an isolated git
+config, objects packed). It is copied three times: ``B`` and ``B2`` are set up (``verinoda init``, ``verinoda
+scan``) by the BASELINE, ``C`` by the CANDIDATE (so the candidate's own rebuild record and caches are what its
+updates start from). Then every copy gets the same decision record (made once by the baseline's ``decide
+record`` on a throwaway copy of ``B``: a guard and a governed function, so every non-noop update runs the
+decision check) and the same claims, each added by that side's own checkout with ``verinoda claim add``
+(:func:`claim_targets`: one cites the line ``body_edit`` changes, one the first definition of the
+``add_function`` file, one the git-ignored file ``untracked_cited`` changes, one a line only ``human_edit``
+changes; claim ids are random, see ``atlas_random_ids``). Every command runs with the copy
+MOVED INTO ONE FIXED FOLDER (``<case>/r/<corpus>``) and moved back afterwards, one copy after the other:
+absolute paths in the state (``.graphify_root``, the rebuild record, ids minted from a path, snapshot rows, the
+update result) are the same on every side, so nothing path-shaped needs a rule. The wall-clock window of every
+run is recorded per side (the clock rules below). ``B`` against ``B2`` is the determinism check of the set-up
+(exit 2 when they differ); ``B`` against ``C`` is step ``scan``.
 
 Each edit is planned ONCE (on ``B``) as a list of operations (write bytes, delete, rename, delete a folder, git
 commit) and the same plan is applied to ``B`` and ``C``. Written files get the step's mtime: a whole second at
 least one second after the previous run ended, and every run starts at least ``EDIT_GAP`` seconds after it, so
-the stat caches' racy windows (git's rule: a file modified within 2 s of being hashed is hashed again) come out
-the same on both sides. Then the BASELINE runs ``update`` in ``B`` and the CANDIDATE in ``C``, and everything
-below is compared. Edits are cumulative, in the order of ``DEFAULT_EDITS``; an edit that finds no file of its
-kind is skipped and listed at the end.
+the stat caches' racy windows come out the same on both sides. The racy window itself is exercised by its own
+two steps: ``racy_prepare`` moves a file's mtime ``RACY_AHEAD`` into the future (the same value on both sides:
+every recording from then on lies within the racy margin of it, snapshot.RACY_MARGIN_NS and freshness), and
+``racy_same_size`` gives that file a same-size edit that keeps the mtime: only the racy rule finds the change.
+Then the BASELINE runs ``update`` in ``B`` and the CANDIDATE in ``C``, and everything below is compared. A step
+runs ``update --json``, except ``fast_edit`` (``update --fast --json``; the harness then waits for the
+background build the result names before anything is compared) and ``human_edit`` (``update`` without
+``--json``: the human output is compared). Edits are cumulative, in the order of ``DEFAULT_EDITS``; an edit that
+finds no file of its kind is skipped and listed at the end (on ``orders``: the Objective-C, Go, Java and Rust
+edits, which ``fixtures`` covers; ``edit_json`` and ``edit_ts`` add a file there instead).
+
+Not covered: detect's same-tick guard (``_mtime_may_hide_a_rewrite``: an mtime less than 2 s before the
+manifest's ``seen``) cannot be put inside a run on both sides alike (the sides run one after the other); what it
+reads, ``seen``, is compared under the clock rule, so a candidate that records it differently is caught.
 
 What is compared
 ----------------
@@ -68,8 +86,10 @@ and its files are compared under the rules of the files they copy. SQLite files 
 order, and every table (``sqlite_sequence`` included) in ROWID order with the rowid itself (a WITHOUT ROWID
 table in its key order). Also compared, per step:
 
-- ``update_exit`` / ``update_result`` (``scan_exit`` / ``scan_result`` at the scan): the exit status and the
-  ``--json`` output as bytes (rules below)
+- ``update_exit`` / ``update_result`` / ``update_stderr`` (``update_human_*`` for ``human_edit``; ``scan_*`` and
+  ``claim_<role>_*`` at the set-up): the exit status, stdout and stderr, as bytes (read without newline
+  translation; rules below). The ``stale`` list of each update result names claims by their number, so the same
+  claims must go stale on both sides.
 - ``graph_kept``: whether the update left graph.json as it was (same mtime and bytes: the fast path), per side
 - ``loaded_graph``: ``verinoda.index.load`` of each side's state, by the BASELINE code, dumped in the loaded
   graph's own node and edge order; ``loaded_graph_candidate``: the baseline's load of ``B`` against the
@@ -77,8 +97,10 @@ table in its key order). Also compared, per step:
   were collected; ``loader_writes`` / ``loader_writes_candidate`` list what a load changed in that copy (a load
   that repairs a stale receiver sidecar writes it). Every file under the real ``.verinoda`` is hashed before
   the collection and after the loads: a change is a harness error.
-- ``corpus``: size, mtime and sha256 of every file outside ``.verinoda`` and ``.git``; ``git_state``: HEAD and
-  ``git status --porcelain``
+- ``corpus``: size, mtime and sha256 of every file but the ROOT's ``.verinoda`` and ``.git`` (a nested
+  ``sub/.verinoda/`` or ``sub/.git/`` is compared); ``git_files``: size and sha256 of every file under ``.git``
+  but ``objects/``, ``logs/``, ``index``, ``ORIG_HEAD`` and ``FETCH_HEAD`` (config, info/, hooks/, refs, HEAD,
+  packed-refs, ...: :func:`git_uncompared`); ``git_state``: HEAD and ``git status --porcelain``
 
 Volatile values (every rule is named; see ``RULES`` for the reason of each)
 -------------------------------------------------------------------------
@@ -86,15 +108,23 @@ Inputs are pinned rather than outputs hidden where possible: file mtimes, git da
 ``PYTHONHASHSEED``, a user-level config and cache folder of each side's own, no auto-index, no OCR, no network.
 What is left, found by running the baseline against itself (``--no-rules`` shows what the rules hide):
 
-- clock readings and durations, replaced only when they have the shape of one: ``build_stats_clock``,
-  ``lexicon_built_at``, ``manifest_seen``, ``search_meta_built_at``, ``atlas_clock_columns``,
-  ``update_timings``, ``report_date``, ``backup_dir_date``
+- clock readings (``build_stats_clock``, ``lexicon_built_at``, ``manifest_seen``, ``search_meta_built_at``,
+  ``atlas_clock_columns`` - every ``*_at``/``*_at_ns`` column, ``file_stat.recorded_at_ns`` included -,
+  ``output_clocks``): accepted only when the value falls inside the wall-clock window of a run of THAT side, and
+  replaced by ``<CLOCK run LABEL>`` naming the run, so both sides must name the same run. Several of these are
+  inputs of later runs (``seen`` feeds detect's racy-rewrite guard, ``recorded_at_ns`` the racy-clean check): a
+  stale one names an earlier run, a future one no run at all. ``report_date`` accepts only a date on which a
+  run of that side ran.
+- durations (``build_stats_duration``, ``update_timings``, ``output_durations``), the background build's pid
+  (``update_background_pid``) and the backup folder's date (``backup_dir_date``)
 - graph.json's write time where another file records it (``receiver_graph_mtime``,
   ``rebuild_record_graph_mtime``, ``search_meta_graph_mtime``): replaced only by a value THIS side's graph.json
   had after a run the harness watched, named by that run (``<GRAPH_MTIME after add_function>``), so both sides
   must point at the graph of the same step
-- snapshot ids (``atlas_snapshot_ids``, ``update_snapshot``): uuid-based, numbered in the order this side's
-  atlas.db created them; the update result's id must be one of this side's snapshot ids
+- random ids (``atlas_random_ids``, ``output_ids``): snapshot, claim and evidence ids (``prefix_`` and 12 hex
+  digits) are numbered by prefix in the rowid order of the atlas.db table whose ``id`` column holds them
+  (``<clm#2>``), wherever they appear (a cell, a JSON payload, an update result, the human output); an id this
+  side's atlas.db does not hold is compared as it is
 - code identities (``extraction_stamp``, ``update_extraction_stamp``, ``code_stamp``, ``python_facts_stamp``,
   ``python_cross_stamp``, ``empty_json_stamp``): replaced only when they are THAT side's own checkout's stamp
   (the baseline's for ``B``, the candidate's for ``C``; ``-vendored`` suffix allowed), so a stale stamp on
@@ -102,7 +132,8 @@ What is left, found by running the baseline against itself (``--no-rules`` shows
   ``meta.schema_written_by`` (version and commit)
 
 Known limits: SQLite files are compared by content, not by page layout. When the candidate changes the
-extractor files, the stamps differ by design and are each accepted on their own side only.
+extractor files, the stamps differ by design and are each accepted on their own side only. The background build
+of ``update --fast`` runs in isolated mode (``-I``), so ``PYTHONHASHSEED`` does not reach it.
 """
 
 from __future__ import annotations
@@ -125,8 +156,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_EDITS = ("noop", "add_function", "body_edit", "comment_only", "add_duplicate_stem", "edit_objc_pair",
-                 "edit_go", "edit_go_mod", "edit_doc", "add_data_file", "same_size_keep_mtime", "rename_file",
-                 "delete_file", "delete_dir", "commit_edit", "noop_after")
+                 "edit_go", "edit_go_mod", "edit_json", "edit_ts", "edit_java", "edit_rust", "edit_doc",
+                 "add_data_file", "same_size_keep_mtime", "racy_prepare", "racy_same_size", "untracked_cited",
+                 "fast_edit", "human_edit", "rename_file", "delete_file", "delete_dir", "commit_edit", "noop_after")
+# how a step runs update: "json" (`update --json`), "fast" (`update --fast --json`, then the harness waits for the
+# background build it started) or "human" (`update` without --json: its human output is compared)
+STEP_MODES = {"fast_edit": "fast", "human_edit": "human"}
 CORPORA = ("fixtures", "orders", "self")
 BASE_MTIME = 1_700_000_000  # the corpus files' mtime (long before any run)
 EDIT_GAP = 3                # seconds from an edit's mtime to the next run (> the 2 s racy windows)
@@ -243,11 +278,14 @@ def replace_spans(text: str, edits) -> str:
 @dataclass
 class SideCtx:
     """What a side's volatile values may legitimately be: its own checkout's stamps, the graph.json mtimes
-    seen after its runs (value -> the run's label) and its snapshot ids (value -> ``<SNAPSHOTn>``)."""
+    seen after its runs (value -> the run's label), its random ids (value -> ``<prefix#n>``, numbered in the
+    rowid order of the atlas.db table that holds them) and the wall-clock window of every run on this side
+    (``(label, start, end)`` in seconds since the epoch, in run order)."""
     name: str
     stamps: dict = field(default_factory=dict)
     graph_mtimes: dict = field(default_factory=dict)
-    snapshots: dict = field(default_factory=dict)
+    ids: dict = field(default_factory=dict)
+    windows: list = field(default_factory=list)
 
 
 @dataclass
@@ -268,11 +306,8 @@ def mask_text(artifact: str, text: str, sctx: SideCtx, rules=None) -> tuple[str,
     rules = _RULES_BY_ARTIFACT.get(artifact, ()) if rules is None else rules
     fired: list[str] = []
     edits: dict = {}
-    for r in rules:
+    for r in rules:  # the JSON value rules first, all on the raw text (their spans are offsets into it) ...
         if r.text is not None:
-            text, n = r.text(text, sctx)
-            if n and r.name not in fired:
-                fired.append(r.name)
             continue
         for pattern in r.paths:
             try:
@@ -293,28 +328,134 @@ def mask_text(artifact: str, text: str, sctx: SideCtx, rules=None) -> tuple[str,
                         fired.append(r.name)
     if edits:
         text = replace_spans(text, [(a, b, rep) for (a, b), rep in edits.items()])
+    for r in rules:  # ... then the text rules, in order, on the result
+        if r.text is not None:
+            text, n = r.text(text, sctx)
+            if n and r.name not in fired:
+                fired.append(r.name)
     return text, fired
 
 
 # -- the checks of the volatile rules ---------------------------------------------------------------------------
 
-_ISO_CLOCK = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+_ISO_CLOCK = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?")
+CLOCK_SLACK = 0.01  # seconds: a clock value rounded to 1/100 s may fall this far before its run's start
 
 
 def _is_number(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+def clock_run(seconds: float, s: SideCtx, whole_second: bool = False) -> str | None:
+    """The label of the run of this side whose wall-clock window holds ``seconds`` (a value truncated to a
+    whole second may lie up to a second before the window's start); None when no run of this side was going
+    on then: a stale value, one from the future, or one from the other side's runs."""
+    for label, start, end in s.windows:
+        lo = math.floor(start) if whole_second else start - CLOCK_SLACK
+        if lo <= seconds <= end + CLOCK_SLACK:
+            return label
+    return None
+
+
+def iso_seconds(text: str) -> tuple[float, bool] | None:
+    """``(seconds since the epoch, whole second?)`` of an ISO 8601 date and time (no zone: UTC), else None."""
+    if not isinstance(text, str) or not _ISO_CLOCK.fullmatch(text):
+        return None
+    from datetime import datetime, timezone
+    try:
+        d = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return d.timestamp(), d.microsecond == 0
+
+
+def _clock_token(label: str | None) -> str | None:
+    return None if label is None else f"<CLOCK run {label}>"
+
+
 def _clock_number(v, s):
-    return "<CLOCK>" if _is_number(v) else None
+    """A clock in seconds (time.time()): accepted only inside a run of this side."""
+    return _clock_token(clock_run(float(v), s)) if _is_number(v) else None
+
+
+def _clock_ns(v, s):
+    """A clock in nanoseconds (time.time_ns()): accepted only inside a run of this side."""
+    return _clock_token(clock_run(v / 1e9, s)) if _is_number(v) else None
+
+
+def _clock_text(v, s):
+    """An ISO date and time: accepted only inside a run of this side."""
+    got = iso_seconds(v)
+    return None if got is None else _clock_token(clock_run(got[0], s, whole_second=got[1]))
+
+
+def _clock_numeric_text(v, s):
+    """A clock in seconds written as text (``str(time.time())``)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return _clock_token(clock_run(f, s)) if isinstance(v, str) and math.isfinite(f) else None
+
+
+def replace_clock_texts(text: str, s: SideCtx) -> tuple[str, int]:
+    """Every ISO date and time inside ``text`` that falls in a run of this side, replaced by its run's
+    token (the others are kept, so they are compared)."""
+    n = 0
+
+    def sub(m):
+        nonlocal n
+        tok = _clock_text(m.group(0), s)
+        if tok is None:
+            return m.group(0)
+        n += 1
+        return tok
+    return _ISO_CLOCK.sub(sub, text), n
 
 
 def _duration(v, s):
     return "<DURATION>" if _is_number(v) else None
 
 
-def _clock_text(v, s):
-    return "<CLOCK>" if isinstance(v, str) and _ISO_CLOCK.match(v) else None
+_RANDOM_ID = re.compile(r"\b[a-z]+_[0-9a-f]{12}\b")
+
+
+def replace_known_ids(text: str, s: SideCtx) -> tuple[str, int]:
+    """Every random id (``new_id``: ``prefix_`` and 12 hex digits) of THIS side inside ``text`` replaced by its
+    number (``<clm#2>``); ids this side's atlas.db does not hold are kept."""
+    n = 0
+
+    def sub(m):
+        nonlocal n
+        tok = s.ids.get(m.group(0))
+        if tok is None:
+            return m.group(0)
+        n += 1
+        return tok
+    return _RANDOM_ID.sub(sub, text), n
+
+
+def number_ids(ids, s: SideCtx) -> None:
+    """Give each new random id in ``ids`` (in order) the next number of its prefix: ``<snp#1>``, ``<clm#1>``."""
+    counts: dict = {}
+    for tok in s.ids.values():
+        p = tok[1:tok.index("#")]
+        counts[p] = counts.get(p, 0) + 1
+    for v in ids:
+        if isinstance(v, str) and _RANDOM_ID.fullmatch(v) and v not in s.ids:
+            p = v[:v.index("_")]
+            counts[p] = counts.get(p, 0) + 1
+            s.ids[v] = f"<{p}#{counts[p]}>"
+
+
+_DURATION_TEXT = re.compile(r"(?<![\w.])\d+(?:\.\d+)?(?= ?(?:s|ms|seconds?)\b)")
+
+
+def replace_durations(text: str, s=None) -> tuple[str, int]:
+    """Durations written in text (``0.5s``, ``12 ms``, ``2.1 seconds``) replaced by ``<DURATION>``."""
+    return _DURATION_TEXT.subn("<DURATION>", text)
 
 
 def stamp_token(value, expected, token: str):
@@ -339,41 +480,72 @@ def _graph_mtime(v, s: SideCtx):
     return None if label is None else f"<GRAPH_MTIME after {label}>"
 
 
-def _snapshot_id(v, s: SideCtx):
-    return s.snapshots.get(v) if isinstance(v, str) else None
-
-
 _REPORT_DATE = re.compile(r"^(# Graph Report - .*\()(\d{4}-\d{2}-\d{2})(\)[ \t]*)$", re.MULTILINE)
 
 
+def _report_date_of_run(date: str, s: SideCtx) -> str | None:
+    """The label of a run of this side during which the date (local or UTC) was ``date``."""
+    for label, start, end in s.windows:
+        if date in {time.strftime("%Y-%m-%d", f(t)) for t in (start, end) for f in (time.localtime, time.gmtime)}:
+            return label
+    return None
+
+
 def _report_date(text, s):
-    return _REPORT_DATE.subn(r"\1<DATE>\3", text)
+    n = 0
+
+    def sub(m):
+        nonlocal n
+        if _report_date_of_run(m.group(2), s) is None:
+            return m.group(0)
+        n += 1
+        return m.group(1) + "<DATE>" + m.group(3)
+    return _REPORT_DATE.sub(sub, text), n
+
+
+def _text_ids(text, s):
+    return replace_known_ids(text, s)
+
+
+def _text_clocks(text, s):
+    return replace_clock_texts(text, s)
 
 
 # -- SQLite rules: fn(table, row dict, SideCtx) -> count, editing the row in place ----------------------------
 
-_ATLAS_CLOCK = {("snapshots", "created_at"): _clock_text, ("file_stat", "recorded_at_ns"): _clock_number,
-                ("file_facts", "created_at"): _clock_text}
+def _is_clock_column(col: str) -> bool:
+    return col.endswith(("_at", "_at_ns"))
 
 
 def _db_atlas_clock(table, row, s):
+    """Every ``*_at`` / ``*_at_ns`` column (created_at, updated_at, verified_at, collected_at, recorded_at_ns,
+    ...), and ISO clocks written inside other text cells (JSON payloads), accepted only inside a run of this
+    side."""
     n = 0
-    for (t, c), check in _ATLAS_CLOCK.items():
-        if t == table and c in row:
-            rep = check(row[c], s)
+    for c, v in list(row.items()):
+        if _is_clock_column(c):
+            rep = (_clock_ns(v, s) if c.endswith("_ns") else _clock_number(v, s)) if _is_number(v) \
+                else _clock_text(v, s)
             if rep is not None:
                 row[c] = rep
                 n += 1
+        elif isinstance(v, str) and _ISO_CLOCK.search(v):
+            text, k = replace_clock_texts(v, s)
+            if k:
+                row[c] = text
+                n += k
     return n
 
 
 def _db_atlas_ids(table, row, s):
+    """Random ids (numbered before the rows are read, see :func:`sqlite_dump`) wherever a cell holds one."""
     n = 0
-    for c in ("id",) if table == "snapshots" else ("snapshot_id",):
-        rep = _snapshot_id(row.get(c), s)
-        if rep is not None:
-            row[c] = rep
-            n += 1
+    for c, v in list(row.items()):
+        if isinstance(v, str) and c != "<rowid>":
+            text, k = replace_known_ids(v, s)
+            if k:
+                row[c] = text
+                n += k
     return n
 
 
@@ -388,12 +560,10 @@ def _db_written_by(table, row, s):
 
 def _db_search_built_at(table, row, s):
     if table == "meta" and row.get("key") == "built_at":
-        try:
-            float(row.get("value"))
-        except (TypeError, ValueError):
-            return 0
-        row["value"] = "<CLOCK>"
-        return 1
+        rep = _clock_numeric_text(row.get("value"), s)
+        if rep is not None:
+            row["value"] = rep
+            return 1
     return 0
 
 
@@ -406,14 +576,23 @@ def _db_search_graph_mtime(table, row, s):
     return 0
 
 
+def _pid(v, s):
+    return "<PID>" if isinstance(v, int) and not isinstance(v, bool) and v > 0 else None
+
+
+# the artifacts a run's own output is compared as (see run_items)
+JSON_OUT, TEXT_OUT, ERR_OUT = "<json stdout>", "<text stdout>", "<stderr>"
+
 RULES: list[Rule] = [
     Rule("build_stats_clock", ("index/build_stats.json",),
-         "`at` is time.time() and `graph_seconds` a duration of the build (numbers only)",
-         (("at",), ("graph_seconds",)), _clock_number),
+         "`at` is time.time() of the build: accepted only inside a run of this side, named by that run",
+         (("at",),), _clock_number),
+    Rule("build_stats_duration", ("index/build_stats.json",), "`graph_seconds` is a duration of the build",
+         (("graph_seconds",),), _duration),
     Rule("extraction_stamp", ("index/build_stats.json",),
          "a hash of the extractor's source: must be this side's checkout's own stamp",
          (("extraction",),), _side_stamp("extraction", "<EXTRACTION_STAMP>")),
-    Rule("update_extraction_stamp", ("update_result", "scan_result"),
+    Rule("update_extraction_stamp", (JSON_OUT,),
          "the same stamps in the result's `extraction` block (shown when the recorded one is outdated)",
          (("extraction", "was"), ("extraction", "now")), _side_stamp("extraction", "<EXTRACTION_STAMP>")),
     Rule("code_stamp", ("index/rebuild_record.json",),
@@ -434,34 +613,44 @@ RULES: list[Rule] = [
     Rule("receiver_graph_mtime", ("index/receiver_calls.json",),
          "graph.mtime_ns (the sidecar's key) is when graph.json was written: as rebuild_record_graph_mtime",
          (("graph", "mtime_ns"),), _graph_mtime),
-    Rule("lexicon_built_at", ("index/lexicon.json",), "`built_at` is the clock (lexicon.now())",
+    Rule("lexicon_built_at", ("index/lexicon.json",),
+         "`built_at` is the clock (lexicon.now()): accepted only inside a run of this side",
          (("built_at",),), _clock_text),
     Rule("manifest_seen", ("index/manifest.json",),
-         "`seen` is when the build looked at the file (the file's own mtime is pinned and compared)",
+         "`seen` is when the build looked at the file (the racy-rewrite guard reads it): accepted only inside a "
+         "run of this side, named by that run, so a `seen` kept from an earlier run is a difference",
          (("*", "seen"),), _clock_number),
-    Rule("update_timings", ("update_result", "scan_result"),
+    Rule("update_timings", (JSON_OUT,),
          "`seconds`, `index_seconds` and `ms` (at any depth) are durations",
          (("**", "seconds"), ("**", "index_seconds"), ("**", "ms")), _duration),
-    Rule("update_snapshot", ("update_result", "scan_result"),
-         "the snapshot's id must be one of this side's atlas.db snapshots (numbered as there); created_at is "
-         "the clock", (("snapshot", "id"),), _snapshot_id),
-    Rule("update_snapshot_clock", ("update_result", "scan_result"), "the snapshot's created_at is the clock",
-         (("snapshot", "created_at"),), _clock_text),
-    Rule("report_date", ("index/GRAPH_REPORT.md",), "the report header carries today's date",
+    Rule("update_background_pid", (JSON_OUT,), "`update --fast`: the background build's process id",
+         (("background", "pid"),), _pid),
+    Rule("output_ids", (JSON_OUT, TEXT_OUT, ERR_OUT, "index/background_update.log"),
+         "random ids (snapshots, claims, evidence: prefix_ and 12 hex digits) must be ids of this side's "
+         "atlas.db, numbered in the rowid order of their table", text=_text_ids),
+    Rule("output_clocks", (JSON_OUT, TEXT_OUT, ERR_OUT, "index/background_update.log"),
+         "ISO dates and times (a snapshot's or claim's created_at): accepted only inside a run of this side, "
+         "named by that run", text=_text_clocks),
+    Rule("output_durations", (TEXT_OUT, ERR_OUT, "index/background_update.log"),
+         "durations written in text (`1.2 s`, `30 ms`)", text=replace_durations),
+    Rule("report_date", ("index/GRAPH_REPORT.md",),
+         "the report header carries the date: accepted only as a date on which a run of this side ran",
          text=_report_date),
     Rule("backup_dir_date", ("<listing>",),
          "the pipeline's backup folder of a labelled graph is named after today's date (index/<YYYY-MM-DD>/): "
          "the name becomes <DATE>; its files are compared under the rules of the files they copy"),
     Rule("atlas_clock_columns", ("atlas.db",),
-         "snapshots.created_at, file_stat.recorded_at_ns and file_facts.created_at are clock readings",
-         db=_db_atlas_clock),
-    Rule("atlas_snapshot_ids", ("atlas.db",),
-         "snapshot ids are random: numbered by their rowid order; snapshot_id columns point at those numbers",
-         db=_db_atlas_ids),
+         "every *_at / *_at_ns column (snapshots.created_at, file_stat.recorded_at_ns - the racy-clean check "
+         "reads it -, claims.created_at/updated_at, evidence.collected_at, ...) and ISO clocks inside text cells: "
+         "accepted only inside a run of this side, named by that run", db=_db_atlas_clock),
+    Rule("atlas_random_ids", ("atlas.db",),
+         "random ids (the `id` column of snapshots, claims, evidence, ...) are numbered by prefix in the rowid "
+         "order of their table; every cell that holds one of this side's ids names that number", db=_db_atlas_ids),
     Rule("atlas_written_by", ("atlas.db",),
          "meta.schema_written_by names the build that created the schema (buildinfo.server_version(): version "
          "and commit): must be this side's checkout's own", db=_db_written_by),
-    Rule("search_meta_built_at", ("index/search.db",), "meta.built_at is time.time() of the search-index build",
+    Rule("search_meta_built_at", ("index/search.db",),
+         "meta.built_at is time.time() of the search-index build: accepted only inside a run of this side",
          db=_db_search_built_at),
     Rule("search_meta_graph_mtime", ("index/search.db",),
          "meta.graph.mtime_ns is when graph.json was written: as rebuild_record_graph_mtime",
@@ -531,6 +720,9 @@ def first_line_diff(a: str, b: str):
     la, lb = a.splitlines(), b.splitlines()
     for i, (x, y) in enumerate(zip(la, lb), 1):
         if x != y:
+            k = next((j for j, (p, q) in enumerate(zip(x, y)) if p != q), min(len(x), len(y)))
+            if k > 60:  # a long line: show it from shortly before the first differing character
+                return i, "..." + _short(x[k - 40:]), "..." + _short(y[k - 40:])
             return i, _short(x), _short(y)
     if len(la) != len(lb):
         i = min(len(la), len(lb)) + 1
@@ -593,12 +785,15 @@ def sqlite_dump(db: Path, rules, sctx: SideCtx, tmp: Path) -> tuple[dict, list[s
         master = con.execute("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY rowid").fetchall()
         out["sqlite_master"] = [list(r) for r in master]
         tables = [name for typ, name, _t, _s in master if typ == "table"]
-        if "snapshots" in tables:  # number the ids before any row refers to them
-            try:
-                for i, (sid,) in enumerate(con.execute("SELECT id FROM snapshots ORDER BY rowid"), 1):
-                    sctx.snapshots.setdefault(sid, f"<SNAPSHOT{i}>")
-            except sqlite3.OperationalError:
-                pass
+        if any(r.name == "atlas_random_ids" for r in rules):
+            # number the random ids (the `id` column of each table, rowid order) before any row refers to them
+            for t in tables:
+                if "id" not in [r[1] for r in con.execute(f'PRAGMA table_info("{t}")')]:
+                    continue
+                try:
+                    number_ids([v for (v,) in con.execute(f'SELECT id FROM "{t}" ORDER BY rowid')], sctx)
+                except sqlite3.OperationalError:  # WITHOUT ROWID
+                    pass
         for t in tables:
             cols = [r[1] for r in con.execute(f'PRAGMA table_info("{t}")')]
             try:
@@ -663,19 +858,36 @@ def sha256_file(p: Path) -> str:
     return h.hexdigest()
 
 
-def tree_state(root: Path, skip_dirs=()) -> dict[str, list]:
-    """``{relative path: [size, mtime_ns, sha256]}`` of every file under ``root`` (folders named in
-    ``skip_dirs`` left out at any depth)."""
+def tree_state(root: Path, skip_root=(), skip=None) -> dict[str, list]:
+    """``{relative path: [size, mtime_ns, sha256]}`` of every file under ``root``. Folders named in
+    ``skip_root`` are left out at the top level only (a nested ``sub/.verinoda/`` is kept); ``skip(rel)``
+    (a relative path, a folder's with a trailing ``/``) leaves out anything it is true for."""
     out: dict[str, list] = {}
     if not root.is_dir():
         return out
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in skip_dirs)
+        top = Path(dirpath) == root
+        prefix = "" if top else Path(dirpath).relative_to(root).as_posix() + "/"
+        dirnames[:] = sorted(d for d in dirnames if not (top and d in skip_root)
+                             and not (skip and skip(prefix + d + "/")))
         for fn in sorted(filenames):
+            if skip and skip(prefix + fn):
+                continue
             p = Path(dirpath) / fn
             st = p.stat()
-            out[p.relative_to(root).as_posix()] = [st.st_size, st.st_mtime_ns, sha256_file(p)]
+            out[prefix + fn] = [st.st_size, st.st_mtime_ns, sha256_file(p)]
     return dict(sorted(out.items()))
+
+
+# what of .git is not compared: the object store (a candidate cannot change a commit's objects without moving
+# a ref, which is compared), git's own stat index (git status refreshes it), reflogs and fetch/merge leftovers
+GIT_UNCOMPARED_DIRS = ("objects/", "logs/")
+GIT_UNCOMPARED_FILES = ("index", "index.lock", "ORIG_HEAD", "FETCH_HEAD")
+
+
+def git_uncompared(rel: str) -> bool:
+    """Is ``rel`` (under ``.git``) left out of ``git_files``?"""
+    return rel.startswith(GIT_UNCOMPARED_DIRS) or rel in GIT_UNCOMPARED_FILES
 
 
 def state_changes(before: dict, after: dict) -> list[str]:
@@ -852,18 +1064,210 @@ def plan_add_data_file(repo: Path):
                                                b"Server.\n")]
 
 
+_PY_ANY_DEF = re.compile(r"^[ \t]*def (\w+)", re.MULTILINE)
+
+
+def _original(rel: str) -> bool:
+    """A file of the corpus as built (the harness's own files live under ``eq_*`` folders)."""
+    return not rel.split("/")[0].startswith("eq_")
+
+
+def _one_letter_rename(text: str) -> str:
+    """``text`` with the first function (at any indentation) renamed by its last letter: the same size."""
+    m = _PY_ANY_DEF.search(text)
+    end = m.end(1) - 1
+    return text[:end] + ("y" if text[end] == "x" else "x") + text[end + 1:]
+
+
+def _pick_original_def(repo: Path, prefer: tuple[str, ...]) -> str | None:
+    for rel in prefer + tuple(_code_files(repo, ".py")):
+        if _original(rel) and (repo / rel).is_file() and _PY_ANY_DEF.search(_read(repo / rel)):
+            return rel
+    return None
+
+
 def plan_same_size_keep_mtime(repo: Path):
-    """The stat-cache case: a function renamed by one letter (same size) and the file's old mtime put back, so
-    nothing but the bytes changed. What a stat cache then misses, it must miss on both sides."""
-    rel = _pick(repo, ("orders/repository.py", "sample_calls.py"), ".py",
-                lambda p: _PY_DEF.search(_read(p)) is not None)
+    """The stat-cache case: a function (of a file of the corpus as built, a method counts) renamed by one letter
+    (same size) and the file's old mtime put back, so nothing but the bytes changed. The old mtime lies at least
+    ``EDIT_GAP`` before every later recording, so the caches may trust it: what a stat cache then misses, it must
+    miss on both sides."""
+    rel = _pick_original_def(repo, ("orders/repository.py", "sample_calls.py"))
+    if rel is None:
+        return None
+    return [Op("write", rel, _enc(_one_letter_rename(_read(repo / rel))), mtime_ns=(repo / rel).stat().st_mtime_ns)]
+
+
+RACY_AHEAD = 6 * 3600  # seconds: the racy file's mtime lies this far ahead of the planning time
+RACY_TARGETS = ("orders/api.py", "sample.py")
+
+
+def plan_racy_prepare(repo: Path, now: float | None = None):
+    """The racy-clean window, first half: a file's bytes are kept but its mtime is put ``RACY_AHEAD`` ahead
+    (the same value on both sides), so every stat recording from now on is made within the racy margin of the
+    file's mtime (snapshot.RACY_MARGIN_NS, freshness): the next update must hash it, and must not trust it."""
+    rel = _pick_original_def(repo, RACY_TARGETS)
+    if rel is None:
+        return None
+    t = (int(time.time() if now is None else now) + RACY_AHEAD) * 1_000_000_000
+    return [Op("write", rel, (repo / rel).read_bytes(), mtime_ns=t)]
+
+
+def plan_racy_same_size(repo: Path, now: float | None = None):
+    """The racy-clean window, second half: the file ``racy_prepare`` moved ahead gets a same-size edit (a function
+    renamed by one letter) and keeps that mtime: size and mtime are what the caches recorded, only the racy rule
+    finds the change (a candidate that trusts the cache here keeps a stale graph)."""
+    now = time.time() if now is None else now
+    for rel in RACY_TARGETS + tuple(_code_files(repo, ".py")):
+        p = repo / rel
+        if _original(rel) and p.is_file() and p.stat().st_mtime > now + 60 and _PY_ANY_DEF.search(_read(p)):
+            return [Op("write", rel, _enc(_one_letter_rename(_read(p))), mtime_ns=p.stat().st_mtime_ns)]
+    return None
+
+
+def plan_json(repo: Path):
+    """A JSON config file changes (a key added after the first ``{``); a corpus without one gets a new one."""
+    rel = _pick(repo, ("sample.json",), ".json", lambda p: _read(p).lstrip().startswith("{"))
+    if rel is None:
+        return [Op("write", "eq_config/package.json",
+                   b'{\n  "name": "eq-config",\n  "version": "1.0.0",\n  "dependencies": {\n    "left-pad": "^1.3.0"\n'
+                   b'  }\n}\n')]
+    text = _read(repo / rel)
+    i = text.index("{") + 1
+    nl = _nl(text)
+    return [Op("write", rel, _enc(text[:i] + f'{nl}  "eqAdded": "by the equality harness",' + text[i:]))]
+
+
+_TS_FUNC = re.compile(r"^function (\w+)\(", re.MULTILINE)
+
+
+def plan_ts(repo: Path):
+    """A TypeScript function added that calls one of the file's; a corpus without TypeScript gets a new file."""
+    rel = _pick(repo, ("sample.ts",), ".ts", lambda p: _TS_FUNC.search(_read(p)) is not None)
+    if rel is None:
+        return [Op("write", "eq_web/helpers.ts",
+                   b"export function eqFormat(n: number): string {\n    return n.toFixed(2);\n}\n\n"
+                   b"export function eqTotal(xs: number[]): string {\n    return eqFormat(xs.reduce((a, b) => a + b, 0));"
+                   b"\n}\n")]
+    text = _read(repo / rel)
+    target = _TS_FUNC.search(text).group(1)
+    nl = _nl(text)
+    return [Op("write", rel, _enc(text.rstrip("\r\n") + f"{nl}{nl}function eqAdded(): unknown {{{nl}    return "
+                                  f"{target}(\"eq\");{nl}}}{nl}"))]
+
+
+def plan_java(repo: Path):
+    """A Java class appended (with a method calling another)."""
+    rel = _pick(repo, ("sample.java",), ".java")
     if rel is None:
         return None
     text = _read(repo / rel)
-    m = _PY_DEF.search(text)
-    end = m.end(1) - 1
-    new = "y" if text[end] == "x" else "x"
-    return [Op("write", rel, _enc(text[:end] + new + text[end + 1:]), mtime_ns=(repo / rel).stat().st_mtime_ns)]
+    nl = _nl(text)
+    return [Op("write", rel, _enc(text.rstrip("\r\n") + f"{nl}{nl}class EqAdded {{{nl}    int eqOne() {{{nl}        "
+                                  f"return eqTwo();{nl}    }}{nl}{nl}    int eqTwo() {{{nl}        return 2;{nl}    }}{nl}}}{nl}"))]
+
+
+def plan_rust(repo: Path):
+    """A Rust function appended (calling another)."""
+    rel = _pick(repo, ("sample.rs",), ".rs")
+    if rel is None:
+        return None
+    text = _read(repo / rel)
+    nl = _nl(text)
+    return [Op("write", rel, _enc(text.rstrip("\r\n") + f"{nl}{nl}pub fn eq_added() -> i32 {{{nl}    eq_helper(){nl}}}"
+                                  f"{nl}{nl}fn eq_helper() -> i32 {{{nl}    2{nl}}}{nl}"))]
+
+
+# a git-ignored file (so no snapshot hashes it) that a claim cites: `update` re-checks such citations itself
+UNTRACKED_REL = "eq_local/notes.py"
+UNTRACKED_TEXT = b"def local_note():\n    return 'kept outside git'\n"
+
+
+def plan_untracked_cited(repo: Path):
+    """The git-ignored file a claim cites changes (nothing the snapshot hashes does): the no-op path must
+    still re-check the untracked citation and mark the claim stale."""
+    if not (repo / UNTRACKED_REL).is_file():
+        return None
+    return [Op("write", UNTRACKED_REL, _enc(_read(repo / UNTRACKED_REL).replace("kept outside git",
+                                                                                "changed outside git")))]
+
+
+def plan_fast_edit(repo: Path):
+    """A function added to a graph file, taken in by ``update --fast`` (the deferred path: search, lexicon and
+    stale claims now, the graph by a background build the harness waits for)."""
+    rel = _pick(repo, ("orders/service.py", "sample_calls.py"), ".py", lambda p: _original(
+        p.relative_to(repo).as_posix()))
+    if rel is None:
+        return None
+    text = _read(repo / rel)
+    nl = _nl(text)
+    return [Op("write", rel, _enc(text.rstrip("\r\n") + f"{nl}{nl}def eq_fast_added():{nl}    return 2{nl}"))]
+
+
+def plan_human_edit(repo: Path):
+    """The line the ``steady`` claim cites (no earlier edit touches it) gets a trailing comment: the human output
+    of `update` then shows a stale claim and the decision check's counts."""
+    src = claim_targets(repo).get("steady")
+    if src is None:
+        return None
+    rel, line = src[1].rsplit(":", 1)
+    text = _read(repo / rel)
+    lines = text.splitlines(keepends=True)
+    n = int(line.split("-")[0]) - 1
+    if n >= len(lines):
+        return None
+    body = lines[n].rstrip("\r\n")
+    lines[n] = body + ("  # eq: edited" if rel.endswith(".py") else "  // eq: edited") + lines[n][len(body):]
+    return [Op("write", rel, _enc("".join(lines)))]
+
+
+# -- the claims and the decision record every case starts with ------------------------------------------------------
+
+def _first_line(text: str, m: re.Match) -> int:
+    return text.count("\n", 0, m.start()) + 1
+
+
+def claim_targets(repo: Path) -> dict[str, tuple[str, str]]:
+    """``{role: (claim text, source)}`` of the claims added after the scan (in this order), the same on every
+    side: ``body`` cites the ``return`` line that ``body_edit`` changes, ``defn`` the first definition of the
+    ``add_function`` file, ``untracked`` the git-ignored file ``untracked_cited`` changes, ``steady`` the first
+    line of a file only ``human_edit`` changes. The texts quote the lines (``contains:``)."""
+    out = {}
+    rel = _pick(repo, ("orders/service.py", "sample.py"), ".py", lambda p: _RETURN.search(_read(p)) is not None)
+    if rel is not None:
+        text = _read(repo / rel)
+        m = _RETURN.search(text)
+        out["body"] = (f"the function returns its result: contains: return {m.group(2)}",
+                       f"{rel}:{_first_line(text, m)}")
+    rel = _pick(repo, ("orders/pricing.py", "sample_calls.py", "sample.py"), ".py",
+                lambda p: _PY_TOP.search(_read(p)) is not None)
+    if rel is not None:
+        text = _read(repo / rel)
+        m = _PY_TOP.search(text)
+        line = text[m.start():].splitlines()[0]
+        out["defn"] = (f"{m.group(1)} is defined here: contains: {line}", f"{rel}:{_first_line(text, m)}")
+    if (repo / UNTRACKED_REL).is_file():
+        out["untracked"] = ("local_note is defined outside git: contains: def local_note():", f"{UNTRACKED_REL}:1-2")
+    for rel in ("orders/__init__.py", "sample.go"):
+        if (repo / rel).is_file():
+            found = next(((i, ln.strip()) for i, ln in enumerate(_read(repo / rel).splitlines(), 1) if ln.strip()),
+                         None)
+            if found:
+                out["steady"] = (f"the file starts so: contains: {found[1].split('  #')[0].split('  //')[0]}",
+                                 f"{rel}:{found[0]}")
+            break
+    return out
+
+
+def decision_args(repo: Path) -> list[str]:
+    """``verinoda decide record`` arguments of the decision record every case starts with: a guard and a
+    governed symbol (the first function of the add_function file), so every non-noop update checks it."""
+    args = ["decide", "record", "--chosen", "keep the standard library", "--rationale",
+            "fewer dependencies to audit", "--title", "No database driver", "--guard", "dependency absent=psycopg"]
+    rel = _pick(repo, ("orders/pricing.py", "sample_calls.py", "sample.py"), ".py",
+                lambda p: _PY_DEF.search(_read(p)) is not None)
+    if rel is not None:
+        args += ["--governs", f"{rel}::{_PY_DEF.search(_read(repo / rel)).group(1)}"]
+    return args
 
 
 def plan_rename_file(repo: Path):
@@ -902,8 +1306,11 @@ def plan_commit_edit(repo: Path):
 
 PLANS = {"noop": plan_noop, "add_function": plan_add_function, "body_edit": plan_body_edit,
          "comment_only": plan_comment_only, "add_duplicate_stem": plan_add_duplicate_stem,
-         "edit_objc_pair": plan_objc_pair, "edit_go": plan_go, "edit_go_mod": plan_go_mod, "edit_doc": plan_doc,
+         "edit_objc_pair": plan_objc_pair, "edit_go": plan_go, "edit_go_mod": plan_go_mod, "edit_json": plan_json,
+         "edit_ts": plan_ts, "edit_java": plan_java, "edit_rust": plan_rust, "edit_doc": plan_doc,
          "add_data_file": plan_add_data_file, "same_size_keep_mtime": plan_same_size_keep_mtime,
+         "racy_prepare": plan_racy_prepare, "racy_same_size": plan_racy_same_size,
+         "untracked_cited": plan_untracked_cited, "fast_edit": plan_fast_edit, "human_edit": plan_human_edit,
          "rename_file": plan_rename_file, "delete_file": plan_delete_file, "delete_dir": plan_delete_dir,
          "commit_edit": plan_commit_edit, "noop_after": plan_noop}
 
@@ -936,7 +1343,7 @@ def apply_plan(repo: Path, ops, when_ns: int, git=None) -> None:
 
 def plan_text(ops) -> str:
     return ", ".join(o.kind + (f" {o.rel}" if o.rel else "") + (f" -> {o.dst}" if o.dst else "")
-                     + (" (old mtime)" if o.mtime_ns is not None else "") for o in ops) or "nothing"
+                     + (f" (mtime {o.mtime_ns // 10**9})" if o.mtime_ns is not None else "") for o in ops) or "nothing"
 
 
 # -- the environment of a run -------------------------------------------------------------------------------------
@@ -1018,9 +1425,12 @@ def git(env: Env, cwd: Path, *args: str) -> str:
 
 def run_tree(env: Env, tree: Path, seed: int, user: Path, *args: str) -> subprocess.CompletedProcess:
     """Run the wrapper for ``tree`` (``cli ARGS...`` or ``code CODE ARGS...``) with the working directory and
-    ``PYTHONPATH`` set to it; a wrong import location is a harness error."""
+    ``PYTHONPATH`` set to it; a wrong import location is a harness error. stdout and stderr are read as bytes
+    (no newline translation) and decoded with ``surrogateescape``, so encoding them again gives the bytes."""
     r = subprocess.run([env.python, "-c", WRAPPER, str(tree), *args], cwd=tree, env=env.run_env(tree, seed, user),
-                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=RUN_TIMEOUT, check=False)
+                       capture_output=True, timeout=RUN_TIMEOUT, check=False, stdin=subprocess.DEVNULL)
+    r.stdout = r.stdout.decode("utf-8", "surrogateescape")
+    r.stderr = r.stderr.decode("utf-8", "surrogateescape")
     if r.returncode == WRAPPER_EXIT and "eq-wrapper:" in r.stderr:
         raise HarnessError(r.stderr.strip()[-500:] + " (an installed copy shadows PYTHONPATH?)")
     return r
@@ -1098,8 +1508,19 @@ def pin_mtimes(root: Path, when: int = BASE_MTIME) -> None:
             os.utime(p, (when, when))
 
 
+def add_untracked(dest: Path) -> None:
+    """A git-ignored file (``UNTRACKED_REL``) for a claim to cite: its folder is added to ``.gitignore``."""
+    gi = dest / ".gitignore"
+    old = gi.read_bytes() if gi.exists() else b""
+    folder = UNTRACKED_REL.split("/")[0] + "/"
+    gi.write_bytes(old + (b"" if not old or old.endswith(b"\n") else b"\n") + folder.encode() + b"\n")
+    (dest / UNTRACKED_REL).parent.mkdir(parents=True, exist_ok=True)
+    (dest / UNTRACKED_REL).write_bytes(UNTRACKED_TEXT)
+
+
 def build_corpus(env: Env, name: str, baseline: Path, candidate: Path, dest: Path) -> Path:
-    """The corpus ``name`` at ``dest`` (a git work tree with one commit, objects packed)."""
+    """The corpus ``name`` at ``dest`` (a git work tree with one commit, objects packed), with a git-ignored
+    file (:func:`add_untracked`)."""
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache", ".verinoda")
     if name == "fixtures":
         shutil.copytree(baseline / "tests_upstream" / "fixtures", dest, ignore=ignore)
@@ -1121,6 +1542,7 @@ def build_corpus(env: Env, name: str, baseline: Path, candidate: Path, dest: Pat
         print(f"  corpus self: git archive HEAD of {src}")
     else:
         raise HarnessError(f"unknown corpus {name!r} (known: {', '.join(CORPORA)})")
+    add_untracked(dest)
     pin_mtimes(dest)
     git(env, dest, "init", "-q")
     git(env, dest, "add", "-A")
@@ -1174,11 +1596,13 @@ class Side:
     items: dict = field(default_factory=dict)
 
 
-PREFERRED_ORDER = ("scan_exit", "scan_result", "update_exit", "update_result", "graph_kept", "index/graph.json",
-                   "index/receiver_calls.json", "index/.graphify_labels.json", "index/.graphify_labels.json.sig",
-                   "index/rebuild_record.json", "index/GRAPH_REPORT.md", "index/manifest.json",
-                   "index/build_stats.json", "index/search.db", "atlas.db", "loaded_graph",
-                   "loaded_graph_candidate", "loader_writes", "loader_writes_candidate", "corpus", "git_state")
+PREFERRED_ORDER = ("scan_exit", "scan_result", "scan_stderr", "update_exit", "update_result", "update_stderr",
+                   "update_human_exit", "update_human_result", "update_human_stderr", "graph_kept",
+                   "index/graph.json", "index/receiver_calls.json", "index/.graphify_labels.json",
+                   "index/.graphify_labels.json.sig", "index/rebuild_record.json", "index/GRAPH_REPORT.md",
+                   "index/manifest.json", "index/build_stats.json", "index/search.db", "atlas.db", "loaded_graph",
+                   "loaded_graph_candidate", "loader_writes", "loader_writes_candidate", "corpus", "git_files",
+                   "git_state")
 
 
 def collect_files(repo: Path, sctx: SideCtx, tmp: Path) -> dict:
@@ -1221,17 +1645,25 @@ def tree_paths(root: Path) -> list[str]:
     return out
 
 
-def run_items(kind: str, run: subprocess.CompletedProcess, sctx: SideCtx) -> dict:
-    """``<kind>_exit`` and ``<kind>_result`` (stdout, masked) of a run."""
-    text, fired = mask_text(f"{kind}_result", run.stdout, sctx)
-    _hit(fired)
-    return {f"{kind}_exit": ("json", run.returncode), f"{kind}_result": ("bytes", text.encode("utf-8"))}
+def run_items(name: str, run: subprocess.CompletedProcess, sctx: SideCtx, json_out: bool = True) -> dict:
+    """``<name>_exit``, ``<name>_result`` (stdout, masked under the rules of ``JSON_OUT`` or ``TEXT_OUT``) and
+    ``<name>_stderr`` (masked under the rules of ``ERR_OUT``), compared as bytes."""
+    out, fired = mask_text(JSON_OUT if json_out else TEXT_OUT, run.stdout, sctx)
+    err, fired_err = mask_text(ERR_OUT, run.stderr, sctx)
+    _hit(fired + fired_err)
+    return {f"{name}_exit": ("json", run.returncode), f"{name}_result": ("bytes", _enc(out)),
+            f"{name}_stderr": ("bytes", _enc(err))}
 
 
 def corpus_items(env: Env, repo: Path) -> dict:
+    """``corpus`` (every file outside the root's ``.verinoda`` and ``.git``: size, mtime, sha256), ``git_files``
+    (every file under ``.git`` but :func:`git_uncompared`: size and sha256; git's own writes move mtimes) and
+    ``git_state`` (HEAD and ``git status``)."""
     head = git(env, repo, "rev-parse", "HEAD").strip()
     status = git(env, repo, "status", "--porcelain", "--untracked-files=all").splitlines()
-    return {"corpus": ("json", tree_state(repo, skip_dirs=(".git", ".verinoda"))),
+    gitf = {rel: [size, sha] for rel, (size, _mt, sha) in tree_state(repo / ".git", skip=git_uncompared).items()}
+    return {"corpus": ("json", tree_state(repo, skip_root=(".git", ".verinoda"))),
+            "git_files": ("json", gitf),
             "git_state": ("json", {"head": head, "status": status})}
 
 
@@ -1277,6 +1709,31 @@ class CaseResult:
     cdir: Path | None = None
 
 
+def wait_pid(pid: int, timeout: float) -> bool:
+    """Wait until process ``pid`` (not a child of this one) has exited; False on timeout."""
+    deadline = time.monotonic() + timeout
+    if os.name == "nt":
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        synchronize = 0x00100000
+        h = k32.OpenProcess(synchronize, False, int(pid))
+        if not h:
+            return True  # gone already
+        try:
+            return k32.WaitForSingleObject(h, int(timeout * 1000)) == 0
+        finally:
+            k32.CloseHandle(h)
+    while time.monotonic() < deadline:
+        try:
+            os.kill(int(pid), 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            pass
+        time.sleep(0.1)
+    return False
+
+
 class Runner:
     def __init__(self, env: Env, case: Case, baseline: Path, candidate: Path, probes: dict, skip: set,
                  keep_going: bool, no_rules: bool):
@@ -1293,14 +1750,34 @@ class Runner:
     def user(self, name: str) -> Path:
         return self.cdir / "u" / name
 
-    def run_at_fixed(self, side: str, *args: str) -> subprocess.CompletedProcess:
+    def run_at_fixed(self, side: str, label: str, *args: str, after=None) -> subprocess.CompletedProcess:
+        """Run the side's checkout on its copy (moved into the fixed folder); ``after(run)`` runs before the
+        copy moves back. The run's wall-clock window (``after`` included) is recorded under ``label``: a clock
+        value this side writes is accepted only inside the window of one of its runs."""
         with at_fixed(self.store[side], self.fixed):
-            return run_tree(self.env, self.trees[side], self.case.seed, self.user(side), "cli", *args)
+            start = time.time()
+            try:
+                r = run_tree(self.env, self.trees[side], self.case.seed, self.user(side), "cli", *args)
+                if after is not None:
+                    after(r)
+            finally:
+                self.ctx[side].windows.append((label, start, time.time()))
+        self.note_graph(side, label)
+        return r
 
     def note_graph(self, side: str, label: str) -> None:
         st = graph_state(self.store[side])
         if st is not None:
             self.ctx[side].graph_mtimes.setdefault(st[0], label)
+
+    def wait_background(self, run: subprocess.CompletedProcess) -> None:
+        """``update --fast``: wait for the background build the run started (its pid is in the result)."""
+        try:
+            bg = json.loads(run.stdout).get("background") or {}
+        except (ValueError, AttributeError):
+            return
+        if bg.get("started") and isinstance(bg.get("pid"), int) and not wait_pid(bg["pid"], RUN_TIMEOUT):
+            raise HarnessError(f"{self.tag}: the background build (pid {bg['pid']}) did not end in {RUN_TIMEOUT}s")
 
     def load(self, side: str, tree: Path, who: str):
         """``verinoda.index.load`` of a throwaway copy of ``side``'s state (in the fixed folder) by ``tree``;
@@ -1323,16 +1800,16 @@ class Runner:
         finally:
             rmtree(self.fixed)
 
-    def observe(self, sides, runs: dict, kind: str) -> dict:
+    def observe(self, sides, runs: dict) -> dict:
         """Collect each side (before anything loads its state), then load throwaway copies; the real state is
-        hashed before and after and must not change."""
+        hashed before and after and must not change. ``runs``: side -> ``[(item name, run, json output?)]``."""
         guard = {s: tree_state(self.store[s] / ".verinoda") for s in sides}
         out = {}
         for s in sides:
             side = Side()
             side.items.update(collect_files(self.store[s], self.ctx[s], self.cdir / "t" / s))
-            if s in runs:
-                side.items.update(run_items(kind, runs[s], self.ctx[s]))
+            for name, run, json_out in runs.get(s, ()):
+                side.items.update(run_items(name, run, self.ctx[s], json_out))
             side.items.update(corpus_items(self.env, self.store[s]))
             out[s] = side
         for s in sides:
@@ -1354,22 +1831,58 @@ class Runner:
                                    + "; ".join(state_changes(guard[s], tree_state(self.store[s] / ".verinoda"))[:5]))
         return out
 
+    def decision_record(self) -> dict[str, bytes]:
+        """The decision record every side starts with, made ONCE by the baseline (``verinoda decide record``) on
+        a throwaway copy of B: ``{path under .verinoda: bytes}``. It is an input of `update` (the decision
+        check), the same bytes on every side."""
+        if self.fixed.exists():
+            raise HarnessError(f"{self.fixed} is in use")
+        shutil.copytree(self.store["B"], self.fixed, copy_function=shutil.copy2)
+        try:
+            before = tree_state(self.fixed / ".verinoda")
+            r = run_tree(self.env, self.baseline, self.case.seed, self.user("decide"), "cli",
+                         *decision_args(self.fixed), "--repo", str(self.fixed), "--json")
+            if r.returncode:
+                raise HarnessError(f"{self.tag}: baseline `verinoda decide record` exited {r.returncode}: "
+                                   f"{(r.stderr or r.stdout).strip()[-600:]}")
+            after = tree_state(self.fixed / ".verinoda")
+            got = {rel: (self.fixed / ".verinoda" / rel).read_bytes() for rel in after
+                   if rel.startswith("decisions/") and before.get(rel) != after[rel]}
+            if not got:
+                raise HarnessError(f"{self.tag}: `verinoda decide record` wrote no record under .verinoda/decisions")
+            return got
+        finally:
+            rmtree(self.fixed)
+
     def scan(self, res: CaseResult) -> bool:
-        """Set up B, B2 (baseline) and C (candidate); compare B with B2 (determinism) and B with C."""
-        runs = {}
+        """Set up B, B2 (baseline) and C (candidate): init, scan, the decision record, the claims (``verinoda
+        claim add`` by each side's own checkout); compare B with B2 (determinism) and B with C."""
+        runs: dict = {}
         for s in ("B", "B2", "C"):
-            ri = self.run_at_fixed(s, "init", str(self.fixed), "--json")
+            ri = self.run_at_fixed(s, "init", "init", str(self.fixed), "--json")
             if ri.returncode == 0:
-                rs = self.run_at_fixed(s, "scan", str(self.fixed), "--json")
+                rs = self.run_at_fixed(s, "scan", "scan", str(self.fixed), "--json")
             else:
                 rs = ri
             if s in BASELINE_SIDES and (ri.returncode or rs.returncode):
                 raise HarnessError(f"{self.tag}: baseline `verinoda {'init' if ri.returncode else 'scan'}` exited "
                                    f"{rs.returncode}: {(rs.stderr or rs.stdout).strip()[-800:]}")
-            runs[s] = rs
-            self.note_graph(s, "scan")
+            runs[s] = [("scan", rs, True)]
+        records = self.decision_record()
+        targets = claim_targets(self.store["B"])
+        for s in ("B", "B2", "C"):
+            for rel, data in records.items():
+                (self.store[s] / ".verinoda" / rel).parent.mkdir(parents=True, exist_ok=True)
+                (self.store[s] / ".verinoda" / rel).write_bytes(data)
+            for role, (text, src) in targets.items():
+                r = self.run_at_fixed(s, f"claim {role}", "claim", "add", text, "--repo", str(self.fixed), "--source",
+                                      src, "--json")
+                if s in BASELINE_SIDES and r.returncode:
+                    raise HarnessError(f"{self.tag}: baseline `verinoda claim add` ({role}, {src}) exited "
+                                       f"{r.returncode}: {(r.stderr or r.stdout).strip()[-600:]}")
+                runs[s].append((f"claim_{role}", r, True))
         self.t_end = time.time()
-        sides = self.observe(("B", "B2", "C"), runs, "scan")
+        sides = self.observe(("B", "B2", "C"), runs)
         det = compare(sides["B"], sides["B2"])
         if det and not self.no_rules:
             raise HarnessError(f"{self.tag}: the two BASELINE scans differ, so the baseline is not deterministic "
@@ -1378,7 +1891,8 @@ class Runner:
         rmtree(self.store["B2"])
         diffs = compare(sides["B"], sides["C"], self.skip)
         res.diffs += [f"{self.tag} step=scan: {a}: {w}" for a, w in diffs]
-        print(f"  {self.tag}: scan: {'equal' if not diffs else f'DIFFERENT ({len(diffs)} artifact(s))'}", flush=True)
+        print(f"  {self.tag}: scan (+ {len(targets)} claims, {len(records)} decision record): "
+              f"{'equal' if not diffs else f'DIFFERENT ({len(diffs)} artifact(s))'}", flush=True)
         return not diffs
 
     def step(self, name: str, res: CaseResult) -> bool | None:
@@ -1387,6 +1901,7 @@ class Runner:
             res.skipped.append(name)
             print(f"  {self.tag}: {name}: skipped (no file of its kind in this corpus)", flush=True)
             return None
+        mode = STEP_MODES.get(name, "json")
         when = math.ceil(self.t_end) + 1
         for s in ("B", "C"):
             apply_plan(self.store[s], ops, when * 1_000_000_000, lambda repo, *a: git(self.env, repo, *a))
@@ -1394,20 +1909,21 @@ class Runner:
                 rmtree(self.store[s] / ".verinoda" / "index" / "cache", ignore_errors=True)
         while time.time() < when + EDIT_GAP:
             time.sleep(min(0.25, max(0.0, when + EDIT_GAP - time.time())))
+        args = ["update", str(self.fixed)] + {"json": ["--json"], "fast": ["--fast", "--json"], "human": []}[mode]
+        item = "update_human" if mode == "human" else "update"
         pre, runs, kept = {}, {}, {}
         t0 = time.monotonic()
         for s in ("B", "C"):
             pre[s] = graph_state(self.store[s])
-            runs[s] = self.run_at_fixed(s, "update", str(self.fixed), "--json")
+            runs[s] = self.run_at_fixed(s, name, *args, after=self.wait_background if mode == "fast" else None)
             post = graph_state(self.store[s])
             kept[s] = pre[s] is not None and post == pre[s]
-            self.note_graph(s, name)
         self.t_end = time.time()
         if runs["B"].returncode:
             raise HarnessError(f"{self.tag}: {name}: the baseline's update exited {runs['B'].returncode}: "
                                f"{(runs['B'].stderr or runs['B'].stdout).strip()[-800:]}")
         t1 = time.monotonic()
-        sides = self.observe(("B", "C"), runs, "update")
+        sides = self.observe(("B", "C"), {s: [(item, runs[s], mode != "human")] for s in ("B", "C")})
         t2 = time.monotonic()
         for s in ("B", "C"):
             sides[s].items["graph_kept"] = ("json", kept[s])
@@ -1416,15 +1932,20 @@ class Runner:
         res.diffs += [f"{self.tag} step={name}: {a}: {w}" for a, w in diffs]
         what = []
         for s in ("B", "C"):
+            if mode == "human":
+                first = (runs[s].stdout.splitlines() or ["<no output>"])[0]
+                what.append(f"{s}: {first[:60]!r} kept={'yes' if kept[s] else 'no'}")
+                continue
             try:
                 r = json.loads(runs[s].stdout)
                 what.append(f"{s}: index_mode={r.get('index_mode', '?')} changed={r.get('changed_count', '?')} "
-                            f"kept={'yes' if kept[s] else 'no'}")
+                            f"stale={len(r.get('stale') or [])} kept={'yes' if kept[s] else 'no'}")
             except ValueError:
                 what.append(f"{s}: no JSON result (exit {runs[s].returncode})")
         status = "equal" if not diffs else f"DIFFERENT ({len(diffs)} artifact(s))"
-        print(f"  {self.tag}: {name}: {status} [{plan_text(ops)}] [{'; '.join(what)}] (updates {t1 - t0:.1f}s, "
-              f"collect and loads {t2 - t1:.1f}s)", flush=True)
+        how = "" if mode == "json" else f" ({mode})"
+        print(f"  {self.tag}: {name}{how}: {status} [{plan_text(ops)}] [{'; '.join(what)}] "
+              f"(updates {t1 - t0:.1f}s, collect and loads {t2 - t1:.1f}s)", flush=True)
         return not diffs
 
 
