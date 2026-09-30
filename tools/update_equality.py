@@ -25,9 +25,9 @@ temporary directory; keep it outside OneDrive and short: Windows paths), ``--kee
 directories; they are always kept when something differs), ``--only EDIT`` (the scan, then that edit alone),
 ``--python EXE`` (default: this interpreter), ``--skip ARTIFACT,...`` (leave artifacts out of the comparison),
 ``--keep-going`` (compare the remaining edits of a case after a difference), ``--no-rules`` (calibration aid,
-below). Every command runs alone (one fixed folder per case), so a case takes minutes (fixtures: about 25
-update steps, each three updates and five loads); run cases in parallel as separate invocations with their own
-``--work``.
+below). Every command runs alone (one fixed folder per case), so a case takes minutes (fixtures: about 35
+update steps, each five or six updates and as many loads); run cases in parallel as separate invocations with
+their own ``--work``.
 
 Exit status: 0 every case equal, 1 a difference (a summary names the case, the step, the artifact and the first
 differing JSON path or line), 2 a harness error: a checkout that does not import from where it should, a
@@ -50,16 +50,19 @@ line ``body_edit`` changes, one the first definition of the ``add_function`` fil
 ``atlas_random_ids``). Every command runs with the copy MOVED INTO ONE FIXED FOLDER (``<case>/r/<corpus>``) and
 moved back afterwards, one copy after the other: absolute paths in the state (``.graphify_root``, the rebuild
 record, ids minted from a path, snapshot rows, the update result) are the same on every side, so nothing
-path-shaped needs a rule. The wall-clock window of every run is recorded per side (the clock rules below). ``B``
+path-shaped needs a rule. The wall-clock window of every run is recorded per side (the clock rules below; a
+run starts in a later second than the side's previous run ended, so no two runs of a side share a second). ``B``
 against ``B2`` is the determinism check of the set-up (exit 2 when they differ); ``B`` against ``C`` is step
 ``scan``. Then ``C0`` is made: a copy of ``B`` as the baseline left it (repository, ``.verinoda`` with
 ``index/cache/``, the stat index, the manifest and the sidecars in the baseline's format, ``.git``, the user
 folder), whose updates the CANDIDATE runs: the real upgrade path, where the candidate's first update reads state
 an older build wrote. ``C0`` starts with ``B``'s run windows, graph mtimes and stamps (its state was written by
-``B``'s runs); the candidate's stamps are accepted there besides the baseline's.
+``B``'s runs); the candidate's stamps are its own there, the baseline's are accepted under their own token
+(``<CODE_STAMP other>``, see the code identities below).
 
 Each edit is planned ONCE (on ``B``) as a list of operations (write bytes, delete, rename, delete a folder, git
-commit) and the same plan is applied to ``B``, ``C`` and ``C0``. Written files get the step's mtime: a whole
+commit, a ``claim add`` each side's checkout runs before the update, a decision record the baseline makes once)
+and the same plan is applied to every side. Written files get the step's mtime: a whole
 second at least one second after the previous run ended, and every run starts at least ``EDIT_GAP`` seconds after
 it, so the stat caches' racy windows come out the same on both sides. The racy window itself is exercised by its
 own two steps: ``racy_prepare`` moves a file's mtime ``RACY_AHEAD`` into the future (the same value on both sides:
@@ -71,10 +74,18 @@ updating the baseline's state]``). A step runs ``update --json``, except ``fast_
 the harness then waits for the background build the result names before anything is compared) and ``human_edit``
 (``update`` without ``--json``: the human output is compared). ``retarget_call`` points one call at another
 existing function on the same line (:func:`retarget_call`): the node set and the edge count stay, one edge changes
-its target, so a candidate that keeps the graph when the counts match is caught. Edits are cumulative, in the
-order of ``DEFAULT_EDITS``; an edit that finds no file of its kind is skipped and listed at the end (on
-``orders``: the Objective-C, Go, Java and Rust edits, which ``fixtures`` covers; ``edit_json`` and ``edit_ts`` add
-a file there instead).
+its target, so a candidate that keeps the graph when the counts match is caught. What a process may keep
+between two updates is changed between them too: the ignore rules (``ignore_add``: ``.graphifyignore`` and
+``.gitignore`` hide two folders; ``ignore_remove`` puts both files back), the repository's config
+(``config_vendored``: ``.verinoda/config.json`` turns ``index.vendored`` on and a vendored file arrives;
+``config_revert`` deletes it), the claims and decision records (``claim_between``: a claim added and a second
+decision record governing the function that holds the claimed line), a file's bytes (``revert_file``: the file
+``retarget_call`` changed goes back to its bytes as built, after a file it calls changed; the claim goes stale,
+the governed function changes), and paths that come back (``restore_deleted``: the deleted file with changed
+content, the deleted folder's files with their old bytes; ``rename_back``). Edits are cumulative, in the order of
+``DEFAULT_EDITS``; an edit that finds no file of its kind is skipped and listed at the end (on ``orders``: the
+Objective-C, Go, Java and Rust edits, which ``fixtures`` covers; ``edit_json`` and ``edit_ts`` add a file there
+instead).
 
 Three more sides are made after the set-up (:meth:`Runner.make_derived`). ``B0``, only when a stamp the
 candidate records (``STAMP_FILES``: extraction, code, python_facts, python_cross, empty_json) differs from the
@@ -82,19 +93,23 @@ baseline's: a copy of ``B`` with those recorded stamps replaced by ``eq-outdated
 BASELINE, and ``C0`` is compared with it instead of ``B`` (a candidate that changes an extractor rightly rebuilds
 the baseline's state once; the baseline does the same only when its stamps are outdated too). ``BM`` and ``M``:
 copies of ``B`` and ``C`` updated by the baseline and the candidate, every update of the case inside ONE
-long-lived process of each (:class:`InProc`, the way the MCP server's ``index_update`` runs; the Store the CLI
-leaves open is closed after each call, as the server does); ``M`` is compared with ``BM`` (the baseline itself
-writes differently in a long-lived process: its stat index is written only at exit), so a memo that outlives
-one build is exercised. ``relocate`` runs in a second fixed folder (``<case>/q/<corpus>``, ``RELOCATED``) and
-adds a file, so the graph is rebuilt from AST cache entries written in the first folder; the next step moves
-back.
+long-lived process of each (:class:`InProc`, the way the MCP server's ``index_update`` runs; the Store a CLI
+command opened through ``cli._store`` is closed after the call, as the server closes the one of its ``with
+self._store()``, and nothing else is: a Store the code keeps between calls stays open); ``M`` is compared with
+``BM`` (the baseline itself writes differently in a long-lived process: its stat index is written only at
+exit), so a memo that outlives one build is exercised. After the last step both processes exit with their
+repository in the fixed folder, so what they write at exit lands there and is compared (step ``inproc_exit``,
+with their exit status and what they wrote to stderr outside the calls), and a fresh CLI process of each
+checkout updates what they left after one more edit (step ``after_exit``, ``M`` against ``BM``). ``relocate``
+runs in a second fixed folder (``<case>/q/<corpus>``, ``RELOCATED``) and adds a file, so the graph is rebuilt
+from AST cache entries written in the first folder; the next step moves back.
 
 Scope (what ``update`` may write, decided in round 4): files under the repository's ``.verinoda``, compared
 as below, and nothing else. Writes elsewhere are looked for in the corpus (files and folders, with mode and
 attributes), ``.git`` (files, objects, index entry flags), the side's user folder (config, cache, TEMP,
-HOME/USERPROFILE, APPDATA, LOCALAPPDATA, XDG), beside the fixed folder, in the case and work folders
-(``outside_files``: entries the harness did not make) and the two checkouts (``checkout_writes``, byte-code
-caches aside). NOT covered, by decision (a candidate's diff is reviewed for these instead): NTFS alternate data
+HOME/USERPROFILE, APPDATA, LOCALAPPDATA, XDG), beside either fixed folder (``<case>/r/`` and ``<case>/q/``,
+after every run), in the case and work folders (``outside_files``: entries the harness did not make) and the
+two checkouts (``checkout_writes``: every file and folder, the ``.pyc`` files in ``__pycache__`` aside). NOT covered, by decision (a candidate's diff is reviewed for these instead): NTFS alternate data
 streams, writes to absolute paths outside the work folder and the redirected user folders, the registry, the
 network, file times under ``.verinoda``, SQLite page contents and page_count (beyond freelist_count and
 schema_version), handles a CLI run leaves open (the process exits).
@@ -107,14 +122,19 @@ What is compared
 ----------------
 Every file under ``.verinoda`` (``index/cache/`` included: the AST cache entries by bytes, the stat index
 under ``stat_index_clock``; the lock files by content) except the SQLite ``-wal``/``-shm`` side files, whose
-content is read with their database, and every folder under it (``verinoda_dirs``, an empty one included): as
+content is read with their database, and the atomic replace's leftover backups (``.gfy-replace-bak-*.tmp``:
+the number each step added, per folder, is compared instead, ``replace_bak_leftovers``, rule
+``replace_bak_leftover``: the baseline leaves some now and then, when a rename is refused at that moment, so a
+difference of up to ``REPLACE_BAK_TOLERANCE`` per step is tolerated and listed at the end), and every folder
+under it (``verinoda_dirs``, an empty one included): as
 bytes, after the named volatile rules below replaced ONLY the volatile value in the
 raw text (the rest of the file, spacing and key order included, is compared byte for byte; the report gives the
 first differing JSON path when both sides parse). A file present on one side only is a difference. The dated
-backup folder the pipeline writes before overwriting a labelled graph (``index/<YYYY-MM-DD>/``) is named
-``<DATE>`` when its date is a local date on which a run of that side ran (``backup_dir_date``; a folder named
-after another date keeps its name, so it differs), and its files are compared under the rules of the files they
-copy. SQLite files (``atlas.db``, ``index/search.db``, found by their header) are read from a copy (with their
+backup folder the pipeline writes before overwriting a labelled graph (``index/<YYYY-MM-DD>/``, one per day) is
+named ``<DATE>`` when its date is a local date on which a run of that side ran (``backup_dir_date``; the folders
+of two such dates are merged in date order, as one folder would have held them: a case may run past midnight;
+a folder named after another date keeps its name, so it differs), and its files are compared under the rules
+of the files they copy. SQLite files (``atlas.db``, ``index/search.db``, found by their header) are read from a copy (with their
 ``-wal``): the pragmas (user_version, application_id, page_size, encoding, auto_vacuum, journal_mode,
 freelist_count, schema_version; not page_count, which the baseline varies in),
 ``sqlite_master`` in its own order, and every table (``sqlite_sequence`` included) in ROWID order with the rowid
@@ -140,7 +160,8 @@ itself (a WITHOUT ROWID table in its key order). Also compared, per step:
 - ``user_files``: every file and folder (size and sha256, no times) under the side's own user folder
   (``<case>/u/<side>``: ``VERINODA_CONFIG_DIR``, ``VERINODA_CACHE_DIR`` and ``TEMP``/``TMP``), so a write outside
   the repository (a trust entry, a cache, a temporary file left behind) is seen; ``outside_files``: what the
-  side's runs left beside the fixed folder (in ``<case>/r/``; moved after every run to ``<case>/x/<side>``). A
+  side's runs left beside either fixed folder (in ``<case>/r/`` or ``<case>/q/``; moved after every run to
+  ``<case>/x/<side>``). A
   load's writes in its own user folder or beside the fixed folder are part of ``loader_writes``.
 
 Volatile values (every rule is named; see ``RULES`` for the reason of each)
@@ -170,16 +191,28 @@ What is left, found by running the baseline against itself (``--no-rules`` shows
   side's atlas.db does not hold is compared as it is
 - code identities (``extraction_stamp``, ``update_extraction_stamp``, ``code_stamp``, ``python_facts_stamp``,
   ``python_cross_stamp``, ``empty_json_stamp``): replaced only when they are THAT side's own checkout's stamp
-  (the baseline's for ``B``, the candidate's for ``C``, either for ``C0``; ``-vendored`` suffix allowed), so a
-  stale stamp on ``B`` or ``C`` is a difference; ``atlas_written_by`` likewise for the build named in atlas.db's
-  ``meta.schema_written_by`` (version and commit)
+  (the baseline's for ``B``, the candidate's for ``C``; ``-vendored`` suffix allowed), so a stale stamp on ``B``
+  or ``C`` is a difference. ``C0`` and ``B0`` accept one more stamp, under its own token (``<CODE_STAMP other>``):
+  ``C0`` the baseline's (what the state it starts from holds), ``B0`` the ``eq-outdated-<kind>`` marker, so a C0
+  that keeps the baseline's stamp where B0 writes its own differs. ``atlas_written_by`` likewise for the build
+  named in atlas.db's ``meta.schema_written_by`` (version and commit), except that on ``C0`` the baseline's is
+  the plain token and the candidate's ``other``: only a schema migration rewrites it
 
 Known limits: SQLite files are compared by content and the two layout pragmas (freelist_count, schema_version), not page by page
 and not by page_count (the baseline differs from itself in it). A clock's fraction digits are not
 compared (``repr(time.time())`` has 3 or fewer about once in 3000 values: the baseline would differ from
 itself), so rounding a clock to milliseconds is not caught, dropping the fraction is. When the candidate changes the
 extractor files, the stamps differ by design and are each accepted on their own side only. The background build
-of ``update --fast`` runs in isolated mode (``-I``), so ``PYTHONHASHSEED`` does not reach it.
+of ``update --fast`` runs in isolated mode (``-I``), so ``PYTHONHASHSEED`` does not reach it. Leftover backups of
+the atomic replace are compared by the number each step added, with a tolerance (``REPLACE_BAK_TOLERANCE`` per
+step): a candidate that leaves one or two more in a step, or different bytes in them, is not caught (the
+baseline itself differs in them). A backup folder written under the date of an EARLIER run of the side is merged like a
+midnight crossing, so it is not caught. Sides M and BM run one repository per process (the MCP server serves one;
+``relocate`` moves it): a process memo that leaves the repository root out of its key is exercised only by the
+move, never by a second repository. Only the repository's config changes between updates (``config_vendored``),
+not the user-level ``config.json`` of ``VERINODA_CONFIG_DIR``: a memo of that file alone is not exercised.
+With ``--only``, M and BM run one update each besides ``after_exit``, so a memo read back by a later build of the
+same process is not exercised.
 """
 
 from __future__ import annotations
@@ -204,9 +237,14 @@ from pathlib import Path
 DEFAULT_EDITS = ("noop", "add_function", "body_edit", "retarget_call", "relocate", "comment_only",
                  "add_duplicate_stem",
                  "edit_objc_pair", "edit_go", "edit_go_mod", "edit_json", "edit_ts", "edit_java", "edit_rust",
-                 "edit_doc", "add_data_file", "same_size_keep_mtime", "racy_prepare", "racy_same_size",
-                 "untracked_cited", "fast_edit", "human_edit", "rename_file", "delete_file", "delete_dir",
-                 "commit_edit", "noop_after")
+                 "edit_doc", "add_data_file", "ignore_add", "same_size_keep_mtime", "racy_prepare",
+                 "racy_same_size", "untracked_cited", "claim_between", "revert_file", "config_vendored",
+                 "fast_edit", "human_edit", "ignore_remove", "config_revert", "rename_file", "delete_file",
+                 "delete_dir", "restore_deleted", "rename_back", "commit_edit", "noop_after")
+# after the steps, when sides M and BM ran: their processes exit with the repository in the fixed folder (what
+# they write at exit is compared: step "inproc_exit"), then a fresh CLI process of each side's checkout updates
+# their state after one more edit (step "after_exit", PLANS)
+EXIT_STEPS = ("inproc_exit", "after_exit")
 # how a step runs update: "json" (`update --json`), "fast" (`update --fast --json`, then the harness waits for the
 # background build it started) or "human" (`update` without --json: its human output is compared)
 STEP_MODES = {"fast_edit": "fast", "human_edit": "human"}
@@ -224,6 +262,11 @@ EXCLUDED_SUFFIXES = ("-wal", "-shm")
 EXCLUDED_FILES: tuple = ()
 # a temporary backup the atomic replace of project_index/paths.py leaves (tempfile.mkstemp: a random name)
 _REPLACE_BAK = re.compile(r"(^|/)\.gfy-replace-bak-[^/]+\.tmp$")
+# how many such leftovers (summed over the folders under .verinoda) two sides may differ by: the baseline leaves
+# one only when a rename is refused at that moment (a file held open), so two baseline runs differ in it now and
+# then; a candidate that leaves one on every write piles them up (rule replace_bak_leftover)
+REPLACE_BAK_TOLERANCE = 2  # per step: the leftovers a step added on one side and not on the other
+TOLERATED: list[str] = []  # the tolerated differences of this invocation (printed at the end)
 BASELINE_SIDES = ("B", "B2", "B0", "BM")
 
 
@@ -333,8 +376,9 @@ class SideCtx:
     """What a side's volatile values may legitimately be: its own checkout's stamps, the graph.json mtimes
     seen after its runs (value -> the run's label), its random ids (value -> ``<prefix#n>``, numbered in the
     rowid order of the atlas.db table that holds them) and the wall-clock window of every run on this side
-    (``(label, start, end)`` in seconds since the epoch, in run order). ``also``: stamps accepted besides its
-    own (side ``C0``, the baseline's state updated by the candidate, may keep the baseline's)."""
+    (``(label, start, end)`` in seconds since the epoch, in run order; no two in one second). ``also``: stamps
+    accepted besides its own, under their own token (``<CODE_STAMP other>``: side ``C0``, the baseline's state
+    updated by the candidate, may keep the baseline's; ``B0`` the ``eq-outdated-<kind>`` markers)."""
     name: str
     stamps: dict = field(default_factory=dict)
     also: dict = field(default_factory=dict)
@@ -404,7 +448,9 @@ def _is_number(v) -> bool:
 def clock_run(seconds: float, s: SideCtx, whole_second: bool = False) -> str | None:
     """The label of the run of this side whose wall-clock window holds ``seconds`` (a value truncated to a
     whole second may lie up to a second before the window's start); None when no run of this side was going
-    on then: a stale value, one from the future, or one from the other side's runs."""
+    on then: a stale value, one from the future, or one from the other side's runs. Two runs of one side never
+    share a second (:meth:`Runner.run_at_fixed` starts a run in a later second than the previous one ended), so
+    a whole-second value names one run only."""
     for label, start, end in s.windows:
         lo = math.floor(start) if whole_second else start - CLOCK_SLACK
         if lo <= seconds <= end + CLOCK_SLACK:
@@ -550,10 +596,22 @@ def stamp_token(value, expected, token: str):
     return None
 
 
+def other_token(token: str) -> str:
+    """The token of a stamp a side accepts besides its own (``SideCtx.also``): ``<CODE_STAMP other>``."""
+    return token[:-1] + " other>"
+
+
+def side_stamp_token(v, s: SideCtx, kind: str, token: str):
+    """``token`` for this side's own stamp of ``kind``, ``<... other>`` for the one it accepts besides (C0: the
+    baseline's, which the state it starts from holds; B0: the ``eq-outdated-<kind>`` marker), else None. The two
+    are kept apart, so a C0 that keeps the baseline's stamp where B0 writes its own differs."""
+    got = stamp_token(v, s.stamps.get(kind), token)
+    return got if got is not None else stamp_token(v, s.also.get(kind), other_token(token))
+
+
 def _side_stamp(kind: str, token: str):
     def check(v, s: SideCtx):
-        got = stamp_token(v, s.stamps.get(kind), token)
-        return got if got is not None else stamp_token(v, s.also.get(kind), token)
+        return side_stamp_token(v, s, kind, token)
     return check
 
 
@@ -634,9 +692,7 @@ def _db_atlas_ids(table, row, s):
 
 def _db_written_by(table, row, s):
     if table == "meta" and row.get("key") == "schema_written_by":
-        rep = stamp_token(row.get("value"), s.stamps.get("server_version"), "<SERVER_VERSION>")
-        if rep is None:
-            rep = stamp_token(row.get("value"), s.also.get("server_version"), "<SERVER_VERSION>")
+        rep = side_stamp_token(row.get("value"), s, "server_version", "<SERVER_VERSION>")
         if rep is not None:
             row["value"] = rep
             return 1
@@ -726,7 +782,12 @@ RULES: list[Rule] = [
          text=_report_date),
     Rule("backup_dir_date", ("<listing>",),
          "the pipeline's backup folder of a labelled graph is named after today's date (index/<YYYY-MM-DD>/): "
-         "the name becomes <DATE>; its files are compared under the rules of the files they copy"),
+         "every such folder of a date on which a run of this side ran becomes the one folder <DATE> (merged in date "
+         "order: a case may run past midnight); its files are compared under the rules of the files they copy"),
+    Rule("replace_bak_leftover", ("replace_bak_leftovers",),
+         "the atomic replace's fallback leaves .gfy-replace-bak-<random>.tmp when a rename is refused at that "
+         "moment (a file held open): the number each step added, per folder, is compared, a difference of up to "
+         "REPLACE_BAK_TOLERANCE per step tolerated (and reported); their names and bytes are not compared"),
     Rule("atlas_clock_columns", ("atlas.db",),
          "every *_at / *_at_ns column (snapshots.created_at, file_stat.recorded_at_ns - the racy-clean check "
          "reads it -, claims.created_at/updated_at, evidence.collected_at, ...) and ISO clocks inside text cells: "
@@ -926,34 +987,37 @@ def excluded(rel: str) -> bool:
 _DATED = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def artifact_names(rels: list[str], sctx: SideCtx, root: Path | None = None) -> dict[str, tuple[str, str]]:
+def artifact_names(rels: list[str], sctx: SideCtx) -> dict[str, tuple[str, str]]:
     """``{rel: (artifact name, rule key)}`` for the files under ``.verinoda``: a dated backup folder
     (``index/<YYYY-MM-DD>/``) whose date is a local date on which a run of THIS side ran becomes ``<DATE>``
-    (``<DATE+1>`` for a second one, by name order; rule ``backup_dir_date``); a folder named after another date
-    keeps its name, so it is compared. The files of either take the rules of the files they copy. A leftover
-    backup of the atomic replace (``.gfy-replace-bak-<random>.tmp``) becomes ``.gfy-replace-bak-<n>.tmp``,
-    numbered per folder in the order of its sha256 (rule ``replace_bak_name``; its bytes are compared)."""
+    (rule ``backup_dir_date``); a folder named after another date keeps its name, so it is compared. The files
+    of either take the rules of the files they copy.
+
+    The pipeline keeps one backup folder per day and overwrites a file in it (project_index/export.py): when a
+    case runs past local midnight, one side's backups may land in two folders where the other's land in one. So
+    every folder named after a date on which a run of this side ran is ONE folder ``<DATE>``, the folders merged
+    in date order, a file of a later date's folder replacing the same file of an earlier one (what a single
+    folder would hold); the replaced files are left out of the result."""
     dated = sorted({r.split("/")[1] for r in rels if r.count("/") >= 2 and r.startswith("index/")
                     and _DATED.match(r.split("/")[1])})
-    ran = [d for d in dated if _report_date_of_run(d, sctx) is not None]
-    tags = {d: "<DATE>" if i == 0 else f"<DATE+{i}>" for i, d in enumerate(ran)}
-    out = {}
-    for r in rels:
+    ran = {d for d in dated if _report_date_of_run(d, sctx) is not None}
+    out: dict = {}
+    by_name: dict = {}
+
+    def date_first(r: str):
+        parts = r.split("/")
+        return (parts[1] if len(parts) >= 3 and parts[0] == "index" and parts[1] in dated else "", r)
+    for r in sorted(rels, key=date_first):
         parts = r.split("/")
         if len(parts) >= 3 and parts[0] == "index" and parts[1] in dated:
-            out[r] = ("/".join(["index", tags.get(parts[1], parts[1])] + parts[2:]), "index/" + "/".join(parts[2:]))
+            name = "/".join(["index", "<DATE>" if parts[1] in ran else parts[1]] + parts[2:])
+            key = "index/" + "/".join(parts[2:])
         else:
-            out[r] = (r, r)
-    baks: dict = {}
-    for r in rels:
-        if _REPLACE_BAK.search(r):
-            folder = out[r][0].rsplit("/", 1)[0] if "/" in out[r][0] else ""
-            baks.setdefault(folder, []).append(r)
-    for folder, group in baks.items():
-        group.sort(key=lambda r: (sha256_file(root / r) if root is not None else "", r))
-        for i, r in enumerate(group, 1):
-            out[r] = ((folder + "/" if folder else "") + f".gfy-replace-bak-<{i}>.tmp", out[r][1])
-        _hit(["replace_bak_name"])
+            name = key = r
+        if name in by_name:  # an earlier date's copy of the same file: the later one replaces it
+            del out[by_name[name]]
+        by_name[name] = r
+        out[r] = (name, key)
     return out
 
 
@@ -1046,7 +1110,7 @@ def state_changes(before: dict, after: dict) -> list[str]:
 
 @dataclass(frozen=True)
 class Op:
-    kind: str                      # write | delete | rename | rmdir | commit
+    kind: str                      # write | delete | rename | rmdir | commit | claim | decide
     rel: str = ""
     data: bytes = b""
     dst: str = ""
@@ -1514,6 +1578,216 @@ def plan_commit_edit(repo: Path):
             Op("commit", data=b"eq: a committed edit")]
 
 
+def _append_line(rel: str, text: str, what: str) -> str:
+    """``text`` with one line appended that says ``what``: a function for Python, else a comment."""
+    nl = _nl(text)
+    body = text if text.endswith(("\n", "\r")) or not text else text + nl
+    suffix = Path(rel).suffix.lower()
+    if suffix == ".py":
+        return body + f"{nl}{nl}def eq_{what}():{nl}    return 4{nl}"
+    if suffix in (".md", ".txt", ".rst"):
+        return body + f"{nl}eq: {what}{nl}"
+    if suffix in (".rb", ".sh", ".toml", ".yaml", ".yml", ".ps1", ".r", ".jl", ".ex", ".robot", ".resource"):
+        return body + f"# eq: {what}{nl}"
+    return body + f"// eq: {what}{nl}"
+
+
+IGNORE_FILES = (".graphifyignore", ".gitignore")
+
+
+def plan_ignore_add(repo: Path):
+    """The ignore rules change between updates: the root's ``.graphifyignore`` (made when missing) names the
+    folder ``add_data_file`` wrote and ``.gitignore`` the folder ``add_duplicate_stem`` wrote, so both leave the
+    graph and the search index (a memo of the ignore rules that a long-lived process keeps goes stale here)."""
+    ops = []
+    for rel, folder in ((".graphifyignore", "eq_notes"), (".gitignore", "eq_dup")):
+        if not (repo / folder).is_dir():
+            continue
+        old = (repo / rel).read_bytes() if (repo / rel).is_file() else b""
+        ops.append(Op("write", rel, old + (b"" if not old or old.endswith(b"\n") else b"\n") + folder.encode()
+                      + b"/\n"))
+    return ops or None
+
+
+def plan_ignore_remove(repo: Path, originals: dict):
+    """The ignore files back as the corpus was built (``.graphifyignore`` deleted, ``.gitignore`` back to its
+    earlier bytes): the folders ``ignore_add`` hid come back."""
+    ops = []
+    for rel in IGNORE_FILES:
+        cur = (repo / rel).read_bytes() if (repo / rel).is_file() else None
+        if cur == originals.get(rel):
+            continue
+        ops.append(Op("delete", rel) if originals.get(rel) is None else Op("write", rel, originals[rel]))
+    return ops or None
+
+
+CONFIG_REL = ".verinoda/config.json"
+CONFIG_VENDORED = b'{\n  "index": {\n    "vendored": true\n  }\n}\n'
+VENDORED_REL = "vendor/eq_vendored.py"
+
+
+def _config_with_vendored(repo: Path, on: bool) -> bytes | None:
+    """``.verinoda/config.json`` (as ``init`` wrote it: indent 2) with ``index.vendored`` set to ``on``, the
+    rest and the layout kept; None when the file is not a JSON object or already says so."""
+    raw = (repo / CONFIG_REL).read_bytes()
+    try:
+        cfg = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(cfg, dict) or not isinstance(cfg.setdefault("index", {}), dict) \
+            or cfg["index"].get("vendored") is on:
+        return None
+    cfg["index"]["vendored"] = on
+    tail = raw[len(raw.rstrip()):]
+    return json.dumps(cfg, indent=2).encode("utf-8") + tail
+
+
+def plan_config_vendored(repo: Path):
+    """The repository's config changes between updates: ``.verinoda/config.json`` turns ``index.vendored`` on
+    (the extraction stamp takes ``-vendored`` and the graph is rebuilt, the calls of vendored code kept), and a
+    vendored file with a call arrives. A memo of the config kept by a long-lived process goes stale here."""
+    ops = [Op("write", VENDORED_REL, b"def eq_vendored_helper():\n    return 1\n\n\n"
+                                     b"def eq_vendored_entry():\n    return eq_vendored_helper()\n")]
+    if not (repo / CONFIG_REL).is_file():
+        return [Op("write", CONFIG_REL, CONFIG_VENDORED)] + ops
+    data = _config_with_vendored(repo, True)
+    return None if data is None else [Op("write", CONFIG_REL, data)] + ops
+
+
+def plan_config_revert(repo: Path):
+    """``index.vendored`` off again (the config back to its earlier bytes; deleted when ``config_vendored`` made
+    it): vendored code leaves the call graph again."""
+    p = repo / CONFIG_REL
+    if not p.is_file() or not (repo / VENDORED_REL).is_file():
+        return None
+    if p.read_bytes() == CONFIG_VENDORED:
+        return [Op("delete", CONFIG_REL)]
+    data = _config_with_vendored(repo, False)
+    return None if data is None else [Op("write", CONFIG_REL, data)]
+
+
+def _changed_lines(repo: Path, rel: str, originals: dict) -> list[int]:
+    """The 1-based numbers of the lines of ``rel`` an edit changed in place since the corpus was built (lines
+    replaced, not added: difflib), in file order."""
+    import difflib
+    cur = _read(repo / rel).splitlines()
+    old = originals[rel].decode("utf-8", "surrogateescape").splitlines()
+    out = []
+    for tag, _i1, _i2, j1, j2 in difflib.SequenceMatcher(None, old, cur, autojunk=False).get_opcodes():
+        if tag == "replace":
+            out += range(j1 + 1, j2 + 1)
+    return out
+
+
+def _revert_target(repo: Path, originals: dict) -> str | None:
+    """The file ``revert_file`` puts back: the one ``retarget_call`` changed (else another Python file of the
+    corpus as built that an edit changed in place), not the racy one (its mtime lies ahead)."""
+    for rel in ("orders/service.py", "sample_calls.py") + tuple(_code_files(repo, ".py")):
+        p = repo / rel
+        if (_original(rel) and rel in originals and p.is_file() and p.stat().st_mtime < time.time() + 60
+                and _changed_lines(repo, rel, originals)):
+            return rel
+    return None
+
+
+def _enclosing_symbol(text: str, line: int) -> str | None:
+    """``Name`` or ``Class.method`` of the top-level function, or method of a top-level class, holding
+    ``line``; None when no such definition holds it."""
+    import ast
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
+    for node in tree.body:
+        if not (node.lineno <= line <= (node.end_lineno or node.lineno)):
+            continue
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return node.name
+        if isinstance(node, ast.ClassDef):
+            for sub in node.body:
+                if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)) and \
+                        sub.lineno <= line <= (sub.end_lineno or sub.lineno):
+                    return f"{node.name}.{sub.name}"
+    return None
+
+
+def plan_claim_between(repo: Path, originals: dict):
+    """Claims and decision records change between updates: a claim is added (``claim add`` by each side's
+    checkout, inside the long-lived process on M and BM, as the MCP server's claim tools do) citing a line that
+    ``revert_file`` changes back, and a second decision record arrives (made once by the BASELINE's ``decide
+    record`` on a throwaway copy of B as it is now: :meth:`Runner.expand_ops`) governing the function that holds
+    that line. The update itself changes no file (noop); ``revert_file`` then makes the claim stale and the
+    governed function change, which a memo of the claims or the records filled by earlier updates misses."""
+    rel = _revert_target(repo, originals)
+    if rel is None:
+        return None
+    text = _read(repo / rel)
+    lines = text.splitlines()
+    changed = _changed_lines(repo, rel, originals)
+    # a changed line inside a body (a definition line renamed by an edit would take the governed name away)
+    body = [n for n in changed if not re.match(r"\s*(async\s+def|def|class)\s", lines[n - 1])]
+    n = (body or changed)[-1]
+    quote = lines[n - 1].strip().split("  #")[0]
+    ops = [Op("claim", data=json.dumps([f"the line reads so between two updates: contains: {quote}",
+                                         f"{rel}:{n}"]).encode())]
+    sym = _enclosing_symbol(text, n)
+    if sym is not None:
+        ops.append(Op("decide", data=json.dumps(
+            ["decide", "record", "--chosen", "keep this function as it is", "--rationale",
+             "the equality harness reviews it", "--title", "Harness review", "--governs", f"{rel}::{sym}"]).encode()))
+    return ops
+
+
+def plan_revert_file(repo: Path, originals: dict):
+    """A file goes back to bytes an earlier build saw (the corpus as built: the scan and the first updates read
+    them), after a file it calls changed (``same_size_keep_mtime``): a memo of past results kept per content
+    digest serves an entry whose context is stale."""
+    rel = _revert_target(repo, originals)
+    return None if rel is None else [Op("write", rel, originals[rel])]
+
+
+def plan_restore_deleted(repo: Path, originals: dict):
+    """Deleted paths come back: the file ``delete_file`` removed with changed content (its folder is still
+    there), the files of the folder ``delete_dir`` removed with their old bytes. A memo entry of a deleted path
+    that is dropped only when a file is modified is looked up again."""
+    ops = []
+    for rel in sorted(originals):
+        p = repo / rel
+        if not _original(rel) or rel in IGNORE_FILES or p.exists():
+            continue
+        q = Path(rel)
+        if (repo / q.with_name(q.stem + "_renamed" + q.suffix)).exists():
+            continue  # renamed away: rename_back
+        if p.parent.is_dir():
+            ops.append(Op("write", rel, _enc(_append_line(rel, originals[rel].decode("utf-8", "surrogateescape"),
+                                                         "restored"))))
+        else:
+            ops.append(Op("write", rel, originals[rel]))
+    return ops or None
+
+
+def plan_rename_back(repo: Path):
+    """The file ``rename_file`` renamed goes back to its old path (its bytes and mtime travel with it)."""
+    for p in sorted(repo.rglob("*_renamed.*")):
+        rel = p.relative_to(repo).as_posix()
+        if ".git" in p.parts or ".verinoda" in p.parts or not p.is_file():
+            continue
+        back = p.with_name(p.name.replace("_renamed.", ".", 1))
+        if not back.exists():
+            return [Op("rename", rel, dst=back.relative_to(repo).as_posix())]
+    return None
+
+
+def plan_after_exit(repo: Path):
+    """After the long-lived processes of M and BM exited: a function appended, taken in by a fresh CLI
+    process of each side's checkout that reads what the long-lived process left (its exit-time writes
+    included)."""
+    rel = _pick(repo, ("orders/pricing.py", "sample.py"), ".py")
+    if rel is None:
+        return None
+    return [Op("write", rel, _enc(_append_line(rel, _read(repo / rel), "after_exit")))]
+
+
 PLANS = {"noop": plan_noop, "add_function": plan_add_function, "body_edit": plan_body_edit,
          "retarget_call": plan_retarget_call, "relocate": plan_relocate,
          "comment_only": plan_comment_only, "add_duplicate_stem": plan_add_duplicate_stem,
@@ -1523,7 +1797,13 @@ PLANS = {"noop": plan_noop, "add_function": plan_add_function, "body_edit": plan
          "racy_prepare": plan_racy_prepare, "racy_same_size": plan_racy_same_size,
          "untracked_cited": plan_untracked_cited, "fast_edit": plan_fast_edit, "human_edit": plan_human_edit,
          "rename_file": plan_rename_file, "delete_file": plan_delete_file, "delete_dir": plan_delete_dir,
-         "commit_edit": plan_commit_edit, "noop_after": plan_noop}
+         "commit_edit": plan_commit_edit, "noop_after": plan_noop,
+         "ignore_add": plan_ignore_add, "ignore_remove": plan_ignore_remove,
+         "config_vendored": plan_config_vendored, "config_revert": plan_config_revert,
+         "claim_between": plan_claim_between, "revert_file": plan_revert_file,
+         "restore_deleted": plan_restore_deleted, "rename_back": plan_rename_back, "after_exit": plan_after_exit}
+# the plans that also read the corpus as built (``{rel: bytes}``, Runner.originals)
+NEEDS_ORIGINALS = frozenset({"ignore_remove", "claim_between", "revert_file", "restore_deleted"})
 
 
 def apply_plan(repo: Path, ops, when_ns: int, git=None) -> None:
@@ -1548,13 +1828,21 @@ def apply_plan(repo: Path, ops, when_ns: int, git=None) -> None:
                 raise HarnessError("a commit edit needs git")
             git(repo, "add", "-A")
             git(repo, "commit", "-q", "-m", op.data.decode())
+        elif op.kind in ("claim", "decide"):
+            pass  # run by the Runner: a command at the fixed folder (claim), a record made once (decide)
         else:
             raise HarnessError(f"unknown edit operation {op.kind!r}")
 
 
 def plan_text(ops) -> str:
-    return ", ".join(o.kind + (f" {o.rel}" if o.rel else "") + (f" -> {o.dst}" if o.dst else "")
-                     + (f" (mtime {o.mtime_ns // 10**9})" if o.mtime_ns is not None else "") for o in ops) or "nothing"
+    def one(o) -> str:
+        if o.kind == "claim":
+            return f"claim add {json.loads(o.data)[1]}"
+        if o.kind == "decide":
+            return f"decide record {json.loads(o.data)[-1]}"
+        return (o.kind + (f" {o.rel}" if o.rel else "") + (f" -> {o.dst}" if o.dst else "")
+                + (f" (mtime {o.mtime_ns // 10**9})" if o.mtime_ns is not None else ""))
+    return ", ".join(one(o) for o in ops) or "nothing"
 
 
 # -- the environment of a run -------------------------------------------------------------------------------------
@@ -1720,10 +2008,20 @@ Path(sys.argv[2]).write_text(json.dumps(out, ensure_ascii=False, default=str, in
 # the call (os.dup2: the same sys.stdout and sys.stderr objects, the same encoding and newline translation as a
 # CLI process writing to a pipe), `verinoda.cli.main(args)` runs, and the exit status is answered on a copy of
 # the original stdout. Exit status as `sys.exit(main())` in a process: an exception is printed and gives 1.
+# The Store a CLI command opens (cli._store: the process exits after one command) is closed after the call, as
+# the MCP server closes the one of its `with self._store()`; nothing else is closed (a Store or connection the
+# code under test keeps between calls on purpose stays open, as in the server).
 _DRIVER = r"""
-import json, os, sys, traceback
+import gc, json, os, sys, traceback
 proto = os.fdopen(os.dup(1), "w", encoding="utf-8")
 from verinoda import cli
+_opened = []
+_cli_store = cli._store
+def _tracked_store(*a, **k):
+    st = _cli_store(*a, **k)
+    _opened.append(st)
+    return st
+cli._store = _tracked_store
 for line in sys.stdin:
     cmd = json.loads(line)
     sys.stdout.flush()
@@ -1749,18 +2047,14 @@ for line in sys.stdin:
         except BaseException:
             traceback.print_exc()
             rc = 1
-        # the CLI leaves its atlas.db Store open (cli._store: the process exits after one command); the MCP
-        # server closes it after every call (`with self._store()`), so the driver does the same. Any other
-        # handle a call leaves open in the repository is kept: the harness cannot move the folder then.
-        import gc
-        from verinoda import store as _store_mod
+        # the Stores this call opened through cli._store (the server's `with self._store()`); then a garbage
+        # collection, so what nothing refers to any more releases its files (the folder is moved next)
+        while _opened:
+            try:
+                _opened.pop().close()
+            except Exception:
+                pass
         gc.collect()
-        for o in gc.get_objects():
-            if isinstance(o, _store_mod.Store):
-                try:
-                    o.close()
-                except Exception:
-                    pass
     finally:
         sys.stdout.flush()
         sys.stderr.flush()
@@ -1806,7 +2100,9 @@ class InProc:
         return subprocess.CompletedProcess(list(args), rc, out.read_bytes().decode("utf-8", "surrogateescape"),
                                            err.read_bytes().decode("utf-8", "surrogateescape"))
 
-    def close(self) -> None:
+    def close(self) -> subprocess.CompletedProcess:
+        """End the process (its atexit handlers run: what it flushes at exit is written now); returns its exit
+        status and what it wrote to stderr outside the calls (start-up and exit)."""
         with contextlib.suppress(OSError):
             self.p.stdin.close()
         try:
@@ -1815,6 +2111,8 @@ class InProc:
             self.p.kill()
             self.p.wait()
         self._err.close()
+        return subprocess.CompletedProcess([], self.p.returncode, "",
+                                           self.err_path.read_bytes().decode("utf-8", "surrogateescape"))
 
 
 def probe_tree(env: Env, tree: Path) -> dict:
@@ -1939,16 +2237,20 @@ def collect_files(repo: Path, sctx: SideCtx, tmp: Path) -> dict:
     ids number the update result's)."""
     atlas = repo / ".verinoda"
     rels = sorted(r for r in tree_paths(atlas) if not excluded(r))
-    if any(_REPLACE_BAK.search(r) for r in rels):
-        # the fallback of the atomic replace (project_index/paths.py) leaves this backup behind only when a
-        # rename was refused at that moment (a file held open): two baseline scans differ in it, so it is not
-        # compared (rule replace_bak_leftover)
-        rels = [r for r in rels if not _REPLACE_BAK.search(r)]
-        _hit(["replace_bak_leftover"])
-    names = artifact_names(rels, sctx, atlas)
-    if any(n != r and not _REPLACE_BAK.search(r) for r, (n, _k) in names.items()):
+    # the fallback of the atomic replace (project_index/paths.py) leaves a backup behind when a rename was
+    # refused at that moment (a file held open): two baseline scans differ in it now and then. Their number per
+    # folder is kept here; Runner.observe turns it into what the step added (``replace_bak_leftovers``, see
+    # compare: a difference up to REPLACE_BAK_TOLERANCE is tolerated and reported); names and bytes are not kept
+    baks: dict = {}
+    for r in rels:
+        if _REPLACE_BAK.search(r):
+            folder = r.rsplit("/", 1)[0] if "/" in r else ""
+            baks[folder] = baks.get(folder, 0) + 1
+    rels = [r for r in rels if not _REPLACE_BAK.search(r)]
+    names = artifact_names(rels, sctx)
+    if len(names) != len(rels) or any(n != r for r, (n, _k) in names.items()):
         _hit(["backup_dir_date"])
-    items: dict = {}
+    items: dict = {"replace_bak_leftovers": ("json", dict(sorted(baks.items())))}
     # every folder under .verinoda (an empty one a run left behind included), under its artifact name
     dirs = set()
     for d in tree_dirs(atlas):
@@ -1956,7 +2258,7 @@ def collect_files(repo: Path, sctx: SideCtx, tmp: Path) -> dict:
         dirs.add(probe[:-1])
     items["verinoda_dirs"] = ("json", sorted(dirs))
     plain = []
-    for rel in rels:
+    for rel in names:
         p = atlas / rel
         with open(p, "rb") as f:
             head = f.read(len(SQLITE_MAGIC))
@@ -2024,8 +2326,15 @@ def corpus_items(env: Env, repo: Path) -> dict:
             "git_state": ("json", {"head": head, "status": status, "index_entries": flags})}
 
 
-def compare(b: Side, c: Side, skip=()) -> list[tuple[str, str]]:
-    """``[(artifact, where)]`` for each artifact that differs."""
+def replace_bak_difference(a: dict, b: dict) -> int:
+    """How many leftover backups of the atomic replace two sides differ by, summed over the folders."""
+    return sum(abs(a.get(k, 0) - b.get(k, 0)) for k in set(a) | set(b))
+
+
+def compare(b: Side, c: Side, skip=(), tolerated: list | None = None) -> list[tuple[str, str]]:
+    """``[(artifact, where)]`` for each artifact that differs. ``replace_bak_leftovers`` (what the step added)
+    differs only when the counts differ by more than ``REPLACE_BAK_TOLERANCE``; a smaller difference is appended
+    to ``tolerated``."""
     out = []
 
     def order(n):
@@ -2037,6 +2346,17 @@ def compare(b: Side, c: Side, skip=()) -> list[tuple[str, str]]:
             out.append((name, "only on the " + ("baseline" if name in b.items else "candidate") + " side"))
             continue
         (kb, vb), (kc, vc) = b.items[name], c.items[name]
+        if name == "replace_bak_leftovers" and kb == kc == "json" and vb != vc:
+            n = replace_bak_difference(vb, vc)
+            where = f"{_short(vb)} != {_short(vc)}"
+            if n > REPLACE_BAK_TOLERANCE:
+                out.append((name, f"{where} (the step added {n} more on one side; tolerated: "
+                                  f"{REPLACE_BAK_TOLERANCE})"))
+            else:
+                _hit(["replace_bak_leftover"])
+                if tolerated is not None:
+                    tolerated.append((name, where))
+            continue
         if kb == "bytes" and kc == "bytes":
             d = bytes_diff(vb, vc)
         elif kb == kc == "json":
@@ -2129,6 +2449,8 @@ class Runner:
         self.inprocs: dict = {}  # side -> InProc (M and BM)
         self.sides = ["B", "C", "C0"]
         self.reference = {"C": "B", "C0": "B"}
+        self.originals: dict = {}  # {rel: bytes} of the corpus as built (run_case): plans NEEDS_ORIGINALS
+        self.bak_seen: dict = {}  # side -> {folder: leftover backups} at its last observation
 
     def close(self) -> None:
         for p in self.inprocs.values():
@@ -2147,12 +2469,16 @@ class Runner:
         """Move everything in the fixed folder's parent (the corpus is not there now) to :meth:`outside`, so
         each side's leftovers are its own and the next run starts from an empty parent."""
         moves = []
-        parent = self.fixed.parent
-        if parent.is_dir():
+        # the current fixed folder's parent, and the other one's (<case>/q/ after relocate, <case>/r/ during it):
+        # a long-lived process that keeps writing where it once ran is seen in every later step
+        for parent in (self.fixed.parent,) + tuple(q for q in (self.fixed_main.parent, self.fixed_moved.parent)
+                                                   if q != self.fixed.parent):
+            if not parent.is_dir():
+                continue
             for p in sorted(parent.iterdir()):
                 if p == self.fixed:
                     raise HarnessError(f"{self.fixed} is still in use")
-                moves.append((p, p.name))
+                moves.append((p, p.name if parent == self.fixed.parent else f"@{parent.name}/{p.name}"))
         # anything new in the case folder or the work folder (two and three levels above the repository)
         # the tags name folders on disk: no "<" or ">" (not allowed in a Windows file name)
         for root, tag, known in ((self.cdir, "@case", CASE_ENTRIES), (self.env.work, "@work", self.env.known)):
@@ -2171,6 +2497,7 @@ class Runner:
         """Run the side's checkout on its copy (moved into the fixed folder); ``after(run)`` runs before the
         copy moves back. The run's wall-clock window (``after`` included) is recorded under ``label``: a clock
         value this side writes is accepted only inside the window of one of its runs."""
+        self.next_second(side)
         with at_fixed(self.store[side], self.fixed):
             start = time.time()
             try:
@@ -2185,6 +2512,14 @@ class Runner:
         self.sweep_outside(side)
         self.note_graph(side, label)
         return r
+
+    def next_second(self, side: str) -> None:
+        """Wait until the second after the one the side's last run ended in: two runs of one side never share
+        a second, so a clock truncated to a whole second names one run only (:func:`clock_run`)."""
+        if self.ctx[side].windows:
+            nxt = math.floor(self.ctx[side].windows[-1][2]) + 1
+            while time.time() < nxt:
+                time.sleep(min(0.25, max(0.0, nxt - time.time())))
 
     def note_graph(self, side: str, label: str) -> None:
         st = graph_state(self.store[side])
@@ -2239,6 +2574,13 @@ class Runner:
         for s in sides:
             side = Side()
             side.items.update(collect_files(self.store[s], self.ctx[s], self.cdir / "t" / s))
+            # the leftover backups this step added (the count since this side's last observation), per folder
+            now = side.items["replace_bak_leftovers"][1]
+            before = self.bak_seen.get(s, {})
+            side.items["replace_bak_leftovers"] = ("json", {k: now.get(k, 0) - before.get(k, 0)
+                                                            for k in sorted(set(now) | set(before))
+                                                            if now.get(k, 0) != before.get(k, 0)})
+            self.bak_seen[s] = now
             for name, run, json_out in runs.get(s, ()):
                 side.items.update(run_items(name, run, self.ctx[s], json_out))
             side.items.update(corpus_items(self.env, self.store[s]))
@@ -2266,17 +2608,18 @@ class Runner:
                                    + "; ".join(state_changes(guard[s], tree_state(self.store[s] / ".verinoda"))[:5]))
         return out
 
-    def decision_record(self) -> dict[str, bytes]:
-        """The decision record every side starts with, made ONCE by the baseline (``verinoda decide record``) on
-        a throwaway copy of B: ``{path under .verinoda: bytes}``. It is an input of `update` (the decision
-        check), the same bytes on every side."""
+    def decision_record(self, args: list[str] | None = None) -> dict[str, bytes]:
+        """The decision record every side starts with (or ``args``, a later one: ``claim_between``), made ONCE
+        by the baseline (``verinoda decide record``) on a throwaway copy of B as it is now: ``{path under
+        .verinoda: bytes}`` of what it wrote there. It is an input of `update` (the decision check), the same
+        bytes on every side."""
         if self.fixed.exists():
             raise HarnessError(f"{self.fixed} is in use")
         shutil.copytree(self.store["B"], self.fixed, copy_function=shutil.copy2)
         try:
             before = tree_state(self.fixed / ".verinoda")
             r = run_tree(self.env, self.baseline, self.case.seed, self.user("decide"), "cli",
-                         *decision_args(self.fixed), "--repo", str(self.fixed), "--json")
+                         *(decision_args(self.fixed) if args is None else args), "--repo", str(self.fixed), "--json")
             if r.returncode:
                 raise HarnessError(f"{self.tag}: baseline `verinoda decide record` exited {r.returncode}: "
                                    f"{(r.stderr or r.stdout).strip()[-600:]}")
@@ -2320,14 +2663,18 @@ class Runner:
                 runs[s].append((f"claim_{role}", r, True))
         self.t_end = time.time()
         sides = self.observe(("B", "B2", "C"), runs)
-        det = compare(sides["B"], sides["B2"])
+        tolerated_det: list = []
+        det = compare(sides["B"], sides["B2"], (), tolerated_det)
+        TOLERATED.extend(f"{self.tag} step=scan B2: {a}: {w}" for a, w in tolerated_det)
         if det and not self.no_rules:
             raise HarnessError(f"{self.tag}: the two BASELINE scans differ, so the baseline is not deterministic "
                                "here: " + "; ".join(f"{a}: {w}" for a, w in det[:5]))
         res.diffs += [f"{self.tag} step=scan (B vs B2, --no-rules): {a}: {w}" for a, w in det]
         rmtree(self.store["B2"])
         self.make_derived()
-        diffs = compare(sides["B"], sides["C"], self.skip)
+        tolerated: list = []
+        diffs = compare(sides["B"], sides["C"], self.skip, tolerated)
+        TOLERATED.extend(f"{self.tag} step=scan C: {a}: {w}" for a, w in tolerated)
         res.diffs += [f"{self.tag} step=scan: {a}: {w}" for a, w in diffs]
         print(f"  {self.tag}: scan (+ {len(targets)} claims, {len(records)} decision record): "
               f"{'equal' if not diffs else f'DIFFERENT ({len(diffs)} artifact(s))'}", flush=True)
@@ -2337,6 +2684,7 @@ class Runner:
         """``dst`` starts as ``src`` is now: the repository with .verinoda and .git, the user folder and the
         leftovers beside the fixed folder."""
         shutil.copytree(self.store[src], self.store[dst], copy_function=shutil.copy2)
+        self.bak_seen[dst] = dict(self.bak_seen.get(src, {}))
         for folder in (self.user, self.outside):
             if folder(src).is_dir():
                 shutil.copytree(folder(src), folder(dst), copy_function=shutil.copy2)
@@ -2347,7 +2695,8 @@ class Runner:
         C0, the upgrade path: a copy of B as the BASELINE left it (index/cache/, the stat index, the manifest,
         the sidecars, atlas.db, .git; the user folder and the leftovers beside the fixed folder), from which the
         CANDIDATE runs every update. Its clock windows, graph mtimes and stamps start as B's (what it holds was
-        written by B's runs); the candidate's stamps are accepted besides the baseline's.
+        written by B's runs); the candidate's stamps are its own, the baseline's are accepted as "other"
+        (``<CODE_STAMP other>``), so keeping the baseline's stamp and writing its own are told apart.
 
         B0, only when a recorded stamp of the candidate differs from the baseline's (it changed the extractors or
         the code a cache is stamped with): the candidate rightly treats B's state as an older build (the
@@ -2355,18 +2704,26 @@ class Runner:
         its own state, never does. B0 is a copy of B whose recorded stamps of those kinds (``STAMP_FILES``) are
         replaced by ``eq-outdated-<kind>`` (same bytes otherwise, mtime kept), updated by the BASELINE: the
         baseline upgrading from an older build. C0 is then compared with B0 instead of B; the marker is accepted
-        on B0 as a stamp of that kind, like the baseline's own on C0.
+        on B0 as the "other" stamp of that kind, as the baseline's is on C0: where B0 re-stamps a file and C0
+        keeps the baseline's stamp (a cache that stopped starting over), the two differ.
 
         M and BM: a copy of C's set-up state updated by the CANDIDATE, and a copy of B's updated by the BASELINE,
         each inside one long-lived process of its own (:class:`InProc`); M is compared with BM (``--no-inproc``
         leaves both out). Not with B: the baseline itself writes differently in a long-lived process (its stat
         index is loaded once per process, tied to the first root it saw, and written only at exit:
-        project_index/cache.py), so only the baseline in the same situation is a fair reference."""
+        project_index/cache.py), so only the baseline in the same situation is a fair reference. After the
+        last step both processes exit with their repository in the fixed folder, and a fresh CLI process of
+        each checkout updates what they left (:meth:`finish_inproc`)."""
         self.copy_side("B", "C0")
         b = self.ctx["B"]
-        self.ctx["C0"] = SideCtx("C0", stamps=dict(self.probes[self.candidate]), also=dict(b.stamps),
-                                 graph_mtimes=dict(b.graph_mtimes), windows=list(b.windows))
         pb, pc = self.probes[self.baseline], self.probes[self.candidate]
+        # C0's own stamps are the candidate's, the baseline's are "other" (<CODE_STAMP other>): its reference B0
+        # names its own and the eq-outdated markers the same way. atlas.db's schema_written_by is the exception:
+        # only a schema migration rewrites it (store._migrate), so on C0 it must stay what B wrote (named as B
+        # names it) and the candidate's there is "other"
+        self.ctx["C0"] = SideCtx("C0", stamps={**pc, "server_version": pb.get("server_version")},
+                                 also={**pb, "server_version": pc.get("server_version")},
+                                 graph_mtimes=dict(b.graph_mtimes), windows=list(b.windows))
         outdated = [k for k in STAMP_FILES if pb.get(k) != pc.get(k)]
         if outdated:
             self.copy_side("B", "B0")
@@ -2404,15 +2761,33 @@ class Runner:
                 self.sides.append(side)
             self.reference["M"] = "BM"
 
-    def step(self, name: str, res: CaseResult) -> bool | None:
-        ops = PLANS[name](self.store["B"])
+    def expand_ops(self, ops: list) -> list:
+        """A ``decide`` operation becomes the writes of the record the baseline makes now (on a throwaway copy
+        of B, before the step's edits); a record that cannot be made is left out, with a note."""
+        out = []
+        for op in ops:
+            if op.kind != "decide":
+                out.append(op)
+                continue
+            try:
+                got = self.decision_record(json.loads(op.data))
+            except HarnessError as exc:
+                print(f"  {self.tag}: note: the second decision record was not made: {exc}", flush=True)
+                continue
+            out += [Op("write", ".verinoda/" + rel, data) for rel, data in sorted(got.items())]
+        return out
+
+    def step(self, name: str, res: CaseResult, sides=None) -> bool | None:
+        plan = PLANS[name]
+        ops = plan(self.store["B"], self.originals) if name in NEEDS_ORIGINALS else plan(self.store["B"])
         if ops is None:
             res.skipped.append(name)
             print(f"  {self.tag}: {name}: skipped (no file of its kind in this corpus)", flush=True)
             return None
+        ops = self.expand_ops(ops)
         mode = STEP_MODES.get(name, "json")
         when = math.ceil(self.t_end) + 1
-        sides_now = list(self.sides)
+        sides_now = list(self.sides if sides is None else sides)
         for s in sides_now:
             apply_plan(self.store[s], ops, when * 1_000_000_000, lambda repo, *a: git(self.env, repo, *a))
             if self.case.cache == "cold":
@@ -2425,12 +2800,70 @@ class Runner:
         finally:
             self.fixed = self.fixed_main
 
+    def compare_sides(self, name: str, sides: dict, sides_now: list, res: CaseResult) -> list:
+        """Compare each side of ``sides_now`` that has a reference with it; the differences go to ``res``, a
+        tolerated one (replace_bak_leftovers) to ``TOLERATED``. Returns ``[(side, artifact, where)]``."""
+        diffs = []
+        for s in sides_now:
+            if s not in self.reference:
+                continue
+            tolerated: list = []
+            diffs += [(s, a, w) for a, w in compare(sides[self.reference[s]], sides[s], self.skip, tolerated)]
+            TOLERATED.extend(f"{self.tag} step={name} {s}: {a}: {w}" for a, w in tolerated)
+        res.compared += 1
+        note = " (after the long-lived processes exited)" if name in EXIT_STEPS else ""
+        res.diffs += [f"{self.tag} step={name}{SIDE_NOTES[s]}{note}: {a}: {w}" for s, a, w in diffs]
+        return diffs
+
+    def finish_inproc(self, res: CaseResult) -> bool:
+        """Sides M and BM after the last step: each long-lived process exits with its repository in the fixed
+        folder (the first folder it ran in, where a flush at exit is aimed: the baseline's stat index), what it
+        wrote then is collected and compared (step ``inproc_exit``: the exit status and stderr outside the calls
+        included), and a fresh CLI process of each side's checkout updates that state after one more edit (step
+        ``after_exit``). Returns whether both were equal."""
+        sides = [s for s in ("BM", "M") if s in self.inprocs]
+        if not sides:
+            return True
+        exits = {}
+        t0 = time.monotonic()
+        for s in sides:
+            proc = self.inprocs.pop(s)
+            self.next_second(s)
+            with at_fixed(self.store[s], self.fixed):
+                start = time.time()
+                try:
+                    exits[s] = proc.close()
+                finally:
+                    self.ctx[s].windows.append(("inproc_exit", start, time.time()))
+            self.sweep_outside(s)
+            self.note_graph(s, "inproc_exit")
+        self.t_end = time.time()
+        observed = self.observe(sides, {s: [("inproc_exit", exits[s], False)] for s in sides})
+        diffs = self.compare_sides("inproc_exit", observed, sides, res)
+        status = "equal" if not diffs else f"DIFFERENT ({len(diffs)} artifact(s))"
+        codes = "; ".join(f"{s}: exit {exits[s].returncode}" for s in sides)
+        print(f"  {self.tag}: inproc_exit: {status} [{codes}] ({time.monotonic() - t0:.1f}s)", flush=True)
+        if diffs and not self.keep_going:
+            return False
+        return self.step("after_exit", res, sides=sides) is not False
+
     def _step(self, name: str, ops, mode: str, sides_now: list, res: CaseResult) -> bool:
         args = ["update", str(self.fixed)] + {"json": ["--json"], "fast": ["--fast", "--json"], "human": []}[mode]
         item = "update_human" if mode == "human" else "update"
         pre, runs, kept = {}, {}, {}
+        extra: dict = {s: [] for s in sides_now}
         t0 = time.monotonic()
         for s in sides_now:
+            for op in ops:
+                if op.kind != "claim":
+                    continue
+                text, src = json.loads(op.data)
+                rc = self.run_at_fixed(s, f"{name} claim", "claim", "add", text, "--repo", str(self.fixed),
+                                       "--source", src, "--json")
+                if s in BASELINE_SIDES and rc.returncode:
+                    raise HarnessError(f"{self.tag}: {name}: baseline `verinoda claim add` ({src}, {s}) exited "
+                                       f"{rc.returncode}: {(rc.stderr or rc.stdout).strip()[-600:]}")
+                extra[s].append((f"{name}_claim", rc, True))
             pre[s] = graph_state(self.store[s])
             runs[s] = self.run_at_fixed(s, name, *args, after=self.wait_background if mode == "fast" else None)
             post = graph_state(self.store[s])
@@ -2441,14 +2874,11 @@ class Runner:
                 raise HarnessError(f"{self.tag}: {name}: the baseline's update ({s}) exited {runs[s].returncode}: "
                                    f"{(runs[s].stderr or runs[s].stdout).strip()[-800:]}")
         t1 = time.monotonic()
-        sides = self.observe(sides_now, {s: [(item, runs[s], mode != "human")] for s in sides_now})
+        sides = self.observe(sides_now, {s: extra[s] + [(item, runs[s], mode != "human")] for s in sides_now})
         t2 = time.monotonic()
         for s in sides_now:
             sides[s].items["graph_kept"] = ("json", kept[s])
-        diffs = [(s, a, w) for s in sides_now if s in self.reference
-                 for a, w in compare(sides[self.reference[s]], sides[s], self.skip)]
-        res.compared += 1
-        res.diffs += [f"{self.tag} step={name}{SIDE_NOTES[s]}: {a}: {w}" for s, a, w in diffs]
+        diffs = self.compare_sides(name, sides, sides_now, res)
         what = []
         for s in sides_now:
             if mode == "human":
@@ -2471,15 +2901,29 @@ class Runner:
 
 
 def _checkout_skip(rel: str) -> bool:
-    """What of a checkout :func:`checkout_state` leaves out: Python's byte-code caches and git's own folder."""
+    """What of a checkout :func:`checkout_state` leaves out: Python's byte-code caches (a ``__pycache__`` folder
+    itself, and the ``.pyc`` files directly in one, with the ``.pyc.<id>`` temporary file importlib writes them
+    through: any other file there is listed), pytest's cache and git's own folder."""
     parts = rel.rstrip("/").split("/")
-    return "__pycache__" in parts or ".pytest_cache" in parts or rel.endswith(".pyc") or parts[0] == ".git"
+    if parts[0] == ".git" or ".pytest_cache" in parts:
+        return True
+    if rel.endswith("/"):
+        return False  # a folder is walked (and listed, see checkout_state) unless named above
+    return len(parts) >= 2 and parts[-2] == "__pycache__" and re.search(r"\.pyc(\.\d+)?$", rel) is not None
 
 
 def checkout_state(tree: Path) -> dict:
-    """Every file of a checkout (:func:`_checkout_skip` aside): a run that writes into the code it runs from
-    (a memo file beside a module) is seen."""
-    return tree_state(tree, skip=_checkout_skip)
+    """Every file of a checkout (:func:`_checkout_skip` aside) and every folder but the ``__pycache__`` ones (an
+    empty one included, no times): a run that writes into the code it runs from (a memo file beside a module,
+    or inside ``__pycache__`` under a name that is not byte code) is seen."""
+    out = tree_state(tree, skip=_checkout_skip)
+    for dirpath, dirnames, _files in os.walk(tree):
+        prefix = "" if Path(dirpath) == tree else Path(dirpath).relative_to(tree).as_posix() + "/"
+        dirnames[:] = [d for d in dirnames if not _checkout_skip(prefix + d + "/")]
+        for d in dirnames:
+            if d != "__pycache__":
+                out[prefix + d + "/"] = ["dir"]
+    return dict(sorted(out.items()))
 
 
 def run_case(env: Env, case: Case, baseline: Path, candidate: Path, edits: list[str], probes: dict,
@@ -2496,12 +2940,17 @@ def run_case(env: Env, case: Case, baseline: Path, candidate: Path, edits: list[
         src = build_corpus(env, case.corpus, baseline, candidate, rn.cdir / "src" / case.corpus)
         for s in ("B", "B2", "C"):  # C0, B0 and M are made after the set-up (Runner.make_derived)
             shutil.copytree(src, rn.store[s], copy_function=shutil.copy2)
+        rn.originals = {rel: (src / rel).read_bytes() for rel in tree_state(src, skip_root=(".git",))}
         rmtree(rn.cdir / "src")
         if rn.scan(res) or keep_going:
+            stopped = False
             for name in edits:
                 ok = rn.step(name, res)
                 if ok is False and not keep_going:
+                    stopped = True
                     break
+            if not stopped:
+                rn.finish_inproc(res)
     finally:
         rn.close()
     for k, t in trees.items():
@@ -2603,6 +3052,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"total {total:.1f}s")
     print("volatile rules applied (artifact reads): "
           + (", ".join(f"{k} x{v}" for k, v in sorted(RULE_HITS.items())) or "none"))
+    if TOLERATED:
+        print(f"tolerated (rule replace_bak_leftover, up to {REPLACE_BAK_TOLERANCE}): {len(TOLERATED)}")
+        for d in TOLERATED:
+            print(f"  {d}")
     all_diffs = [d for _t, res, _s in results for d in res.diffs]
     if all_diffs:
         print(f"DIFFERENT: {len(all_diffs)} difference(s)")
