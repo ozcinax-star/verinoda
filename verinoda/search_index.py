@@ -1856,6 +1856,7 @@ class Ranking:
     pushes: int
     seconds: float
     notes: list[str]
+    text_matched: int | None = None   # with a query's filters: the units the text ranked before they applied
 
 
 def _adjacency_cache(g) -> dict:
@@ -2469,10 +2470,16 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
             if ref_factor(uid) < 1.0:
                 reasons[uid].append(REFERENCE_REASON)
         match_line: dict[int, int] = {}
+        text_matched = None
         if where is not None:
-            # a query's filters keep a subset of the ranked units; with nothing ranked (a question of
-            # filters only) every unit is a candidate, at score 0, so the order is by path and line
-            pool = list(score) or [u for u in h.units if include_tests or not is_test_file(h.units[u][0])]
+            # a query's filters keep a subset of the ranked units. With no text to rank (a question of
+            # filters only) every unit is a candidate, at score 0, so the order is by path and line; text
+            # that matched nothing still counts, so it keeps nothing
+            if q.weights or score:
+                pool = list(score)
+                text_matched = len(pool)
+            else:
+                pool = [u for u in h.units if include_tests or not is_test_file(h.units[u][0])]
             kept = where(h, conn, pool)
             score = {u: score.get(u, 0.0) for u in kept}
             for u, (why, line) in kept.items():
@@ -2500,7 +2507,7 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                             ppr_mass.get(uid, 0.0), ps, sorted(name_tf.get(uid, {})),
                             sorted(acc.get(best_pid, {})) if best_pid is not None else [], reasons.get(uid, []),
                             match_line.get(uid)))
-        return Ranking(hits, q, len(score), pushes, time.perf_counter() - t0, list(h.notes))
+        return Ranking(hits, q, len(score), pushes, time.perf_counter() - t0, list(h.notes), text_matched)
     finally:
         h.release(conn)
 

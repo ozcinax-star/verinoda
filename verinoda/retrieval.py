@@ -321,6 +321,8 @@ def retrieve(g: Graph, question: str, budget: Budget | None = None, *, include_t
     fblock = None
     if fl is not None:  # what the filters were read as: always returned, so always charged
         fblock = {"expression": fl.describe(), "ranked_text": fl.text, "matched": rk.candidates}
+        if rk.text_matched is not None:  # how many units the text ranked before the filters applied
+            fblock["text_matched"] = rk.text_matched
         budget.used_chars += _cost(fblock) + len(', "filters": ')
     budget.truncated = budget.used_chars > budget.max_chars
     exps = [f"{e['from']}->{e['to']} ({e['via']})" for e in q.expansions]
@@ -587,6 +589,19 @@ def stale_lines(result: dict) -> list[str]:
     return out
 
 
+def _filters_line(fb: dict) -> str:
+    """The plain-text line that says what the filters were read as and what they kept, or why nothing."""
+    head = f"filters: {fb['expression']}"
+    if fb.get("matched"):
+        return f"{head} ({fb['matched']} matching)"
+    ranked = fb.get("text_matched")
+    if ranked is None:
+        return f"{head} - no indexed unit matches them"
+    if ranked == 0:
+        return f"{head} - the ranked text ({fb.get('ranked_text', '')}) matches no indexed unit"
+    return f"{head} - none of the {ranked} units the ranked text matches passes them"
+
+
 def render_text(result: dict, budget_chars: int = 6000) -> str:
     """Plain text for a model, skeleton first, packed to ``budget_chars``.
 
@@ -616,8 +631,7 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         add(_clip(_expanded_line(expansions), 300))
     fb = result.get("filters")
     if fb:
-        add(_clip(f"filters: {fb['expression']} ({fb['matched']} matching)" if fb.get("matched")
-                  else f"filters: {fb['expression']} - no indexed unit matches them", 300))
+        add(_clip(_filters_line(fb), 300))
     for line in stale_lines(result):
         add(line)
     if rd is None:

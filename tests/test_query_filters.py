@@ -82,6 +82,7 @@ def g(tmp_path_factory):
     _write(root, "src/main/java/shop/PriceService.java", JAVA)
     _write(root, "third_party/pricing/vendor.py", VENDORED)
     _write(root, "tests/test_cache.py", TESTS)
+    _write(root, "static/app.min.js", "function tax(o){return o.total*0.2}\n")
     workflow.init(root)
     st = open_store(root)
     try:
@@ -134,11 +135,51 @@ def test_a_regex_is_read_whole_and_flags_are_kept():
 
 
 @pytest.mark.parametrize("q, msg", [("/(unclosed/ path:x", "not a regular expression"),
-                                    ("is:weird price", "is:weird is not a filter"),
-                                    ("path:a OR", "OR needs"), ("lang:py NOT", "NOT needs")])
+                                    ("is:weird price path:x", "is:weird is not a filter"),
+                                    ("path:a OR", "OR needs"), ("OR path:a", "OR needs"),
+                                    ("path:a AND", "AND needs"), ("AND path:a", "AND needs"),
+                                    ("lang:py NOT", "NOT needs"), ("path:(a) price", "cannot open a group"),
+                                    ("((path:a lang:py", "not closed"), ("path:a) lang:py", "closes no"),
+                                    ("(" * 400 + "path:a" + ")" * 400, "nest deeper"),
+                                    ("NOT " * 1200 + "path:a", "nest deeper")])
 def test_a_filter_that_cannot_be_read_is_an_error(q, msg):
     with pytest.raises(FilterError, match=msg):
         parse(q)
+
+
+def test_prose_that_looks_like_a_filter_stays_prose():
+    # one path segment between slashes is a URL path or a folder, not a regex
+    for q in ["which handler serves /health/ now", "what writes to /tmp/ on startup"]:
+        assert parse(q) is None
+    f = parse("which handler serves /health/ path:web")
+    assert f.text == "which handler serves /health/" and f.describe() == "path:web"
+    assert parse("/health/i path:web").atoms[0].kind == "regex"   # a flag makes it a regex
+    # an is: value that is not a filter is a word when the question writes no filter
+    assert parse("why is the default is:none here") is None and parse("the value is:null") is None
+
+
+def test_a_call_written_in_the_text_keeps_its_parentheses():
+    f = parse("why does parse() fail on empty input lang:py")
+    assert f.text == "why does parse() fail on empty input"
+    assert search_index.named_identifiers(f.text) == search_index.named_identifiers(
+        "why does parse() fail on empty input")
+    assert parse("foo(bar) and more path:x").text == "foo(bar) and more"
+    f = parse("(path:a OR path:b) take() lang:py")
+    assert f.describe() == "(path:a OR path:b) lang:py" and f.text == "take()"
+
+
+def test_a_negated_group_and_a_negated_regex():
+    f = parse("-(path:src OR path:vendor) price")
+    assert f.describe() == "NOT (path:src OR path:vendor)" and f.text == "price"
+    f = parse("NOT (path:src OR path:vendor) price")
+    assert f.describe() == "NOT (path:src OR path:vendor)"
+    f = parse("-/TODO: round/ path:shop")
+    assert f.describe() == "NOT /TODO: round/ path:shop"
+
+
+def test_aliases_are_the_same_filter():
+    assert parse("file:shop/*.py x").describe() == parse("path:shop/*.py x").describe()
+    assert parse("language:java x").describe() == parse("lang:java x").describe()
 
 
 def test_path_lang_and_symbol_matching():
@@ -170,7 +211,8 @@ def test_a_path_filter_keeps_the_ranked_order_of_what_it_keeps(g):
     kept = [i["id"] for i in res["items"]]
     assert [x for x in base if x in kept] == kept[:len([x for x in base if x in kept])]
     assert res["filters"] == {"expression": "path:shop/*", "ranked_text": "price of an order",
-                              "matched": res["filters"]["matched"]} and res["filters"]["matched"] >= len(kept)
+                              "matched": res["filters"]["matched"], "text_matched": res["filters"]["text_matched"]}
+    assert res["filters"]["text_matched"] >= res["filters"]["matched"] >= len(kept)
 
 
 def test_lang_and_symbol_filters(g):
@@ -212,8 +254,69 @@ def test_words_beside_an_operator_are_content_filters(g):
 
 def test_no_match_is_said(g):
     res = _q(g, "price lang:rust")
-    assert res["items"] == [] and res["filters"]["matched"] == 0
+    assert res["items"] == [] and res["filters"]["matched"] == 0 and res["filters"]["text_matched"] > 0
+    first = retrieval.render_text(res, 6000).splitlines()[0]
+    assert first.startswith("filters: lang:rust - none of the ") and "units the ranked text matches" in first
+    res = _q(g, r"/zzq\d+qq/ lang:py")   # filters only
+    assert res["items"] == [] and "text_matched" not in res["filters"]
     assert "no indexed unit matches them" in retrieval.render_text(res, 6000)
+
+
+def test_ranked_text_that_matches_nothing_keeps_nothing(g):
+    # the text still counts when it matches no unit: it is not dropped in favour of the filters alone
+    res = _q(g, "zzqqxx lang:java")
+    assert res["items"] == [] and res["filters"]["matched"] == 0 and res["filters"]["text_matched"] == 0
+    assert "the ranked text (zzqqxx) matches no indexed unit" in retrieval.render_text(res, 6000)
+    # a real word whose units the filter excludes is not "no unit matches the filters"
+    res = _q(g, "store lang:java")
+    assert res["items"] == [] and "none of the" in retrieval.render_text(res, 6000)
+    assert _files(_q(g, "lang:java")) == {"src/main/java/shop/PriceService.java"}
+
+
+def test_a_filter_leaves_the_ranking_of_the_text_unchanged(g):
+    text = "why does take() return the price"
+    plain = [x.key for x in search_index.rank(g, text).hits if x.file.endswith(".py")]
+    f = parse(text + " lang:py")
+    assert f.text == text
+    kept = [x.key for x in search_index.rank(g, f.text, where=query_filters.Selector(f, g.root)).hits]
+    assert kept and kept == plain[:len(kept)]
+
+
+def test_symbol_glob_is_minified_and_is_test(g):
+    res = _q(g, "symbol:price_of_*")
+    names = {i["symbol"] for i in res["items"]}
+    assert any(s.startswith("price_of_legacy") for s in names) and any(s.startswith("price_of_vendor") for s in names)
+    assert all(s.startswith("price_of_") for s in names)
+    assert _files(_q(g, "is:minified")) == {"static/app.min.js"}
+    assert _files(_q(g, "price of an order is:test")) == {"tests/test_cache.py"}
+
+
+def test_negated_regex_and_negated_group_through_retrieve(g):
+    res = _q(g, "price of an order -/TODO: round/ path:shop/cache.py")
+    assert res["items"] and all(i["symbol"] != "price_of" for i in res["items"])
+    both = _files(_q(g, "price of an order (path:shop OR path:src)"))
+    rest = _files(_q(g, "price of an order -(path:shop OR path:src)"))
+    assert both and rest and not both & rest
+    assert rest == _files(_q(g, "price of an order NOT (path:shop OR path:src)"))
+
+
+def test_an_absolute_path_inside_the_repository_is_read_from_its_root(g):
+    root = Path(g.root).resolve()
+    res = _q(g, f'price of an order path:"{root / "shop" / "legacy.py"}"')
+    assert _files(res) == {"shop/legacy.py"}
+    res = _q(g, f"price of an order path:{(root / 'shop').as_posix()}/")
+    assert _files(res) and all(f.startswith("shop/") for f in _files(res))
+    with pytest.raises(FilterError, match="outside the repository"):
+        _q(g, "price path:Z:/elsewhere/src")
+
+
+def test_a_regex_that_backtracks_badly_is_stopped(tmp_path, monkeypatch):
+    _write(tmp_path, "lib.py", "a" * 40000 + "\n")
+    rx = parse("/(a|aa)+b/ path:lib").atoms[0]
+    with pytest.raises(FilterError, match="took longer than"):
+        query_filters.regex_lines(tmp_path, ["lib.py"], [rx], seconds=2)
+    ok = parse("/a{3}/ path:lib").atoms[0]
+    assert query_filters.regex_lines(tmp_path, ["lib.py"], [ok]) == [{"lib.py": [1]}]
 
 
 def test_rank_where_hook_is_optional(g):
@@ -238,7 +341,7 @@ def test_cli_query_reads_filters_and_reports_a_bad_one(g):
     res = json.loads(r.stdout)
     assert res["filters"]["expression"] == "lang:java"
     assert {i["file"] for i in res["items"]} == {"src/main/java/shop/PriceService.java"}
-    bad = _cli(g, "price is:nonsense")
+    bad = _cli(g, "price is:nonsense lang:py")
     assert bad.returncode != 0 and "is:nonsense is not a filter" in bad.stderr
 
 
