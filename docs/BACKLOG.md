@@ -81,7 +81,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 7.1 | **Architecture rules as code** | Layers, forbidden and allowed dependencies, public interfaces, tags; checked in CI | ArchUnit, import-linter, Tach, dependency-cruiser, Nx, Sonargraph, NDepend | `decide check` or a rules file fails CI on a violating edge with its call site |
 | 7.2 | **Violation baseline and ratchet** | Known violations recorded; only new ones fail; the baseline shrinks as they are fixed | ArchUnit FreezingArchRule, dependency-cruiser | a new violation fails while old ones pass |
 | 7.3 | **Ask before writing a dependency** | Check a proposed dependency against the rules before the code exists | Sonargraph MCP `check_proposed_dependency` | an MCP call answers allowed / forbidden with the rule |
 | 7.4 | **What-if refactoring** | Simulate moving or renaming modules and re-check rules and cycles without editing | Sonargraph, Lattix | a simulated move reports the violations it would add or remove |
