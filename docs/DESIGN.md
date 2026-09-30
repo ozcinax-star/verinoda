@@ -5768,6 +5768,153 @@ tests/test_debug.py tests/test_docs.py -q -p no:cacheprovider`
 
 Run together with tests/test_docs.py and tests/test_cli.py: 130 passed (Windows 11, Python 3.12, 2026-09-30). tests/test_mcp.py is unchanged (the MCP wiring is held back).
 
+## 55. Declared vs used dependencies (D82, 2026-09-30)
+
+### 55.1 Why
+
+A project declares its packages in manifests and uses them through imports. The two drift: code imports a
+package nobody declared (it works because another package pulled it in, until that one drops it), a runtime
+dependency is imported by nothing, a test tool is imported by shipped code, or a shipped package is only
+imported by tests. deptry answers this for Python; Verinoda already reads the manifests (for the dependency
+guards) and the imports (for the name-existence check), so the check is a join of the two, with evidence.
+
+### 55.2 Decisions
+
+1. **A mode of `check`, not a new command.** `verinoda check --deps [--env ENV] [--json]`. It reuses
+   `check`'s exit codes: 0 nothing found, 3 something found, 4 nothing checked (no manifest or build file
+   read). PATHs, `--diff` and `--stdin` are refused with it (the check is whole-project).
+2. **MCP: a parameter of the existing core tool.** `code_check(deps=true, env=...)` - the core profile stays
+   at five tools and nothing new is registered (the core's slim `code_check` takes `deps` but not `env`; its
+   description says what `deps=true` does). The response keeps `findings`, `summary`, `exit`,
+   `exit_because`, `manifests` and `limits` when it is capped.
+3. **Manifests are the guards' reader** (`guards.declared_dependencies`: pyproject, requirements*,
+   setup.py/cfg, package.json plus workspace packages, the Gradle/Maven builds the root build includes,
+   version catalogs). The new module only adds what that reader does not return: PEP 735
+   `[dependency-groups]`, Poetry `group.X.dependencies` and `dev-dependencies`, as dev groups.
+4. **Four findings, each a claim** with `status`, `claim`, `evidence` (`file:line` of the declaration, up to
+   three import sites, the lock-file line) and a `next_step`:
+   - `missing`: imported, declared nowhere, and not installed as another package's dependency;
+   - `transitive_only`: imported, not declared, installed only because a declared package requires it
+     (Python: `Requires-Dist` of the installed metadata, walked from the declared roots, extras skipped;
+     npm: the lock file line or `node_modules/<pkg>`);
+   - `unused`: a runtime dependency no file imports (dev groups and extras are not judged: tools are run,
+     not imported);
+   - `wrong_group`: declared only in a dev group but imported by runtime code, or a runtime dependency
+     imported only by dev code.
+5. **Statuses follow the evidence, never above it.**
+   - Python with a project environment (`.venv`/`venv`/`env`, or `--env DIR`), read from its files, never
+     started: an import is tied to an installed distribution by the full dotted module path in each
+     distribution's `RECORD` (the longest installed prefix owned by one distribution; `from X import y`
+     tries `X.y` first). A namespace folder several distributions share (`google`, `azure`, `zope`) pins
+     nothing, so `google.cloud.storage` and `google.protobuf` go to their own distributions and a bare
+     `import google` falls back to the name. `top_level.txt` only stands in for a distribution whose
+     `RECORD` has no module. `missing` and `transitive_only` tied this way are `statically_verified` when
+     every manifest of the project was read.
+   - Python without one: by name (normalised, a table of well-known import/distribution differences,
+     dotted prefixes, build variants `-binary`/`-headless`, `python-X`/`pyX`): `strong_inference`, and a
+     limit says so. A plugin that extends a name (flask-sqlalchemy, pytest-cov) does not stand for the
+     host package: `import flask` is not tied to flask-sqlalchemy.
+   - npm: `transitive_only` and `missing` are `strong_inference`. A lock-file line or a
+     `node_modules/<pkg>` folder shows the package installed, not why: another package's dependency, or a
+     sibling workspace package that declares it (then the claim names that package.json and cites its
+     declaration). A lock entry nested under another package (`node_modules/a/node_modules/foo`) is not
+     one the root code resolves and does not count. Bundler aliases and tsconfig paths are resolved first
+     with the TS resolver; relative imports, node builtins, `node:` specifiers and the workspace's own
+     packages are skipped.
+   - Gradle/Maven: an import is tied to an artifact by group prefix, artifact name as a package segment,
+     or a table of well-known packages (Guava, Jackson, JUnit, Gson, ...): `strong_inference`. Without the
+     classpath an import matching nothing may be the JDK, the platform or a transitive jar, so JVM imports
+     are never `missing`/`transitive_only`; their count is a limit. Only compile configurations
+     (`implementation`, `api`, `compileOnly`, `test*`, Maven scopes) are judged; `runtimeOnly`,
+     annotation processors and `include`/bundling are not expected to be imported. An import that ties
+     with several artifacts (two artifacts of one group, say `spring-boot-starter-web` and
+     `spring-boot-starter-test` for `org.springframework.boot.SpringApplication`) counts as use of each but
+     decides no `wrong_group`; a starter or BOM artifact (it has no package of its own) is not judged
+     unused, and a limit names it. `spring-boot-starter-test` is in the table (JUnit, AssertJ, Mockito,
+     Spring test packages).
+   - `unused` and `wrong_group` are `strong_inference` everywhere (use without an import exists; the
+     dev/runtime split of files is a path rule).
+6. **Optional imports** (inside `try/except ImportError`, the body of `if TYPE_CHECKING:` or the `else` of
+   `if not TYPE_CHECKING:`; TS `import type`) are never `missing` and never make a dev dependency a runtime
+   one. The body of `if not TYPE_CHECKING:` runs, so its imports are hard.
+7. **Dynamic imports**: a declared Python package whose import name only appears as a string literal
+   (`importlib.import_module("tree_sitter_lua")`) is not reported unused; a limit names it.
+8. **What is dev code**: test files (`testcode.is_test_file`), `docs/`, `benchmarks/`, `e2e/`, stories,
+   `setup.py`, `noxfile.py`, `conftest.py`, JS/TS tool configs (`*.config.ts` except Angular's
+   `app.config.ts`, `.eslintrc.js`); a bare `config.ts` is runtime code. What is a
+   dev group: PEP 735 / Poetry groups, `devDependencies`, a `requirements-dev`-like file, an extra named like
+   dev/test/lint/docs/typing, a Gradle `test*` configuration, a Maven `test` scope.
+9. **Not the project's code**: node_modules, build outputs, vendor/third_party, examples/samples/fixtures,
+   benchmark `corpora/`, virtual environments, reference trees (`_excluded_roots`), and anything git-ignored.
+10. Nothing is run, installed or fetched; nothing leaves the machine.
+11. **The project's own Python modules**: the outermost package of each chain of `__init__.py` folders, and
+    the modules and namespace folders at the root or in `src/`, are first-party everywhere. A loose module
+    deeper down (`scripts/requests.py`) is first-party only for the files in its folder and below (a
+    script's folder is on sys.path), so a helper named like a package does not hide that package's
+    imports elsewhere. A loose module in a folder of tests (`tests/docfixtures.py`) is also first-party
+    for every dev file: pytest puts each test folder it collects on sys.path for the session.
+12. **Inputs that cannot be read are limits**: a Python file that does not parse (including one nested too
+    deep for the parser: RecursionError, MemoryError) and any file over the size cap (2 MB for source
+    files, 64 MB for lock files, which pass 2 MB in large projects) are named in `limits`.
+13. **JS/TS imports are scanned in linear time**: clause runs (`import a, { b } from`) are found once,
+    left to right, and the last `import`/`export` keyword before the closing `from` gives the line; a lazy
+    clause pattern tried from every `import` backtracked quadratically on long runs of words and spaces
+    (a 36 KB file took 12 s). Lock files are indexed in one pass.
+
+### 55.3 Not done
+
+- Python without an environment ties imports by name: a package installed some other way, or an import
+  name the alias table does not know, can be reported `missing`.
+- `unused` cannot see use without an import: entry points, plugins (pytest11), CLI tools declared as runtime
+  deps, strings passed to importers other than a literal module name.
+- JVM: no classpath, so no `missing`/`transitive_only`; the artifact matching is heuristic.
+- Only the root manifests, workspace packages and included builds are read; other manifests are listed as a
+  limit and make `missing` `strong_inference`.
+- A module the project writes at run time (a generated file, a temporary module a test creates) is not a
+  file of the project, so its import is reported `missing` (`strong_inference`).
+- Go, Cargo and other ecosystems the reader lists are not checked (a limit says so).
+- Lock files: package-lock.json, npm-shrinkwrap.json, yarn.lock, pnpm-lock.yaml are matched by line pattern,
+  not parsed.
+
+### 55.4 Tests
+
+`tests/test_depcheck.py`:
+
+- `test_python_by_name` - missing, unused, both wrong-group directions, try/except and examples/ skipped,
+  aliases (`yaml` -> PyYAML), stdlib and first-party skipped, exact evidence lines, summary and exit.
+- `test_python_with_environment_finds_transitive` - a hand-written `.venv`: transitive via `Requires-Dist`
+  (extras skipped) is `statically_verified`, `attr` tied to `attrs` by `top_level.txt`, `--env none` drops
+  to `strong_inference`, a bad `--env` raises; httpx is read as declared.
+- `test_npm` - missing, transitive from the lock file (lock line cited), unused, wrong group both ways,
+  type-only imports, node builtins, relative imports and `@types/*` not reported.
+- `test_gradle` - unused artifact, `testImplementation` used by main code, Guava by the alias table,
+  `runtimeOnly` not judged, unmatched imports as a limit.
+- `test_nothing_to_check_and_clean` - exit 4 without a manifest, exit 0 on a clean project.
+- `test_dev_files_and_dynamic_imports` - the dev-file rule, a string-literal import, `TYPE_CHECKING`.
+- `test_cli` - rendering, `--json`, PATH with `--deps` refused, a bad `--env` refused.
+- `test_mcp_code_check_deps` - `code_check(deps=True)` equals the core, `paths` with `deps` refused.
+- `test_mcp_core_profile_offers_deps` - the core profile still lists five tools and its slim `code_check`
+  takes `deps` (not `env`).
+
+- `test_namespace_packages_in_the_environment` - `google.cloud` and `google.protobuf` from three
+  distributions sharing `google/` are tied to their own; a bare `import google` falls back to the name.
+- `test_npm_workspace_sibling_and_nested_lock` - an import declared only by a sibling workspace package is
+  `transitive_only` `strong_inference` naming that package.json; a nested lock entry does not count.
+- `test_spring_boot_starters` - no `wrong_group` or `unused` for starter-web / starter-test.
+- `test_runtime_config_module_is_not_dev_code` - `src/config.ts` importing dotenv and zod.
+- `test_plugin_package_does_not_stand_for_its_host` - flask / flask-sqlalchemy, pytest / pytest-cov,
+  psycopg2 / psycopg2-binary still tied.
+- `test_not_type_checking_and_parser_limits` - `if not TYPE_CHECKING:` body is hard, its `else` optional;
+  a deeply nested file is a parse limit, not a crash.
+- `test_js_imports_linear_and_exact` - every import form with its line; pathological inputs under 2 s.
+- `test_helper_script_named_like_a_package` - `scripts/requests.py` and `scripts/yaml.py` hide nothing
+  outside `scripts/`.
+- `test_oversized_files_are_a_limit` - a file over the cap is named in `limits`.
+
+`tests/test_mcp.py`: `code_check`'s expected parameters include `deps`. Run together with
+`tests/test_docs.py`, `tests/test_research.py`, `tests/test_cli.py`, `tests/test_codecheck*.py` and
+`tests/test_guard*.py`: all pass.
+
 ## Sources
 
 - **Retrieval:**
