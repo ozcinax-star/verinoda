@@ -1123,6 +1123,17 @@ def cmd_history(args) -> int:
     repo = _repo(args)
     if args.history_cmd == "text":
         res = history.text_history(repo, args.text, regex=args.regex, path=args.path)
+    elif args.history_cmd == "symbol":
+        from verinoda import freshness, index
+
+        g = stale = None
+        if not history._SPAN.match(args.target.strip()):
+            _need_graph(repo)
+            g, stale = index.load(repo), freshness.check(repo)["files"]
+        try:
+            res = history.symbol_history(repo, g, args.target, stale=stale or (), limit=args.limit)
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}") from None
     elif args.history_cmd == "commits":
         res = history.commits(repo, message=args.message, author=args.author, path=args.path, since=args.since,
                               until=args.until, diff=args.diff, limit=args.limit)
@@ -3000,7 +3011,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-numbers", action="store_true", help="the source as it is, without line numbers")
 
     sp = sub.add_parser("history", help="git history: when a text appeared or disappeared (the commits as "
-                                         "evidence), commit search, two revisions compared (exit 2: nothing found)")
+                                         "evidence), the commits that changed a symbol, commit search, two "
+                                         "revisions compared (exit 2: nothing found)")
     hsub = sp.add_subparsers(dest="history_cmd", required=True)
     c = add("text", cmd_history, "the commit that first added TEXT and, when HEAD has none, the one that last "
                                  "removed it (git log -S; -G with --regex), each with its file:line", parent=hsub)
@@ -3008,6 +3020,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--regex", action="store_true", help="TEXT is an extended regular expression matched against "
                                                         "added and removed lines")
     c.add_argument("--path", help="only the history of this file or folder (a git pathspec)")
+    c = add("symbol", cmd_history, "why a symbol is the way it is: the commits that changed its lines (git log "
+                                   "-L from HEAD), newest first, each quoting its message", parent=hsub)
+    c.add_argument("target", help="Class.method, path/file.py::name, a node id, or path:A-B")
+    c.add_argument("--limit", type=int, default=10, help="commits to list (default 10, at most 100)")
     c = add("commits", cmd_history, "commits by message, author, path, date and diff content, newest first",
             parent=hsub)
     c.add_argument("--message", help="a regular expression the commit message matches (case ignored)")

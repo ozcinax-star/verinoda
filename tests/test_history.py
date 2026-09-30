@@ -323,3 +323,123 @@ def test_mcp_history_search(repo):
         assert t.history_search(text="RETRY_BUDGET", path="lib")["appeared"]["commit"] == shas[2]
     finally:
         shutil.rmtree(r / ".verinoda")
+
+
+# -- the commits that changed a symbol ---------------------------------------------------------------------------
+
+PRICING_1 = "def compute_total(items):\n    return sum(items)\n\n\ndef other():\n    return 0\n"
+PRICING_2 = "def compute_total(items):\n    return round(sum(items), 2)\n\n\ndef other():\n    return 0\n"
+PRICING_3 = "def compute_total(items):\n    return round(sum(items), 2)\n\n\ndef other():\n    return 1\n"
+
+
+@pytest.fixture(scope="module")
+def sym_repo(tmp_path_factory) -> tuple[Path, list[str]]:
+    """compute_total written, then rounded (a message with a body and a trailer block); then other() changed."""
+    r = tmp_path_factory.mktemp("symbol history ğ") / "proj"
+    r.mkdir()
+    _git(r, "init", "-q")
+    body = ("Round totals to cents\n\nInvoices showed 10.000000001; the ledger stores cents, so the total is\n"
+            "rounded where it is computed.\n\nCo-Authored-By: Someone <s@example.org>\nSigned-off-by: Bob <b@x>\n")
+    shas = [_commit(r, {"pricing.py": PRICING_1}, "Add pricing", date="2026-01-05T10:00:00+00:00"),
+            _commit(r, {"pricing.py": PRICING_2}, body, author="Alice", date="2026-02-10T10:00:00+00:00"),
+            _commit(r, {"pricing.py": PRICING_3}, "Other returns one", date="2026-03-15T10:00:00+00:00")]
+    return r, shas
+
+
+def test_the_commits_that_changed_a_line_range_quote_their_messages(sym_repo):
+    r, shas = sym_repo
+    res = history.symbol_history(r, None, "pricing.py:1-2")
+    assert res["status"] == "found" and [c["commit"] for c in res["commits"]] == [shas[1], shas[0]]
+    rounded = res["commits"][0]
+    assert rounded["subject"] == "Round totals to cents" and rounded["author"] == "Alice"
+    assert rounded["body"].startswith("Invoices showed 10.000000001") and "Signed-off-by" not in rounded["body"]
+    assert "Co-Authored-By" not in rounded["evidence"]["excerpt"] and "ledger stores cents" in rounded["evidence"]["excerpt"]
+    claim = res["claims"][0]
+    assert claim["status"] == "primary_source_verified" and shas[1][:10] in claim["text"]
+    assert claim["evidence"][0]["locator"] == f"commit {shas[1]} pricing.py"
+    from verinoda.claims import check_status
+
+    for c in res["claims"]:
+        evs = [{**e, "relation": "supports", "id": f"evd_{i}"} for i, e in enumerate(c["evidence"])]
+        assert check_status(c["status"], evs, claim={"kind": c["kind"], "text": c["text"]}, repo=r) is None, c
+    other = history.symbol_history(r, None, "pricing.py:5-6")
+    assert [c["commit"] for c in other["commits"]] == [shas[2], shas[0]]
+
+
+def test_working_tree_lines_are_mapped_to_head_first(sym_repo, tmp_path):
+    r, shas = sym_repo
+    work = tmp_path / "w"
+    _git(tmp_path, "clone", "-q", str(r), str(work))
+    (work / "pricing.py").write_bytes(("import math\n\n\n" + PRICING_3).encode())   # uncommitted: 3 lines on top
+    res = history.symbol_history(work, None, "pricing.py:4-5")
+    assert res["head_lines"] == [1, 2] and "mapped to HEAD's lines 1-2" in res["note"]
+    assert [c["commit"] for c in res["commits"]] == [shas[1], shas[0]]
+    assert res["claims"][0]["uncertainties"] == [res["note"]]
+    new = history.symbol_history(work, None, "pricing.py:1-1")
+    assert new["status"] == "not_committed" and "new since HEAD" in new["note"]
+    (work / "fresh.py").write_bytes(b"x = 1\n")
+    assert history.symbol_history(work, None, "fresh.py:1-1")["status"] == "not_committed"
+    with pytest.raises(ValueError):
+        history.symbol_history(work, None, "pricing.py:5-4")
+
+
+def test_a_name_resolves_through_the_index_and_is_never_replaced(sym_repo, tmp_path):
+    from verinoda import index, workflow
+    from verinoda.store import open_store
+
+    r, shas = sym_repo
+    work = tmp_path / "idx"
+    _git(tmp_path, "clone", "-q", str(r), str(work))
+    workflow.init(work)
+    st = open_store(work)
+    try:
+        workflow.scan(st, work)
+    finally:
+        st.close()
+    g = index.load(work)
+    res = history.symbol_history(work, g, "compute_total")
+    assert res["status"] == "found" and res["symbol"].startswith("compute_total") and res["lines"] == [1, 2]
+    assert [c["commit"] for c in res["commits"]] == [shas[1], shas[0]]
+    miss = history.symbol_history(work, g, "compute_totl")
+    assert miss["status"] == "unresolved" and "commits" not in miss
+    assert history.symbol_history(work, None, "compute_total")["status"] == "unresolved"
+    # analyze's why-question quotes the message body as the commit's evidence
+    from verinoda import analysis
+
+    st = open_store(work)
+    try:
+        ans = analysis.analyze(st, work, "Why does compute_total round the total?")
+        hist = [c for c in ans["claims"] if " were changed in " in c["text"]]
+        assert hist and shas[1][:10] in hist[0]["text"]
+        from verinoda.claims import Claims
+
+        ev = next(e for e in Claims(st).evidence(hist[0]["id"]) if e["relation"] == "supports")
+        assert "ledger stores cents" in ev["excerpt"]
+    finally:
+        st.close()
+
+
+def test_symbol_history_cli_and_mcp(sym_repo, capsys):
+    from verinoda.mcp.server import AtlasTools
+
+    r, shas = sym_repo
+    assert cli.main(["history", "symbol", "pricing.py:1-2", "--repo", str(r)]) == 0
+    text = capsys.readouterr().out
+    assert text.startswith("pricing.py:1-2:") and "| Invoices showed" in text and shas[1][:10] in text
+    assert cli.main(["history", "symbol", "pricing.py:1-2", "--repo", str(r), "--json", "--limit", "1"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert [c["commit"] for c in out["commits"]] == [shas[1]] and out["truncated"]
+    (r / ".verinoda").mkdir(exist_ok=True)
+    try:
+        t = AtlasTools(r)
+        assert t.history_search(symbol="pricing.py:5-6")["commits"][0]["commit"] == shas[2]
+        for bad in ({"symbol": "pricing.py:1-2", "text": "x"}, {"symbol": "pricing.py:1-2", "path": "lib"},
+                    {"symbol": "pricing.py:1-2", "base": "HEAD"}):
+            assert t.history_search(**bad)["error"] == "invalid_argument", bad
+    finally:
+        shutil.rmtree(r / ".verinoda")
+
+
+def test_symbol_history_outside_git(tmp_path):
+    (tmp_path / "a.py").write_bytes(b"x = 1\n")
+    assert history.symbol_history(tmp_path, None, "a.py:1-1")["status"] == "not_git"

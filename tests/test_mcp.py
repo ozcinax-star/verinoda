@@ -51,7 +51,7 @@ EXPECTED_PARAMS = {
     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
     "run_when": ({"symbol", "depth"}, {"symbol"}),
     "history_search": ({"text", "regex", "message", "author", "path", "since", "until", "diff", "base", "head",
-                        "limit"}, set()),
+                        "symbol", "limit"}, set()),
     "map_view": ({"view", "targets"}, {"view"}),
     "change_review": ({"base", "staged", "targets", "change", "concerns", "run_tests", "observe", "max_chars"}, set()),
     "question_plan_draft": ({"question"}, {"question"}),

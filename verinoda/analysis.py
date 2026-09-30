@@ -59,7 +59,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from verinoda import anchors, callsite, entail, index, retrieval, testcode, verdict_gate
+from verinoda import anchors, callsite, entail, history, index, retrieval, testcode, verdict_gate
 from verinoda import architecture_map as am
 from verinoda import evidence as evmod
 from verinoda import question_plan as qp
@@ -1880,17 +1880,19 @@ def _h_why(ctx: _Ctx, sub: _Sub) -> None:
         if not sp or not hv["is_git"] or not ctx.budget.ok:
             continue
         a, b = sp
-        log = git(repo, "log", "-n3", f"-L{a},{b}:{it['file']}", "--no-patch", "--format=%H%x1f%aI%x1f%s")
+        # the commits whose diffs changed the symbol's lines, each message quoted whole (subject and body):
+        # the author's own words are the "why" evidence, nothing is summarised
+        try:
+            got = history.symbol_commits(repo, it["file"], a, b, limit=3)
+        except ValueError:
+            got = {"commits": []}
         ctx.step("git_log_L", f"{it['file']}:{a}-{b}")
-        for line in (log or "").splitlines():
-            if "\x1f" not in line:
-                continue
-            sha, date, subj = line.split("\x1f", 2)
-            ev = {"source_type": "git_history", "locator": f"commit {sha}", "commit_sha": sha,
-                  "content_hash": evmod.content_hash(subj), "excerpt": subj, "meta": {"date": date}}
-            if rec.claim(f"`{it['symbol']}` lines {a}-{b} were changed in {sha[:10]} ({date[:10]}): {subj}",
-                         kind="history", status="primary_source_verified", evidence=[(ev, "supports")],
-                         subjects=[it["file"]]) is not None:
+        unc = [got["note"]] if got.get("note") else []
+        for c in got.get("commits") or []:
+            if rec.claim(f"`{it['symbol']}` lines {a}-{b} were changed in {c['commit'][:10]} ({c['date'][:10]}): "
+                         f"{c['subject']}", kind="history", status="primary_source_verified",
+                         evidence=[(c["evidence"], "supports")], subjects=[it["file"]],
+                         uncertainties=unc or None) is not None:
                 found = True
     if not found and not rec.skipped["why"]:
         _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["why"],
