@@ -1182,7 +1182,13 @@ def cmd_docs(args) -> int:
     from verinoda import docrefs
 
     repo = _repo(args)
-    res = docrefs.check(repo, args.paths or None, exclude=args.exclude or None)
+    try:
+        res = docrefs.check(repo, args.paths or None, exclude=args.exclude or None)
+    except ValueError as exc:   # a document argument that names nothing: never "0 documents, ok"
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if args.fix and (res["renamed"] or res["moved"]):
         res["fixed"] = docrefs.fix(repo, res)
         fixed = {f["at"] + f["from"] for f in res["fixed"]}

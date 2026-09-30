@@ -122,3 +122,83 @@ def test_cli_text_and_exit_codes(repo, capsys):
     assert json.loads(capsys.readouterr().out)["broken"][0]["path"] == "src/gone.py"
     assert cli.main(["docs", "check", "--repo", str(repo)]) == 1
     assert "BROKEN docs/more.md:1 `src/gone.py`" in capsys.readouterr().out
+
+
+BS = "\\"   # a Windows separator in a document
+
+
+# -- review round -------------------------------------------------------------------------------------------------
+
+def test_fix_twice_changes_nothing_the_second_time_and_a_hand_fix_is_not_moved_again(repo):
+    _write(repo, "src/load.py", "import os\nimport sys\n" + CODE)
+    _commit(repo, "two lines on top")
+    assert cli.main(["docs", "check", "--repo", str(repo), "--fix"]) == 0
+    once = (repo / "docs/guide.md").read_bytes()
+    assert b"`src/load.py:7-8`" in once
+    assert cli.main(["docs", "check", "--repo", str(repo), "--fix"]) == 0     # the fixed numbers are current
+    assert (repo / "docs/guide.md").read_bytes() == once
+
+
+def test_renames_keep_the_reference_s_own_style(repo):
+    _write(repo, "skill/SKILL.md", "Read `references/old.md` and [o](./references/old.md) and `src" + BS + "old_name.py`.\n")
+    _write(repo, "skill/references/old.md", "x\n")
+    _commit(repo, "skill")
+    _git(repo, "mv", "skill/references/old.md", "skill/references/new.md")
+    _git(repo, "mv", "src/old_name.py", "src/new_name.py")
+    _commit(repo, "renames")
+    res = docrefs.check(repo, ["skill"])
+    assert sorted(r["fix"] for r in res["renamed"]) == ["./references/new.md", "references/new.md",
+                                                         "src" + BS + "new_name.py"]
+    assert cli.main(["docs", "check", "--repo", str(repo), "skill", "--fix"]) == 0
+    assert (repo / "skill/SKILL.md").read_text(encoding="utf-8") == \
+        "Read `references/new.md` and [o](./references/new.md) and `src" + BS + "new_name.py`.\n"
+
+
+def test_folder_renames_non_ascii_names_and_rename_cycles_are_followed(repo):
+    _write(repo, "lib/a.py", "a = 1\n")
+    _write(repo, "src/çalış.py", "b = 2\n")
+    _write(repo, "src/p.py", "c = 3\n")
+    _write(repo, "docs/r.md", "See `lib/a.py`, `src/çalış.py` and `src/q.py`.\n")
+    _commit(repo, "files")
+    _git(repo, "mv", "lib", "pkg")
+    _git(repo, "mv", "src/çalış.py", "src/yeni.py")
+    _git(repo, "mv", "src/p.py", "src/q.py")
+    _commit(repo, "moves")
+    _git(repo, "mv", "src/q.py", "src/r.py")
+    _commit(repo, "q to r")
+    _git(repo, "mv", "src/r.py", "src/p.py")
+    _commit(repo, "and back")
+    res = docrefs.check(repo, ["docs/r.md"])
+    assert {r["ref"]: r["to"] for r in res["renamed"]} == {"lib/a.py": "pkg/a.py", "src/çalış.py": "src/yeni.py",
+                                                            "src/q.py": "src/p.py"}
+
+
+def test_line_ends_are_kept_per_line_and_untouched_documents_are_not_written(repo):
+    _write(repo, "docs/mixed.md", "a `src/old_name.py`\r\nb\nc `` src/old_name.py `` d\n")
+    _commit(repo, "mixed")
+    _git(repo, "mv", "src/old_name.py", "src/new_name.py")
+    _commit(repo, "rename")
+    assert cli.main(["docs", "check", "--repo", str(repo), "docs/mixed.md", "--fix"]) == 0
+    assert (repo / "docs/mixed.md").read_bytes() == b"a `src/new_name.py`\r\nb\nc `` src/new_name.py `` d\n"
+
+
+def test_link_forms_fences_and_examples(repo):
+    _write(repo, "docs/my file.md", "x\n")
+    _write(repo, "docs/forms.md", "[a](my%20file.md) [z](missing.md#Limits) [s](guide.md#setup)\n"
+                                  "Write `[x](src/zzz.py)` for a link.\n\n````md\n```py\n`src/nofile.py`\n```\n````\n")
+    res = docrefs.check(repo, ["docs/forms.md"])
+    assert [b["path"] for b in res["broken"]] == ["docs/missing.md"] and res["ok"] == 2
+
+
+def test_a_document_argument_that_names_nothing_is_an_error(repo, capsys):
+    assert cli.main(["docs", "check", "--repo", str(repo), "no/such.md"]) == 2
+    assert "no tracked document" in capsys.readouterr().err
+    assert cli.main(["docs", "check", "--repo", str(repo), "./docs/guide.md"]) == 0
+
+
+def test_a_long_run_of_backticks_is_linear():
+    import time
+
+    t = time.perf_counter()
+    docrefs.references("x" + "`" * 19_000 + "a\n")
+    assert time.perf_counter() - t < 1
