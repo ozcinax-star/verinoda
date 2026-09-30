@@ -2154,7 +2154,8 @@ class Runner:
                     raise HarnessError(f"{self.fixed} is still in use")
                 moves.append((p, p.name))
         # anything new in the case folder or the work folder (two and three levels above the repository)
-        for root, tag, known in ((self.cdir, "<case>", CASE_ENTRIES), (self.env.work, "<work>", self.env.known)):
+        # the tags name folders on disk: no "<" or ">" (not allowed in a Windows file name)
+        for root, tag, known in ((self.cdir, "@case", CASE_ENTRIES), (self.env.work, "@work", self.env.known)):
             if root.is_dir():
                 moves += [(p, f"{tag}/{p.name}") for p in sorted(root.iterdir()) if p.name not in known]
         for p, rel in moves:
