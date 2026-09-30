@@ -238,8 +238,8 @@ edge's location matter.
   text and, when HEAD has none, the one that last removed it, each a claim with the commit as evidence),
   `history commits [--message RE] [--author RE] [--path P] [--since D] [--until D] [--diff RE] [--limit N]`,
   `history compare BASE [HEAD] [--path P]`. Read only; exit 2 when nothing is found.
-- The MCP server has 38 tools: `history_search` is new, served by the core profile behind `run_tool` and by
-  the full profile. Reinstalled skills allow `verinoda history` and mention it.
+- `history_search` is new (one more MCP tool; `dependency_ask` of D105 is the latest), served by the core profile
+  behind `run_tool` and by the full profile. Reinstalled skills allow `verinoda history` and mention it.
 
 ### D77: Mermaid diagrams and a wiki outline
 
@@ -472,9 +472,7 @@ MCP tool count is unchanged.
 ### D105: Ask before writing a dependency
 
 - New: `verinoda decide ask SOURCE TARGET` and the MCP tool `dependency_ask` (core, behind `run_tool` in a
-  project with decision records; listed in the full profile). The MCP server now has 39 tools:
-  docs/UPGRADING.md's "38 tools" needs to become 39 (tests/test_docs.py
-  `test_schema_version_and_mcp_tool_count_match_the_code` fails until it does).
+  project with decision records; listed in the full profile). The MCP server now has 39 tools.
 - The core instructions of a project with decision records now name `dependency_ask`.
 
 ### D106: What-if refactoring
