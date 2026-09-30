@@ -1038,7 +1038,7 @@ def _file_deps(g: Graph) -> tuple[dict[tuple[str, str], dict], dict[tuple[str, s
         into = deps
         ln = (d.get("source_location") or "")[1:]
         if d.get("relation") in ("imports", "imports_from") and fu.endswith(_PY_SUFFIXES) and ln.isdigit():
-            lines = _read(g.root, fu)
+            lines = _read(g.root, d.get("source_file") or fu)   # the cited line is in the edge's own file
             if 0 < int(ln) <= len(lines):
                 top = _py_top_names(g) if top is None else top
                 if _imports_stdlib(lines[int(ln) - 1], top):
@@ -1254,15 +1254,10 @@ def _all_under(files: list[str], roots: tuple[str, ...]) -> bool:
     return bool(roots) and all(f.startswith(roots) for f in files)
 
 
-def cycles(g: Graph) -> dict:
-    """Dependency cycles between files and the smallest set of file-to-file dependencies to cut.
-
-    A cycle is a strongly connected set of files over the dependencies view's edges. Its ``status`` is
-    ``strong_inference`` when the parser's own (EXTRACTED) edges already connect every file of it, else
-    ``weak_inference``: graph edges are extractions, never verification. Each dependency of the break set
-    names a cycle it closes (the dependency, then the shortest way back) with the reference lines of every
-    step, so the cut can be read in the code. Every list is capped: ``truncated`` says one was, and the
-    ``*_total`` keys and ``size`` give the full counts."""
+def _cycle_parts(g: Graph) -> dict:
+    """What the cycles view is computed from: the file-to-file dependencies (``deps``; those between a detected
+    copy and the project are apart, in ``crossing``), the standard-library imports left out, and ``comps``, every
+    cycle as its sorted files (the project's own first, then the largest first)."""
     deps, stdlib = _file_deps(g)
     with_deps = {f for e in deps for f in e}
     roots = _aside_roots(g)
@@ -1272,17 +1267,38 @@ def cycles(g: Graph) -> dict:
     # into one. A configured reference tree may be vendored code the project does load: its edges stay.
     crossing = sorted(e for e in deps if e[0].startswith(copy_roots) != e[1].startswith(copy_roots)) \
         if copy_roots else []
-    left_out = [{"from": a, "to": b, "references": d["references"], "at": _sites(d)[:CYCLE_EDGE_SITES],
-                 "why": "the line imports the standard library"} for (a, b), d in sorted(stdlib.items())]
-    left_out += [{"from": a, "to": b, "references": deps[(a, b)]["references"],
-                  "at": _sites(deps[(a, b)])[:CYCLE_EDGE_SITES], "why": f"between a {ASIDE} and the project"}
-                 for a, b in crossing]
-    for e in crossing:
-        del deps[e]
+    crossing_deps = [(e, deps.pop(e)) for e in crossing]
     fg = nx.DiGraph()
     fg.add_edges_from(deps)
     comps = sorted((sorted(c) for c in nx.strongly_connected_components(fg) if len(c) > 1),
                    key=lambda fs: (_all_under(fs, roots), -len(fs), fs))
+    return {"deps": deps, "stdlib": stdlib, "with_deps": with_deps, "roots": roots, "copy_roots": copy_roots,
+            "crossing": crossing_deps, "comps": comps}
+
+
+def cycle_components(g: Graph) -> tuple[list[list[str]], dict[tuple[str, str], dict]]:
+    """Every cycle of the cycles view as its sorted files (no list capped), and the file-to-file dependencies it
+    was computed from, each with its ``references``, ``relations``, ``extracted`` count and reference ``sites``."""
+    parts = _cycle_parts(g)
+    return parts["comps"], parts["deps"]
+
+
+def cycles(g: Graph) -> dict:
+    """Dependency cycles between files and the smallest set of file-to-file dependencies to cut.
+
+    A cycle is a strongly connected set of files over the dependencies view's edges. Its ``status`` is
+    ``strong_inference`` when the parser's own (EXTRACTED) edges already connect every file of it, else
+    ``weak_inference``: graph edges are extractions, never verification. Each dependency of the break set
+    names a cycle it closes (the dependency, then the shortest way back) with the reference lines of every
+    step, so the cut can be read in the code. Every list is capped: ``truncated`` says one was, and the
+    ``*_total`` keys and ``size`` give the full counts."""
+    parts = _cycle_parts(g)
+    deps, stdlib, comps = parts["deps"], parts["stdlib"], parts["comps"]
+    with_deps, roots, copy_roots, crossing = parts["with_deps"], parts["roots"], parts["copy_roots"], parts["crossing"]
+    left_out = [{"from": a, "to": b, "references": d["references"], "at": _sites(d)[:CYCLE_EDGE_SITES],
+                 "why": "the line imports the standard library"} for (a, b), d in sorted(stdlib.items())]
+    left_out += [{"from": a, "to": b, "references": d["references"], "at": _sites(d)[:CYCLE_EDGE_SITES],
+                  "why": f"between a {ASIDE} and the project"} for (a, b), d in crossing]
     comp_of = {f: k for k, fs in enumerate(comps) for f in fs}
     inners: list[dict[tuple[str, str], dict]] = [{} for _ in comps]
     for e, d in deps.items():   # one pass: each dependency goes to the cycle that holds both its files

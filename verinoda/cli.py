@@ -1210,6 +1210,30 @@ def cmd_rename_preview(args) -> int:
     return 3 if res["conflicts"] else 0
 
 
+def cmd_what_if(args) -> int:
+    from verinoda import decisions as dm
+    from verinoda import freshness, index, whatif
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    try:
+        res = whatif.run(index.load(repo), args.move, decisions_dir=args.decisions_dir)
+    except (whatif.WhatIfError, dm.DecisionError) as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    res.update(freshness.summary(fresh))
+
+    def render(r: dict) -> None:
+        print(whatif.render(r))
+        _stale_note(r)
+
+    _emit(args, res, render)
+    return 3 if res["status"] == "adds" else 0
+
+
 # -- question plans (docs/DESIGN.md D1-D9) ----------------------------------------
 
 def _plan_file(repo: Path, arg: str) -> Path:
@@ -3257,6 +3281,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("symbol", help="the symbol: Class.method, path/file.py::name or a node id")
     sp.add_argument("new_name", help="the new name (an identifier)")
     sp.add_argument("--max-sites", type=int, default=300, help="entries per list (default 300)")
+    sp = add("what-if", cmd_what_if, "simulate moving or renaming files and folders: the edge guards of the "
+                                     "decision records and the dependency cycles re-checked on the new paths, and "
+                                     "the violations and cycles the move would add or remove; edits nothing "
+                                     "(exit 3 = it adds some, 2 = a bad move)")
+    sp.add_argument("--move", action="append", required=True, metavar="OLD=NEW",
+                    help="a file or folder of the index and its new path (NEW/ or an existing folder: into it; "
+                         "onto an existing file: a merge); repeatable")
+    sp.add_argument("--decisions-dir", metavar="DIR", help="the folder of the decision records (as for decide check)")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",
