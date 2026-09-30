@@ -80,3 +80,52 @@ The two verification runs that started were cut short and returned no verdict (n
 How the work was run: agent workflows (understand, prep, implement) with a frozen baseline checkout of `cc71f33`; the
 group branches were made in separate git worktrees. The venv has Verinoda installed editable from the main checkout, so
 any other checkout must be run with `PYTHONPATH=<checkout>` from its root.
+
+## State when paused again (2026-10-01)
+
+The harness is trustworthy now, for its stated scope. It is on branch `stagea-harness-r4` (pushed, head `da578c3`) and
+has not been merged yet.
+- Calibration, baseline against baseline: EQUAL on fixtures and orders, seeds 1 and 2, warm and cold cache.
+- Planted mutants: the mutants of rounds 4 and 5 (n1-n5, n7-n9 and p1-p11) are all DIFFERENT. The three correct
+  candidates (fp, fp2, fp3) are EQUAL. n6 writes an NTFS stream, which is out of scope by decision.
+- The rounds added since the first version of this file:
+  - r5 (`5dcc858`) covers what a long-lived process writes at exit, ignore and config changes, delete then re-add,
+    reverts, and claim and decision record changes between updates. It also stops closing Stores more often than the
+    server does.
+  - `d68b7a8` sums the replace-backup tolerance over a case.
+  - `da578c3`: with a cold cache the baseline varies in which stat-index entries exist and in replace backups under
+    `index/cache`. The stat index is now compared on the paths both sides have, and those backups are not counted.
+
+Verification of the group branches (harness da578c3, one job per corpus x seed x cache):
+
+| Branch | orders (4 cases) | fixtures (4 cases) |
+|---|---|---|
+| `stagea-cluster` | EQUAL x4 | not run |
+| `stagea-watch` | EQUAL x4 | 4 cases stopped part-way, 0 differences so far |
+| `stagea-build` | 1 EQUAL, 3 stopped part-way (0 differences) | stopped part-way, 0 differences so far |
+| `stagea-extract` | stopped part-way (0 differences) | not started |
+| `stagea-cache` | not started | not started |
+| `stagea-owned` | DIFFERENT (item 21(b)) | - |
+| `stagea-owned-r2` (pushed, `5dbca7d`) | seed 1 warm EQUAL (full case); 3 stopped part-way (0 differences) | not run |
+
+`stagea-owned` failed because of item 21(b): the receiver sidecar trusted the stat cache instead of hashing the file.
+When a file is rewritten with the same size and mtime (harness step `racy_same_size`), the sidecar kept the old
+sha256 (`index/receiver_calls.json`). `stagea-owned-r2` reverts that one item and keeps the others. It adds a test that
+fails on `d421fc1`.
+
+Side finding, not fixed: inside one process the baseline's `_PYINFO_CACHE` is keyed by (path, mtime, size). A
+same-size, same-mtime rewrite therefore gets the old parse's facts. The harness cannot see this, because each CLI
+update is a separate process.
+
+How to run a case: from a checkout of `stagea-harness-r4`,
+`python tools/update_equality.py --baseline <cc71f33 checkout> --candidate <branch checkout> --corpus orders
+--seeds 1 --cache warm --keep-going [--keep]`.
+One case takes 30-60 minutes, and a job that has not finished prints no details. Keep each job under two hours, or
+run it outside a time-limited shell. In a job list read by `xargs -L 1`, a line that ends with a space joins the next
+line.
+
+Next:
+1. Finish the verification above.
+2. Merge the branches that are EQUAL everywhere, then run the full suite.
+3. Time `update` on a copy outside OneDrive.
+4. Merge `stagea-harness-r4` (tools/update_equality.py).
