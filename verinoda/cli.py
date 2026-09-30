@@ -149,7 +149,11 @@ def _waiting_note(holder: dict | None) -> None:
 
 
 def _need_graph(repo: Path) -> None:
-    if not _auto_index(repo):
+    try:
+        indexed = _auto_index(repo)
+    except RuntimeError as e:  # the first-use build failed (a repository with no code files, say)
+        raise SystemExit(f"error: {repo} could not be indexed: {e}") from None
+    if not indexed:
         why = "" if (repo / ".git").exists() else " (not a git work tree, so it is not indexed on its own)"
         raise SystemExit(f"error: {repo} has no index yet - run `verinoda scan {repo}` first{why}")
 
@@ -1064,6 +1068,30 @@ def cmd_history(args) -> int:
         res = history.compare(repo, args.base, args.head, path=args.path)
     _emit(args, res, lambda r: print(history.render(r)))
     return 0 if res["status"] in ("found", "same") else 2
+
+
+def cmd_rename_preview(args) -> int:
+    from verinoda import freshness, index, rename_preview
+
+    if args.max_sites < 1:
+        print("error: --max-sites must be a positive number", file=sys.stderr)
+        return 2
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    res = rename_preview.run(index.load(repo), args.symbol, args.new_name, stale=fresh["files"],
+                             max_sites=args.max_sites)
+    res.update(freshness.summary(fresh))
+
+    def render(r: dict) -> None:
+        print(rename_preview.render(r))
+        _stale_note(r)
+
+    _emit(args, res, render)
+    if res["status"] != "found":
+        return 2
+    return 3 if res["conflicts"] else 0
+
 
 # -- question plans (docs/DESIGN.md D1-D9) ----------------------------------------
 
@@ -2837,6 +2865,13 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("base", help="the base revision (branch, tag, sha, HEAD~3)")
     c.add_argument("head", nargs="?", default="HEAD", help="the other revision (default HEAD)")
     c.add_argument("--path", help="only this file or folder")
+    sp = add("rename-preview", cmd_rename_preview, "every line a rename of a symbol would touch (definition, calls, "
+                                                   "imports, overrides), each with its status and the line, and "
+                                                   "the mentions nothing ties to it; edits nothing (exit 3 = "
+                                                   "conflicts with the new name)")
+    sp.add_argument("symbol", help="the symbol: Class.method, path/file.py::name or a node id")
+    sp.add_argument("new_name", help="the new name (an identifier)")
+    sp.add_argument("--max-sites", type=int, default=300, help="entries per list (default 300)")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",

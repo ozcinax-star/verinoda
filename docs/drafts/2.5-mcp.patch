@@ -1,0 +1,146 @@
+diff --git a/tests/test_mcp.py b/tests/test_mcp.py
+index f5341ea..0f509b9 100644
+--- a/tests/test_mcp.py
++++ b/tests/test_mcp.py
+@@ -50,6 +50,7 @@ EXPECTED_PARAMS = {
+     "node_inspect": ({"name"}, {"name"}),
+     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
+     "run_when": ({"symbol", "depth"}, {"symbol"}),
++    "rename_preview": ({"symbol", "new_name", "max_sites"}, {"symbol", "new_name"}),
+     "map_view": ({"view", "targets"}, {"view"}),
+     "change_review": ({"base", "staged", "targets", "change", "concerns", "run_tests", "observe", "max_chars"}, set()),
+     "question_plan_draft": ({"question"}, {"question"}),
+@@ -92,7 +93,7 @@ EXPECTED_PARAMS = {
+                       "allow_side_effects", "emit_test"}, set()),
+ }
+ READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "map_view", "claim_inspect", "claim_list",
+-             "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
++             "rename_preview", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
+              "debug_status", "grep_context"}
+ 
+ 
+@@ -230,6 +231,7 @@ def _all_calls(t: AtlasTools) -> dict:
+         "node_inspect": lambda: t.node_inspect("place_order"),
+         "relation_trace": lambda: t.relation_trace("a", "b"),
+         "run_when": lambda: t.run_when("place_order"),
++        "rename_preview": lambda: t.rename_preview("place_order", "submit_order"),
+         "map_view": lambda: t.map_view("hierarchy"),
+         "change_review": lambda: t.change_review(),
+         "question_plan_draft": lambda: t.question_plan_draft("where is the order saved?"),
+@@ -328,7 +330,7 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
+                 for t in anyio.run(srv.list_tools)]
+ 
+     core = listing(mcp_server.build_server(repo))
+-    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 12
++    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 13
+     assert set(CORE_TOOLS) <= set(TOOL_NAMES) and GATEWAY not in TOOL_NAMES
+     gate = next(t for t in core if t["name"] == GATEWAY)
+     behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
+diff --git a/verinoda/mcp/server.py b/verinoda/mcp/server.py
+index 2e0ad55..8277f4a 100644
+--- a/verinoda/mcp/server.py
++++ b/verinoda/mcp/server.py
+@@ -81,6 +81,7 @@ TOOL_NAMES: tuple[str, ...] = (
+     "run_when",
+     "map_view",
+     "change_review",
++    "rename_preview",
+     "question_plan_draft",
+     "question_plan_check",
+     "analyze",
+@@ -998,6 +999,22 @@ class AtlasTools:
+             return res
+         return self._run("run_when", go, need="graph")
+ 
++    def rename_preview(self, symbol: str, new_name: str, max_sites: int = 100) -> dict:
++        def go():
++            from verinoda import freshness, rename_preview
++
++            fresh = self._freshness()
++            res = rename_preview.run(self._graph(), _text(symbol, "symbol"), _text(new_name, "new_name"),
++                                     stale=fresh.get("files") or (), max_sites=_clamp(max_sites, 1, 1000,
++                                                                                        "max_sites"))
++            res.update(freshness.summary(fresh))
++            if res["status"] in ("ambiguous", "not_found"):
++                res.setdefault("next_step", "pass 'path/file.py::name' or 'Class.method' (see 'candidates')")
++            return res
++        return self._run("rename_preview", go, need="graph",
++                         keep=("status", "symbol", "at", "old", "new", "counts", "conflicts", "written", "truncated"),
++                         first=("mentions", "other_symbol_lines", "sites"))
++
+     def map_view(self, view: str, targets: list[str] | None = None) -> dict:
+         def go():
+             from verinoda import architecture_map as am
+@@ -1802,7 +1819,7 @@ def _error_hint(exc: BaseException, repo: Path) -> str:
+ # experiments, runtime tracing, claim re-checks) is served with `--profile full` (or config mcp.profile)
+ CORE_TOOLS: tuple[str, ...] = (
+     "project_query", "analyze", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
+-    "evidence_inspect", "index_update", "code_check", "decision_check", "change_review",
++    "evidence_inspect", "index_update", "code_check", "decision_check", "change_review", "rename_preview",
+ )
+ PROFILES: dict[str, tuple[str, ...]] = {"core": CORE_TOOLS, "full": TOOL_NAMES}
+ DEFAULT_PROFILE = "core"
+@@ -1821,6 +1838,7 @@ GATEWAY_CATALOG: dict[str, str] = {
+     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
+                      "change touches",
+     "decision_check": "decision_check {changed_only?: true}: the tree against accepted decision records",
++    "rename_preview": "rename_preview {symbol, new_name}: every line a rename would touch, with status; edits nothing",
+ }
+ 
+ _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
+@@ -1844,6 +1862,7 @@ the default branch for a named version; ask only questions_for_user. reference_r
+ reference_id) inspects one at its pin; reference_compare compares a mechanism.
+ - plan_audit: re-judge an analysis later. lexicon_show: the code words the repository ties to a word.
+ - run_when: when a method runs - the event or caller that starts it and the conditions on the way (not evaluated).
++- rename_preview: before a rename, every line it would touch with its status, and mentions nothing ties to it.
+ - claim_verify / claim_challenge: re-check a claim's lines; adversarial check. resolve_call: which definition
+   a call binds to (only 'definitive' verifies). api_members: the real members of a module or class.
+ - runtime_observe: selected tests under the call tracer. experiment_run: one allowlisted command in a copy.
+@@ -1863,8 +1882,8 @@ Questions: project_query (where is X; hits are leads) or analyze (claims with ev
+ understood_as, one block per sub-question; never state weak_inference or unknown as fact). Cite the narrowest lines
+ that support a claim (source lines are numbered), not the whole span of a header. index_update after editing;
+ code_check only on code you wrote or edited, not to read code. run_tool reaches node_inspect, relation_trace,
+-map_view, claim_list, claim_inspect, evidence_inspect and change_review (before and after editing: report every
+-concern)."""
++map_view, claim_list, claim_inspect, evidence_inspect, rename_preview and change_review (before and after editing:
++report every concern)."""
+ 
+ _INSTRUCTIONS_CORE_DECISIONS = """ Through run_tool, decision_check(changed_only=true) before finishing - on
+ VIOLATED fix the code or ask the user."""
+@@ -1952,6 +1971,11 @@ DESCRIPTIONS: dict[str, str] = {
+         "registrations and lambdas: 'at the end of every server tick', '80 ticks later'), each call with the "
+         "conditions around it as written (if/for/while blocks, early returns) and file:line. Conditions are not "
+         "evaluated; a path that ends at a method nothing calls is an entry point or dead code."),
++    "rename_preview": (
++        "Before renaming a symbol: every line the rename would touch - definition, calls, imports, overrides, lines "
++        "bound by place - each with a status (statically_verified, strong_inference, weak_inference), why and the "
++        "line; mentions nothing ties to it (weak_inference: read each); other symbols of that name (left alone); "
++        "conflicts with the new name. Reads only: edits nothing and records nothing."),
+     "map_view": (
+         "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, or impact "
+         "(dependents of targets; default the working-tree changes). 'coverage' states the method and its "
+@@ -2107,7 +2131,7 @@ DESCRIPTIONS: dict[str, str] = {
+ }
+ 
+ _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "map_view", "claim_inspect", "claim_list",
+-              "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
++              "rename_preview", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call", "code_check", "api_members",
+               "debug_status", "grep_context"}
+ _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
+ 
+@@ -2327,6 +2351,15 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile:
+     ) -> dict[str, Any]:
+         return emit(t.run_when(symbol, depth=depth))
+ 
++    @register("rename_preview")
++    def rename_preview(
++        symbol: Annotated[str, Field(description="The symbol to rename: 'Class.method', 'path/file.py::name' or a "
++                                                 "node id.")],
++        new_name: Annotated[str, Field(description="The new name (an identifier).")],
++        max_sites: Annotated[int, Field(description="Entries per list (1-1000).")] = 100,
++    ) -> dict[str, Any]:
++        return emit(t.rename_preview(symbol, new_name, max_sites=max_sites))
++
+     @register("map_view")
+     def map_view(
+         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact"],
