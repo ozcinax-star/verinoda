@@ -50,7 +50,7 @@ from verinoda import review_rules as rr
 from verinoda.architecture_map import CONFIG_FILE_RE, ENV_PATTERNS, entry_reasons
 from verinoda.testcode import is_test_or_support_file as _is_test
 
-CONCERNS = ("persistence", "security", "performance", "public_api", "config", "entry_points")
+CONCERNS = ("persistence", "security", "performance", "public_api", "config", "entry_points", "health")
 PLANNED_KINDS = ("body", "signature", "remove")
 DEPTH = 3
 MAX_DEPENDENTS = 40
@@ -87,6 +87,9 @@ RULES = {
                "changed keys of config files, with their readers found by literal key search"],
     "entry_points": ["entries that reach the change within depth 3 (decorators, handler names, entry modules, "
                      "packet/command/event registrations found by text)"],
+    "health": ["a changed function's code health (cyclomatic and cognitive complexity, nesting, length, parameters "
+               "against thresholds) lower than in the base", "an added function below full health",
+               "a changed function now a near-duplicate of another function of its file (similarity >= 0.9)"],
 }
 LIMITS = [
     "static analysis: dynamic dispatch, reflection, dependency injection and callbacks are not resolved; "
@@ -3456,6 +3459,67 @@ def _removed_refs_js(ctx: _Ctx, c: Change) -> list[dict]:
     return out
 
 
+def _health(ctx: _Ctx, changes: list[Change]) -> list[dict]:
+    """A changed function whose code health fell (a smell threshold of :data:`verinoda.health.SMELLS` reached), an
+    added one below full health, and a near-duplicate of another function of its file that the change made. The
+    metrics are counted on both versions' syntax trees; the score and the similarity are heuristics, so every
+    finding is ``strong_inference``."""
+    from verinoda import health as hl
+
+    per: dict[tuple[str, str], dict | None] = {}
+
+    def metrics(rel: str, side: str) -> dict:
+        if (rel, side) not in per:
+            t = ctx.text(rel, side)
+            per[(rel, side)] = hl.file_metrics(rel, t, with_tokens=True) if t is not None else None
+        return per[(rel, side)] or {}
+
+    def shown(m) -> dict:
+        return {**m.values(), "health": m.health}
+
+    out: list[dict] = []
+    seen: set[frozenset] = set()
+    basis = "metrics counted on the syntax tree of both versions; the health score is a heuristic (verinoda/health.py)"
+    for c in _code_units(changes):
+        new = metrics(c.file, "new").get(c.qual)
+        if new is None:
+            continue
+        old_q = c.renamed_from if c.kind == "added" else c.qual
+        old = metrics(c.file, "old").get(old_q) if old_q else None
+        at = f"{c.file}:{new.start}"
+        deep = [f"{c.file}:{new.deepest}"] if new.nesting and new.deepest else []
+        smells = ", ".join(s["smell"].replace("_", " ") for s in new.smells)
+        if old is not None and new.health < old.health:
+            was = old.values()
+            moved = "; ".join(f"{k} {was[k]} -> {v}" for k, v in new.values().items() if v != was[k])
+            out.append(_finding("health", "health-drop", f"code health of {c.name} fell from {old.health} to "
+                                f"{new.health} ({moved}); now: {smells}", "strong_inference", at, evidence_at=deep,
+                                basis=basis, derived_by="verinoda.health", for_symbol=c.symbol,
+                                base_at=f"{c.file}:{old.start}-{old.end}",
+                                metrics={"base": shown(old), "head": shown(new)}))
+        elif old is None and c.kind == "added" and new.health < 10:
+            vals = ", ".join(f"{k} {v}" for k, v in new.values().items())
+            out.append(_finding("health", "health-low-added", f"added {c.name} starts at code health {new.health} "
+                                f"of 10 ({vals}); smells: {smells}", "strong_inference", at, evidence_at=deep,
+                                basis=basis, derived_by="verinoda.health", for_symbol=c.symbol,
+                                metrics={"head": shown(new)}))
+        before = ({o.qual for o, _r in hl.near_duplicates(metrics(c.file, "old"), old.qual)} if old is not None
+                  else set())
+        for other, r in hl.near_duplicates(metrics(c.file, "new"), c.qual):
+            key = frozenset((c.qual, other.qual))
+            if other.qual in before or (c.file, key) in seen:   # as alike in the base: not this change's
+                continue
+            seen.add((c.file, key))
+            n = min(len(new.toks or ()), len(other.toks or ()))
+            out.append(_finding("health", "clone-added", f"{c.name} is a near-duplicate of {other.qual} "
+                                f"(similarity {r:.2f} over {n} normalised tokens)", "strong_inference", at,
+                                evidence_at=[f"{c.file}:{other.start}-{other.end}"],
+                                basis="similarity ratio of the normalised token sequences (names and literals "
+                                      "replaced); the pair was less alike in the base", derived_by="verinoda.health",
+                                for_symbol=c.symbol, similarity=round(r, 3)))
+    return out
+
+
 def _dedupe(findings: list[dict]) -> list[dict]:
     """One finding per rule, place and text; of duplicates (a class and its method both cover a changed line)
     the one for the innermost symbol is kept."""
@@ -4362,6 +4426,8 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         found["config"] = _config(ctx, changes)
     if "entry_points" in want:
         found["entry_points"] = _entries(ctx, changes, walk) + _manifest_findings(ctx, changes)
+    if "health" in want and not targets:
+        found["health"] = _health(ctx, changes)
     for k in found:
         found[k] = _dedupe(found[k])
         found[k].sort(key=lambda f: (rr.rank(f["status"]), f["at"] or ""))
@@ -4403,7 +4469,9 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
                                "(verinoda/review_rules.py)", "limits": list(LIMITS),
                      "not_checked": ([] if "security" in want and not targets else
-                                     ["security (a planned change has no diff to compare)"] if targets else [])},
+                                     ["security (a planned change has no diff to compare)"] if targets else [])
+                     + (["health (a planned change has no new version to measure)"]
+                        if targets and "health" in want else [])},
         "counts": {"changes": len(changes), "findings": sum(len(v) for v in found.values()),
                    "strong_or_verified": n_strong, "unknown": len(unknown)},
     }

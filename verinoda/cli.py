@@ -832,6 +832,23 @@ def cmd_review(args) -> int:
     return int(res["exit"])
 
 
+def cmd_health(args) -> int:
+    from verinoda import health as hl
+
+    repo = _repo(args)
+    if args.limit < 1:
+        print("error: --limit must be a positive number", file=sys.stderr)
+        return 2
+    try:
+        res = hl.report(repo, args.paths, limit=args.limit, min_similarity=args.min_similarity,
+                        min_tokens=args.min_tokens, with_clones=not args.no_clones)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: _write(hl.render_text(r)))
+    return 2 if res["unmatched"] else 0
+
+
 def cmd_query(args) -> int:
     from verinoda import freshness, index, retrieval
 
@@ -2590,12 +2607,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="a planned change, before editing (repeatable): what changing it would touch")
     sp.add_argument("--change", choices=["body", "signature", "remove"], help="with --target: the kind of change")
     sp.add_argument("--concerns", help="comma list of persistence,security,performance,public_api,config,"
-                                       "entry_points (default: all)")
+                                       "entry_points,health (default: all)")
     sp.add_argument("--run-tests", action="store_true",
                     help="run the pytest tests that reach the change (isolated copy, recorded experiment)")
     sp.add_argument("--observe", action="store_true",
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
+    sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
+                                   "parameters, and near-duplicate functions with a similarity score")
+    sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
+    sp.add_argument("--limit", type=int, default=20, help="functions and clone pairs shown (default 20)")
+    sp.add_argument("--min-similarity", type=float, default=0.9, help="clone threshold, 0-1 (default 0.9)")
+    sp.add_argument("--min-tokens", type=int, default=50, help="smallest function compared for clones (default 50)")
+    sp.add_argument("--no-clones", action="store_true", help="metrics only, no clone search")
     sp = add("query", cmd_query, "bounded, justified retrieval for a question (plain text; --json for programs)")
     sp.add_argument("question")
     sp.add_argument("--max-items", type=int, default=10)

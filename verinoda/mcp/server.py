@@ -2345,7 +2345,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         change: Annotated[Literal["body", "signature", "remove"] | None,
                           Field(description="With targets: the kind of planned change (default body).")] = None,
         concerns: Annotated[list[str] | None, Field(description="Subset of persistence, security, performance, "
-                                                                "public_api, config, entry_points (default all).")]
+                                                                "public_api, config, entry_points, health "
+                                                                "(default all).")]
         = None,
         run_tests: Annotated[bool, Field(description="Run the pytest tests that reach the change (isolated copy).")]
         = False,
