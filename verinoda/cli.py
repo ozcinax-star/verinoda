@@ -980,7 +980,10 @@ def cmd_agent_lint(args) -> int:
 def cmd_datapack(args) -> int:
     from verinoda import datapack
 
-    res = datapack.lookup(_repo(args), args.what, args.name)
+    if args.with_paths and args.what not in (None, "packs"):
+        raise SystemExit("error: --with applies to the summary and `datapack packs`, not to a tag, score or "
+                         "function lookup")
+    res = datapack.lookup(_repo(args), args.what, args.name, with_paths=args.with_paths)
     _emit(args, res, lambda r: print(datapack.render(r)))
     return 0 if res["status"] == "found" else 2
 
@@ -2894,11 +2897,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="leave out Claude Code's memory files for the project (~/.claude/projects/.../memory)")
     sp.add_argument("--all", action="store_true", help="list the checks that passed too")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
-                                       "but never read, calls to missing functions (from mcfunction or Java); or "
+                                       "but never read, calls to missing functions (from mcfunction or Java), "
+                                       "resource collisions across packs and mods, unmet mod dependencies; or "
                                        "one tag, score or function across mcfunction and Java (a function's Java "
                                        "callers: command strings, identifier lookups, the project's helpers)")
-    sp.add_argument("what", nargs="?", choices=["tag", "score", "function"], help="look one up (default: the summary)")
+    sp.add_argument("what", nargs="?", choices=["tag", "score", "function", "packs"],
+                    help="look one up, or packs: the packs and mods, resource collisions, mod dependencies "
+                         "(default: the summary)")
     sp.add_argument("name", nargs="?", help="the tag, objective or function id (ns:path)")
+    sp.add_argument("--with", dest="with_paths", action="append", metavar="PATH",
+                    help="a mod jar, a datapack or a mods folder loaded beside the project: its resources are "
+                         "checked for collisions and its mods meet dependencies; repeatable")
     sp = add("trace-log", cmd_trace_log, "the stack traces and GameTest results of a log mapped onto the code: project "
                                          "frames with their callers, the rest folded, a trace through a test's "
                                          "succeed/fail tied to that test; stored as claims with the log as evidence")
