@@ -162,15 +162,31 @@ def _box_diagram(title: str, agg: dict, labels: dict[str, str], names: dict[str,
     return out
 
 
+def _depths(pages: list[dict]) -> dict[str, int]:
+    """Each page's depth in the tree its ``parent`` titles make (a parent cycle stops the count)."""
+    by_title = {p["title"]: p for p in pages}
+    out = {}
+    for p in pages:
+        depth, seen, q = 0, {p["title"]}, p
+        while q.get("parent") in by_title and q["parent"] not in seen:
+            seen.add(q["parent"])
+            q, depth = by_title[q["parent"]], depth + 1
+        out[p["id"]] = depth
+    return out
+
+
 def architecture(g, pages: list[dict] | None = None) -> dict:
-    """The parts of the project and the edges between them: ``pages``' files (a file in several pages
-    counts for the first), else the default parts (:func:`area_of`)."""
+    """The parts of the project and the edges between them: ``pages``' files, else the default parts
+    (:func:`area_of`). A file in several pages counts for the deepest of them (a sub-page over the page
+    that also lists its folder), then for the first."""
     if pages:
+        depth = _depths(pages)
         owner: dict[str, str] = {}
-        for p in pages:
+        for p in sorted(pages, key=lambda p: -depth[p["id"]]):  # stable: the file's order within a depth
             for f in p["_files"]:
                 owner.setdefault(f, p["id"])
-        labels = {p["id"]: p["title"] for p in pages if p["_files"]}
+        owners = set(owner.values())
+        labels = {p["id"]: p["title"] for p in pages if p["id"] in owners}
         agg = _aggregate(g, owner.get)
     else:
         labels = {a: a for a in {area_of(f) for f in _files(g)}}
@@ -205,13 +221,22 @@ def page_diagram(g, page: dict, pages: list[dict]) -> dict:
 
 # -- call flow and sequence -------------------------------------------------------------------------
 
-def _owner(g, nid: str) -> str:
-    """The class that owns a method, else the file the symbol is in."""
+def _owner_of(g, nid: str) -> tuple[str, str, str]:
+    """The class that owns a method, else the file the symbol is in: a key that tells two owners apart,
+    a short label (a class name, a file's name) and a long one (with the path)."""
     for u, _d in g.in_edges(nid, {"method"}):
         if not g.is_file_node(u):
-            return g.label(u)
+            f = g.file(u)
+            return u, g.label(u), f"{g.label(u)} ({f})" if f else u
     f = g.file(nid)
-    return PurePosixPath(f).name if f else g.label(nid)
+    if f:
+        return "file:" + f, PurePosixPath(f).name, f
+    return nid, g.label(nid), nid
+
+
+def _owner(g, nid: str) -> str:
+    """The class that owns a method, else the file the symbol is in."""
+    return _owner_of(g, nid)[1]
 
 
 def _name(g, nid: str) -> str:
@@ -270,6 +295,10 @@ def _callees(g, source: str, stale) -> dict:
                     seen.add(v)
                     nxt.append(v)
         frontier = nxt
+    if not hops:
+        return {"status": "no outgoing calls",
+                "next_step": "the graph has no calls edge from it to a file of the project: give a target, or see "
+                             "its other edges with node_inspect (`verinoda inspect`)"}
     out = {"status": "found", "paths": [hops], "resolved": {"source": {"id": r.node}}}
     if r.status == naming.SIMILAR and r.note:
         out["fuzzy"] = {"source": r.note}
@@ -297,9 +326,10 @@ def flow(g, source: str, target: str | None = None, *, mode: str = "flow", stale
     for n, i in nodes.items():
         if n in keep:
             lines.append(f'  {i}["{_text(_name(g, n))}<br/><small>{_text(_node_at(g, n))}</small>"]')
-    claims = []
+    claims, dropped = [], 0
     for (a, b), e in edges.items():
         if a not in keep or b not in keep:
+            dropped += 1
             continue
         rel = e["relation"] or "calls"
         lines.append(f"  {nodes[a]} {'-->' if e['extracted'] else '-.->'}|{_text(rel, 20)}| {nodes[b]}")
@@ -315,6 +345,7 @@ def flow(g, source: str, target: str | None = None, *, mode: str = "flow", stale
             out[k] = res[k]
     if truncated:
         out["truncated"] = True
+        out["left_out"] = {"boxes": len(nodes) - len(keep), "arrows": dropped}
     return out
 
 
@@ -325,13 +356,19 @@ def sequence(g, source: str, target: str, *, stale=()) -> dict:
         return _unresolved("sequence", res)
     path = res["paths"][0]
     parts: dict[str, str] = {}
+    names: dict[str, tuple[str, str]] = {}
     for h in path:
         for n in (h["from_id"], h["to_id"]):
-            parts.setdefault(_owner(g, n), f"p{len(parts)}")
-    lines = ["sequenceDiagram"] + [f"  participant {i} as {_text(o)}" for o, i in parts.items()]
+            key, short, long = _owner_of(g, n)
+            parts.setdefault(key, f"p{len(parts)}")
+            names[key] = (short, long)
+    # two owners with one name (two utils.py, two classes Config) are shown with their paths
+    same = Counter(short for short, _ in names.values())
+    lines = ["sequenceDiagram"] + [f"  participant {i} as {_text(names[k][1] if same[names[k][0]] > 1 else names[k][0])}"
+                                   for k, i in parts.items()]
     claims = []
     for h in path:
-        a, b = _owner(g, h["from_id"]), _owner(g, h["to_id"])
+        a, b = _owner_of(g, h["from_id"])[0], _owner_of(g, h["to_id"])[0]
         callee = g.label(h["to_id"]).lstrip(".")
         extracted = h.get("confidence") == "EXTRACTED"
         lines.append(f"  {parts[a]}{'->>' if extracted else '-)'}{parts[b]}: {_text(callee)}")
@@ -396,8 +433,11 @@ def _slug(title: str, taken: set[str]) -> str:
 
 
 def _matches(f: str, pattern: str) -> bool:
-    pat = pattern.replace("\\", "/").strip().lstrip("./") if pattern.strip() not in (".", "./") else ""
-    if not pat:
+    pat = pattern.replace("\\", "/").strip()
+    while pat.startswith("./"):  # only the prefix: a dot-folder (.github/) keeps its dot
+        pat = pat[2:]
+    pat = pat.lstrip("/")
+    if pat in ("", "."):
         return True
     if any(ch in pat for ch in "*?["):
         return fnmatch.fnmatchcase(f, pat) or fnmatch.fnmatchcase(f, pat.rstrip("/") + "/*")
@@ -411,7 +451,7 @@ def read_steering(repo: Path) -> tuple[dict | None, list[str]]:
     if not p.is_file():
         return None, []
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
+        data = json.loads(p.read_text(encoding="utf-8-sig"))  # an editor's BOM is no error
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return None, [f"{STEERING_FILE}: not read ({type(exc).__name__}: {exc}); the default outline is used"]
     if not isinstance(data, dict) or not isinstance(data.get("pages"), list) or not data["pages"]:
@@ -434,28 +474,50 @@ def _default_pages(g) -> list[dict]:
 def _steered_pages(g, data: dict, problems: list[str]) -> list[dict]:
     files = _files(g)
     pages = []
+    titles: set[str] = set()
     for i, raw in enumerate(data["pages"]):
-        if not isinstance(raw, dict) or not str(raw.get("title") or "").strip():
+        if not isinstance(raw, dict) or not isinstance(raw.get("title"), (str, int, float)) \
+                or not str(raw["title"]).strip():
             problems.append(f"pages[{i}]: no title; left out")
             continue
         title = str(raw["title"]).strip()
+        if title in titles:  # a parent names a page by its title: one title is one page
+            problems.append(f"pages[{i}]: title {title!r} is an earlier page's title; left out")
+            continue
+        titles.add(title)
         paths = raw.get("paths") or []
-        paths = [paths] if isinstance(paths, str) else [str(p) for p in paths]
+        if isinstance(paths, str):
+            paths = [paths]
+        elif isinstance(paths, list):
+            bad = [p for p in paths if not isinstance(p, str)]
+            if bad:
+                problems.append(f"{title}: paths {bad!r} are not text; left out")
+            paths = [p for p in paths if isinstance(p, str)]
+        else:
+            problems.append(f"{title}: paths {paths!r} is not a list of paths; left out")
+            paths = []
+        parent = raw.get("parent")
+        if parent is not None and not isinstance(parent, str):
+            problems.append(f"{title}: parent {parent!r} is not a page's title; shown at the top")
+            parent = None
+        flows_raw = raw.get("flows") or []
+        if not isinstance(flows_raw, list):
+            problems.append(f"{title}: flows {flows_raw!r} is not a list of [\"from\", \"to\"] pairs; left out")
+            flows_raw = []
         mine = [f for f in files if any(_matches(f, p) for p in paths)]
         for p in paths:
             if not any(_matches(f, p) for f in files):
                 problems.append(f"{title}: path {p!r} matches no indexed file")
         flows = []
-        for fl in raw.get("flows") or []:
+        for fl in flows_raw:
             if isinstance(fl, (list, tuple)) and len(fl) == 2 and all(isinstance(x, str) and x for x in fl):
                 flows.append((fl[0], fl[1]))
             elif isinstance(fl, dict) and fl.get("from") and fl.get("to"):
                 flows.append((str(fl["from"]), str(fl["to"])))
             else:
                 problems.append(f"{title}: flow {fl!r} is not [\"from\", \"to\"]; left out")
-        pages.append({"title": title, "purpose": str(raw.get("purpose") or ""), "parent": raw.get("parent"),
+        pages.append({"title": title, "purpose": str(raw.get("purpose") or ""), "parent": parent,
                       "_files": mine, "_flows": flows, "_overview": bool(raw.get("overview"))})
-    titles = {p["title"] for p in pages}
     for p in pages:
         if p["parent"] is not None and p["parent"] not in titles:
             problems.append(f"{p['title']}: parent {p['parent']!r} is no page's title; shown at the top")
@@ -490,10 +552,11 @@ def _ordered(pages: list[dict]) -> list[dict]:
 
 
 def outline(g, repo: Path | str | None = None, *, pages: list[str] | None = None, diagrams: bool = True,
-            stale=()) -> dict:
+            only: bool = False, stale=()) -> dict:
     """The page tree: from :data:`STEERING_FILE` when the repository has one, else an overview and a page
     per part. ``pages``: only these (by id or title) get their diagrams; ``diagrams=False``: none do (each
-    page still names the diagrams it has)."""
+    page still names the diagrams it has); ``only``: the other pages are left out (``page_count`` has the
+    tree's)."""
     repo = Path(repo or g.root)
     # the steering file spells the flows' names: that never makes them names of a changed code file
     stale = [f for f in stale if f != STEERING_FILE]
@@ -529,15 +592,18 @@ def outline(g, repo: Path | str | None = None, *, pages: list[str] | None = None
                                         + (f" ({d['next_step']})" if d.get("next_step") else ""))
                     ds.append({**d, "from": a, "to": b})
             page["diagrams"] = ds
-        out_pages.append(page)
+        if not only or want is None or p["id"] in want or p["title"].lower() in want:
+            out_pages.append(page)
     res = {"source": STEERING_FILE if data else "default: a page per folder (first two folders of a path)",
            "pages": out_pages, "unassigned_files": len(set(_files(g)) - assigned),
            "coverage": {"method": "pages from " + (STEERING_FILE if data else "the folders of the indexed files")
                         + "; diagrams from the graph's edges",
                         "limits": ["a page's text is its purpose as written; nothing is generated",
                                    "diagram arrows are graph extractions, strong_inference at most"]}}
+    if only and want is not None:
+        res["page_count"] = len(tree)
     if want is not None:
-        missing = sorted(want - {p["id"] for p in out_pages} - {p["title"].lower() for p in out_pages})
+        missing = sorted(want - {p["id"] for p in tree} - {p["title"].lower() for p in tree})
         if missing:
             problems.append("no page named " + ", ".join(repr(m) for m in missing))
     if problems:

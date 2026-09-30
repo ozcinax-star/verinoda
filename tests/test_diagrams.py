@@ -248,3 +248,129 @@ def test_the_html_export_carries_the_diagrams(repo, tmp_path):
     assert first["kind"] == "architecture" and first["mermaid"].startswith("flowchart LR") and first["claims"]
     assert "<br/>" not in raw  # a diagram's markup is escaped in the embedded JSON
     assert '"#/w/"' in html and 'case "/api/wiki"' in html  # the page shows the wiki pages
+
+
+# -- a small repository: two files named utils.py, a dot-folder, nested pages -------------------------
+
+SMALL = {
+    "a/__init__.py": "",
+    "a/utils.py": "from b.utils import helper\n\n\ndef start():\n    return helper()\n",
+    "b/__init__.py": "",
+    "b/utils.py": "def finish():\n    return 1\n\n\ndef helper():\n    return finish()\n",
+    "tools/run.py": "from a.utils import start\n\n\ndef main():\n    return start()\n",
+    ".ci/check.py": "from tools.run import main\n\n\ndef check():\n    return main()\n",
+}
+
+
+@pytest.fixture(scope="module")
+def small(tmp_path_factory) -> Path:
+    dst = tmp_path_factory.mktemp("diagrams") / "small ğ repo"
+    for rel, text in SMALL.items():
+        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+        (dst / rel).write_text(text, encoding="utf-8")
+    _git(dst, "init", "-q")
+    _git(dst, "add", "-A")
+    _git(dst, "commit", "-q", "-m", "init")
+    workflow.init(dst)
+    st = open_store(dst)
+    try:
+        workflow.scan(st, dst)
+    finally:
+        st.close()
+    return dst
+
+
+def _steer(repo: Path, data, bom: bool = False) -> dict:
+    p = repo / diagrams.STEERING_FILE
+    p.write_bytes((b"\xef\xbb\xbf" if bom else b"") + json.dumps(data).encode("utf-8"))
+    try:
+        return diagrams.outline(index.load(repo), repo)
+    finally:
+        p.unlink()
+
+
+def test_two_files_with_one_name_are_two_participants(small):
+    d = diagrams.sequence(index.load(small), "main", "finish")
+    parts = dict(re.findall(r"participant (p\d+) as (.+)$", d["mermaid"], re.M))
+    assert set(parts.values()) == {"run.py", "a/utils.py", "b/utils.py"}
+    ids = {v: k for k, v in parts.items()}
+    assert f"{ids['a/utils.py']}->>{ids['b/utils.py']}" in d["mermaid"]  # not a call of utils.py to itself
+    assert f"{ids['b/utils.py']}->>{ids['b/utils.py']}: finish()" in d["mermaid"]  # a call within one file
+
+
+def test_a_steering_path_may_name_a_dot_folder(small):
+    assert diagrams._matches(".ci/check.py", ".ci/") and diagrams._matches(".ci/check.py", "./.ci")
+    assert diagrams._matches(".ci/check.py", "././.ci/*.py") and not diagrams._matches("ci/check.py", ".ci/")
+    o = _steer(small, {"pages": [{"title": "CI", "paths": [".ci/"]}]})
+    assert o["pages"][0]["files"] == [".ci/check.py"] and "problems" not in o
+
+
+def test_nested_pages_draw_the_arrows_between_the_sub_pages(small):
+    o = _steer(small, {"pages": [
+        {"title": "All", "paths": ["a/", "b/", "tools/"]},
+        {"title": "A", "parent": "All", "paths": ["a/"]},
+        {"title": "B", "parent": "All", "paths": ["b/"]},
+        {"title": "Tools", "parent": "All", "paths": ["tools/*.py"]}]})
+    arch = o["pages"][0]["diagrams"][0]
+    assert arch["kind"] == "architecture"
+    pairs = {(c["from"], c["to"]) for c in arch["claims"]}
+    assert {("tools", "a"), ("a", "b")} <= pairs  # a file counts for the sub-page that lists it
+    assert '"All"' not in arch["mermaid"]  # every file of All is in a sub-page
+
+
+def test_a_mistyped_steering_file_is_listed_under_problems(small, tmp_path):
+    from verinoda.ui import export
+
+    bad = {"pages": [{"title": "A", "parent": ["x"], "paths": 5, "flows": 5},
+                     {"title": "B", "parent": {"a": 1}, "paths": ["a/", 3], "flows": "ab"},
+                     {"title": "A", "paths": ["b/"]}, {"title": ["t"]}]}
+    o = _steer(small, bad, bom=True)  # a BOM is read, not an error
+    assert o["source"] == diagrams.STEERING_FILE
+    assert [p["id"] for p in o["pages"]] == ["a", "b"] and all(p["depth"] == 0 for p in o["pages"])
+    problems = "\n".join(o["problems"])
+    for text in ("A: parent ['x'] is not a page's title", "A: paths 5 is not a list", "A: flows 5 is not a list",
+                 "B: parent {'a': 1}", "B: paths [3] are not text", "B: flows 'ab' is not a list",
+                 "pages[2]: title 'A' is an earlier page's title", "pages[3]: no title"):
+        assert text in problems, text
+    assert o["pages"][1]["files"] == ["a/__init__.py", "a/utils.py"]
+    p = small / diagrams.STEERING_FILE
+    p.write_text(json.dumps(bad), encoding="utf-8")
+    try:
+        assert export.write(small, tmp_path / "graph.html")["wiki_pages"] == 2
+    finally:
+        p.unlink()
+
+
+def test_a_flow_cut_to_its_boxes_says_how_many_were_left_out(g, monkeypatch):
+    monkeypatch.setattr(diagrams, "MAX_NODES", 2)
+    d = diagrams.flow(g, "place_order")
+    assert d["truncated"] and d["left_out"]["boxes"] > 0 and d["left_out"]["arrows"] > 0
+    assert "%% truncated: {}" not in diagrams.as_text(d)
+
+
+def test_a_flow_of_a_symbol_that_calls_nothing_says_so(repo, g, capsys):
+    from verinoda import cli
+
+    d = diagrams.flow(g, "orders/api.py")
+    assert d["status"] == "no outgoing calls" and d["mermaid"] is None and d["next_step"]
+    assert cli.main(["diagram", "flow", "orders/api.py", "--repo", str(repo)]) == 2
+    assert "no diagram: no outgoing calls" in capsys.readouterr().out
+
+
+def test_mcp_outline_with_targets_gives_only_those_pages(repo):
+    from verinoda.mcp.server import AtlasTools
+
+    one = AtlasTools(repo).map_view("outline", targets=["tests"])
+    assert [p["id"] for p in one["pages"]] == ["tests"] and one["pages"][0]["diagrams"]
+    assert one["page_count"] > 1 and "truncated" not in one
+
+
+def test_the_export_escapes_a_flow_diagrams_markup(steered, tmp_path):
+    from verinoda.ui import export
+
+    out = export.write(steered, tmp_path / "graph.html")
+    html = Path(out["path"]).read_text(encoding="utf-8")
+    raw = re.search(r'<script type="application/json" id="verinoda-data">(.*?)</script>', html, re.DOTALL).group(1)
+    http = next(p for p in json.loads(raw)["wiki"]["pages"] if p["id"] == "http-layer")
+    assert "<br/><small>" in http["diagrams"][1]["mermaid"]  # a flow's box: a name and its line
+    assert "<br/>" not in raw and "</small>" not in raw

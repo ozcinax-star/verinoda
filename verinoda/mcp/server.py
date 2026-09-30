@@ -1027,7 +1027,8 @@ class AtlasTools:
             if view == "outline":  # the wiki page tree; the pages named in targets with their Mermaid diagrams
                 from verinoda import diagrams
 
-                res = diagrams.outline(g, self.repo, pages=tg or None, diagrams=bool(tg),
+                # with targets only those pages: the whole tree would crowd their diagrams out of the budget
+                res = diagrams.outline(g, self.repo, pages=tg or None, diagrams=bool(tg), only=bool(tg),
                                        stale=fresh.get("files") or ())
                 if not tg:
                     res["next_step"] = "targets=[page id] for a page's Mermaid diagrams and their evidence"
