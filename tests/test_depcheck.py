@@ -106,13 +106,24 @@ def test_python_by_name(pyproj):
     assert any("tied to packages by name only" in lim for lim in res["limits"])
 
 
-def _dist(site: Path, name: str, version: str, tops: list[str], requires: list[str] = ()) -> None:
+def _dist(site: Path, name: str, version: str, tops: list[str], requires: list[str] = (),
+          record: list[str] = ()) -> None:
     d = site / f"{name}-{version}.dist-info"
     d.mkdir(parents=True)
     meta = ["Metadata-Version: 2.1", f"Name: {name}", f"Version: {version}"]
     meta += [f"Requires-Dist: {r}" for r in requires]
     (d / "METADATA").write_text("\n".join(meta) + "\n\nlong description\n", encoding="utf-8")
-    (d / "top_level.txt").write_text("\n".join(tops) + "\n", encoding="utf-8")
+    if tops:
+        (d / "top_level.txt").write_text("\n".join(tops) + "\n", encoding="utf-8")
+    if record:
+        rows = [f"{r},sha256=x,1" for r in record] + [f"{d.name}/METADATA,,"]
+        (d / "RECORD").write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def _venv(proj: Path) -> Path:
+    (proj / ".venv").mkdir()
+    (proj / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\nversion_info = 3.12.1\n", encoding="utf-8")
+    return proj / ".venv" / "Lib" / "site-packages"
 
 
 def test_python_with_environment_finds_transitive(tmp_path):
@@ -184,8 +195,8 @@ def test_npm(tmp_path):
     res = depcheck.check_deps(proj)
     missing, trans, unused, wrong = (_by(res, k) for k in depcheck.FINDINGS)
     assert set(missing) == {"left-pad"} and missing["left-pad"]["evidence"][0]["locator"] == "src/app.tsx:4"
-    # scheduler: in the lock file only; the lock line is cited
-    assert set(trans) == {"scheduler"} and trans["scheduler"]["status"] == "statically_verified"
+    # scheduler: in the lock file only; the lock line is cited. A lock line shows it installed, not why
+    assert set(trans) == {"scheduler"} and trans["scheduler"]["status"] == "strong_inference"
     assert {"locator": "package-lock.json:3", "role": "lock", "excerpt": '"node_modules/scheduler": {'} \
         in trans["scheduler"]["evidence"]
     assert set(unused) == {"lodash"}
@@ -265,6 +276,137 @@ def test_dev_files_and_dynamic_imports(tmp_path):
     # named in a string (a dynamic import): a limit, not unused; wheel is a build tool; pandas is TYPE_CHECKING only
     assert not res["findings"]
     assert any("tree-sitter-lua" in lim for lim in res["limits"])
+
+
+def test_namespace_packages_in_the_environment(tmp_path):
+    # google/ is a namespace shared by three distributions: each import goes to the one owning its module
+    proj = _write(tmp_path, {
+        "pyproject.toml": '[project]\nname = "app"\ndependencies = ["google-cloud-storage", "protobuf"]\n',
+        "app/__init__.py": "",
+        "app/m.py": "from google.cloud import storage\nfrom google.protobuf import message\n",
+    })
+    site = _venv(proj)
+    _dist(site, "google_api_core", "2.0.0", [], record=["google/api_core/__init__.py"])
+    _dist(site, "google_cloud_storage", "2.0.0", [], ["google-api-core"],
+          record=["google/cloud/storage/__init__.py", "google/cloud/storage/blob.py"])
+    _dist(site, "protobuf", "4.0.0", [], record=["google/protobuf/__init__.py", "google/protobuf/message.py"])
+    res = depcheck.check_deps(proj, env="auto")
+    assert not res["findings"], res["findings"]
+    # an import the environment cannot pin to one distribution (the bare namespace) falls back to the name
+    (proj / "app" / "n.py").write_text("import google\n", encoding="utf-8")
+    missing = _by(depcheck.check_deps(proj, env="auto"), "missing")
+    assert missing["google"]["status"] == "strong_inference"
+
+
+def test_npm_workspace_sibling_and_nested_lock(tmp_path):
+    proj = _write(tmp_path, {
+        "package.json": '{"name": "root", "private": true, "workspaces": ["packages/*"]}\n',
+        "package-lock.json": '{\n  "packages": {\n    "node_modules/lodash": {},\n'
+                             '    "node_modules/a/node_modules/foo": {}\n  }\n}\n',
+        "packages/a/package.json": '{"name": "a", "dependencies": {}}\n',
+        "packages/b/package.json": '{"name": "b", "dependencies": {"lodash": "^4"}}\n',
+        "packages/a/src/index.js": "import lodash from 'lodash';\nconst foo = require('foo');\n",
+        "packages/b/src/index.js": "import lodash from 'lodash';\n",
+    })
+    res = depcheck.check_deps(proj)
+    trans, missing = _by(res, "transitive_only"), _by(res, "missing")
+    t = trans["lodash"]
+    assert t["status"] == "strong_inference"
+    assert "packages/b/package.json declares it for its own folder only" in t["claim"]
+    assert "packages/b/package.json:1" in [e["locator"] for e in t["evidence"]]
+    # foo is only nested under another package in the lock: the root code cannot resolve it
+    assert "foo" in missing and "foo" not in trans
+
+
+def test_spring_boot_starters(tmp_path):
+    proj = _write(tmp_path, {
+        "build.gradle": "dependencies {\n"
+                        "    implementation 'org.springframework.boot:spring-boot-starter-web:3.2.0'\n"
+                        "    testImplementation 'org.springframework.boot:spring-boot-starter-test:3.2.0'\n"
+                        "}\n",
+        "settings.gradle": "rootProject.name = 'app'\n",
+        "src/main/java/com/ex/App.java": "package com.ex;\nimport org.springframework.boot.SpringApplication;\n",
+        "src/test/java/com/ex/AppTest.java": "package com.ex;\nimport org.junit.jupiter.api.Test;\n",
+    })
+    res = depcheck.check_deps(proj)
+    assert not _by(res, "wrong_group") and not _by(res, "unused"), res["findings"]
+
+
+def test_runtime_config_module_is_not_dev_code(tmp_path):
+    assert not depcheck.is_dev_file("src/config.ts") and not depcheck.is_dev_file("src/app/app.config.ts")
+    assert depcheck.is_dev_file("tailwind.config.cjs") and depcheck.is_dev_file(".eslintrc.js")
+    proj = _write(tmp_path, {
+        "package.json": '{"name": "svc", "dependencies": {"dotenv": "^16", "zod": "^3"}}\n',
+        "src/config.ts": "import 'dotenv/config';\nimport { z } from 'zod';\n",
+        "src/index.ts": "import { cfg } from './config';\n",
+    })
+    assert not depcheck.check_deps(proj)["findings"]
+
+
+def test_plugin_package_does_not_stand_for_its_host(tmp_path):
+    proj = _write(tmp_path, {
+        "requirements.txt": "flask-sqlalchemy\npsycopg2-binary\n",
+        "requirements-dev.txt": "pytest-cov\n",
+        "app.py": "import flask\nimport flask_sqlalchemy\nimport psycopg2\n",
+        "tests/test_a.py": "import pytest\n",
+    })
+    res = depcheck.check_deps(proj, env="none")
+    assert set(_by(res, "missing")) == {"flask", "pytest"}   # psycopg2 is still psycopg2-binary
+
+
+def test_not_type_checking_and_parser_limits(tmp_path):
+    proj = _write(tmp_path, {
+        "requirements.txt": "attrs\n",
+        "m.py": "from typing import TYPE_CHECKING\nimport attr\nif not TYPE_CHECKING:\n    import numpy\n"
+                "else:\n    import pandas\n",
+    })
+    (proj / "gen.py").write_text("X = " + "1+" * 100000 + "1\n", encoding="utf-8")
+    res = depcheck.check_deps(proj, env="none")
+    assert set(_by(res, "missing")) == {"numpy"}   # the runtime branch; pandas is for the checker only
+    assert any("gen.py" in lim and "do not parse" in lim for lim in res["limits"])
+    assert depcheck.python_imports("x = " + "-" * 100000 + "1", "a.py") is None
+
+
+def test_js_imports_linear_and_exact():
+    import time
+
+    src = ("import a, { b as c } from 'm1';\nexport * from \"m2\";\nimport type { T } from 'm3';\n"
+           "import 'm4';\nconst x = require('m5');\nawait import('m6');\nimport\n  d\nfrom 'm7';\n")
+    assert depcheck.js_imports(src, "a.ts") == [("m1", 1, False), ("m2", 2, False), ("m3", 3, True),
+                                                 ("m4", 4, False), ("m5", 5, False), ("m6", 6, False),
+                                                 ("m7", 7, False)]
+    for bad in ("import" + " " * 8000, "const s = '" + "import a " * 8000 + "';", "import a\n" * 4000):
+        t = time.perf_counter()
+        depcheck.js_imports(bad + "\nimport z from 'left-pad';\n", "big.js")
+        assert time.perf_counter() - t < 2.0
+
+
+def test_helper_script_named_like_a_package(tmp_path):
+    proj = _write(tmp_path, {
+        "pyproject.toml": '[project]\nname = "p"\ndependencies = ["requests"]\n',
+        "src/app/__init__.py": "import requests\nimport yaml\n",
+        "scripts/requests.py": "print(1)\n",
+        "scripts/yaml.py": "print(1)\n",
+        "scripts/run.py": "import yaml\n",   # next to scripts/yaml.py: its own module
+        # pytest puts tests/ on sys.path for the session: another test folder imports its helper
+        "tests/test_a.py": "import helpers\n",
+        "tests/helpers.py": "X = 1\n",
+        "tests_other/test_b.py": "import helpers\n",
+    })
+    res = depcheck.check_deps(proj, env="none")
+    assert not _by(res, "unused")
+    missing = _by(res, "missing")
+    assert set(missing) == {"pyyaml"} and missing["pyyaml"]["import_sites"] == 1
+
+
+def test_oversized_files_are_a_limit(tmp_path, monkeypatch):
+    proj = _write(tmp_path, {
+        "pyproject.toml": '[project]\nname = "p"\ndependencies = ["requests"]\n',
+        "big.py": "import requests\n" + "#" * 500 + "\n",
+    })
+    monkeypatch.setattr(depcheck, "MAX_FILE_BYTES", 200)
+    res = depcheck.check_deps(proj, env="none")
+    assert any("over the size cap" in lim and "big.py" in lim for lim in res["limits"])
 
 
 # -- CLI and MCP ------------------------------------------------------------------------------------------------

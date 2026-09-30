@@ -23,26 +23,31 @@ line, the lock-file line):
 
 What counts as dev code: test files (:func:`verinoda.testcode.is_test_file`), ``docs/`` and ``benchmarks/``,
 build and task scripts (``setup.py``, ``noxfile.py``, ``tasks.py``) and JS/TS tool configuration
-(``*.config.js``, stories, ``e2e/``). A dev group is a PEP 735 group, a Poetry group, npm
+(``vite.config.ts``-like ``*.config.*`` names but not ``app.config.*``, ``.eslintrc.js``, stories,
+``e2e/``); a bare ``config.ts`` is runtime code. A dev group is a PEP 735 group, a Poetry group, npm
 ``devDependencies``, a ``requirements-dev``-like file, an optional-dependencies group named like dev, test,
 lint, docs or typing, a Gradle ``test*`` configuration or a Maven ``test`` scope.
 
 How an import is tied to a package, and what that makes the status:
 
 * Python with a project environment (``.venv``, ``venv`` or ``env``; read from files, its interpreter never
-  started): the installed distribution whose ``RECORD``/``top_level.txt`` holds the module. ``missing`` and
-  ``transitive_only`` are ``statically_verified`` when every manifest of the project was read;
+  started): the installed distribution whose ``RECORD`` holds the module, matched on the full dotted path
+  (``google.cloud.storage`` and ``google.protobuf`` are two distributions under one namespace; a module
+  several distributions share falls back to the name). ``missing`` and ``transitive_only`` are
+  ``statically_verified`` when every manifest of the project was read;
 * Python without one: the import name against the declared names (normalised, a table of well-known
   differences such as ``yaml`` for PyYAML): ``strong_inference`` at most, and a name matching nothing may be
   a package installed some other way;
 * npm: the specifier names the package; a bundler alias or a tsconfig path is resolved first
-  (:class:`verinoda.codecheck_ts.Resolver`). ``transitive_only`` is ``statically_verified`` (the lock file or
-  ``node_modules`` holds it), ``missing`` ``strong_inference`` (a bundler may still provide it);
+  (:class:`verinoda.codecheck_ts.Resolver`). ``transitive_only`` and ``missing`` are ``strong_inference``:
+  a lock-file line or ``node_modules`` folder shows a package installed but not why (another package's
+  dependency, or a sibling workspace package that declares it), and a bundler may provide a missing one;
 * Gradle and Maven: a Java or Kotlin import is tied to a declared artifact by its group (``org.yaml`` for
   ``org.yaml.snakeyaml``), its artifact name as a package segment, or a table of well-known packages (Guava's
   ``com.google.common``): ``strong_inference``. Without reading the classpath an import that matches nothing
   may come from the JDK, the platform (Minecraft), or a transitive jar, so JVM imports are never ``missing``
-  or ``transitive_only``: their count is a limit.
+  or ``transitive_only``: their count is a limit. An import that ties with several artifacts (one group)
+  counts as use of each but decides no ``wrong_group``; a starter or BOM artifact is not judged unused.
 
 ``unused`` and ``wrong_group`` are ``strong_inference`` everywhere: a package can be used without an import
 (a plugin, an entry point, a string passed to ``importlib``) and the dev/runtime split of files is a rule.
@@ -61,6 +66,7 @@ from pathlib import Path, PurePosixPath
 FINDINGS = ("missing", "transitive_only", "unused", "wrong_group")
 EVIDENCE_SITES = 3          # import sites cited per finding (the count says how many there are)
 MAX_FILE_BYTES = 2_000_000
+MAX_LOCK_BYTES = 64_000_000  # lock files of large projects often pass the source cap
 
 # folders whose code is not the project's own (samples, fixtures, vendored or generated code)
 _NOT_PROJECT = {"node_modules", "build", "dist", "out", ".gradle", "target", "vendor", "third_party", "third-party",
@@ -71,7 +77,9 @@ _DEV_DIRS = {"docs", "doc", "benchmarks", "benchmark", "e2e", "cypress", "playwr
              "stories"}
 _DEV_FILES = {"setup.py", "noxfile.py", "tasks.py", "fabfile.py", "conftest.py", "gulpfile.js", "gruntfile.js",
               "Gruntfile.js", "Gulpfile.js"}
-_DEV_NAME = re.compile(r"(^|[._-])(config|conf|rc|stories|story)\.[cm]?[jt]sx?$|^\.[\w-]+rc\.[cm]?js$")
+# tool configuration (vite.config.ts, .eslintrc.js, Button.stories.tsx); a bare config.ts, or Angular's
+# app.config.ts, is runtime code
+_DEV_NAME = re.compile(r"^(?!app\.)[\w-]+\.(config|stories|story)\.[cm]?[jt]sx?$|^\.[\w-]+rc\.[cm]?js$")
 _DEV_GROUP = re.compile(r"dev|test|lint|doc|typ|check|ci\b|style|format|bench|coverage", re.I)
 
 # import name -> distribution, where they differ and no environment says so
@@ -102,7 +110,11 @@ JVM_ALIASES = {
     "commons-codec:commons-codec": ("org.apache.commons.codec",),
     "org.projectlombok:lombok": ("lombok",),
     "org.assertj:assertj-core": ("org.assertj",),
+    "org.springframework.boot:spring-boot-starter-test": ("org.springframework.boot.test", "org.springframework.test",
+                                                          "org.junit", "org.assertj", "org.mockito", "org.hamcrest"),
 }
+# meta artifacts: a starter or a bill of materials pulls in other artifacts and has no package of its own
+_JVM_META = re.compile(r"starter|(^|-)(bom|platform|dependencies)$")
 _JVM_PLATFORM = ("java.", "javax.", "jdk.", "sun.", "com.sun.", "kotlin.", "kotlinx.", "org.w3c.", "org.xml.",
                  "org.ietf.", "org.omg.")
 # configurations that compile code (the others bundle, run or process it: no import is expected)
@@ -119,15 +131,21 @@ class Use:
     line: int
     dev: bool
     optional: bool = False
+    subs: tuple[str, ...] = ()   # the names of ``from X import a, b`` (a may be a submodule of X)
+    ambiguous: bool = False      # tied to several declarations at once: counts as use, never as wrong_group
 
 
 def _dep_key(name: str) -> str:
     return re.sub(r"[-_.]+", "-", str(name or "")).lower()
 
 
-def _read(p: Path) -> str | None:
+def _read(p: Path, cap: int | None = None, skipped: list | None = None) -> str | None:
+    """The file's text; None when it cannot be read or is larger than ``cap`` (default MAX_FILE_BYTES; then
+    its path goes to ``skipped``, when given, so the caller can report it as a limit)."""
     try:
-        if p.stat().st_size > MAX_FILE_BYTES:
+        if p.stat().st_size > (MAX_FILE_BYTES if cap is None else cap):
+            if skipped is not None:
+                skipped.append(p)
             return None
         return p.read_bytes().decode("utf-8", errors="replace")
     except OSError:
@@ -136,7 +154,7 @@ def _read(p: Path) -> str | None:
 
 def _line_text(repo: Path, rel: str, line: int, cache: dict) -> str:
     if rel not in cache:
-        cache[rel] = (_read(repo / rel) or "").split("\n")
+        cache[rel] = (_read(repo / rel, MAX_LOCK_BYTES) or "").split("\n")
     lines = cache[rel]
     return lines[line - 1].strip()[:160] if 0 < line <= len(lines) else ""
 
@@ -221,12 +239,19 @@ def _optional_lines(tree: ast.AST) -> set[int]:
             return {n for e in t.elts for n in names(e)}
         return {t.attr if isinstance(t, ast.Attribute) else getattr(t, "id", "")}
 
+    def type_checking(t) -> bool:
+        return (isinstance(t, ast.Name) and t.id == "TYPE_CHECKING") or \
+            (isinstance(t, ast.Attribute) and t.attr == "TYPE_CHECKING")
+
     for node in ast.walk(tree):
         body = None
         if isinstance(node, ast.Try) and any(names(h.type) & catches for h in node.handlers):
             body = node.body
-        elif isinstance(node, ast.If) and "TYPE_CHECKING" in ast.unparse(node.test):
+        elif isinstance(node, ast.If) and type_checking(node.test):
             body = node.body
+        elif isinstance(node, ast.If) and isinstance(node.test, ast.UnaryOp) and isinstance(node.test.op, ast.Not) \
+                and type_checking(node.test.operand):
+            body = node.orelse   # `if not TYPE_CHECKING:` runs its body; the else branch is for the checker
         for stmt in body or ():
             for sub in ast.walk(stmt):
                 if isinstance(sub, (ast.Import, ast.ImportFrom)):
@@ -239,43 +264,57 @@ def python_imports(text: str, rel: str, strings: set[str] | None = None) -> list
     literals that look like a module name (``importlib.import_module("tree_sitter_lua")``)."""
     try:
         tree = ast.parse(text)
-    except (SyntaxError, ValueError):
+    except (SyntaxError, ValueError, RecursionError, MemoryError):   # nested too deep for the parser too
         return None
     opt = _optional_lines(tree)
     dev = is_dev_file(rel)
     out = []
     for node in ast.walk(tree):
-        mods: list[str] = []
         if isinstance(node, ast.Import):
-            mods = [a.name for a in node.names]
+            for a in node.names:
+                out.append(Use("python", a.name, rel, node.lineno, dev, node.lineno in opt))
         elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
-            mods = [node.module]
-        for m in mods:
-            out.append(Use("python", m, rel, node.lineno, dev, node.lineno in opt))
+            subs = tuple(a.name for a in node.names if a.name != "*")
+            out.append(Use("python", node.module, rel, node.lineno, dev, node.lineno in opt, subs))
         if strings is not None and isinstance(node, ast.Constant) and isinstance(node.value, str) \
                 and _MODULE_NAME.match(node.value):
             strings.add(node.value.split(".")[0])
     return out
 
 
-_JS_IMPORT = re.compile(
-    r"""\bimport\s+(type\s+)?[\w*${}\s,]*?\bfrom\s*(['"])([^'"\n]+)\2"""
-    r"""|\bexport\s+(type\s+)?[\w*${}\s,]*?\bfrom\s*(['"])([^'"\n]+)\5"""
-    r"""|\bimport\s*(['"])([^'"\n]+)\7"""
-    r"""|\b(?:require|import)\s*\(\s*(['"])([^'"\n]+)\9\s*\)""")
+# `import x, { y } from "m"` and `export * from "m"`: a run of clause characters that ends in `from` just
+# before a quote. The runs are found once, left to right: a lazy clause pattern tried from every `import`
+# backtracks quadratically over a long run of words and spaces with no `from`.
+_JS_CLAUSE = re.compile(r"[\w*${}\s,]+")
+_JS_KEYWORD = re.compile(r"\b(?:import|export)\s+(type\s+)?")
+_JS_SPEC = re.compile(r"""(['"])([^'"\n]+)\1""")
+_JS_BARE = re.compile(r"""\bimport\s*(['"])([^'"\n]+)\1|\b(?:require|import)\s*\(\s*(['"])([^'"\n]+)\3\s*\)""")
 
 
 def js_imports(text: str, rel: str) -> list[tuple[str, int, bool]]:
     """(specifier, line, type only) of the imports, re-exports, requires and dynamic imports of a JS/TS file."""
+    from bisect import bisect_right
+
     from verinoda.guards import code_text
 
     code = code_text(text, PurePosixPath(rel).suffix or ".js", keep_strings=True)
-    out = []
-    for m in _JS_IMPORT.finditer(code):
-        spec = m.group(3) or m.group(6) or m.group(8) or m.group(10)
-        type_only = bool(m.group(1) or m.group(4))
-        out.append((spec, code.count("\n", 0, m.start()) + 1, type_only))
-    return out
+    newlines = [i for i, c in enumerate(code) if c == "\n"]
+    found: list[tuple[int, str, bool]] = []
+    for m in _JS_CLAUSE.finditer(code):
+        body = m.group().rstrip()
+        if not body.endswith("from") or (len(body) > 4 and (body[-5].isalnum() or body[-5] in "_$")):
+            continue
+        spec = _JS_SPEC.match(code, m.end())
+        if not spec:
+            continue
+        kw = None
+        for kw in _JS_KEYWORD.finditer(body, 0, len(body) - 4):
+            pass   # the last import/export keyword before this `from`
+        if kw is not None:
+            found.append((m.start() + kw.start(), spec.group(2), bool(kw.group(1))))
+    for m in _JS_BARE.finditer(code):
+        found.append((m.start(), m.group(2) or m.group(4), False))
+    return [(spec, bisect_right(newlines, pos - 1) + 1, type_only) for pos, spec, type_only in sorted(found)]
 
 
 _MODULE_NAME = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")
@@ -313,9 +352,71 @@ def _venv(repo: Path, env: str | None) -> tuple[dict, dict, str, str]:
                 where = venv.relative_to(repo).as_posix()
             except ValueError:
                 where = str(venv)
-            return dists, top, f"{where} ({len(dists)} installed distributions)", ""
+            return dists, _module_owners(dists, top), f"{where} ({len(dists)} installed distributions)", ""
     return {}, {}, "", ("no project environment (.venv, venv or env with pyvenv.cfg): imports are tied to packages "
                         "by name only")
+
+
+_PY_EXT = re.compile(r"\.(py|pyi|pyc|pyd|so)$")
+
+
+def _module_owners(dists: dict, top: dict) -> dict[str, dict[str, bool]]:
+    """``{dotted module path: {distribution: regular}}`` from each installed distribution's ``RECORD``: every
+    package folder and module a distribution installs, ``regular`` when it holds the ``__init__`` or the
+    module file itself. A namespace folder (``google``, ``azure``) is shared by several distributions without
+    being regular in any; ``top_level.txt`` stands in for a distribution with no module in its ``RECORD``."""
+    owners: dict[str, dict[str, bool]] = {}
+
+    def own(mod: str, key: str, regular: bool) -> None:
+        slot = owners.setdefault(mod, {})
+        slot[key] = slot.get(key, False) or regular
+
+    for key, (_name, _ver, info) in dists.items():
+        found = False
+        for ln in (_read(info / "RECORD") or "").split("\n"):
+            parts = ln.split(",", 1)[0].replace("\\", "/").split("/")
+            if not _PY_EXT.search(parts[-1]):
+                continue
+            stem = parts[-1].split(".")[0]
+            dirs = parts[:-1]
+            if not all(p.isidentifier() for p in dirs + [stem]):
+                continue   # dist-info, .data, ../bin, __pycache__ entries are not importable paths
+            for i in range(1, len(dirs) + 1):
+                own(".".join(dirs[:i]), key, False)
+            own(".".join(dirs) if stem == "__init__" else ".".join(dirs + [stem]), key, True)
+            found = True
+        if not found:
+            for t, k in top.items():
+                if k == key:
+                    own(t, key, True)
+    owners.pop("", None)
+    return owners
+
+
+def _env_owner(module: str, owners: dict[str, dict[str, bool]]) -> str | None:
+    """The one installed distribution a dotted module comes from: the longest installed prefix, owned by a
+    single distribution as a regular package or module (or as the only one holding the folder). None when
+    the environment does not say, or when several distributions share it (a namespace like ``google``)."""
+    parts = module.split(".")
+    for i in range(len(parts), 0, -1):
+        slot = owners.get(".".join(parts[:i]))
+        if slot is None:
+            continue
+        regular = [k for k, r in slot.items() if r]
+        if len(regular) == 1:
+            return regular[0]
+        return next(iter(slot)) if len(slot) == 1 else None
+    return None
+
+
+def _env_keys(u: Use, owners: dict[str, dict[str, bool]]) -> list[str] | None:
+    """The installed distributions an import is tied to (``from google.cloud import storage`` names the
+    ``google.cloud.storage`` module), or None when the environment cannot tell."""
+    subs = sorted({k for s in u.subs if (k := _env_owner(f"{u.name}.{s}", owners))})
+    if subs:
+        return subs
+    k = _env_owner(u.name, owners)
+    return [k] if k else None
 
 
 def _requires(dist_info: Path) -> list[str]:
@@ -371,41 +472,69 @@ def _own_python_names(repo: Path) -> set[str]:
     return out
 
 
-def _first_party_python(files: list[str]) -> set[str]:
-    """Top-level names the project's own modules can be imported by: the outermost folder of each chain of
-    packages (folders with ``__init__.py``), the stem of each module outside a package, and every folder of
-    Python files that is not a package (a namespace package, or a folder a script puts on sys.path)."""
+def _first_party_python(files: list[str]) -> tuple[set[str], dict[str, set[str]]]:
+    """Top-level names the project's own modules can be imported by: ``(everywhere, {name: folders})``.
+
+    Everywhere: the outermost folder of each chain of packages (folders with ``__init__.py``), and the
+    modules and namespace folders at the root or in ``src/``. A module outside a package deeper down
+    (``scripts/requests.py``) is importable only by the files next to it or below (a script's own folder is
+    on sys.path), and so is a namespace folder by the files of its parent: a helper script named like a
+    package does not hide that package's imports in the rest of the project. A loose module in a folder of
+    tests is also importable by every dev file (``{name: {"*dev"}}``): pytest puts each test folder it
+    collects on sys.path for the whole session."""
+    from verinoda.testcode import is_test_file
+
     py = [PurePosixPath(f) for f in files if f.endswith((".py", ".pyi"))]
     packages = {p.parent.as_posix() for p in py if p.name in ("__init__.py", "__init__.pyi")}
+    test_dirs = {p.parent.as_posix() for p in py if is_test_file(p.as_posix())}
     out: set[str] = set()
+    local: dict[str, set[str]] = {}
+
+    def add(name: str, where: PurePosixPath) -> None:
+        w = where.as_posix()
+        if w in (".", "", "src"):
+            out.add(name)
+        else:
+            local.setdefault(name, set()).add(w)
+            if w in test_dirs:
+                local[name].add("*dev")
+
     for p in py:
         d = p.parent
         if d.as_posix() not in packages:
-            out.add(p.stem)
+            add(p.stem, d)
             if d.name:
-                out.add(d.name)
+                add(d.name, d.parent)
             continue
         while d.parent.as_posix() in packages:
             d = d.parent
         out.add(d.name)
-    return out
+    return out, local
+
+
+def _is_first_party(top: str, u: Use, first: tuple[set[str], dict[str, set[str]]]) -> bool:
+    where = first[1].get(top, ())
+    return top in first[0] or (u.dev and "*dev" in where) or any(u.path.startswith(w + "/") for w in where)
 
 
 def _py_key(module: str, declared: set[str]) -> str:
     """The declared distribution an import names, by name only: the module, a well-known alias, a dotted
-    prefix joined with dashes (``google.cloud.storage`` -> google-cloud-storage), or a declared name that
-    extends the module's (``psycopg2`` -> psycopg2-binary). Else the module's own normalised top name."""
+    prefix joined with dashes (``google.cloud.storage`` -> google-cloud-storage), or a build variant of the
+    name (``psycopg2`` -> psycopg2-binary, ``cv2`` -> opencv-python-headless, ``magic`` -> python-magic).
+    A plugin that only extends the name (flask-sqlalchemy, pytest-cov) is another package: ``import flask``
+    is not tied to it. Else the module's own normalised top name."""
     parts = module.split(".")
     for i in range(len(parts), 0, -1):
         dotted = ".".join(parts[:i])
         for cand in (PY_ALIASES.get(dotted), _dep_key("-".join(parts[:i]))):
             if cand and _dep_key(cand) in declared:
                 return _dep_key(cand)
-    top = _dep_key(parts[0])
-    ext = sorted(d for d in declared if d.startswith(top + "-") or d == f"python-{top}" or d == f"py{top}")
-    if ext:
-        return ext[0]
-    return _dep_key(PY_ALIASES.get(parts[0]) or parts[0])
+    base = _dep_key(PY_ALIASES.get(parts[0]) or parts[0])
+    for name in (_dep_key(parts[0]), base):
+        for cand in (f"{name}-binary", f"{name}-headless", f"python-{name}", f"py{name}"):
+            if cand in declared:
+                return cand
+    return base
 
 
 # -- the check -------------------------------------------------------------------------------------
@@ -415,7 +544,11 @@ class _Out:
         self.repo = repo
         self.findings: list[dict] = []
         self.limits: list[str] = []
+        self.too_big: list[Path] = []   # files over the size cap, not read
         self._lines: dict = {}
+
+    def read(self, rel: str, cap: int | None = None) -> str:
+        return _read(self.repo / rel, cap, self.too_big) or ""
 
     def ev(self, rel: str, line: int, role: str) -> dict:
         return {"locator": f"{rel}:{line}", "role": role, "excerpt": _line_text(self.repo, rel, line, self._lines)}
@@ -441,7 +574,7 @@ def _in_scope(decl: dict, rel: str) -> bool:
 def _judge_declared(out: _Out, eco: str, key: str, decls: list[dict], uses: list[Use], label: str) -> None:
     """``wrong_group`` and ``unused`` for one declared package (all its declarations together)."""
     groups = {_group(d) for d in decls}
-    hard = [u for u in uses if not u.optional]
+    hard = [u for u in uses if not u.optional and not u.ambiguous]
     runtime_uses = [u for u in hard if not u.dev]
     if groups == {"dev"} and runtime_uses:
         where = ", ".join(sorted({str(d.get('scope')) for d in decls}))
@@ -450,7 +583,7 @@ def _judge_declared(out: _Out, eco: str, key: str, decls: list[dict], uses: list
                 runtime_uses, decls, next_step=f"move {label} to the runtime dependencies, or the importing code "
                                                "to test or tool code")
         return
-    if "runtime" in groups and "dev" not in groups and uses and all(u.dev for u in uses):
+    if "runtime" in groups and "dev" not in groups and uses and all(u.dev and not u.ambiguous for u in uses):
         out.add("wrong_group", eco, label, "strong_inference",
                 f"{label} is a runtime dependency, but only test, documentation or tool code imports it",
                 uses, [d for d in decls if _group(d) == "runtime"],
@@ -471,7 +604,7 @@ def _python(out: _Out, repo: Path, files: list[str], items: list[dict], env: str
     py = [f for f in files if f.endswith(".py")]
     if not py and not decls:
         return {}
-    dists, top, label, note = _venv(repo, env)
+    dists, owners, label, note = _venv(repo, env)
     if note:
         out.limits.append(f"python: {note}")
     own = _own_python_names(repo)
@@ -481,21 +614,25 @@ def _python(out: _Out, repo: Path, files: list[str], items: list[dict], env: str
     by_env: set[str] = set()
     unparsed = []
     strings: set[str] = set()
+    declared = set(decls)
     for rel in py:
-        got = python_imports(_read(repo / rel) or "", rel, strings)
+        got = python_imports(out.read(rel), rel, strings)
         if got is None:
             unparsed.append(rel)
             continue
         for u in got:
             topname = u.name.split(".")[0]
-            if topname in std or topname in first:
+            if topname in std or _is_first_party(topname, u, first):
                 continue
-            key = _dep_key(top[topname]) if topname in top else _py_key(u.name, set(decls))
-            if topname in top:
-                by_env.add(key)
-            if key in own:
-                continue
-            uses.setdefault(key, []).append(u)
+            keys = _env_keys(u, owners) if owners else None
+            if keys:
+                by_env.update(keys)
+            else:   # by name: `from google.cloud import storage` may name google-cloud-storage
+                keys = sorted({k for sub in u.subs if (k := _py_key(f"{u.name}.{sub}", declared)) in declared}) \
+                    or [_py_key(u.name, declared)]
+            for key in keys:
+                if key not in own:
+                    uses.setdefault(key, []).append(u)
     if unparsed:
         out.limits.append(f"python: {len(unparsed)} file(s) do not parse, their imports are not read: "
                           f"{', '.join(unparsed[:5])}{' ...' if len(unparsed) > 5 else ''}")
@@ -524,7 +661,7 @@ def _python(out: _Out, repo: Path, files: list[str], items: list[dict], env: str
     for key, ds in sorted(decls.items()):
         if _PY_NOT_IMPORTED.match(key) or key in own:
             continue
-        modules = {m for m, d in top.items() if _dep_key(d) == key} | {key.replace("-", "_")} | \
+        modules = {m for m, slot in owners.items() if "." not in m and key in slot} | {key.replace("-", "_")} | \
                   {m for m, d in PY_ALIASES.items() if _dep_key(d) == key}
         if not uses.get(key) and modules & strings:
             by_name.append(ds[0]["name"])   # imported by a name in a string (importlib): not judged unused
@@ -544,20 +681,29 @@ _NPM_NAME = re.compile(r"^(@[a-z0-9~][a-z0-9._~-]*/)?[a-z0-9~][a-z0-9._~-]*$")
 _JS_SUFFIXES = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte")
 
 
-def _lock_line(repo: Path, rels: list[str], pkg: str, cache: dict) -> tuple[str, int] | None:
-    """Where a lock file (package-lock.json, yarn.lock, pnpm-lock.yaml) of the project names a package."""
-    pats = (rf'"(?:[^"]*/)?node_modules/{re.escape(pkg)}"\s*:', rf'^"?{re.escape(pkg)}@',
-            rf"^\s+/?'?{re.escape(pkg)}[@/:]")
+# lock files, matched by line (not parsed): package-lock.json and npm-shrinkwrap.json `"node_modules/x": {`
+# at the root or under a workspace folder (an entry nested under another package is not one the root code
+# resolves); yarn.lock `x@^1.0.0:` at the start of a line; pnpm-lock.yaml `  /x@1.0.0:` or `  x: 1.0.0`
+_LOCK_NPM = re.compile(r'''^\s*"((?:(?!node_modules/)[^"])*/)?node_modules/((?:@[^/"]+/)?[^/"]+)"\s*:''')
+_LOCK_YARN = re.compile(r'''^"?((?:@[^@\s"/]+/)?[^@\s"/,]+)@''')
+_LOCK_PNPM = re.compile(r"""^\s+/?'?((?:@[^@/\s':]+/)?[^@/\s':]+)[@/:]""")
+
+
+def _lock_index(out: _Out, rels: list[str]) -> dict[str, tuple[str, int]]:
+    """{package: (lock file, first line naming it)} over the project's lock files, built in one pass."""
+    index: dict[str, tuple[str, int]] = {}
     for rel in rels:
-        if rel not in cache:
-            cache[rel] = (_read(repo / rel) or "").split("\n")
-        for i, ln in enumerate(cache[rel], 1):
-            if any(re.search(p, ln) for p in pats):
-                return rel, i
-    return None
+        name = PurePosixPath(rel).name
+        pat, group = ((_LOCK_YARN, 1) if name == "yarn.lock" else (_LOCK_PNPM, 1) if name == "pnpm-lock.yaml"
+                      else (_LOCK_NPM, 2))
+        for i, ln in enumerate(out.read(rel, MAX_LOCK_BYTES).split("\n"), 1):
+            m = pat.match(ln)
+            if m:
+                index.setdefault(m.group(group).lower(), (rel, i))
+    return index
 
 
-def _npm(out: _Out, repo: Path, files: list[str], items: list[dict], all_read: bool) -> dict:
+def _npm(out: _Out, repo: Path, files: list[str], items: list[dict]) -> dict:
     from verinoda.codecheck_ts import NODE_BUILTINS, Resolver
 
     decls: dict[str, list[dict]] = {}
@@ -577,7 +723,7 @@ def _npm(out: _Out, repo: Path, files: list[str], items: list[dict], all_read: b
     r = Resolver(repo)
     uses: dict[str, list[Use]] = {}
     for rel in src:
-        for spec, line, type_only in js_imports(_read(repo / rel) or "", rel):
+        for spec, line, type_only in js_imports(out.read(rel), rel):
             if spec.startswith((".", "/", "node:")) or ":" in spec or spec.split("/")[0] in NODE_BUILTINS:
                 continue
             kind, _p, _why = r.resolve(spec, repo / rel)
@@ -590,28 +736,37 @@ def _npm(out: _Out, repo: Path, files: list[str], items: list[dict], all_read: b
             uses.setdefault(pkg, []).append(Use("npm", spec, rel, line, is_dev_file(rel), type_only))
     locks = [f for f in files if PurePosixPath(f).name in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml",
                                                             "npm-shrinkwrap.json")]
-    lock_cache: dict = {}
+    lock_index = _lock_index(out, locks) if any(uses.values()) else {}
     for pkg in sorted(uses):
         types = "@types/" + (pkg[1:].replace("/", "__") if pkg.startswith("@") else pkg)
         mine = [u for u in uses[pkg] if any(_in_scope(d, u.path) for d in decls.get(pkg, []) + decls.get(types, []))]
         rest = [u for u in uses[pkg] if u not in mine and not u.optional]
         if not rest:
             continue
-        lock = _lock_line(repo, locks, pkg, lock_cache)
+        # a sibling workspace package that declares it: the install is shared, so the import resolves here
+        sibling = [d for d in decls.get(pkg, []) if not any(_in_scope(d, u.path) for u in rest)]
+        also = (f"; {', '.join(sorted({d['path'] for d in sibling}))} declares it for its own folder only"
+                if sibling else "")
+        lock = lock_index.get(pkg)
         nm = r._node_modules(repo / rest[0].path)
         installed = nm is not None and (nm / pkg / "package.json").is_file()
         if lock or installed:
+            # a lock line or a folder shows the package installed, not why: strong_inference
             extra = [out.ev(lock[0], lock[1], "lock")] if lock else []
             where = f"{lock[0]}:{lock[1]}" if lock else f"{nm.relative_to(repo).as_posix()}/{pkg}"
-            out.add("transitive_only", "npm", pkg, "statically_verified" if all_read else "strong_inference",
-                    f"{pkg} is imported but not declared in the package.json that applies; it is installed "
-                    f"({where}) only as another package's dependency", rest, extra=extra,
-                    next_step=f"add {pkg} to dependencies (or devDependencies for test code)")
+            why = "the install shared with that package" if sibling else "another package's dependency"
+            out.add("transitive_only", "npm", pkg, "strong_inference",
+                    f"{pkg} is imported but not declared in the package.json that applies{also}; it is installed "
+                    f"({where}), likely only through {why}", rest, sibling, extra=extra,
+                    next_step=f"add {pkg} to the dependencies of the package.json that applies (or devDependencies "
+                              "for test code)")
         else:
             out.add("missing", "npm", pkg, "strong_inference",
-                    f"{pkg} is imported but no package.json declares it and no lock file or node_modules holds it",
-                    rest, next_step=f"add {pkg} to package.json, or check that the name is an alias your bundler "
-                                    "resolves")
+                    f"{pkg} is imported but " + (f"not declared in the package.json that applies{also}" if sibling
+                                                 else "no package.json declares it") +
+                    ", and no lock file or node_modules holds it",
+                    rest, sibling, next_step=f"add {pkg} to package.json, or check that the name is an alias your "
+                                             "bundler resolves")
     for pkg, ds in sorted(decls.items()):
         if pkg.startswith("@types/") or pkg in own:
             continue
@@ -657,7 +812,7 @@ def _jvm(out: _Out, repo: Path, files: list[str], items: list[dict]) -> dict:
     src = [f for f in files if f.endswith((".java", ".kt"))]
     if not src or not decls:
         return {"files": len(src), "declared": len(decls)} if decls or src else {}
-    texts = {rel: _read(repo / rel) or "" for rel in src}
+    texts = {rel: out.read(rel) for rel in src}
     own = {m.group(1) for t in texts.values() for m in _JVM_PACKAGE.finditer(t)}
     uses: dict[str, list[Use]] = {}
     unmatched: set[str] = set()
@@ -675,9 +830,20 @@ def _jvm(out: _Out, repo: Path, files: list[str], items: list[dict]) -> dict:
             if not hits:
                 unmatched.add(".".join(imp.split(".")[:3]))
             for n in hits:
-                uses.setdefault(n, []).append(Use("maven", imp, rel, line, is_dev_file(rel)))
+                # a tie (two artifacts of one group, say spring-boot-starter-web and -test) says the group is
+                # used, not which artifact: it keeps both from being unused but decides no wrong_group
+                uses.setdefault(n, []).append(Use("maven", imp, rel, line, is_dev_file(rel),
+                                                  ambiguous=len(hits) > 1))
+    meta = []
     for name, ds in sorted(decls.items()):
+        if not uses.get(name) and _JVM_META.search(name.partition(":")[2]):
+            meta.append(name)   # a starter or BOM brings other artifacts; its own name is never imported
+            continue
         _judge_declared(out, "maven", name, ds, uses.get(name, []), name)
+    if meta:
+        out.limits.append(f"jvm: {len(meta)} starter or BOM artifact(s) match no import and are not judged unused "
+                          f"(they bring other artifacts whose packages differ): {', '.join(meta[:5])}"
+                          f"{' ...' if len(meta) > 5 else ''}")
     if unmatched:
         out.limits.append(f"jvm: {len(unmatched)} imported package(s) match no declared artifact and are not judged "
                           "(the JDK, the platform, a transitive jar or a name the matching misses; the classpath is "
@@ -712,12 +878,17 @@ def check_deps(repo: Path, *, env: str | None = "auto", all_files: list[str] | N
     got = _python(out, repo, files, [i for i in items if i.get("ecosystem") == "python"], env, all_read)
     if got:
         eco["python"] = got
-    got = _npm(out, repo, files, [i for i in items if i.get("ecosystem") == "npm"], all_read)
+    got = _npm(out, repo, files, [i for i in items if i.get("ecosystem") == "npm"])
     if got:
         eco["npm"] = got
     got = _jvm(out, repo, files, items)
     if got:
         eco["gradle_maven"] = got
+    if out.too_big:
+        big = sorted({p.relative_to(repo).as_posix() for p in out.too_big})
+        out.limits.append(f"{len(big)} file(s) are over the size cap ({MAX_FILE_BYTES:,} bytes for source files, "
+                          f"{MAX_LOCK_BYTES:,} for lock files) and not read, so their imports or lock entries are "
+                          f"missing from the check: {', '.join(big[:5])}{' ...' if len(big) > 5 else ''}")
     others = sorted({str(i.get("ecosystem")) for i in items} - {"python", "npm", "maven", "gradle-plugin"})
     if others:
         out.limits.append(f"declared {', '.join(others)} dependencies are listed by the manifests but not checked")
