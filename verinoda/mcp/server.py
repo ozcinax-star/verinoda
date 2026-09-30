@@ -1131,12 +1131,17 @@ class AtlasTools:
                     raise ToolFailure("invalid_argument", str(exc)[:600], "base is a git revision such as HEAD~1; "
                                       "targets are 'path/file.py' or 'path/file.py::Qual.name'") from None
             res.pop("files", None)
+            ms = res.get("made_stale")
+            if isinstance(ms, dict) and not any(ms.get(k) for k in ("claims", "notes", "decisions")):
+                # nothing made stale: the counts say what was compared; the limits stay in `review --json`
+                res["made_stale"] = {k: ms[k] for k in ("counts", "checked") if k in ms}
             return res
         return self._run("change_review", go, need="graph",
-                         keep=("summary", "exit", "counts", "concerns", "unknown", "read_first", "tests",
-                               "concerns_checked", "changes", "api_changes", "decisions", "differential",
-                               "made_stale"),
-                         first=("dependents", "binding_readers", "skipped"))
+                         # the findings come before the lists that lead to them: what to read first, the tests,
+                         # what ran (concerns_checked) and what went stale are cut before any concern is
+                         keep=("summary", "exit", "counts", "concerns", "unknown", "changes", "api_changes",
+                               "decisions", "differential"),
+                         first=("dependents", "binding_readers", "skipped", "read_first"))
 
     def question_plan_draft(self, question: str) -> dict:
         def go():
