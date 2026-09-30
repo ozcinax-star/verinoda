@@ -45,7 +45,17 @@ is quoted; a backslash is kept as written (``allowed=orders\\repository.py``, ``
   allowed files;
 * ``no_edge from=GLOB to=GLOB [relations=imports,calls,uses]``: no graph edge from one set of files to
   the other;
+* ``layers order=GLOB,GLOB[,...] [relations=...]``: the layers, top first; no graph edge from a file of a
+  lower layer to a file of a higher one (docs/DESIGN.md D93);
+* ``allow_edges from=GLOB allowed=GLOB[,...] [relations=...]``: the files ``from`` matches depend only on
+  each other and on the allowed files (an edge to any other file of the index breaks it);
+* ``public module=GLOB api=GLOB[,...] [relations=...]``: code outside the module reaches it only through
+  its public files;
 * ``dependency absent=NAME`` / ``dependency present=NAME``: a declared dependency must (not) exist.
+
+A glob of an edge guard may be ``tag:NAME``: the globs listed under that name in a committed
+``verinoda.toml`` (``[architecture.tags]``: ``ui = ["src/ui/**", "src/widgets/**"]``) or ``pyproject.toml``
+(``[tool.verinoda.architecture.tags]``), see :func:`architecture_tags`.
 
 ``--revisit-when dependency_added=NAME`` / ``file_appears=GLOB`` asks for a human review when it fires;
 ``--governs SYMBOL`` asks for a review when that symbol's code changes. Guards from ``record`` and
@@ -70,7 +80,10 @@ DEFAULT_DIR = ".verinoda/decisions"
 # where the folder comes from when nothing names it (decisions_dir_source): a missing folder is no error then
 DEFAULT_SOURCE = "the default (nothing configured)"
 STATUSES = ("proposed", "accepted", "superseded", "rejected", "deprecated")
-GUARD_KINDS = ("only_in", "no_edge", "dependency")
+GUARD_KINDS = ("only_in", "no_edge", "layers", "allow_edges", "public", "dependency")
+# the guards that read graph edges: the index is loaded (and refreshed first) for them
+EDGE_KINDS = ("no_edge", "layers", "allow_edges", "public")
+TAG_PREFIX = "tag:"
 REVISIT_KINDS = ("dependency_added", "file_appears")
 EDGE_RELATIONS = ("imports", "imports_from", "calls", "uses", "inherits", "implements", "references")
 DEFAULT_EDGE_RELATIONS = ("imports", "imports_from", "calls", "uses", "inherits", "implements")
@@ -138,29 +151,69 @@ def norm_id(value: str) -> str:
     return f"ADR-{int(m.group(1)):04d}"
 
 
-def _committed_dir(repo: Path) -> tuple[str, str] | None:
-    """``(dir, where)`` from a file the project commits: ``verinoda.toml`` (``[decisions] dir = ...``), else
-    ``pyproject.toml`` (``[tool.verinoda.decisions] dir = ...``). ``.verinoda/`` is git-ignored, so a
-    folder set only in ``.verinoda/config.json`` is unknown to a fresh clone (a CI run)."""
+def _committed_tables(repo: Path, *path: str):
+    """``(table, where, problem)`` for ``[path]`` of ``verinoda.toml``, then ``[tool.verinoda.path]`` of
+    ``pyproject.toml``, for each of the two files that exists (``problem``: why it could not be read)."""
     try:
         import tomllib  # type: ignore[import-not-found]
     except ImportError:  # pragma: no cover - py3.10
         import tomli as tomllib  # type: ignore[no-redef]
 
-    for name, path in (("verinoda.toml", ("decisions",)), ("pyproject.toml", ("tool", "verinoda", "decisions"))):
+    for name, keys in (("verinoda.toml", path), ("pyproject.toml", ("tool", "verinoda", *path))):
         p = Path(repo) / name
         if not p.is_file():
             continue
         try:
             data = tomllib.loads(p.read_bytes().decode("utf-8-sig", errors="replace"))
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
+            yield None, name, f"{name} cannot be read: {exc}"[:200]
             continue
-        for key in path:
+        for key in keys:
             data = data.get(key) if isinstance(data, dict) else None
+        yield data, f"{name} [{'.'.join(keys)}]", None
+
+
+def _committed_dir(repo: Path) -> tuple[str, str] | None:
+    """``(dir, where)`` from a file the project commits: ``verinoda.toml`` (``[decisions] dir = ...``), else
+    ``pyproject.toml`` (``[tool.verinoda.decisions] dir = ...``). ``.verinoda/`` is git-ignored, so a
+    folder set only in ``.verinoda/config.json`` is unknown to a fresh clone (a CI run)."""
+    for data, where, _problem in _committed_tables(repo, "decisions"):
         value = data.get("dir") if isinstance(data, dict) else None
         if isinstance(value, str) and value.strip():
-            return value.strip(), f"{name} [{'.'.join(path)}] dir"
+            return value.strip(), f"{where} dir"
     return None
+
+
+def _inside(glob: str) -> bool:
+    q = glob.strip().replace("\\", "/")
+    return bool(q) and not (q.startswith("/") or re.match(r"^[A-Za-z]:", q) or ".." in q.split("/"))
+
+
+def architecture_tags(repo: Path) -> tuple[dict[str, list[str]], list[str], list[str]]:
+    """``(tags, where, problems)``: the named file sets an edge guard names as ``tag:NAME`` (D93), from the
+    committed ``[architecture.tags]`` of ``verinoda.toml`` and ``[tool.verinoda.architecture.tags]`` of
+    ``pyproject.toml`` (a name in both: verinoda.toml's). A value is a glob or a list of globs relative to the
+    project root; a value that is not, or a file that does not parse, is a problem, never an empty set."""
+    tags: dict[str, list[str]] = {}
+    where: list[str] = []
+    problems: list[str] = []
+    for data, src, problem in _committed_tables(repo, "architecture", "tags"):
+        if problem:
+            problems.append(problem)
+            continue
+        if data is None:
+            continue
+        if not isinstance(data, dict):
+            problems.append(f"{src} is not a table of NAME = [globs]")
+            continue
+        where.append(src)
+        for name, value in data.items():
+            globs = [value] if isinstance(value, str) else value
+            if not isinstance(globs, list) or not globs or not all(isinstance(x, str) and _inside(x) for x in globs):
+                problems.append(f"{src} {name}: not a glob or a list of globs inside the repository")
+                continue
+            tags.setdefault(name, [x.strip().replace("\\", "/") for x in globs])
+    return tags, where, problems
 
 
 def decisions_dir_source(repo: Path, override: str | None = None) -> tuple[Path, str]:
@@ -518,13 +571,19 @@ def validate_guard(g: dict) -> dict:
         raise DecisionError(f"guard kind {kind!r} is not one of {', '.join(GUARD_KINDS)}")
     if g.get("status", "accepted") not in ("proposed", "accepted"):
         raise DecisionError(f"guard status {g.get('status')!r} is not proposed/accepted")
-    for key in ("pattern", "sink", "from", "to", "absent", "present", "scope"):
+    for key in ("pattern", "sink", "from", "to", "module", "absent", "present", "scope"):
         if g.get(key) is not None and not isinstance(g[key], str):
             raise DecisionError(f"{key} must be a string")
     _texts(g, "calls")
     _texts(g, "relations")
     _texts(g, "allowed", paths=True)
     _texts(g, "exclude", paths=True)
+    _texts(g, "order", paths=True)
+    _texts(g, "api", paths=True)
+    if kind in EDGE_KINDS:
+        bad = [r for r in g.get("relations") or [] if r not in EDGE_RELATIONS]
+        if bad:
+            raise DecisionError(f"relations {bad} are not graph relations ({', '.join(EDGE_RELATIONS)})")
     if kind == "only_in":
         what = [k for k in ("calls", "sink", "pattern") if g.get(k)]
         if len(what) != 1:
@@ -547,9 +606,15 @@ def validate_guard(g: dict) -> dict:
     elif kind == "no_edge":
         if not g.get("from") or not g.get("to"):
             raise DecisionError("no_edge needs from=GLOB and to=GLOB")
-        bad = [r for r in g.get("relations") or [] if r not in EDGE_RELATIONS]
-        if bad:
-            raise DecisionError(f"relations {bad} are not graph relations ({', '.join(EDGE_RELATIONS)})")
+    elif kind == "layers":
+        if len(g.get("order") or []) < 2:
+            raise DecisionError("layers needs order=GLOB,GLOB[,...]: two layers or more, the top one first")
+    elif kind == "allow_edges":
+        if not g.get("from") or not g.get("allowed"):
+            raise DecisionError("allow_edges needs from=GLOB and allowed=GLOB[,...] (what those files may use)")
+    elif kind == "public":
+        if not g.get("module") or not g.get("api"):
+            raise DecisionError("public needs module=GLOB and api=GLOB[,...] (the module's public files)")
     else:
         which = [k for k in ("absent", "present") if g.get(k)]
         if len(which) != 1 or not _NAME.match(str(g[which[0]])):
@@ -572,10 +637,14 @@ def parse_guard(spec: str, repo: Path, gid: str, *, status: str = "accepted") ->
         excl = kv.pop("exclude", "")
         if excl:
             g["exclude"] = [rel_path(repo, a, "exclude") for a in _list(excl)]
-    elif kind == "no_edge":
-        for k in ("from", "to"):
+    elif kind in EDGE_KINDS:
+        one, many = {"no_edge": (("from", "to"), ()), "layers": ((), ("order",)),
+                     "allow_edges": (("from",), ("allowed",)), "public": (("module",), ("api",))}[kind]
+        for k in one:
             v = kv.pop(k, "")
             g[k] = rel_path(repo, v, k) if v else ""
+        for k in many:
+            g[k] = [rel_path(repo, v, k) for v in _list(kv.pop(k, ""))]
         g["relations"] = _list(kv.pop("relations", "")) or list(DEFAULT_EDGE_RELATIONS)
         if "imports" in g["relations"] and "imports_from" not in g["relations"]:
             g["relations"].append("imports_from")

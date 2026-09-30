@@ -1489,7 +1489,7 @@ def _decide_check(args, repo: Path) -> int:
     ddir = getattr(args, "decisions_dir", None)
     recs = dm.load_all(repo, ddir)
     graph, note, stale_graph = None, None, None
-    if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
+    if any(d.enforced and g.get("kind") in dm.EDGE_KINDS and g.get("status") == "accepted"
            for d in recs for g in d.guards):
         if not args.no_refresh and db_path(repo).is_file():
             from verinoda import buildlock, workflow
@@ -3080,7 +3080,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--title")
     c.add_argument("--guard", action="append", metavar="SPEC",
                    help="a check of the code, e.g. 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
-                        "'no_edge from=src/main/** to=src/client/**', 'dependency absent=psycopg'; repeatable")
+                        "'no_edge from=src/main/** to=src/client/**', 'layers order=src/ui/**,src/core/**', "
+                        "'allow_edges from=src/ui/** allowed=src/api/**', 'public module=src/orders/** "
+                        "api=src/orders/api.py', 'dependency absent=psycopg' (a glob may be tag:NAME from "
+                        "[architecture.tags] in verinoda.toml); repeatable")
     c.add_argument("--governs", action="append", metavar="SYMBOL",
                    help="path/file.py::Symbol whose changes need a review; repeatable")
     c.add_argument("--revisit-when", action="append", metavar="SPEC",
@@ -3119,7 +3122,8 @@ def build_parser() -> argparse.ArgumentParser:
     grp.add_argument("--changed", action="store_true",
                      help="label findings new/touched since HEAD or pre-existing; only new ones fail")
     grp.add_argument("--base", metavar="REF", help="as --changed, against this git revision (e.g. origin/main)")
-    c.add_argument("--no-refresh", action="store_true", help="do not update a stale index first (no_edge guards)")
+    c.add_argument("--no-refresh", action="store_true",
+                   help="do not update a stale index first (edge guards: no_edge, layers, allow_edges, public)")
     c = add("brief", cmd_decide, "what a decision needs, from the code: forces with evidence, what is absent, "
                                  "decisions on record, options, and the questions only the user can answer (no "
                                  "recommendation)", parent=dsub)

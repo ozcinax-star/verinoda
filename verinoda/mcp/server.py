@@ -1656,7 +1656,7 @@ class AtlasTools:
                                   ".verinoda/config.json, [decisions] dir in verinoda.toml or "
                                   "[tool.verinoda.decisions] dir in pyproject.toml)")
             note, graph, stale_graph = None, None, None
-            if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
+            if any(d.enforced and g.get("kind") in dm.EDGE_KINDS and g.get("status") == "accepted"
                    for d in recs for g in d.guards):
                 with self._store() as st:
                     graph = self._graph_for_analysis(st)
@@ -2134,7 +2134,8 @@ DESCRIPTIONS: dict[str, str] = {
         "record for a hand-written ADR, document=path; guards only proposed) | guard (add guards to decision_id) "
         "| accept (guard_ids) | waive (one guard id, at='path[:line]', reason, until) | answer (the user's answer "
         "to question_id of brief_id). Guards: 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
-        "'no_edge from=src/main/** to=src/client/**', 'dependency absent=psycopg'; revisit_when: "
+        "'no_edge from=src/main/** to=src/client/**', 'layers order=ui/**,core/**', 'allow_edges from=GLOB "
+        "allowed=GLOB,...', 'public module=GLOB api=GLOB,...', 'dependency absent=psycopg'; revisit_when: "
         "'dependency_added=NAME' / 'file_appears=GLOB'. record, guard, accept, waive and answer need "
         "user_statement, the user's own words verbatim: never decide for the user."),
     "decision_brief": (
