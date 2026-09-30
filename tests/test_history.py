@@ -66,7 +66,7 @@ def repo(tmp_path_factory) -> tuple[Path, list[str]]:
 def test_a_text_that_came_and_went_is_answered_with_both_commits(repo):
     r, shas = repo
     res = history.text_history(r, "RETRY_BUDGET")
-    assert res["status"] == "found" and not res["head"]["present"]
+    assert res["status"] == "found" and not res["at_head"]["present"]
     assert [e["commit"] for e in res["events"]] == [shas[1], shas[2], shas[3]]  # oldest first
     appeared, gone = res["claims"]
     assert appeared["status"] == "primary_source_verified" and appeared["kind"] == "history"
@@ -78,6 +78,9 @@ def test_a_text_that_came_and_went_is_answered_with_both_commits(repo):
     assert gone["status"] == "primary_source_verified" and shas[3][:10] in gone["text"]
     assert "HEAD has no occurrence" in gone["text"]
     assert gone["evidence"][0]["meta"]["change"] == "removed" and gone["evidence"][0]["commit_sha"] == shas[3]
+    # a removed line is a line of the parent's file, and the locator names the parent
+    assert gone["evidence"][0]["locator"] == f"commit {shas[3]} removed from {shas[3]}^:lib/job.py:3"
+    assert "RETRY_BUDGET" in _git(r, "show", f"{shas[3]}^:lib/job.py").split("\n")[2]
     assert res["appeared"]["commit"] == shas[1] and res["disappeared"]["commit"] == shas[3]
     counts = {f["path"]: (f["added"], f["removed"]) for f in res["events"][2]["files"]}
     assert counts == {"svc.py": (0, 2), "lib/job.py": (0, 1)}
@@ -88,7 +91,7 @@ def test_a_text_still_at_head_has_no_disappearance(repo):
     res = history.text_history(r, "def main")
     assert [c["text"].split(" in commit ")[0] for c in res["claims"]] == ["`def main` first appeared"]
     assert res["appeared"] == {"commit": shas[0], "at": "svc.py:1"}
-    assert res["head"]["present"] and res["head"]["sites"][0] == {"path": "svc.py", "line": 1,
+    assert res["at_head"]["present"] and res["at_head"]["sites"][0] == {"path": "svc.py", "line": 1,
                                                                    "text": "def main():"}
 
 
@@ -106,6 +109,26 @@ def test_a_regex_matches_changed_lines(repo):
     assert res["disappeared"]["commit"] == shas[3]
     with pytest.raises(ValueError, match="not a regular expression"):
         history.text_history(r, "RETRY_(", regex=True)
+
+
+def test_a_regex_is_git_s_both_to_select_commits_and_to_pick_lines(repo):
+    """A POSIX bracket class selects the commits in git; the lines are matched by git too, so they are found."""
+    r, shas = repo
+    res = history.text_history(r, "RETRY_[[:upper:]]+ = [[:digit:]]", regex=True)
+    assert res["appeared"]["commit"] == shas[1] and res["disappeared"]["commit"] == shas[3]
+    # \d is not POSIX: git selects nothing, and the answer does not blame a shallow clone
+    res = history.text_history(r, r"RETRY_BUDGET = \d", regex=True)
+    assert res["status"] == "not_found" and "shallow" not in res["unknowns"][0]["next_step"]
+
+
+def test_a_catastrophic_python_pattern_is_matched_by_git(tmp_path):
+    """No pattern runs in Python's backtracking engine: one that takes exponential time there returns at once."""
+    r = tmp_path / "redos"
+    r.mkdir()
+    _git(r, "init", "-q")
+    sha = _commit(r, {"f.txt": "a" * 34 + "!\n"}, "a line of a's", date="2026-01-05T10:00:00+00:00")
+    res = history.text_history(r, "(a|a)+c|a", regex=True)
+    assert res["appeared"]["commit"] == sha and res["at_head"]["count"] == 1
 
 
 def test_a_removed_sql_comment_is_a_line_not_a_file_header(repo):
@@ -135,6 +158,77 @@ def test_a_shallow_clone_does_not_prove_the_first_appearance(repo, tmp_path):
     assert "shallow" in res["claims"][0]["uncertainties"][0]
 
 
+def test_a_cut_history_does_not_prove_the_first_appearance(repo, monkeypatch):
+    r, shas = repo
+    monkeypatch.setattr(history, "MAX_EVENTS", 2)  # three commits changed it: the oldest is cut
+    res = history.text_history(r, "RETRY_BUDGET")
+    assert res["truncated"] and [e["commit"] for e in res["events"]] == [shas[2], shas[3]]
+    appeared, gone = res["claims"]
+    assert appeared["status"] == "strong_inference" and "cut at 2" in appeared["uncertainties"][0]
+    assert res["appeared"]["commit"] == shas[2]
+    assert gone["status"] == "primary_source_verified"  # the newest removal is never the one cut
+
+
+def test_a_text_a_merge_removed_has_an_unknown_disappearance(tmp_path):
+    r = tmp_path / "merge"
+    r.mkdir()
+    _git(r, "init", "-q")
+    added = _commit(r, {"a.py": "x = 1\nFLAG_Z = 1\ny = 2\n"}, "add flag", date="2026-01-05T10:00:00+00:00")
+    _git(r, "checkout", "-q", "-b", "side")
+    _commit(r, {"a.py": "x = 1\nFLAG_Z = 2\ny = 2\n"}, "side flag", date="2026-01-06T10:00:00+00:00")
+    _git(r, "checkout", "-q", "main")
+    _commit(r, {"a.py": "x = 1\nFLAG_Z = 3\ny = 2\n"}, "main flag", date="2026-01-07T10:00:00+00:00")
+    with pytest.raises(subprocess.CalledProcessError):  # a conflict
+        _git(r, "merge", "-q", "side")
+    (r / "a.py").write_bytes(b"x = 1\ny = 2\n")  # the conflict resolved by deleting the line
+    _git(r, "add", "-A")
+    _git(r, "commit", "-q", "--no-edit", date="2026-01-08T10:00:00+00:00")
+    res = history.text_history(r, "FLAG_Z")
+    assert res["status"] == "found" and not res["at_head"]["present"]
+    assert res["appeared"]["commit"] == added and "disappeared" not in res
+    gone = [u for u in res["unknowns"] if "disappear" in u["question"]]
+    assert gone and "merge" in gone[0]["why"] and "--first-parent" in gone[0]["next_step"]
+
+
+def test_a_text_only_in_binary_files_is_not_said_to_be_unchanged(tmp_path):
+    r = tmp_path / "bin"
+    r.mkdir()
+    _git(r, "init", "-q")
+    _commit(r, {"b.bin": "png\x00FLAG_BIN\n"}, "binary", date="2026-01-05T10:00:00+00:00")
+    res = history.text_history(r, "FLAG_BIN")
+    assert res["status"] == "not_found"
+    assert "binary" in res["unknowns"][0]["why"] and "no commit" not in res["unknowns"][0]["why"]
+
+
+def test_a_project_in_a_folder_of_its_repository_searches_that_folder_only(tmp_path):
+    top = tmp_path / "top"
+    top.mkdir()
+    _git(top, "init", "-q")
+    _commit(top, {"other.py": "alpha_token outside\n", "sub proj/a.py": "alpha_token inside\n",
+                  "sub proj/lat.txt": "beta_tok\n"}, "both", date="2026-01-05T10:00:00+00:00")
+    gone = _commit(top, {"sub proj/a.py": "nothing\n"}, "drop inside", date="2026-01-06T10:00:00+00:00")
+    proj = top / "sub proj"
+    res = history.text_history(proj, "alpha_token")
+    assert not res["at_head"]["present"] and res["appeared"]["at"] == "a.py:1"
+    assert res["disappeared"] == {"commit": gone, "at": "a.py:1"}
+    res = history.text_history(proj, "beta_tok")
+    assert res["appeared"]["at"] == "lat.txt:1" and res["at_head"]["sites"][0]["path"] == "lat.txt"
+    assert [c["commit"] for c in history.commits(proj, message="drop")["commits"]] == [gone]
+    assert history.commits(proj, message="drop")["commits"][0]["files"] == ["a.py"]
+    assert history.commits(tmp_path / "top", message="drop")["commits"][0]["files"] == ["sub proj/a.py"]
+    cmp = history.compare(proj, "HEAD~1", "HEAD")
+    assert [f["path"] for f in cmp["files"]] == ["a.py"]
+
+
+def test_head_sites_are_capped_but_counted(tmp_path):
+    r = tmp_path / "many"
+    r.mkdir()
+    _git(r, "init", "-q")
+    _commit(r, {f"f{i:02}.txt": "hit\nhit\n" for i in range(12)}, "many", date="2026-01-05T10:00:00+00:00")
+    now = history.text_history(r, "hit")["at_head"]
+    assert now["count"] == 24 and len(now["sites"]) == history.MAX_SITES and now["truncated"]
+
+
 def test_commits_by_message_author_path_date_and_diff(repo):
     r, shas = repo
     assert [c["commit"] for c in history.commits(r, message="retry budget")["commits"]] == \
@@ -147,6 +241,12 @@ def test_commits_by_message_author_path_date_and_diff(repo):
     diff = history.commits(r, diff=r"retry_budget = 3")
     assert [c["commit"] for c in diff["commits"]] == [shas[3], shas[1]]
     assert diff["commits"][0]["files"] == ["svc.py"]  # the file whose lines matched
+    # message and author are extended regexes, as diff is: alternation works in all three
+    assert [c["commit"] for c in history.commits(r, message="initial|remove the sql")["commits"]] == \
+        [shas[4], shas[0]]
+    assert [c["commit"] for c in history.commits(r, author="alice|nobody")["commits"]] == [shas[1]]
+    assert by_alice[0]["evidence"]["commit_sha"] == shas[1]
+    assert by_alice[0]["evidence"]["source_type"] == "git_history"
     cut = history.commits(r, limit=2)
     assert len(cut["commits"]) == 2 and cut["truncated"]
     assert history.commits(r, message="no such words")["status"] == "not_found"
@@ -215,5 +315,11 @@ def test_mcp_history_search(repo):
         assert t.history_search(base=shas[3])["commits"][0]["commit"] == shas[4]
         assert t.history_search(base="no-such-branch")["error"] == "invalid_argument"
         assert "next_step" in t.history_search(text="never_written_anywhere")
+        # a parameter of another mode is an error, not dropped
+        for bad in ({"text": "x", "base": "HEAD~1"}, {"text": "x", "message": "fix"}, {"base": "HEAD", "diff": "x"},
+                    {"author": "alice", "head": "HEAD"}, {"message": "x", "regex": True}):
+            err = t.history_search(**bad)
+            assert err["error"] == "invalid_argument", bad
+        assert t.history_search(text="RETRY_BUDGET", path="lib")["appeared"]["commit"] == shas[2]
     finally:
         shutil.rmtree(r / ".verinoda")

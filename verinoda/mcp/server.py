@@ -1006,6 +1006,17 @@ class AtlasTools:
         def go():
             from verinoda import history
 
+            # three modes; a parameter of another mode is an error, not silently dropped
+            given = {k for k, v in (("text", text), ("message", message), ("author", author), ("since", since),
+                                    ("until", until), ("diff", diff), ("base", base), ("head", head))
+                     if _opt_text(v)} | ({"regex"} if regex else set())
+            mode, own = (("base", {"base", "head"}) if "base" in given else
+                         ("text", {"text", "regex"}) if "text" in given else
+                         ("commit search", {"message", "author", "since", "until", "diff"}))
+            if given - own:
+                raise ValueError(f"{', '.join(sorted(given - own))}: not used with {mode} (history_search has "
+                                 "three modes: text (+regex), base (+head), or the commit filters; path goes with "
+                                 "any of them)")
             if _opt_text(base):
                 return history.compare(self.repo, base, _opt_text(head) or "HEAD", path=_opt_text(path))
             if _opt_text(text):
@@ -1982,7 +1993,8 @@ DESCRIPTIONS: dict[str, str] = {
         "Git history. With text: the commit that first added it and, when HEAD has none, the one that last "
         "removed it, each a claim with the commit as evidence and file:line (regex=true: a pattern over changed "
         "lines). Without text: commits by message, author, path, since/until dates and diff content (a regex), "
-        "newest first. With base: what head (default HEAD) has that base has not - commits and changed files."),
+        "newest first. With base: what head (default HEAD) has that base has not - commits and changed files. "
+        "Regexes are git's (POSIX extended). A parameter of another mode is an error."),
     "map_view": (
         "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, or impact "
         "(dependents of targets; default the working-tree changes). 'coverage' states the method and its "

@@ -12,7 +12,12 @@ patches (oldest first), counts the text in each file's added and removed lines, 
 
 Each of these is a ``history`` claim whose evidence is the commit (``git_history``, the diff line quoted). The
 reading is exact for the history reachable from HEAD; a shallow clone or a cut list (more than :data:`MAX_EVENTS`
-commits) leaves the first appearance unproven, so that claim is ``strong_inference`` then, with the reason.
+commits) leaves the first appearance unproven, so that claim is ``strong_inference`` then, with the reason. A
+regular expression is git's (POSIX extended) throughout: git selects the commits with it and ``git grep`` picks
+the changed lines it matches, so the two never disagree and no pattern is matched in this process.
+
+When the project is a folder of its git repository, every search stays inside that folder and every path is
+relative to it (``--relative``), as the index's paths are.
 
 :func:`commits` searches commit messages, authors, paths, dates and diff content (``git log --grep``,
 ``--author``, ``-G``); :func:`compare` lists what one revision has that another has not (the commits of
@@ -23,11 +28,14 @@ a commit first.
 from __future__ import annotations
 
 import re
+import subprocess
+import tempfile
 from pathlib import Path
+from typing import Callable
 
 from verinoda import evidence as evmod
 from verinoda.snapshot import git
-from verinoda.treestate import _GIT_SAFE
+from verinoda.treestate import _GIT_SAFE, project_prefix
 
 MAX_EVENTS = 200     # commits read for one text; more and the oldest (the first appearance) are cut
 MAX_COMMITS = 100    # commits a search or a comparison lists at most
@@ -71,6 +79,15 @@ def _pathspec(path: str | None) -> list[str]:
     return ["--", p.replace("\\", "/")] if p else []
 
 
+def _scope(repo: Path, path: str | None) -> tuple[list[str], list[str]]:
+    """The pathspec and the diff option that keep a search inside the project: in a folder of its git
+    repository, only that folder (``.``, or the path given, both relative to it), its paths relative to it."""
+    spec = _pathspec(path)
+    if not project_prefix(repo):
+        return spec, []
+    return (spec or ["--", "."]), ["--relative"]
+
+
 def _rev(repo: Path, rev: str, what: str) -> str:
     """The commit ``rev`` names (a branch, tag, sha, ``HEAD~3``); ValueError when it names none."""
     r = _word(rev, what)
@@ -96,8 +113,11 @@ def _header(line: str) -> dict:
 
 def _ev(c: dict, *, path: str | None = None, line: int | None = None, excerpt: str | None = None,
         change: str | None = None) -> dict:
-    """``git_history`` evidence for commit ``c``: the diff line when there is one, else the subject."""
+    """``git_history`` evidence for commit ``c``: the diff line when there is one, else the subject. A removed
+    line is a line of the parent's file, and its locator says so (``removed from <sha>^:<path>:<line>``)."""
     where = f" {path}:{line}" if path and line else (f" {path}" if path else "")
+    if change == "removed" and path and line:
+        where = f" removed from {c['commit']}^:{path}:{line}"
     text = excerpt if excerpt is not None else c["subject"]
     meta = {"date": c["date"], "author": c["author"], "subject": c["subject"]}
     if path:
@@ -108,22 +128,47 @@ def _ev(c: dict, *, path: str | None = None, line: int | None = None, excerpt: s
 
 # -- when a text appeared or disappeared ---------------------------------------------------------------------
 
-def _count(line: str, text: str, rx: re.Pattern | None) -> int:
-    if rx is not None:
-        return 1 if rx.search(line) else 0  # a regex counts matching lines, as git -G reads them
-    return line.count(text)
+def _ere_lines(lines: list[str], pattern: str) -> set[int]:
+    """The indexes of ``lines`` that git's extended regular expression ``pattern`` matches: ``git grep -E`` over
+    them (a temporary file, removed at once), the engine ``git log -G`` selects commits with. ValueError when git
+    cannot read the pattern."""
+    with tempfile.TemporaryDirectory(prefix="verinoda-history-") as d:
+        (Path(d) / "lines.txt").write_bytes("".join(x + "\n" for x in lines).encode("utf-8"))
+        try:
+            r = subprocess.run(["git", "-C", d, *_GIT_SAFE, "grep", "--no-index", "-a", "-h", "-n", "-E", "-e",
+                                pattern, "--", "lines.txt"], capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=_GIT_TIMEOUT, stdin=subprocess.DEVNULL)
+        except subprocess.TimeoutExpired:
+            raise ValueError(f"text: git took over {_GIT_TIMEOUT} s to match the pattern") from None
+        except OSError as exc:
+            raise ValueError(f"git could not run: {exc}") from None
+    if r.returncode not in (0, 1):  # 1: no line matched
+        raise ValueError(f"text: not a regular expression git reads: {r.stderr.strip()[:200]}")
+    return {int(n) - 1 for n, _, _ in (x.partition(":") for x in r.stdout.split("\n")) if n.isdigit()}
 
 
-def _parse_patches(out: str, text: str, rx: re.Pattern | None) -> list[dict]:
+def _counter(text: str, regex: bool) -> Callable[[list[str]], list[int]]:
+    """Occurrences per line: a literal counts each occurrence, a regex the lines it matches (as -G reads them)."""
+    if regex:
+        def count(lines: list[str]) -> list[int]:
+            hit = _ere_lines(lines, text) if lines else set()
+            return [1 if i in hit else 0 for i in range(len(lines))]
+        return count
+    return lambda lines: [x.count(text) for x in lines]
+
+
+def _parse_patches(out: str, count: Callable[[list[str]], list[int]]) -> list[dict]:
     """Commits (as git listed them) with, per file, the occurrences its added and removed lines hold and the
-    first line of each (new-file line for an addition, parent-file line for a removal)."""
+    first line of each (new-file line for an addition, parent-file line for a removal). A commit whose patch
+    has a binary file is marked ``binary``: such a file has no lines to count."""
     commits: list[dict] = []
     cur: dict | None = None
     f: dict | None = None
     old_ln = new_ln = 0
+    pending: list[tuple[dict, str, int, str]] = []  # (file, "added" or "removed", line number, the line)
     for line in out.split("\n"):
         if line.startswith(_HDR):
-            cur = {**_header(line), "files": []}
+            cur = {**_header(line), "files": [], "binary": False}
             commits.append(cur)
             f = None
             continue
@@ -145,25 +190,27 @@ def _parse_patches(out: str, text: str, rx: re.Pattern | None) -> list[dict]:
             if line != "+++ /dev/null":
                 f["path"] = _diff_path(line[4:], "b/")
             continue
+        if in_header and line.startswith("Binary files ") and line.endswith(" differ"):
+            cur["binary"] = True
+            continue
         m = _HUNK.match(line)
         if m:
             old_ln, new_ln = int(m.group(1)), int(m.group(2))
             in_header = False
             continue
+        if in_header:
+            continue
         if line.startswith("+"):
-            n = _count(line[1:], text, rx)
-            if n:
-                f["added"] += n
-                if f["added_at"] is None:
-                    f["added_at"], f["added_line"] = new_ln, line[1:].strip()
+            pending.append((f, "added", new_ln, line[1:]))
             new_ln += 1
         elif line.startswith("-"):
-            n = _count(line[1:], text, rx)
-            if n:
-                f["removed"] += n
-                if f["removed_at"] is None:
-                    f["removed_at"], f["removed_line"] = old_ln, line[1:].strip()
+            pending.append((f, "removed", old_ln, line[1:]))
             old_ln += 1
+    for (f, side, ln, body), n in zip(pending, count([p[3] for p in pending])):
+        if n:
+            f[side] += n
+            if f[f"{side}_at"] is None:
+                f[f"{side}_at"], f[f"{side}_line"] = ln, body.strip()
     for c in commits:
         c["files"] = [x for x in c["files"] if x["path"] and (x["added"] or x["removed"])]
     return commits
@@ -195,18 +242,28 @@ def _diff_path(p: str, prefix: str) -> str:
 
 
 def _at_head(repo: Path, text: str, regex: bool, spec: list[str]) -> dict:
-    """The lines at HEAD that hold the text (``git grep``, binary files left out)."""
-    out = _git(repo, "grep", "-n", "-I", "--null", "-E" if regex else "-F", "-e", text, "HEAD", *spec)
-    sites = []
-    for line in (out or "").splitlines():
-        parts = line.split("\x00", 2)
-        if len(parts) < 3:
-            continue
-        where, ln, body = parts
-        sites.append({"path": where[len("HEAD:"):] if where.startswith("HEAD:") else where, "line": int(ln),
-                      "text": body.strip()[:200]})
-    return {"present": bool(sites), "count": len(sites), "sites": sites[:MAX_SITES],
-            "truncated": len(sites) > MAX_SITES}
+    """The lines at HEAD that hold the text (``git grep``, binary files left out): how many (counted per file by
+    git) and the first :data:`MAX_SITES` of them, read from the first files only."""
+    kind = "-E" if regex else "-F"
+    per_file: list[tuple[str, int]] = []
+    for line in (_git(repo, "grep", "-c", "-I", "--null", kind, "-e", text, "HEAD", *spec) or "").splitlines():
+        where, _, n = line.partition("\x00")
+        per_file.append((where[len("HEAD:"):] if where.startswith("HEAD:") else where, int(n) if n.isdigit() else 0))
+    count = sum(n for _, n in per_file)
+    sites: list[dict] = []
+    if per_file:
+        out = _git(repo, "--literal-pathspecs", "grep", "-n", "-I", "--null", f"--max-count={MAX_SITES}", kind,
+                   "-e", text, "HEAD", "--", *(p for p, _ in per_file[:MAX_SITES]))
+        for line in (out or "").splitlines():
+            parts = line.split("\x00", 2)
+            if len(parts) < 3 or not parts[1].isdigit():
+                continue
+            where, ln, body = parts
+            sites.append({"path": where[len("HEAD:"):] if where.startswith("HEAD:") else where, "line": int(ln),
+                          "text": body.strip()[:200]})
+            if len(sites) == MAX_SITES:
+                break
+    return {"present": count > 0, "count": count, "sites": sites, "truncated": count > len(sites)}
 
 
 def text_history(repo: Path, text: str, *, regex: bool = False, path: str | None = None) -> dict:
@@ -216,45 +273,53 @@ def text_history(repo: Path, text: str, *, regex: bool = False, path: str | None
     t = _word(text, "text")
     if not t:
         raise ValueError("text: give the text (or with regex, the pattern) to look for")
-    rx = None
     if regex:
-        try:
-            rx = re.compile(t)
-        except re.error as exc:
-            raise ValueError(f"text: not a regular expression: {exc}") from None
+        _ere_lines([], t)  # a pattern git cannot read is the caller's error, before any history is read
     base = {"kind": "text", "text": t, "regex": bool(regex), "path": _word(path, "path")}
     if not _is_git(repo):
         return {**base, **_not_git("text", repo)}
-    spec = _pathspec(path)
+    spec, rel = _scope(repo, path)
     pick = f"-G{t}" if regex else f"-S{t}"
-    out = _git(repo, "log", pick, f"-n{MAX_EVENTS + 1}", _FMT, "-p", "-U0", *_DIFF_SAFE, *spec)
+    out = _git(repo, "log", pick, f"-n{MAX_EVENTS + 1}", _FMT, "-p", "-U0", *_DIFF_SAFE, *rel, *spec)
     if out is None:
         raise ValueError(f"git log {pick[:2]} failed (a pattern git cannot read, or it took over "
                          f"{_GIT_TIMEOUT} s)")
-    listed = _parse_patches(out, t, rx)
+    listed = _parse_patches(out, _counter(t, bool(regex)))
     truncated = len(listed) > MAX_EVENTS
     events = [c for c in reversed(listed[:MAX_EVENTS]) if c["files"]]  # oldest first
     shallow = _shallow(repo)
     now = _at_head(repo, t, bool(regex), spec)
     limits = ["history reachable from HEAD only (other branches are not searched)",
-              "merge commits are not diffed: a text a merge alone introduced is not seen",
-              "a moved file's text is neither added nor removed (no rename detection)"]
+              "merge commits are not diffed: a text a merge alone introduced or removed is not seen",
+              "no rename detection: a moved file's text is removed from the old path and added at the new one",
+              "a binary file has no lines to read"]
     if regex:
-        limits.append("a regex is git's (POSIX extended) to select commits and Python's to count lines")
-    else:
-        limits.append("a text spanning lines is not counted in the diff lines (git -S still selects the commit)")
+        limits.append("the regex is git's (POSIX extended: [0-9] or [[:digit:]], not \\d)")
+    if project_prefix(repo):
+        limits.append(f"only the project's folder {project_prefix(repo)!r} of its git repository")
     res = {**base, "status": "found" if events else "not_found", "events": [_event(c) for c in events],
-           "head": now, "truncated": truncated, "shallow": shallow,
+           "at_head": now, "truncated": truncated, "shallow": shallow,
            "coverage": {"method": f"git log {pick[:2]} over the history of HEAD, zero-context patches; "
                                   "git grep at HEAD", "limits": limits},
            "claims": [], "unknowns": []}
     if not events:
-        res["unknowns"].append({
-            "question": f"when did {t!r} appear?",
-            "why": "no commit reachable from HEAD added or removed it" + (" (a shallow clone)" if shallow else ""),
-            "next_step": ("check the spelling or search without --path; `verinoda history commits --diff PATTERN` "
-                          "matches changed lines by regex") if not now["present"] else
-                         "it is at HEAD but no commit added it in the history searched: the clone may be shallow"})
+        selected = listed[:MAX_EVENTS]
+        if selected and any(c["binary"] for c in selected):
+            why = (f"git selected {len(selected)} commit(s), but they changed it only in binary files, which have "
+                   "no lines to read (git grep leaves binary files out too)")
+        elif selected:
+            why = f"git selected {len(selected)} commit(s), but none of their changed lines holds it"
+        else:
+            why = "no commit reachable from HEAD added or removed it" + (" (a shallow clone)" if shallow else "")
+        if not now["present"]:
+            step = ("check the spelling or search without --path; `verinoda history commits --diff PATTERN` "
+                    "matches changed lines by regex")
+        elif shallow:
+            step = "the clone is shallow: `git fetch --unshallow`, then ask again"
+        else:
+            step = (f"it is at HEAD, so a merge commit (not diffed here) brought it in: `git log -m --first-parent "
+                    f"{pick[:2]}<text>` diffs each merge against its first parent")
+        res["unknowns"].append({"question": f"when did {t!r} appear?", "why": why, "next_step": step})
         return res
     complete = not truncated and not shallow
     why_not = ("the history is cut at %d commits: an older commit may have added it first" % MAX_EVENTS
@@ -291,6 +356,13 @@ def text_history(repo: Path, text: str, *, regex: bool = False, path: str | None
                                  excerpt="-" + (f["removed_line"] or ""), change="removed")],
                 "subjects": [f["path"]]})
             res["disappeared"] = {"commit": last["commit"], "at": f"{f['path']}:{f['removed_at']}"}
+        else:
+            res["unknowns"].append({
+                "question": f"when did {t!r} disappear?",
+                "why": "HEAD has no occurrence, but no commit read removed it: a merge commit (merges are not "
+                       "diffed) or a change to a binary file removed it",
+                "next_step": f"`git log -m --first-parent {pick[:2]}<text>` diffs each merge against its first "
+                             "parent"})
     return res
 
 
@@ -319,7 +391,10 @@ def commits(repo: Path, *, message: str | None = None, author: str | None = None
     base = {"kind": "commits", "filters": filters}
     if not _is_git(repo):
         return {**base, **_not_git("commits", repo)}
-    args = ["log", f"-n{limit + 1}", _FMT, "--name-only", *_DIFF_SAFE, "--regexp-ignore-case"]
+    spec, rel = _scope(repo, path)
+    # all three patterns are extended regular expressions (--grep and --author read basic ones without -E)
+    args = ["log", f"-n{limit + 1}", _FMT, "--name-only", *_DIFF_SAFE, *rel, "--regexp-ignore-case",
+            "--extended-regexp"]
     if "message" in filters:
         args.append(f"--grep={filters['message']}")
     if "author" in filters:
@@ -330,7 +405,7 @@ def commits(repo: Path, *, message: str | None = None, author: str | None = None
         args.append(f"--until={filters['until']}")
     if "diff" in filters:
         args.append(f"-G{filters['diff']}")
-    out = _git(repo, *args, *_pathspec(path))
+    out = _git(repo, *args, *spec)
     if out is None:
         raise ValueError("git log failed (a pattern or date git cannot read, or it took over "
                          f"{_GIT_TIMEOUT} s)")
@@ -341,13 +416,15 @@ def commits(repo: Path, *, message: str | None = None, author: str | None = None
         elif line.strip() and found:
             found[-1]["files"].append(line.strip())
     for c in found:
-        c["evidence"] = f"commit {c['commit']}"
+        c["evidence"] = _ev(c)
+    limits = ["history reachable from HEAD only",
+              "message, author and diff patterns are git's extended regular expressions (POSIX: [0-9], not \\d), "
+              "case ignored; a merge commit's diff is not searched"]
+    if project_prefix(repo):
+        limits.append(f"only the project's folder {project_prefix(repo)!r} of its git repository")
     return {**base, "status": "found" if found else "not_found", "commits": found[:limit],
             "truncated": len(found) > limit,
-            "coverage": {"method": "git log over the history of HEAD, newest first",
-                         "limits": ["history reachable from HEAD only",
-                                    "message, author and diff patterns are git's regular expressions, case "
-                                    "ignored; a merge commit's diff is not searched"]}}
+            "coverage": {"method": "git log over the history of HEAD, newest first", "limits": limits}}
 
 
 # -- two revisions -------------------------------------------------------------------------------------------
@@ -362,13 +439,13 @@ def compare(repo: Path, base_rev: str, head_rev: str, *, path: str | None = None
     a = _rev(repo, base_rev, "base")
     b = _rev(repo, head_rev, "head")
     out_base["base"]["commit"], out_base["head"]["commit"] = a, b
-    spec = _pathspec(path)
+    spec, rel = _scope(repo, path)
     mb = (_git(repo, "merge-base", a, b) or "").strip() or None
     log = _git(repo, "log", f"-n{MAX_COMMITS + 1}", _FMT, f"{a}..{b}", *spec) or ""
     only_head = [_header(x) for x in log.split("\n") if x.startswith(_HDR)]
     back = _git(repo, "rev-list", "--count", f"{b}..{a}", *spec)
-    status = _git(repo, "diff", "--name-status", "-z", *_DIFF_SAFE, a, b, *spec)
-    numstat = _git(repo, "diff", "--numstat", "-z", *_DIFF_SAFE, a, b, *spec)
+    status = _git(repo, "diff", "--name-status", "-z", *_DIFF_SAFE, *rel, a, b, *spec)
+    numstat = _git(repo, "diff", "--numstat", "-z", *_DIFF_SAFE, *rel, a, b, *spec)
     if status is None or numstat is None:
         raise ValueError("git diff failed between the two revisions")
     kinds = {}
@@ -396,7 +473,9 @@ def compare(repo: Path, base_rev: str, head_rev: str, *, path: str | None = None
                        "removed": sum(f["removed"] or 0 for f in files)},
             "coverage": {"method": "git log base..head, git diff base head (the two trees, not the working tree)",
                          "limits": ["a renamed file is listed as deleted and added",
-                                    "binary files have no line counts (null)"]}}
+                                    "binary files have no line counts (null)"]
+                         + ([f"only the project's folder {project_prefix(repo)!r} of its git repository"]
+                            if project_prefix(repo) else [])}}
 
 
 # -- rendering -----------------------------------------------------------------------------------------------
@@ -422,7 +501,7 @@ def render(res: dict) -> str:
             for e in res["events"]:
                 ch = ", ".join(f"{f['path']} +{f['added']}/-{f['removed']}" for f in e["files"][:4])
                 out.append(f"    {_short(e)}  [{ch}]")
-        head = res.get("head") or {}
+        head = res.get("at_head") or {}
         if head.get("present"):
             out.append(f"  at HEAD: {head['count']} line(s): "
                        + ", ".join(f"{s['path']}:{s['line']}" for s in head["sites"])
