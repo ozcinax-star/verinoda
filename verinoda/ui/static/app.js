@@ -85,10 +85,11 @@
         imported_by: "Imported by", references: "References", referenced_by: "Referenced by",
         names_data: "Names (resource ids)", named_by: "Named by", other_out: "Other links", other_in: "Other backlinks",
         claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes", answerMore: "Also relevant",
-        wiki: "Wiki", diagrams: "Diagrams", wikiFiles: "Files", problems: "Problems",
+        wiki: "Wiki", diagrams: "Diagrams", wikiFiles: "Files", problems: "Problems", decisions: "Decision records",
       },
       wikiMermaid: "Mermaid text: paste it into a Mermaid viewer (GitHub, GitLab, Obsidian, mermaid.live) to draw it. A dashed arrow comes from an inferred edge.",
       copy: "Copy", copied: "Copied", evidence: "Evidence", wikiNone: "No page named so.",
+      decNote: "By the date each record states. Superseding and links as each record writes them; a dashed relation is stated by one record only.", decNone: "No decision records (verinoda decide record).", undated: "no date", oneSided: "stated by one record only", notEnforced: "not enforced", chosen: "chosen",
       kind: {
         class: "class", method: "method", function: "function", file: "file", doc: "document", section: "section",
         data: "data file", symbol: "symbol", external: "external", claim: "claim",
@@ -170,10 +171,11 @@
         names_data: "Adlandırdığı kaynaklar", named_by: "Adlandıranlar", other_out: "Diğer bağlantılar",
         other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
         myNotes: "Notlarım", answerMore: "Ayrıca ilgili", wiki: "Wiki", diagrams: "Diyagramlar", wikiFiles: "Dosyalar",
-        problems: "Sorunlar",
+        problems: "Sorunlar", decisions: "Karar kayıtları",
       },
       wikiMermaid: "Mermaid metni: çizmek için bir Mermaid görüntüleyicisine (GitHub, GitLab, Obsidian, mermaid.live) yapıştırın. Kesikli ok çıkarım yapılmış bir bağlantıdan gelir.",
       copy: "Kopyala", copied: "Kopyalandı", evidence: "Kanıt", wikiNone: "Bu adda sayfa yok.",
+      decNote: "Her kaydın belirttiği tarihe göre. Yerine geçme ve bağlantılar her kaydın yazdığı gibi; kesikli ilişkiyi yalnızca bir kayıt belirtir.", decNone: "Karar kaydı yok (verinoda decide record).", undated: "tarih yok", oneSided: "yalnızca bir kayıt belirtiyor", notEnforced: "uygulanmıyor", chosen: "seçilen",
       kind: {
         class: "sınıf", method: "metot", function: "fonksiyon", file: "dosya", doc: "belge", section: "bölüm",
         data: "veri dosyası", symbol: "sembol", external: "dış", claim: "iddia",
@@ -621,7 +623,7 @@
   }
 
   // the start page is what the address shows when it names nothing else
-  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h.startsWith("#/n/") || h.startsWith("#/w/") || (h.startsWith("#/q/") && !OFFLINE)); };
+  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h === "#/d" || h.startsWith("#/n/") || h.startsWith("#/w/") || (h.startsWith("#/q/") && !OFFLINE)); };
   async function renderHome() {
     current = null;
     document.title = "Verinoda";
@@ -653,10 +655,15 @@
       return li;
     })) : el("p", { class: "muted small", text: t("noNotes") });
     const wiki = await wikiList();
+    let dec = null;
+    try { dec = await api("/api/decisions"); } catch (_) { dec = null; }
     if (!onHome()) return;
+    const decs = dec && (dec.records || []).length ? el("div", {}, sectionHeader("decisions", dec.records.length),
+      el("ul", { class: "links" }, el("li", {}, el("a", { href: "#/d" }, t("sec.decisions")),
+        el("span", { class: "at", text: dec.records.slice(-3).map((r) => r.id).join(", ") })))) : null;
     setMain(el("div", { class: "home" }, el("h1", { text: s.project }), el("p", { class: "muted", text: t("welcome") }),
       OFFLINE ? el("p", { class: "muted small", text: `${t("offlineHome")} ${OFFLINE.generated || ""}` }) : null,
-      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs, wiki));
+      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs, wiki, decs));
     $("#outline").replaceChildren();
     local.setData([], []);
   }
@@ -718,6 +725,39 @@
     const ds = p.diagrams || [];
     if (ds.length) parts.push(sectionHeader("diagrams", ds.length), el("p", { class: "muted small", text: t("wikiMermaid") }), ...ds.map(diagramBlock));
     if ((w.problems || []).length) parts.push(sectionHeader("problems", w.problems.length), el("ul", { class: "links" }, w.problems.map((x) => el("li", { text: x }))));
+    setMain(el("div", { class: "wiki" }, parts));
+  }
+
+  // -- the decision records on a timeline: by the date each states, with superseding and links -------
+  async function renderDecisions() {
+    current = null;
+    setMain(el("div", { class: "empty", text: t("loading") }));
+    $("#outline").replaceChildren(); local.setData([], []); markTree(null);
+    let d;
+    try { d = await api("/api/decisions"); } catch (e) { showError(e); return; }
+    if (location.hash !== "#/d") return; // another page was opened meanwhile
+    document.title = `${t("sec.decisions")} · Verinoda`;
+    const recs = d.records || [], rels = d.relations || [];
+    const parts = [el("div", { class: "crumbs" }, el("a", { href: "#/" }, t("cmd.home"))), el("h1", { text: t("sec.decisions") }),
+      el("p", { class: "muted small", text: `${t("decNote")} ${d.dir || ""}` })];
+    if (!recs.length) { parts.push(el("div", { class: "empty", text: t("decNone") })); setMain(el("div", { class: "wiki" }, parts)); return; }
+    const rel = (e, out) => el("span", { class: "rel" + (e.one_sided || (e.missing || []).length ? " one-sided" : ""),
+      title: e.one_sided ? t("oneSided") : "" }, out ? `${e.kind} ${e.to}` : `${e.kind === "supersedes" ? "superseded-by" : e.kind + " ←"} ${e.from}`);
+    let lastDate;
+    const items = recs.map((r) => {
+      const head = r.date !== lastDate ? el("div", { class: "tl-date mono", text: r.date || t("undated") }) : null;
+      lastDate = r.date;
+      const mine = rels.filter((e) => e.from === r.id).map((e) => rel(e, true)).concat(rels.filter((e) => e.to === r.id).map((e) => rel(e, false)));
+      return el("li", { class: "tl-item st-" + r.status }, head,
+        el("div", {}, el("strong", { text: r.id }), " ", el("span", { text: r.title }), " ",
+          el("span", { class: "status", text: r.status + (r.status === "accepted" && !r.enforced ? ` · ${t("notEnforced")}` : "") })),
+        r.chosen ? el("div", { class: "muted small", text: `${t("chosen")}: ${r.chosen}` }) : null,
+        mine.length ? el("div", { class: "rels" }, mine) : null,
+        r.file ? el("div", {}, atLink(r.file)) : null,
+        ...[...(r.problems || []), ...(r.warnings || [])].map((w) => el("div", { class: "muted small warn", text: w })));
+    });
+    parts.push(el("ol", { class: "timeline" }, items));
+    if (d.mermaid) parts.push(diagramBlock({ kind: "decisions", title: t("sec.diagrams"), mermaid: d.mermaid, claims: [] }));
     setMain(el("div", { class: "wiki" }, parts));
   }
 
@@ -1876,6 +1916,7 @@
       }
       case "/api/search": return { results: offlineSearch(p.get("q") || "") };
       case "/api/wiki": return D.wiki || { pages: [] }; // every page with its diagrams
+      case "/api/decisions": return D.decisions || { records: [], relations: [], mermaid: "" };
       case "/api/global": return offlineGlobal(flag("tests"), flag("data"));
       case "/api/impact": return offlineImpact(p.get("id") || "", flag("tests"));
       case "/api/path": return offlinePath(p.get("from") || "", p.get("to") || "");
@@ -2104,6 +2145,7 @@
     if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)));
     else if (h.startsWith("#/q/") && !OFFLINE) renderAnswer(decodeURIComponent(h.slice(4)));
     else if (h.startsWith("#/w/")) renderWiki(decodeURIComponent(h.slice(4)));
+    else if (h === "#/d") renderDecisions();
     else renderHome();
   }
   window.addEventListener("hashchange", route);

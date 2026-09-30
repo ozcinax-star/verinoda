@@ -78,7 +78,7 @@ EXPECTED_PARAMS = {
                          {"feedback_id", "verdict", "reason", "evidence_ids"}),
     "index_update": (set(), set()),
     "decision_record": ({"action", "decision_id", "chosen", "rationale", "title", "brief_id", "guards", "governs",
-                         "revisit_when", "supersedes", "guard_ids", "at", "reason", "until", "document",
+                         "revisit_when", "supersedes", "link", "guard_ids", "at", "reason", "until", "document",
                          "user_statement", "question_id"}, {"action"}),
     "decision_check": ({"base", "changed_only", "refresh"}, set()),
     "decision_brief": ({"question", "options", "quotes", "agent_arguments"}, {"question"}),

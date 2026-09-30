@@ -288,6 +288,8 @@ def make_handler(atlas: Atlas, port: list[int], token: str = "", watcher: Watche
                                             data=_flag(qs, "data", True))
                 elif route == "usernotes":
                     obj = atlas.user_notes()
+                elif route == "decisions":
+                    obj = atlas.decisions()
                 elif route == "impact":
                     obj = atlas.impact(nid, int((qs.get("depth") or ["3"])[0] or 3), tests=_flag(qs, "tests", True))
                 elif route == "version":

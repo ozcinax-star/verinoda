@@ -172,8 +172,15 @@ def build(repo: Path | str) -> dict:
     from verinoda import diagrams
 
     wiki = diagrams.outline(snap.g, Path(repo))
+    # the decision records' timeline (titles, dates, relations; no record body)
+    from verinoda.decisions import DecisionError
+
+    try:
+        timeline = atlas.decisions()
+    except DecisionError:  # a decisions folder configured outside the project: nothing to show
+        timeline = {"records": [], "relations": [], "mermaid": ""}
     data = {"stats": stats, "tree": _prune_tree(tree, ids) or {**tree, "children": []}, "global": graph,
-            "notes": notes, "user_notes": mine, "wiki": wiki}
+            "notes": notes, "user_notes": mine, "wiki": wiki, "decisions": timeline}
     # the file is made to be passed on: no path of this machine, no secret or e-mail address in its text
     paths = _scrubber(Path(repo).resolve())
     redact = redactor()  # the environment's secret values, read once for all the texts
