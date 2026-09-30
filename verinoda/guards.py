@@ -2259,7 +2259,8 @@ def stale_graph_note(update_result: dict) -> str:
 
 
 def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool = False,
-          records=None, decisions_dir: str | None = None, graph_stale: str | None = None) -> dict:
+          records=None, decisions_dir: str | None = None, graph_stale: str | None = None,
+          use_baseline: bool = True) -> dict:
     """Run every accepted guard of every enforced decision on the working tree.
 
     ``base`` (a git revision) or ``changed_only`` (= base HEAD) labels each finding ``new/touched since
@@ -2275,6 +2276,9 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
     was still running): every edge guard (no_edge, layers, allow_edges, public) is then ``unknown`` (a
     violation it still finds stands, as its line is re-read), and without a violation ``exit`` is 2, as for
     an error: a gate never passes on edges it could not read.
+
+    ``use_baseline``: the findings the decisions folder's ``baseline.json`` lists are moved to ``baselined`` and
+    do not fail the check; its entries nothing matched are ``baseline_fixed`` (:mod:`verinoda.baseline`).
     """
     from verinoda import decisions as dm
     from verinoda.snapshot import list_files
@@ -2412,6 +2416,10 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
                 note = "held already when the decision was recorded" if where else "does not hold"
                 res["ok"].append({"decision": d.id, "guard": r["id"], "kind": "revisit_when",
                                   "what": f"{r['kind']}={r['value']}", "scope": scope, "limits": [note]})
+    if use_baseline:
+        from verinoda import baseline
+
+        baseline.apply(res, ddir)
     res["elapsed_s"] = round(time.monotonic() - t0, 3)
     broken = [n for n in res["not_enforced"] if n.get("problem")]
     stale_unchecked = bool(graph_stale) and any(u["kind"] in dm.EDGE_KINDS for u in res["unknown"])
@@ -2441,6 +2449,9 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
     if broken:
         steps.append(f"{len(broken)} decision record(s) cannot be read and are not checked (see not_enforced): "
                      "ask the user to fix their front matter; never edit a decision on your own")
+    if res.get("baseline_fixed"):
+        steps.append(f"{sum(e['count'] for e in res['baseline_fixed'])} baselined violation(s) are fixed: "
+                     "`verinoda decide baseline --shrink` removes them from the baseline")
     if res["pre_existing"] and not res["violations"]:
         steps.append(f"{len(res['pre_existing'])} violation(s) in files unchanged since {base_label} (see "
                      "pre_existing): not new, but the code still breaks the decision there")
