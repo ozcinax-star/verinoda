@@ -177,7 +177,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 16.3 | **Symbol exists in a version and namespace** | "Does this method exist in 1.21.4 Mojmap?" | minecraft-modding-mcp | `api` answers per version |
 | 16.4 | **Version diff for porting (opt-in)** | Class, member and registry changes between two game versions; breaking changes that touch the project | minecraft-dev-mcp, ModLens primers | `verinoda port 1.21.4 1.21.5` lists the project's sites that break |
 | 16.5 | **Third-party mod jars (opt-in)** | A dependency mod's metadata, entry points, Mixin configs and decompiled code | minecraft-dev-mcp, ModLens | `api` reads a dependency mod's class |
-| 16.6 | **Missing dependencies and pack collisions** | Missing mod dependencies, compatibility pre-flight, asset and datapack collisions across mods | ModLens | `datapack` reports a collision with both sources |
 | 16.7 | **Vanilla registry and data lookup (opt-in)** | Blocks, items, entities, vanilla tags, recipes and commands of the version | ModLens, misode/mcmeta | a datapack id is told apart from a typo |
 
 ## 17 - Minecraft validators
