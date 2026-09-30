@@ -28,12 +28,23 @@ bossbar set arena:timer value 10
 execute store result bossbar timer_old max run scoreboard players get #game a_ticks
 tag @s add arena_player
 execute as @a[tag=arena_player] run function arena:load
+tellraw @a {"text":"Click to trigger the door, or join the team list"}
+say join the team list now
+$team join red_$(suffix) @s
+$bossbar set arena:bar_$(id) value 3
+$scoreboard players set @s obj_$(k) 1
+scoreboard players set @s a_durum 1
+execute as @a run scoreboard players add @s a_cmd 1
+scoreboard objectives remove a_kills
 """,
     "src/main/java/com/example/arena/Arena.java": """package com.example.arena;
+
+import net.minecraft.world.scores.Scoreboard;
 
 public final class Arena {
     static final String STATE = "a_state";
     static final String BLUE = "blue";
+    static final String CMD = "a_cmd";
 
     static void setUp(Scoreboard sb, String kind) {
         sb.addObjective(STATE, ObjectiveCriteria.DUMMY, null, null, false, null);
@@ -44,6 +55,27 @@ public final class Arena {
 
     static void run(Server server) {
         server.runCommand("team join purple @s");
+    }
+
+    static void ensure(Scoreboard sb, String name) {
+        sb.addObjective(name, ObjectiveCriteria.DUMMY, null, null, false, null);
+    }
+
+    static void init(Scoreboard sb, Server server) {
+        ensure(sb, "a_durum");
+        server.runCommand("scoreboard objectives add " + CMD + " dummy");
+        LOGGER.warn("Could not trigger reload for scoreboard state");
+        LOGGER.info("Player failed to join team list refresh");
+    }
+}
+""",
+    "src/main/java/com/example/arena/YarnSide.java": """package com.example.arena;
+
+import net.minecraft.scoreboard.Scoreboard;
+
+final class YarnSide {
+    static Object of(Scoreboard sb) {
+        return sb.getPlayerTeam("Steve");
     }
 }
 """,
@@ -120,3 +152,68 @@ def test_cli_summary_and_lookup(repo, capsys):
     assert "never declared" in capsys.readouterr().out
     assert cli.main(["datapack", "score", "a_kills", "--repo", str(repo)]) == 0
     assert "never declared" not in capsys.readouterr().out
+
+
+def test_words_in_text_are_not_commands():
+    # "trigger", "team" and "bossbar" in a tellraw, a say or a log message are English, not commands
+    text = FILES[f"{DP}/tick.mcfunction"]
+    _c, _t, objs = datapack.parse_function(text)
+    assert not [o for o in objs if o[1] in ("the", "door", "reload", "help")]
+    assert not [r for r in datapack.parse_symbols(text) if r[2] in ("list", "now")]
+    _c, _t, objs = datapack.parse_function('LOGGER.warn("Could not trigger ability for player")')
+    assert objs == []
+    assert datapack.parse_function("execute as @a run trigger a_vote")[2] == [(1, "a_vote", "write")]
+    assert datapack.parse_symbols("/team join red @s") == [(1, "team", "red", "use")]
+
+
+def test_a_name_a_macro_fills_in_part_is_not_a_name():
+    rows = datapack.parse_symbols("$team join red_$(suffix) @s\n$bossbar set ns:bar_$(id) value 3\n$team add r_$(x)")
+    assert rows == [(3, "team", "*", "define")]
+    assert datapack.parse_function("$scoreboard players set @s obj_$(k) 1")[2] == []
+    assert datapack.parse_function("$function ns:do_$(x)") == ([], [], [])       # not a call to ns:do_
+    assert datapack.parse_function("$tag @s add a_$(x)")[1] == [(1, "*", "add")]  # a tag a macro fills in
+
+
+def test_objectives_remove_is_a_use_not_a_declaration():
+    assert datapack.parse_function("scoreboard objectives remove a_x")[2] == [(1, "a_x", "remove")]
+
+
+def test_declared_by_a_helper_a_concatenation_and_not_by_yarn_get_player_team(repo):
+    ix = datapack.index(repo, java_calls=False)
+    pr = datapack.problems(ix)
+    names = {r["name"] for r in pr["objectives_used_never_declared"]}
+    assert "a_durum" not in names and "a_cmd" not in names       # ensure(sb, "a_durum"); "... add " + CMD + " ..."
+    arena = "src/main/java/com/example/arena/Arena.java"
+    assert any(s.kind == "define" and s.at == _at(arena, "ensure(sb, \"a_durum\")") for s in ix["objectives"]["a_durum"])
+    # the helper hands its own parameter on: no "*" lead on every name, and nothing built at run time but "a_" + kind
+    assert all("maybe_declared_by" not in r or all(d["pattern"] != "*" for d in r["maybe_declared_by"])
+               for r in pr["objectives_used_never_declared"])
+    assert [d["pattern"] for d in pr["declared_dynamically"]] == ["a_*"]
+    assert "Steve" not in ix["teams"]                             # Yarn's getPlayerTeam takes a player's name
+    assert not {"red_", "ns:bar_", "arena:bar_", "obj_", "reload", "refresh", "list", "now"} & (
+        set(ix["objectives"]) | set(ix["teams"]) | set(ix["bossbars"]))
+    kills = {s.kind for s in ix["objectives"]["a_kills"]}
+    assert {"define", "remove"} <= kills and "a_kills" not in names
+
+
+def test_naming_rules_that_could_hang_or_are_misshapen_are_reported(repo):
+    (repo / ".verinoda").mkdir()
+    cfg = repo / ".verinoda" / "config.json"
+    cfg.write_text(json.dumps({"datapack": {"naming": {"team": "(a|aa)*", "objectives": "[a-z_]+",
+                                                       "objective": "x"}}}), encoding="utf-8")
+    rules, bad = datapack.naming_rules(repo)
+    assert set(rules) == {"objective"} and rules["objective"].pattern == "[a-z_]+"
+    assert [(b["kind"], b["rule"]) for b in bad] == [("team", "(a|aa)*"), ("objective", "x")]
+    assert "exponential" in bad[0]["why"] and "set twice" in bad[1]["why"]
+    cfg.write_text(json.dumps({"datapack": {"naming": "^[a-z]+$"}}), encoding="utf-8")
+    assert datapack.naming_rules(repo) == ({}, [{"kind": "naming", "rule": "^[a-z]+$",
+                                                 "why": "datapack.naming is an object: {kind: regex}"}])
+
+
+def test_score_lookup_carries_the_built_name_lead(repo, capsys):
+    assert cli.main(["datapack", "score", "a_board", "--repo", str(repo), "--json"]) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert res["declared"] is False and [d["pattern"] for d in res["maybe_declared_by"]] == ["a_*"]
+    assert cli.main(["datapack", "score", "a_board", "--repo", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "never declared by name" in out and "declares a_*" in out
