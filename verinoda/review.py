@@ -5017,6 +5017,9 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
                    "uncovered_changed_lines": (line_cov or {}).get("uncovered_lines", 0),
                    "api_breaking": sum(1 for a in api if a["verdict"] == "breaking")},
     }
+    from verinoda import risk
+
+    res["risk"] = risk.score(res, graph=g is not None)
     res["summary"] = _summary(res)
     if len(api) > MAX_API_CHANGES:   # breaking first: what is cut is the tail of compatible and unknown ones
         res["api_changes"], res["api_changes_total"] = api[:MAX_API_CHANGES], len(api)
@@ -5594,6 +5597,11 @@ def _summary(res: dict) -> str:
     stale = stale_reach.summary_part(res.get("made_stale") or {})
     if stale:
         parts.append(stale)
+    from verinoda import risk
+
+    scored = risk.summary_part(res.get("risk") or {})
+    if scored:
+        parts.append(scored)
     return " ".join(parts)
 
 
@@ -5615,7 +5623,8 @@ def _record(store, repo: Path, res: dict) -> str | None:
                                     for fs in res["concerns"].values() for f in fs],
                        "api_changes": [{k: a.get(k) for k in ("symbol", "verdict", "status", "at", "base_at")}
                                        for a in res.get("api_changes") or []],
-                       "unknown": res["unknown"], "tests": {"static": [t["test"] for t in res["tests"]["static"]]}},
+                       "unknown": res["unknown"], "tests": {"static": [t["test"] for t in res["tests"]["static"]]},
+                       "risk": {k: (res.get("risk") or {}).get(k) for k in ("score", "band", "status")}},
             "created_at": now()})
     except Exception:  # noqa: BLE001 - a read-only or busy store: the review is still returned
         return None
@@ -5625,7 +5634,8 @@ def _record(store, repo: Path, res: dict) -> str | None:
 # -- text rendering ----------------------------------------------------------------------------------------
 
 def render_text(res: dict) -> str:
-    """Answer first: what changed, the findings by concern, tests, unknowns, what to read first."""
+    """Answer first: what changed, the findings by concern, tests, unknowns, the risk score, what to read
+    first."""
     out = [res["summary"]]
     if res.get("changes"):
         out.append("")
@@ -5745,6 +5755,9 @@ def render_text(res: dict) -> str:
     from verinoda import reviewers
 
     out += reviewers.render(res.get("reviewers") or {})
+    from verinoda import risk
+
+    out += risk.render(res.get("risk") or {}) if res.get("changes") else []
     if res.get("read_first"):
         b = res["budget"]
         out.append("")
