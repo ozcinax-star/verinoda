@@ -112,9 +112,13 @@ def test_a_folder_is_blamed_file_by_file_binary_files_left_out(repo):
     assert [(o["line"], o["files"]) for o in co["owned"]] == [(3, 1)]
     assert co["skipped"] and co["skipped"][0]["line"] == 5
     owner = next(c for c in res["claims"] if "CODEOWNERS" in c["text"])
-    assert "1 of the 2 file(s) of `src` (2 file(s)) are owned by @core @alice" in owner["text"]
+    assert "1 of the 2 file(s) of `src` are owned by @core @alice" in owner["text"]  # the count once
     cut = ownership.owners(r, "src", max_files=1)
     assert cut["truncated"] and cut["files"] == 1
+    assert "the first 1 of the 2 file(s) of `src` (in path order)" in cut["claims"][0]["text"]
+    cut = ownership.owners(r, max_files=2)  # .github/CODEOWNERS and docs/guide.md
+    cut_owner = next(c for c in cut["claims"] if "CODEOWNERS" in c["text"])
+    assert "1 of the first 2 of the 4 file(s) of `.` (in path order) are owned by @docs-team" in cut_owner["text"]
     _check(r, res)
 
 
@@ -149,6 +153,51 @@ def test_uncommitted_lines_are_credited_to_nobody(repo, tmp_path):
     assert res["uncommitted_lines"] == 1 and res["credited_lines"] == 12
 
 
+def test_a_work_tree_that_differs_from_head_is_not_called_head(repo, tmp_path):
+    r, shas = repo
+    clean = ownership.owners(r, "src/svc.py:7-8")
+    ev = clean["claims"][0]["evidence"][0]
+    assert ev["locator"] == f"git blame -w -L7,8 {shas[2]} -- src/svc.py" and not clean["modified_files"]
+    assert f"at HEAD {shas[2][:10]}" in clean["claims"][0]["text"]
+    assert ownership.owners(r, "src")["claims"][0]["evidence"][0]["locator"] == \
+        f"git blame -w {shas[2]} -- <each text file git tracks under src>"
+    w = tmp_path / "w"
+    shutil.copytree(r, w)
+    # two lines above Bob's run(): lines 7-8 on disk are Alice's a4, a5 now, not Bob's lines 7-8 at HEAD
+    (w / "src" / "svc.py").write_text("NEW = 1\nNEW2 = 2\n" + SVC, encoding="utf-8")
+    (w / ".github" / "CODEOWNERS").write_text("/src/ @someone-else\n", encoding="utf-8")
+    res = ownership.owners(w, "src/svc.py:7-8")
+    assert res["modified_files"] == ["src/svc.py"] and res["main_author"]["name"] == "Alice"
+    main = res["claims"][0]
+    assert "at HEAD" not in main["text"] and f"in the work tree on HEAD {shas[2][:10]}" in main["text"]
+    ev = main["evidence"][0]
+    assert ev["locator"] == "git blame -w -L7,8 -- src/svc.py" and ev["meta"]["work_tree"]
+    assert any("work tree" in u for u in main["uncertainties"])
+    owner = next(c for c in res["claims"] if "CODEOWNERS" in c["text"])
+    assert not res["codeowners"]["committed"] and not owner["evidence"][0].get("commit_sha")
+    assert any("CODEOWNERS differs from HEAD" in x for x in res["coverage"]["limits"])
+    _check(w, res)
+
+
+def test_a_tie_has_one_main_author_alone_and_in_a_folder(tmp_path):
+    r = tmp_path / "t"
+    r.mkdir()
+    _git(r, "init", "-q")
+    _commit(r, {"f.py": "a = 1\nb = 2\n", "g.py": "z = 0\n"}, "one", author="Alice", date="2026-01-01T10:00:00+00:00")
+    _commit(r, {"f.py": "a = 1\nb = 2\nc = 3\nd = 4\n"}, "two", author="Bob", date="2026-01-02T10:00:00+00:00")
+    alone = ownership.owners(r, "f.py")["main_author"]["name"]
+    listed = next(f for f in ownership.owners(r)["per_file"] if f["path"] == "f.py")["main_author"]
+    assert alone == listed == "Alice"  # the smaller e-mail, both ways
+
+
+def test_a_huge_days_value_does_not_crash(repo):
+    r, _ = repo
+    for days in (100_000, 99_999_999_999):
+        res = ownership.owners(r, "src/svc.py", days=days)
+        assert res["knowledge_loss"]["lines"] == 0 and res["knowledge_loss"]["since"] == "1970-01-01"
+    assert ownership._day(-5) == "1970-01-01"
+
+
 def test_a_shallow_clone_says_its_oldest_commit_may_not_have_written_the_lines(repo, tmp_path):
     r, _ = repo
     c = tmp_path / "shallow"
@@ -172,7 +221,7 @@ def test_mailmap_joins_an_authors_two_addresses(tmp_path):
 
 def test_codeowners_patterns_follow_githubs_rules():
     def m(pat: str, path: str) -> bool:
-        return bool(ownership.pattern_regex(pat).match(path))
+        return bool(ownership.pattern_matcher(pat)(path))
 
     assert m("*", "a/b/c.py") and m("*.js", "x/y/z.js") and not m("*.js", "x/y/z.ts")
     assert m("/build/logs/", "build/logs/a.txt") and not m("/build/logs/", "x/build/logs/a.txt")
@@ -182,7 +231,27 @@ def test_codeowners_patterns_follow_githubs_rules():
     assert m("**/logs", "logs/a") and m("**/logs", "deep/down/logs/a") and m("/apps/**", "apps/x/y")
     assert m("src/?.py", "src/a.py") and not m("src/?.py", "src/ab.py")
     assert m("my dir/", "my dir/a")
-    assert ownership._split("my\\ dir/ @a # note") == ["my dir/", "@a", "#", "note"]
+    assert ownership._split("my\\ dir/ @a # note") == ["my dir/", "@a"]
+    # a word that starts with an unescaped # starts the comment, whatever follows; an escaped one is a word
+    assert ownership._split("* @all #note @notowner") == ["*", "@all"]
+    assert ownership._split("\\#x @a") == ["#x", "@a"] and ownership._split("a@b#c @d") == ["a@b#c", "@d"]
+    assert m("/apps/**", "apps/x") and not m("/apps/**", "apps") and m("src/**.py", "src/a.py")
+
+
+def test_codeowners_patterns_cannot_make_matching_slow():
+    import time
+
+    t0 = time.perf_counter()
+    assert not ownership.pattern_matcher("a/**/**/**/**/**/**/**/**/**/**/**/b")("/".join(["a"] * 28))
+    assert not ownership.pattern_matcher("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b")("a" * 28)
+    assert not ownership.pattern_matcher("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b")("/".join(["a" * 28] * 20))
+    assert time.perf_counter() - t0 < 1.0  # a backtracking regex took 96 s and 9 s on the first two
+
+
+def test_an_inline_comment_is_not_an_owner(tmp_path):
+    (tmp_path / "CODEOWNERS").write_text("* @all #note @notowner\n", encoding="utf-8")
+    co = ownership.read_codeowners(tmp_path)
+    assert co["rules"][0]["owners"] == ["@all"]
 
 
 def test_the_last_matching_rule_wins(tmp_path):
@@ -245,6 +314,10 @@ def test_not_git_and_bad_targets(repo, tmp_path):
     with pytest.raises(ValueError):
         ownership.owners(r, "src/svc.py#nothing_here")
     assert ownership.owners(r, "src/logo.bin")["status"] == "not_found"
+    for bad in ("src/svc.py:0-1", "src/svc.py:13-20", "src/svc.py:5-99"):  # svc.py has 12 lines
+        with pytest.raises(ValueError, match="has 12 line"):
+            ownership.owners(r, bad)
+    assert ownership.owners(r, "src/svc.py:12-11")["lines"] == [11, 12]
 
 
 def test_cli(repo, capsys, tmp_path):
@@ -258,4 +331,7 @@ def test_cli(repo, capsys, tmp_path):
     assert cli.main(["owners", "src/logo.bin", "--repo", str(r)]) == 2
     capsys.readouterr()
     assert cli.main(["owners", "nothing.py", "--repo", str(r)]) == 1
+    assert cli.main(["owners", "src/svc.py:5-99", "--repo", str(r)]) == 1
+    assert cli.main(["owners", "src/svc.py", "--days", "100000", "--repo", str(r)]) == 0
+    capsys.readouterr()
     assert cli.main(["owners", "--repo", str(tmp_path)]) == 2
