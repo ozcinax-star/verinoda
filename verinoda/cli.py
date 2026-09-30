@@ -860,6 +860,24 @@ def cmd_trace(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_export(args) -> int:
+    from verinoda import graph_export
+
+    repo = _repo(args)
+    _need_graph(repo)
+    try:
+        res = graph_export.write(repo, args.format, args.out)
+    except OSError as exc:
+        print(f"error: cannot write {args.out or graph_export.default_path(repo, args.format)}: {exc}",
+              file=sys.stderr)
+        return 2
+    except ValueError as exc:  # a folder the vault may not be written into
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(graph_export.render(r)))
+    return 0
+
+
 def cmd_backlog(args) -> int:
     from verinoda import backlog, freshness, index
 
@@ -2606,6 +2624,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("export", cmd_export, "the graph for other tools: GraphML (Gephi, yEd), Neo4j Cypher, an Obsidian vault "
+                                   "or an SVG drawing; each edge with its location and the status it can carry "
+                                   "unchecked, no code, no machine paths")
+    sp.add_argument("--format", choices=["graphml", "cypher", "obsidian", "svg"], default="graphml")
+    sp.add_argument("--out", metavar="PATH",
+                    help="the file (for obsidian: the vault folder; default .verinoda/index/export/graph.<format> "
+                         "or .verinoda/index/export/obsidian)")
     sp = add("backlog", cmd_backlog, "a backlog item and the code comments that cite it, or the items that explain "
                                      "a line or symbol (docs/BACKLOG.md rows and headings)")
     sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")
