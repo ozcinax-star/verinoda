@@ -1390,11 +1390,11 @@ class AtlasTools:
                          keep=("status", "summary", "exit", "exit_because", "incomplete", "not_checked", "env",
                                "unknown_summary"))
 
-    def api_members(self, target: str, env: str | None = None, private: bool = False) -> dict:
+    def api_members(self, target: str, env: str | None = None, private: bool = False, docs: bool = False) -> dict:
         def go():
             codecheck = self._optional("verinoda.codecheck")
             return codecheck.api(self.repo, _text(target, "target"), env=_opt_text(env) or "auto",
-                                 private=bool(private), trust_env=False)
+                                 private=bool(private), trust_env=False, docs=bool(docs))
         return self._run("api_members", go, first=("members",))
 
     def runtime_observe(self, test_ids: list[str] | None = None, symbols: list[str] | None = None,
@@ -2093,7 +2093,7 @@ DESCRIPTIONS: dict[str, str] = {
         "The real members of a Python module, class or function (dotted target) in the project's environment, "
         "or of a Java class on the build's classpath (access included): name, kind, signature, file:line, "
         "inherited-from, source version; private=true adds '_' "
-        "names. found=false (exit 3) comes with nearest names; found=null ('unknown' / 'not_installed') was "
+        "names; docs=true quotes the installed docstring and README section. found=false (exit 3) comes with nearest names; found=null ('unknown' / 'not_installed') was "
         "not decided; 'unsupported_language' (exit 4): the project's code in another language. Read-only."),
     "runtime_observe": (
         "Run tests in an isolated copy under the call tracer (test_ids, else tests selected for symbols/terms, "
@@ -2573,8 +2573,9 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
                                                  "(e.g. 'packaging.specifiers.SpecifierSet').")],
         env: EnvArg = None,
         private: Annotated[bool, Field(description="Also list names starting with '_'.")] = False,
+        docs: Annotated[bool, Field(description="Also quote the installed docstring and README section.")] = False,
     ) -> dict[str, Any]:
-        return emit(t.api_members(target, env=env, private=private))
+        return emit(t.api_members(target, env=env, private=private, docs=docs))
 
     @register("runtime_observe")
     def runtime_observe(
