@@ -913,6 +913,16 @@ def cmd_shader(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_lang(args) -> int:
+    from verinoda import langkeys
+
+    res = langkeys.lookup(_repo(args), args.default, unused=not args.no_unused)
+    _emit(args, res, lambda r: print(langkeys.render(r)))
+    if res["status"] != "found":
+        return 2
+    return 3 if res["findings"] else 0
+
+
 def cmd_when(args) -> int:
     from verinoda import freshness, index, when
 
@@ -2624,6 +2634,11 @@ def build_parser() -> argparse.ArgumentParser:
                                    "from; --check: blocks and writers that differ, mirrored constants that disagree")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
     sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
+    sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
+                               "placeholders that differ from the default locale, keys the code asks for that no "
+                               "lang file defines, keys nothing names (exit 3 when something is found)")
+    sp.add_argument("--default", default="en_us", help="the locale the others are compared with (default en_us)")
+    sp.add_argument("--no-unused", action="store_true", help="skip the search for keys nothing names")
     sp = add("when", cmd_when, "when a method runs: the events and callers that lead to it, with the conditions "
                                "around each call")
     sp.add_argument("symbol")
