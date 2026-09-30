@@ -2867,10 +2867,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                       "cycles", "dead", "hotspots"],
+                                       "cycles", "dead", "hotspots", "sides"],
                     help="cycles: dependency cycles between files and the fewest file dependencies to cut; "
                          "dead: code no entry point reaches; hotspots: files and functions by changes x "
-                         "complexity (dead and hotspots are asked for by name)")
+                         "complexity; sides: client-only code (Minecraft) reachable from server code, with the "
+                         "path (dead, hotspots and sides are asked for by name)")
     sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); default: git changes")
     sp.add_argument("--base", help="impact view: diff base (default HEAD + untracked)")
     sp.add_argument("--max-lines", type=int, default=None,
