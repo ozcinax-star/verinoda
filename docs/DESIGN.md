@@ -7409,6 +7409,107 @@ after the edit are neither listed nor counted; the CLI `review --json` and text 
 carry `made_stale`; `usernotes.check_text` equals `check`. Run with the modules touched: `test_review`,
 `test_decision_reach`, `test_decide_review3`, `test_usernotes`, `test_mcp`, `test_docs`, `test_line_endings`.
 
+## 71. Decision record lifecycle (D98, 2026-10-01)
+
+### 71.1 Why
+
+A decision record could only be superseded while a new one was being made (`decide record --supersedes`).
+Two records that already existed could not be tied together, nothing linked records in other ways (adr-tools'
+"Amends" / "Amended by"), and there was no overview: no table of contents, no graph of the records and no
+timeline. A hand edit that set `supersedes` on one record and not `superseded-by` on the other went unnoticed.
+
+### 71.2 Decisions
+
+- **`decide supersede OLD --by NEW [--said]`** (`decisions.supersede`). Both records must exist and be readable
+  (a record with problems is never rewritten, as before). OLD becomes `status: superseded` with `superseded-by:
+  NEW`; NEW gets `supersedes: OLD`; both files are written and both get a `supersede` row in the append-only
+  `decisions` log, carrying the user's words. It refuses: a record superseding itself, an OLD already
+  superseded, a NEW that is not `accepted` (a proposed, rejected, deprecated or superseded record replaces
+  nothing; a record's status is the human's to change), a NEW that already supersedes another record (one
+  record replaces one record, as the front matter has one `supersedes`), and a pair where OLD already says it
+  supersedes NEW. A relation only one of the two records states (a hand edit) is completed from either side: a
+  NEW that already says `supersedes: OLD`, or an OLD that already says `superseded-by: NEW` (with or without
+  `status: superseded`); an OLD superseded by another record is still refused, and a relation both records
+  already state is refused as already recorded. A hand-written
+  ADR an imported record points to is never edited; the result says so in `not_changed`.
+- **`decide link ADR-N KIND ADR-M [--said]`** (`decisions.link`). A new front-matter key `links` (one line of
+  JSON, like the other lists): `[{"kind": "amends", "id": "ADR-0002"}]`. Kinds: `amends` / `amended-by`,
+  `clarifies` / `clarified-by`, `depends-on` / `required-by`, `relates-to` (its own reverse); a reverse kind can
+  be given too (`amended by` and `relates_to` are read). The reverse is written on the other record, so both
+  files say it; event `link` in the log. `supersedes` is refused as a link kind: superseding changes a status.
+  A relation already on both records is refused; a record may link another in two ways.
+- **One-sided relations are warnings, never problems.** `load_all` now adds a warning when a `supersedes`,
+  `superseded-by` or link names a record the folder does not hold, when the other record does not state the
+  reverse, and when a link kind is unknown. Warnings do not change enforcement: the existing rule (an enforced
+  record that supersedes another makes it inactive) is unchanged. A `links` value that is not a JSON list of
+  objects with `kind` and `id` is a problem, as for the other lists (the record would otherwise be rewritten
+  without it); so is an entry whose `kind` or `id` is missing or not text. Such an entry is a problem of that
+  record only: it is left out of the warnings, the relations and the timeline, so `decide list`, `decide check`,
+  `decide toc`, `/api/decisions` and `ui --export` still read every other record.
+- **`decide toc [--write FILE.md] [--decisions-dir DIR] [--json]`**. `decisions.timeline` lists the records by
+  the `date` each states (then by id; a record without a valid date last, listed in `undated`) and every
+  relation once in its forward direction (`supersedes` new -> old, a reverse link drawn as the forward one,
+  `relates-to` once per pair), with `stated_by`, `one_sided` and `missing`. The text output is a Markdown table
+  (date, record linked to its file, status - "not enforced" for an accepted record that is not -, relations
+  both ways) and a Mermaid `graph LR` (dashed arrow: one-sided or to a missing record; dashed border:
+  superseded, deprecated or rejected; a record whose id could not be read gets a node id of its own, `rec1`,
+  so the graph stays valid Mermaid, and two files with one id are two nodes). `--write` puts it in a `.md` file inside the repository, with links
+  relative to that file (percent-encoded, so a folder name with a space still links; a bracket in a title is
+  escaped in the link text); it starts with a `verinoda:toc` marker and a file without that marker is never
+  overwritten. Such a file in the decisions folder is not a record, and elsewhere it is not listed as a
+  hand-written ADR without a record. No store is needed: the command reads the files only.
+- **A timeline in `verinoda ui`**: `/api/decisions` (`Atlas.decisions`, the same timeline plus its Mermaid
+  text; it needs no index), a page at `#/d` (records grouped by date, status, chosen option, relations both
+  ways with one-sided ones dashed, the file, warnings and problems, then the Mermaid text with a copy button as
+  on the wiki pages; no renderer is loaded), a "Decision records" entry on the start page when any exist, and
+  the same timeline in `ui --export` (answered offline). The page writes nothing.
+- **MCP**: `decision_record` (full profile, as before; not in the core profile) gets the
+  actions `supersede` (`decision_id` = the record that replaces, `supersedes` = the one replaced) and `link`
+  (`decision_id`, `link: "KIND ADR-N"`, split at the last space so a kind of two words such as `amended by` or
+  `relates to` is read); both need `user_statement`, like `record`, `guard`, `accept` and
+  `waive`. No new tool; the core menu is unchanged. The full-profile instructions now say "never record, accept,
+  waive, supersede or link without the user's own words".
+- **The generated block** of a record (between the `verinoda:generated` markers) lists `supersedes`,
+  `superseded by` and each link, so a reader of the Markdown sees them.
+- `decide toc --json` prints an error as JSON on stdout too (`{"status": "error", "exit": 2, ...}`), as
+  `decide check --json` does.
+- **No claims.** The timeline states what the record files say (front matter), not facts about code, like
+  `decide list`; dates are what each record states.
+
+### 71.3 Measured
+
+Not benchmarked: the timeline reads the decision files once (`load_all`), as `decide list` does. Tests: 15 in
+`tests/test_decide_lifecycle.py` (about 1 minute on this machine, each on a fresh git repository).
+
+### 71.4 Not done
+
+- The `decisions` log table has no `links` column (schema unchanged): a `link` event is logged with the record's
+  state and the file's hash, and the link itself lives in the file. Adding the column is a schema change.
+- A hand-written ADR's own date is not read: an imported record's `date` is the day of the import.
+- No unlink command; a link is removed by editing both records (a one-sided leftover is then warned about).
+- The timeline page shows the Mermaid text, not a drawn graph (the page loads no third-party code).
+- `decide toc --write` writes one page, not a static site (Log4brains builds a site); the page is plain
+  Markdown that GitHub and GitLab render, Mermaid included.
+- One record supersedes at most one record (the front matter's single `supersedes`); a split or merge of
+  decisions is expressed with links.
+
+### 71.5 Tests
+
+`tests/test_decide_lifecycle.py`: supersede updates and logs both records and leaves no warning; its refusals
+(itself, missing, already superseded, a superseded or proposed record as the new one, a second `supersedes`,
+supersede each other); an imported ADR's document is never edited; link and its reverse, refusals, two kinds
+on one pair, four `link` events; one-sided relations and unknown kinds are warnings and do not change
+enforcement, and `supersede` completes a one-sided relation from either record (and refuses one both state); a links entry
+without a text `kind` or `id` (missing, a list, a number) is a problem of its record only and `decide check`,
+`list` and `toc` still run; MCP `link` reads `amended by` and `relates to`; a title with `[` and a folder with a
+space still give a working Markdown link, and a record with an unreadable id gets a valid Mermaid node; the timeline's order by date, undated last, each
+relation once, the Mermaid and Markdown output (escaped `|` and quotes, relative links, reverse labels);
+`--write` refuses a file it did not write, paths outside the repository and non-Markdown names, rewrites its
+own, and its file is neither a record nor an unrecorded ADR; the CLI (`supersede`, `link`, `toc`, `toc --json`,
+`toc --write`, `list` showing links, `toc --json` errors as JSON); MCP `supersede` and `link` need the user's words; `Atlas.decisions`
+without an index and the page's `#/d` route and offline answer. `tests/test_ui.py`: `/api/decisions` is served
+and the export carries the timeline. `tests/test_mcp.py`: the `decision_record` argument set includes `link`.
+
 ## Sources
 
 - **Retrieval:**

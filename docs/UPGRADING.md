@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D97)
+## Upgrading from 0.3.2 (D60-D98)
 
 ### D63: Running a project's own tests safely
 
@@ -409,6 +409,18 @@ The MCP tool count does not change (no new tool), so UPGRADING's tool count need
 records the change makes stale, each with a status, the changed line and what it cites, plus a "Made stale by
 the change" section in the text. Nothing to do; no new command, no MCP tool count change (UPGRADING's tool
 count stays as it is), no store schema change.
+
+### D98: Decision record lifecycle
+
+`verinoda decide supersede OLD --by NEW` supersedes one existing record by another and updates both;
+`verinoda decide link ADR-N amends ADR-M` links two records and writes the reverse link on the other one;
+`verinoda decide toc` prints a table of contents with a Mermaid graph of the records (`--write
+docs/decisions/README.md` keeps it in a file). `verinoda ui` shows the records on a timeline (`#/d`). Records
+written from now on carry a `links:` line in their front matter; an older Verinoda reads such a record but
+drops the line when it rewrites the record. A record whose `supersedes` or `superseded-by` is not answered by
+the other record now shows a warning in `decide list` (nothing changes in what is enforced). MCP
+`decision_record` has two more actions (`supersede`, `link`) and one more argument (`link`); the tool count is
+unchanged, so UPGRADING's tool count needs no change.
 
 ### D60-D62
 
