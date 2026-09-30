@@ -97,8 +97,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 8.1 | **Differential findings** | Findings split into introduced, fixed and preexisting between base and head | Infer reportdiff, SonarQube new code, CodeScene delta | `review` shows only what the change introduced by default |
-| 8.2 | **Decisions a diff touches** | The decision records whose governed code or guards a diff reaches, without a model | ADRian, ADR-Toolkit | `review` lists the records to read |
-| 8.3 | **Breaking vs compatible API change** | Classify each public API change | Baz | each public change has a verdict with the call sites it breaks |
 | 8.4 | **Change risk score** | One roll-up of a change's findings, reach and test coverage, with the parts shown | Greptile, GitNexus | a score whose inputs are listed; never "safe" |
 | 8.5 | **Path-scoped review rules** | Rule files per directory (like BUGBOT.md), AGENTS.md and CLAUDE.md read as rules; off, warning and error modes | Cursor Bugbot, Greptile, CodeRabbit | a rule under `src/api/` applies only to changes there |
 | 8.6 | **Incremental re-review** | Review only commits since the last review, with repeated findings removed | Bugbot, Ellipsis | a second `review` shows only new findings |
@@ -151,7 +149,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 13.1 | **Hooks on the agent's own tool calls** | PreToolUse and PostToolUse hooks add graph context to the agent's Grep and Read in Claude Code, Codex and Cursor | GitNexus, Codanna, CodeGraph | a Grep in Claude Code returns the matching symbols' callers without a Verinoda call |
-| 13.2 | **MCP prompts** | Ready workflows: review, onboarding, debug, pre-merge | code-review-graph | listed by `prompts/list` |
 | 13.3 | **Installers for more agents** | Cursor, Gemini CLI, GitHub Copilot, Kiro, Aider, Continue and others | Graphify | `setup --agents all` registers each one found |
 | 13.4 | **Package existence and slopsquatting check (opt-in)** | A new dependency checked against its registry: exists, age, downloads, malware signals | Socket MCP, Endor Labs | `check` flags a dependency name the registry does not have |
 | 13.5 | **Bisect over the debug ledger's attempts** | Find which recorded attempt or agent step broke the tests | agent-blackbox, culprit | `debug bisect --attempts` |
@@ -180,7 +177,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 16.3 | **Symbol exists in a version and namespace** | "Does this method exist in 1.21.4 Mojmap?" | minecraft-modding-mcp | `api` answers per version |
 | 16.4 | **Version diff for porting (opt-in)** | Class, member and registry changes between two game versions; breaking changes that touch the project | minecraft-dev-mcp, ModLens primers | `verinoda port 1.21.4 1.21.5` lists the project's sites that break |
 | 16.5 | **Third-party mod jars (opt-in)** | A dependency mod's metadata, entry points, Mixin configs and decompiled code | minecraft-dev-mcp, ModLens | `api` reads a dependency mod's class |
-| 16.6 | **Missing dependencies and pack collisions** | Missing mod dependencies, compatibility pre-flight, asset and datapack collisions across mods | ModLens | `datapack` reports a collision with both sources |
 | 16.7 | **Vanilla registry and data lookup (opt-in)** | Blocks, items, entities, vanilla tags, recipes and commands of the version | ModLens, misode/mcmeta | a datapack id is told apart from a typo |
 
 ## 17 - Minecraft validators
