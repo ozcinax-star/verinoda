@@ -180,6 +180,9 @@ class Atlas:
     def impact(self, nid: str, depth: int = 3, *, tests: bool = True) -> dict:
         return self.snapshot().impact(nid, depth, tests=tests)
 
+    def butterfly(self, nid: str, mode: str | None = None, depth: int = 2, *, tests: bool = True) -> dict:
+        return self.snapshot().butterfly(nid, mode, depth, tests=tests)
+
     def answer(self, question: str) -> dict:
         return self.snapshot().answer(question)
 
@@ -196,6 +199,14 @@ class Atlas:
 
     def user_notes(self) -> dict:
         return {"notes": self.snapshot().user_notes()}
+
+    def decisions(self) -> dict:
+        """The decision records by date with their relations and a Mermaid graph (read from the files; the
+        index is not needed)."""
+        from verinoda import decisions as dm
+
+        tl = dm.timeline(self.repo)
+        return {**tl, "mermaid": dm.mermaid(tl) if tl["records"] else ""}
 
     def delete_user_note(self, subject: str) -> dict:
         """Remove the note on ``subject``, whatever became of its code (a note whose symbol is gone)."""
@@ -875,6 +886,24 @@ class Snapshot:
                 via[u] = (v, "registers (callback)" if rel == "registers" else rel, _at(data))
                 heapq.heappush(heap, (d + 1, u))
         return False
+
+    def butterfly(self, nid: str, mode: str | None = None, depth: int = 2, *, tests: bool = True) -> dict:
+        """Callers and callees of a note, or the types it extends and those that extend it
+        (:mod:`verinoda.butterfly`), each item with the note it opens."""
+        from verinoda import butterfly
+
+        g = self.g
+        if nid not in g.G or self.kind(nid) in HIDDEN_KINDS or self.kind(nid) in ("file", "doc"):
+            raise KeyError(f"no symbol note {nid!r}")
+        res = butterfly.butterfly(g, nid, mode=mode, depth=depth, tests=tests, is_test=_is_test,
+                                  keep=lambda n: self.kind(n) != "comment")
+        for side in res["sides"]:
+            for it in side["items"]:
+                it.update(self.brief(it["id"]))
+                it["via_title"] = self.title(it["via"])
+        res["title"] = self.title(nid)
+        res["kind"] = self.kind(nid)
+        return res
 
     def path(self, src: str, dst: str) -> dict:
         """The shortest chain of uses from ``src`` to ``dst`` (it calls / imports / extends / names the

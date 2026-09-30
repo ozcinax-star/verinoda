@@ -59,7 +59,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from verinoda import anchors, callsite, entail, index, retrieval, testcode, verdict_gate
+from verinoda import anchors, callsite, entail, history, index, retrieval, testcode, verdict_gate
 from verinoda import architecture_map as am
 from verinoda import evidence as evmod
 from verinoda import question_plan as qp
@@ -1841,6 +1841,7 @@ def _h_why(ctx: _Ctx, sub: _Sub) -> None:
     files = {i["file"] for i in sub.items}
     terms = _decision_terms(ctx, sub)
     found = False
+    why_not = None   # why the symbol's commits could not be read, for the unknown
     for dec in hv["decisions"]:
         text = "\n".join(am._read(repo, dec["doc"]))
         folded = tn.fold_tr(text).lower()
@@ -1880,21 +1881,29 @@ def _h_why(ctx: _Ctx, sub: _Sub) -> None:
         if not sp or not hv["is_git"] or not ctx.budget.ok:
             continue
         a, b = sp
-        log = git(repo, "log", "-n3", f"-L{a},{b}:{it['file']}", "--no-patch", "--format=%H%x1f%aI%x1f%s")
+        if it["file"] in (rec.stale_files or ()):   # the index's lines are not the file's any more
+            why_not = f"{it['file']} changed since the index: its commits were not read"
+            continue
+        # the commits whose diffs changed the symbol's lines, each message quoted whole (subject and body):
+        # the author's own words are the "why" evidence, nothing is summarised
+        try:
+            got = history.symbol_commits(repo, it["file"], a, b, limit=3)
+        except ValueError as exc:
+            got = {"commits": [], "note": str(exc)}
         ctx.step("git_log_L", f"{it['file']}:{a}-{b}")
-        for line in (log or "").splitlines():
-            if "\x1f" not in line:
-                continue
-            sha, date, subj = line.split("\x1f", 2)
-            ev = {"source_type": "git_history", "locator": f"commit {sha}", "commit_sha": sha,
-                  "content_hash": evmod.content_hash(subj), "excerpt": subj, "meta": {"date": date}}
-            if rec.claim(f"`{it['symbol']}` lines {a}-{b} were changed in {sha[:10]} ({date[:10]}): {subj}",
-                         kind="history", status="primary_source_verified", evidence=[(ev, "supports")],
-                         subjects=[it["file"]]) is not None:
+        unc = [got["note"]] if got.get("note") else []
+        if not got.get("commits") and got.get("note"):
+            why_not = got["note"]
+        for c in got.get("commits") or []:
+            if rec.claim(f"`{it['symbol']}` lines {a}-{b} were changed in {c['commit'][:10]} ({c['date'][:10]}): "
+                         f"{c['subject']}", kind="history", status="primary_source_verified",
+                         evidence=[(c["evidence"], "supports")], subjects=[it["file"]],
+                         uncertainties=unc or None) is not None:
                 found = True
     if not found and not rec.skipped["why"]:
         _unknown(ctx, sub, {"question": sub.sq.get("text") or SUBQUESTIONS["why"],
-                            "why": "no decision record or commit message explains it",
+                            "why": "no decision record or commit message explains it"
+                                   + (f" ({why_not})" if why_not else ""),
                             "next_step": "search issue tracker/PR discussion; or `verinoda research <reference>` "
                                          "if the design follows an external reference"})
     elif found:

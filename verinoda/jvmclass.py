@@ -77,9 +77,9 @@ def _generic_return(sig: str | None) -> bool:
     return sig[sig.rindex(")") + 1:].lstrip("[").startswith("T")
 
 
-def parse_class(b: bytes) -> dict | None:
-    """``{"name", "super", "ifaces", "flags", "methods": {name: [[nparams, flags, ret, param types], ...]},
-    "fields": {name: [type, flags]}, "inner": {simple name: binary name}}`` of a class file, or None."""
+def _constant_pool(b: bytes) -> tuple[list, int] | None:
+    """The constant pool of a class file (UTF-8 strings, class references as ``("class", index)``, ints) and
+    the offset just past it, or None when ``b`` is not a class file this reader knows."""
     if b[:4] != b"\xca\xfe\xba\xbe":
         return None
     u2 = lambda o: (b[o] << 8) | b[o + 1]
@@ -110,6 +110,47 @@ def parse_class(b: bytes) -> dict | None:
         else:
             return None
         k += 1
+    return cp, i
+
+
+def class_members(b: bytes) -> dict | None:
+    """``{"name", "fields": [[name, descriptor, flags]], "methods": [[name, descriptor, flags]]}``: every member
+    of a class file as written, synthetic and bridge ones included, with its full descriptor (what an access
+    widener or transformer entry names), or None."""
+    try:
+        got = _constant_pool(b)
+        if got is None:
+            return None
+        cp, i = got
+        u2 = lambda o: (b[o] << 8) | b[o + 1]
+        this = cp[u2(i + 2)]
+        out: dict = {"name": cp[this[1]] if isinstance(this, tuple) else None}
+        i += 6
+        i += 2 + 2 * u2(i)   # the interfaces
+        for kind in ("fields", "methods"):
+            rows = []
+            count = u2(i)
+            i += 2
+            for _ in range(count):
+                acc, nm, desc, n_attr = u2(i), u2(i + 2), u2(i + 4), u2(i + 6)
+                i += 8
+                for _ in range(n_attr):
+                    i += 6 + struct.unpack(">I", b[i + 2:i + 6])[0]
+                rows.append([cp[nm], cp[desc], acc])
+            out[kind] = rows
+        return out
+    except (IndexError, struct.error, TypeError):
+        return None
+
+
+def parse_class(b: bytes) -> dict | None:
+    """``{"name", "super", "ifaces", "flags", "methods": {name: [[nparams, flags, ret, param types], ...]},
+    "fields": {name: [type, flags]}, "inner": {simple name: binary name}}`` of a class file, or None."""
+    got = _constant_pool(b)
+    if got is None:
+        return None
+    cp, i = got
+    u2 = lambda o: (b[o] << 8) | b[o + 1]
 
     def cname(idx: int) -> str | None:
         ref = cp[idx] if idx else None

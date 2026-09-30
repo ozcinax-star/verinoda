@@ -25,6 +25,11 @@ relative to it (``--relative``), as the index's paths are.
 argument that reaches it is one ``--option=value`` word or a path after ``--``, and a revision is checked to name
 a commit first.
 
+:func:`symbol_history` answers why a symbol is the way it is from git: the commits whose diffs changed its lines
+(``git log -L`` from HEAD; working-tree lines that differ from HEAD are mapped to HEAD's first), each a claim quoting
+the commit message, subject and body, as the author wrote it. :func:`symbol_commits` is the reading alone; the
+why-questions of ``analyze`` use it.
+
 :func:`co_changes` reads which files changed in the same commits as a set of files (temporal coupling):
 ``map --view impact`` lists those the graph does not link to the change as ``strong_inference`` claims with their
 commit counts and the shared commits as evidence.
@@ -577,6 +582,199 @@ def _pair_ev(c: dict, target: str, other: str) -> dict:
     return ev
 
 
+# -- the commits that changed a symbol -----------------------------------------------------------------------
+
+MAX_BODY_LINES = 12   # lines of a commit message body quoted
+_SPAN = re.compile(r"^(?P<path>.+):(?P<a>\d+)-(?P<b>\d+)$")
+# trailers that name people or tooling, not reasons ("Reason:", "Note:" or "See:" lines are kept)
+_TRAILER = re.compile(r"(?i)^(signed-off-by|co-authored-by|reviewed-by|acked-by|tested-by|reported-by|suggested-by"
+                      r"|helped-by|cc|change-id|git-svn-id): \S")
+
+
+def _head_lines(repo: Path, rel: str, a: int, b: int) -> tuple[tuple[int, int] | None, str | None]:
+    """Lines ``a``-``b`` of the working-tree file ``rel`` as HEAD's lines (``git log -L`` starts from HEAD),
+    and a note when they had to be mapped. ``(None, why)`` when HEAD has no such file or none of the lines."""
+    head = _git(repo, "show", f"HEAD:./{rel}")
+    if head is None:
+        return None, f"{rel} is not in HEAD (not committed yet)"
+    head = head.replace("\r\n", "\n")
+    n_head = len(head.split("\n")) - (1 if head.endswith("\n") else 0)
+    if not (repo / rel).exists():
+        if a > n_head:
+            return None, f"{rel} is not in the working tree and has {n_head} lines at HEAD"
+        return (a, min(b, n_head)), f"{rel} is not in the working tree: lines {a}-{min(b, n_head)} are HEAD's"
+    try:
+        cur = (repo / rel).read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
+    except OSError:
+        return None, f"{rel} cannot be read"
+    n_cur = len(cur.split("\n")) - (1 if cur.endswith("\n") else 0)
+    if a > n_cur:
+        raise ValueError(f"{rel} has {n_cur} lines; the range starts at line {a}")
+    b = min(b, n_cur)
+    if head == cur:
+        return (a, b), None
+    from verinoda.hotspots import _line_map
+
+    m = _line_map(head, cur)
+    old = [i + 1 for i, ln in enumerate(m) if a <= ln <= b]
+    if not old:
+        return None, f"lines {a}-{b} of {rel} are all new since HEAD (not committed yet)"
+    return (min(old), max(old)), (f"{rel} differs from HEAD: lines {a}-{b} were mapped to HEAD's lines "
+                                  f"{min(old)}-{max(old)} by a text diff")
+
+
+def symbol_commits(repo: Path, rel: str, a: int, b: int, *, limit: int = 10) -> dict:
+    """The commits reachable from HEAD that changed lines ``a``-``b`` of ``rel`` (working-tree lines), newest
+    first, as git's ``log -L`` follows the range back through the file's history, each with its whole message
+    (subject, and the body up to :data:`MAX_BODY_LINES` lines) and ``git_history`` evidence quoting it.
+    ``{"status": "found" | "not_found" | "not_committed" | "not_git", "commits", "head_lines", "note",
+    "truncated", "shallow"}``."""
+    repo = Path(repo)
+    limit = max(1, min(int(limit), MAX_COMMITS))
+    if not _is_git(repo):
+        return _not_git("symbol", repo)
+    span, note = _head_lines(repo, rel, a, b)
+    if span is None:
+        return {"status": "not_committed", "commits": [], "note": note}
+    fmt = f"--format={_HDR}%H%x1f%an%x1f%aI%x1f%P%x1f%B"
+    out = _git(repo, "log", f"-n{limit + 1}", f"-L{span[0]},{span[1]}:{rel}", "--no-patch", "--no-ext-diff",
+               "--no-textconv", "--no-color", fmt)
+    if out is None:
+        raise ValueError(f"git log -L could not read {rel}:{span[0]}-{span[1]} at HEAD (or it took over "
+                         f"{_GIT_TIMEOUT} s)")
+    found: list[dict] = []
+    for block in out.split(_HDR)[1:]:
+        sha, author, date, parents, msg = (block.split("\x1f", 4) + [""] * 5)[:5]
+        lines = msg.strip("\n").splitlines()
+        subject = lines[0].strip() if lines else ""
+        body = lines[1:]
+        while body and not body[0].strip():
+            body.pop(0)
+        while body and not body[-1].strip():
+            body.pop()
+        # a closing block of people trailers (Signed-off-by:, Co-Authored-By:) names people, not reasons
+        k = len(body)
+        while k and _TRAILER.match(body[k - 1]):
+            k -= 1
+        if k < len(body) and (k == 0 or not body[k - 1].strip()):
+            body = body[:k]
+            while body and not body[-1].strip():
+                body.pop()
+        c = {"commit": sha.strip(), "date": date, "author": author, "subject": subject,
+             "body": "\n".join(body[:MAX_BODY_LINES]), "body_truncated": len(body) > MAX_BODY_LINES,
+             "merge": len(parents.split()) > 1}
+        quote = subject + ("\n\n" + c["body"] if c["body"] else "")
+        c["evidence"] = _ev(c, path=rel, excerpt=quote)
+        c["evidence"]["locator"] = f"commit {c['commit']} {rel}"
+        c["evidence"]["meta"]["head_lines"] = list(span)
+        found.append(c)
+    return {"status": "found" if found else "not_found", "commits": found[:limit], "truncated": len(found) > limit,
+            "head_lines": list(span), "note": note, "shallow": _shallow(repo)}
+
+
+def _project_rel(repo: Path, path: str) -> str:
+    """``path`` (relative to the project, or absolute) as a '/'-separated path inside the project; ValueError
+    for one outside it (the history read is the project's)."""
+    p = Path(path.replace("\\", "/"))
+    root = repo.resolve()
+    full = (p if p.is_absolute() else root / p).resolve()
+    try:
+        rel = full.relative_to(root).as_posix()
+    except ValueError:
+        raise ValueError(f"{path} is outside the project {repo}") from None
+    if rel in ("", ".") or rel.startswith(".git/"):
+        raise ValueError(f"{path} is not a file of the project")
+    return rel
+
+
+def symbol_history(repo: Path, g, target: str, *, stale=(), limit: int = 10) -> dict:
+    """Why a symbol is the way it is, from git: the commits that changed its lines, newest first, each a
+    ``history`` claim quoting the commit message (git's own words, no summary). ``target`` is a name the index
+    resolves exactly (``Class.method``, ``path/file.py::name``, a node id) or ``path:A-B``; a name that does not
+    resolve to one symbol is answered with its candidates, never replaced by a similar one."""
+    from verinoda import naming
+
+    repo = Path(repo)
+    base = {"kind": "symbol", "target": target}
+    t = _word(target, "target")
+    if not t:
+        raise ValueError("target: a symbol or path:A-B is needed")
+    m = _SPAN.match(t)
+    if m:
+        rel, a, b = _project_rel(repo, m.group("path")), int(m.group("a")), int(m.group("b"))
+        if a < 1 or b < a:
+            raise ValueError(f"{t}: the line range must be A-B with 1 <= A <= B")
+        label = f"{rel}:{a}-{b}"
+    else:
+        if g is None:
+            return {**base, "status": "unresolved", "note": "no index: run `verinoda scan`, or give path:A-B"}
+        res = naming.resolve(g, t, stale=stale)
+        if not res.exact:
+            return {**base, "status": "ambiguous" if res.status == naming.AMBIGUOUS else "unresolved",
+                    "note": res.note or f"{t!r} names no one symbol of the index", "candidates": res.rows(g)}
+        sp = g.span(res.node)
+        rel = g.file(res.node)
+        if not sp or not rel:
+            return {**base, "status": "unresolved", "note": f"{g.label(res.node)} has no line span in the index"}
+        if rel in set(stale or ()):   # the index's lines are the file's as it was scanned, not as it is now
+            return {**base, "status": "stale_index", "symbol": g.label(res.node), "file": rel,
+                    "note": f"{rel} changed since the index: its lines for {g.label(res.node)} may have moved; "
+                            "run `verinoda update` or give path:A-B"}
+        (a, b), label = sp, g.label(res.node)
+        if res.note:
+            base["resolution_note"] = res.note
+    got = symbol_commits(repo, rel, a, b, limit=limit)
+    out = {**base, **got, "symbol": label, "file": rel, "lines": [a, b]}
+    if got["status"] in ("not_git", "not_committed"):
+        return out
+    unc = [got["note"]] if got.get("note") else []
+    claims = []
+    for c in got["commits"]:
+        text = f"`{label}` ({rel}:{a}-{b}) was changed in {c['commit'][:10]} ({c['date'][:10]}, {c['author']}): " \
+               f"{c['subject']}"
+        claims.append({"kind": "history", "status": "primary_source_verified", "text": text,
+                       "evidence": [c["evidence"]], "subjects": [rel], "uncertainties": list(unc)})
+    out["claims"] = claims
+    limits = ["history reachable from HEAD only; git log -L follows the lines within the file (a symbol moved "
+              "from another file starts where it arrived)",
+              "a commit message states the author's intent when committing, not the current behaviour"]
+    if got.get("shallow"):
+        limits.append("a shallow clone: older commits are missing")
+    if project_prefix(repo):
+        limits.append(f"only the project's folder {project_prefix(repo)!r} of its git repository")
+    out["coverage"] = {"method": "git log -L over the symbol's lines at HEAD, newest first", "limits": limits}
+    if got["status"] == "not_found":
+        out["unknowns"] = [{"why": "no commit reachable from HEAD changed these lines",
+                            "next_step": "`verinoda history text` with a line of the symbol"}]
+    return out
+
+
+def _render_symbol(res: dict) -> str:
+    if res.get("status") in ("unresolved", "ambiguous", "stale_index"):
+        out = [f"{res['target']}: {res['status']} - {res.get('note')}"]
+        out += [f"  candidate: {c['label']} ({c.get('at')})" for c in res.get("candidates") or []]
+        return "\n".join(out)
+    where = f"{res['file']}:{res['lines'][0]}-{res['lines'][1]}"
+    out = [(where if res["symbol"] == where else f"{res['symbol']} ({where})") + ":"]
+    for key in ("resolution_note", "note"):
+        if res.get(key):
+            out.append(f"  note: {res[key]}")
+    if res.get("shallow"):
+        out.append("  note: a shallow clone: older commits are missing")
+    if res["status"] == "not_committed":
+        return "\n".join(out)
+    if not res.get("commits"):
+        out.append("  no commit reachable from HEAD changed these lines")
+    for c in res.get("commits") or []:
+        out.append(f"  {_short(c)}" + ("  (merge)" if c.get("merge") else ""))
+        out += [f"    | {ln}" for ln in c["body"].splitlines()]
+        if c.get("body_truncated"):
+            out.append("    | ...")
+    if res.get("truncated"):
+        out.append("  (more: raise --limit)")
+    return "\n".join(out)
+
+
 # -- rendering -----------------------------------------------------------------------------------------------
 
 def _short(c: dict) -> str:
@@ -610,6 +808,8 @@ def render(res: dict) -> str:
         if res.get("truncated"):
             out.append(f"  (cut at {MAX_EVENTS} commits: narrow with --path)")
         return "\n".join(out)
+    if kind == "symbol":
+        return _render_symbol(res)
     if kind == "commits":
         f = res.get("filters") or {}
         out = ["commits" + (" where " + ", ".join(f"{k}={v!r}" for k, v in f.items()) if f else "") + ":"]

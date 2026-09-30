@@ -129,9 +129,9 @@ VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
 NETWORK_MODES = ("off", "cache", "on")
 QUERY_FORMATS = ("text", "json")
-DECISION_ACTIONS = ("list", "record", "import", "guard", "accept", "waive", "answer")
+DECISION_ACTIONS = ("list", "record", "import", "guard", "accept", "waive", "supersede", "link", "answer")
 # what changes what is enforced, and the user's answers to a brief: the user's own words
-DECISION_NEEDS_USER = ("record", "guard", "accept", "waive", "answer")
+DECISION_NEEDS_USER = ("record", "guard", "accept", "waive", "supersede", "link", "answer")
 DEBUG_KINDS = ("fix", "probe", "rerun", "differential")
 DEBUG_STRATEGIES = ("differential", "bisect", "rerun", "observe")
 # analyze: what the agent reads first and what is cut last (the interpretation and the per-sub-question verdicts)
@@ -1009,21 +1009,31 @@ class AtlasTools:
     def history_search(self, text: str | None = None, regex: bool = False, message: str | None = None,
                        author: str | None = None, path: str | None = None, since: str | None = None,
                        until: str | None = None, diff: str | None = None, base: str | None = None,
-                       head: str | None = None, limit: int = 20) -> dict:
+                       head: str | None = None, limit: int = 20, symbol: str | None = None) -> dict:
         def go():
             from verinoda import history
 
-            # three modes; a parameter of another mode is an error, not silently dropped
+            # four modes; a parameter of another mode is an error, not silently dropped
             given = {k for k, v in (("text", text), ("message", message), ("author", author), ("since", since),
-                                    ("until", until), ("diff", diff), ("base", base), ("head", head))
+                                    ("until", until), ("diff", diff), ("base", base), ("head", head),
+                                    ("symbol", symbol), ("path", path))
                      if _opt_text(v)} | ({"regex"} if regex else set())
-            mode, own = (("base", {"base", "head"}) if "base" in given else
-                         ("text", {"text", "regex"}) if "text" in given else
-                         ("commit search", {"message", "author", "since", "until", "diff"}))
+            mode, own = (("symbol", {"symbol"}) if "symbol" in given else
+                         ("base", {"base", "head", "path"}) if "base" in given else
+                         ("text", {"text", "regex", "path"}) if "text" in given else
+                         ("commit search", {"message", "author", "since", "until", "diff", "path"}))
             if given - own:
                 raise ValueError(f"{', '.join(sorted(given - own))}: not used with {mode} (history_search has "
-                                 "three modes: text (+regex), base (+head), or the commit filters; path goes with "
-                                 "any of them)")
+                                 "four modes: symbol, text (+regex), base (+head), or the commit filters; path goes "
+                                 "with the last three)")
+            if isinstance(symbol, str) and symbol and not symbol.strip():
+                raise ValueError("symbol is empty: pass a name or path:A-B")
+            if _opt_text(symbol):
+                t = _opt_text(symbol)
+                g = stale = None
+                if not history._SPAN.match(t):
+                    g, stale = self._graph(), self._freshness().get("files") or ()
+                return history.symbol_history(self.repo, g, t, stale=stale or (), limit=_clamp(limit, 1, 100, "limit"))
             if _opt_text(base):
                 return history.compare(self.repo, base, _opt_text(head) or "HEAD", path=_opt_text(path))
             if _opt_text(text):
@@ -1092,10 +1102,11 @@ class AtlasTools:
     # -- question understanding -----------------------------------------------------
     def change_review(self, base: str | None = None, staged: bool = False, targets: list[str] | None = None,
                       change: str | None = None, concerns: list[str] | None = None, run_tests: bool = False,
-                      observe: bool = False, max_chars: int = 6000) -> dict:
+                      observe: bool = False, max_chars: int = 6000, findings: str = "introduced") -> dict:
         def go():
             from verinoda import review as rv
 
+            fs = _choice(findings, rv.FINDINGS_SHOWN, "findings")
             b = _opt_text(base)
             tg = _str_list(targets, "targets")
             ch = _choice(change, rv.PLANNED_KINDS, "change") if change is not None else None
@@ -1115,7 +1126,7 @@ class AtlasTools:
                     res = rv.review(self.repo, store=st, graph=self._graph(), base=b, staged=bool(staged),
                                     targets=tg or None, change=ch or ("body" if tg else None), concerns=cs,
                                     run_tests=bool(run_tests), observe=bool(observe),
-                                    max_chars=_clamp(max_chars, 500, 50_000, "max_chars"))
+                                    max_chars=_clamp(max_chars, 500, 50_000, "max_chars"), findings=fs)
                 except ValueError as exc:
                     raise ToolFailure("invalid_argument", str(exc)[:600], "base is a git revision such as HEAD~1; "
                                       "targets are 'path/file.py' or 'path/file.py::Qual.name'") from None
@@ -1123,7 +1134,8 @@ class AtlasTools:
             return res
         return self._run("change_review", go, need="graph",
                          keep=("summary", "exit", "counts", "concerns", "unknown", "read_first", "tests",
-                               "concerns_checked", "changes", "api_changes", "decisions"),
+                               "concerns_checked", "changes", "api_changes", "decisions", "differential",
+                               "made_stale"),
                          first=("dependents", "binding_readers", "skipped"))
 
     def question_plan_draft(self, question: str) -> dict:
@@ -1390,11 +1402,11 @@ class AtlasTools:
                          keep=("status", "summary", "exit", "exit_because", "incomplete", "not_checked", "env",
                                "unknown_summary"))
 
-    def api_members(self, target: str, env: str | None = None, private: bool = False) -> dict:
+    def api_members(self, target: str, env: str | None = None, private: bool = False, docs: bool = False) -> dict:
         def go():
             codecheck = self._optional("verinoda.codecheck")
             return codecheck.api(self.repo, _text(target, "target"), env=_opt_text(env) or "auto",
-                                 private=bool(private), trust_env=False)
+                                 private=bool(private), trust_env=False, docs=bool(docs))
         return self._run("api_members", go, first=("members",))
 
     def runtime_observe(self, test_ids: list[str] | None = None, symbols: list[str] | None = None,
@@ -1567,6 +1579,7 @@ class AtlasTools:
                         rationale: str | None = None, title: str | None = None, brief_id: str | None = None,
                         guards: list[str] | None = None, governs: list[str] | None = None,
                         revisit_when: list[str] | None = None, supersedes: str | None = None,
+                        link: str | None = None,
                         guard_ids: list[str] | None = None, at: str | None = None, reason: str | None = None,
                         until: str | None = None, document: str | None = None,
                         user_statement: str | None = None, question_id: str | None = None) -> dict:
@@ -1610,6 +1623,14 @@ class AtlasTools:
                         return dm.add_guards(st, self.repo, did, _str_list(guards, "guards"), user_statement=said)
                     if act == "accept":
                         return dm.accept(st, self.repo, did, _str_list(guard_ids, "guard_ids"), user_statement=said)
+                    if act == "supersede":
+                        return dm.supersede(st, self.repo, _text(supersedes, "supersedes"), did, user_statement=said)
+                    if act == "link":
+                        kind, _, target = _text(link, "link").strip().rpartition(" ")  # a kind may be two words
+                        if not kind.strip() or not target.strip():
+                            raise ToolFailure("invalid_argument", "link is 'KIND ADR-N', e.g. 'amends ADR-0002'",
+                                              f"kinds: {', '.join(sorted(dm.REVERSE_LINK))}")
+                        return dm.link(st, self.repo, did, kind, target.strip(), user_statement=said)
                     ids = _str_list(guard_ids, "guard_ids")
                     if len(ids) != 1:
                         raise ToolFailure("invalid_argument", "waive takes exactly one guard id in guard_ids",
@@ -1656,7 +1677,7 @@ class AtlasTools:
                                   ".verinoda/config.json, [decisions] dir in verinoda.toml or "
                                   "[tool.verinoda.decisions] dir in pyproject.toml)")
             note, graph, stale_graph = None, None, None
-            if any(d.enforced and g.get("kind") == "no_edge" and g.get("status") == "accepted"
+            if any(d.enforced and g.get("kind") in dm.EDGE_KINDS and g.get("status") == "accepted"
                    for d in recs for g in d.guards):
                 with self._store() as st:
                     graph = self._graph_for_analysis(st)
@@ -1892,8 +1913,9 @@ GATEWAY_CATALOG: dict[str, str] = {
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
                      "change touches",
     "decision_check": "decision_check {changed_only?: true}: the tree against accepted decision records",
-    "history_search": "history_search {text, regex?, path?}: the commits where text appeared and disappeared; "
-                      "{message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two revisions",
+    "history_search": "history_search {text, regex?, path?}: when text appeared/disappeared; {symbol}: its "
+                      "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two "
+                      "revisions",
 }
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
@@ -1924,8 +1946,8 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - runtime_observe: selected tests under the call tracer. experiment_run: one allowlisted command in a copy.
 - feedback_submit / feedback_process / feedback_resolve: user critique as a hypothesis, verified, resolved.
 - decision_brief: the code's side of a should/which question; no recommendation - ask the user its questions and
-  record each answer (decision_record action='answer'). decision_record: never record, accept or waive without
-  the user's own words (user_statement).
+  record each answer (decision_record action='answer'). decision_record: never record, accept, waive, supersede
+  or link without the user's own words (user_statement).
 - debug_start before the first edit of a bug fix, debug_attempt after every edit; on stop=true stop editing, run
   strategies[0] with debug_strategy and show debug_status. Never say "fixed": the repro passed at tree T in run R.
 - grep_context: what the Grep hook adds (definition, callers, callees of a searched symbol).
@@ -2032,6 +2054,7 @@ DESCRIPTIONS: dict[str, str] = {
         "removed it, each a claim with the commit as evidence and file:line (regex=true: a pattern over changed "
         "lines). Without text: commits by message, author, path, since/until dates and diff content (a regex), "
         "newest first. With base: what head (default HEAD) has that base has not - commits and changed files. "
+        "With symbol (a name or path:A-B): the commits that changed its lines, each message quoted. "
         "Regexes are git's (POSIX extended). A parameter of another mode is an error."),
     "map_view": (
         "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, impact "
@@ -2094,7 +2117,7 @@ DESCRIPTIONS: dict[str, str] = {
         "The real members of a Python module, class or function (dotted target) in the project's environment, "
         "or of a Java class on the build's classpath (access included): name, kind, signature, file:line, "
         "inherited-from, source version; private=true adds '_' "
-        "names. found=false (exit 3) comes with nearest names; found=null ('unknown' / 'not_installed') was "
+        "names; docs=true quotes the installed docstring and README section. found=false (exit 3) comes with nearest names; found=null ('unknown' / 'not_installed') was "
         "not decided; 'unsupported_language' (exit 4): the project's code in another language. Read-only."),
     "runtime_observe": (
         "Run tests in an isolated copy under the call tracer (test_ids, else tests selected for symbols/terms, "
@@ -2133,11 +2156,13 @@ DESCRIPTIONS: dict[str, str] = {
         "Decision records (Markdown with front matter in decisions.dir, logged append-only). action: list | "
         "record (chosen + rationale; optional brief_id, guards, governs, revisit_when, supersedes) | import (a "
         "record for a hand-written ADR, document=path; guards only proposed) | guard (add guards to decision_id) "
-        "| accept (guard_ids) | waive (one guard id, at='path[:line]', reason, until) | answer (the user's answer "
-        "to question_id of brief_id). Guards: 'only_in calls=sqlite3.connect allowed=orders/repository.py', "
-        "'no_edge from=src/main/** to=src/client/**', 'dependency absent=psycopg'; revisit_when: "
-        "'dependency_added=NAME' / 'file_appears=GLOB'. record, guard, accept, waive and answer need "
-        "user_statement, the user's own words verbatim: never decide for the user."),
+        "| accept (guard_ids) | waive (one guard id, at='path[:line]', reason, until) | supersede (decision_id "
+        "replaces supersedes; both records updated) | link (decision_id, link='amends ADR-N'; the reverse link "
+        "is written too) | answer (the user's answer to question_id of brief_id). Guards: 'only_in "
+        "calls=sqlite3.connect allowed=orders/repository.py', 'no_edge from=src/main/** to=src/client/**', "
+        "'layers order=ui/**,core/**', 'allow_edges from=GLOB allowed=GLOB,...', 'public module=GLOB "
+        "api=GLOB,...', 'dependency absent=psycopg'; revisit_when: 'dependency_added=NAME' / 'file_appears=GLOB'. "
+        "All but list and import need user_statement, the user's own words verbatim: never decide for the user."),
     "decision_brief": (
         "What a human needs to decide a should/which/scale question, from the code - never a recommendation: "
         "forces with re-checkable evidence, absences (searched, not found), existing decisions, options with "
@@ -2428,9 +2453,11 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         base: Annotated[OptStr, Field(description="Compare: the base revision (branch, tag, sha).")] = None,
         head: Annotated[OptStr, Field(description="Compare: the other revision (default HEAD).")] = None,
         limit: Annotated[int, Field(description="Commits to list (1-100).")] = 20,
+        symbol: Annotated[OptStr, Field(description="Alone: a symbol or path:A-B; the commits that changed it.")]
+        = None,
     ) -> dict[str, Any]:
         return emit(t.history_search(text=text, regex=regex, message=message, author=author, path=path, since=since,
-                                     until=until, diff=diff, base=base, head=head, limit=limit))
+                                     until=until, diff=diff, base=base, head=head, limit=limit, symbol=symbol))
 
     @register("map_view")
     def map_view(
@@ -2459,9 +2486,12 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         = False,
         observe: Annotated[bool, Field(description="Run them under the call tracer.")] = False,
         max_chars: Annotated[int, Field(description="Budget of read_first in characters (500-50000).")] = 6000,
+        findings: Annotated[Literal["introduced", "all"],
+                            Field(description="introduced: only what the change introduced (preexisting and fixed "
+                                              "under differential); all: preexisting too.")] = "introduced",
     ) -> dict[str, Any]:
         return emit(t.change_review(base=base, staged=staged, targets=targets, change=change, concerns=concerns,
-                                    run_tests=run_tests, observe=observe, max_chars=max_chars))
+                                    run_tests=run_tests, observe=observe, max_chars=max_chars, findings=findings))
 
     @register("question_plan_draft")
     def question_plan_draft(
@@ -2574,8 +2604,9 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
                                                  "(e.g. 'packaging.specifiers.SpecifierSet').")],
         env: EnvArg = None,
         private: Annotated[bool, Field(description="Also list names starting with '_'.")] = False,
+        docs: Annotated[bool, Field(description="Also quote the installed docstring and README section.")] = False,
     ) -> dict[str, Any]:
-        return emit(t.api_members(target, env=env, private=private))
+        return emit(t.api_members(target, env=env, private=private, docs=docs))
 
     @register("runtime_observe")
     def runtime_observe(
@@ -2703,9 +2734,10 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
     @register("decision_record")
     def decision_record(
-        action: Annotated[Literal["list", "record", "import", "guard", "accept", "waive", "answer"],
-                          Field(description="What to do (see the tool description).")],
-        decision_id: Annotated[OptStr, Field(description="ADR-0001 (guard, accept, waive).")] = None,
+        action: Annotated[Literal["list", "record", "import", "guard", "accept", "waive", "supersede", "link",
+                                  "answer"], Field(description="What to do (see the tool description).")],
+        decision_id: Annotated[OptStr, Field(description="ADR-0001 (guard, accept, waive, link; supersede: the "
+                                                         "record that replaces).")] = None,
         chosen: Annotated[OptStr, Field(description="record: the option the user chose.")] = None,
         rationale: Annotated[OptStr, Field(description="record: why, in the user's words.")] = None,
         title: Annotated[OptStr, Field(description="record: a short title.")] = None,
@@ -2715,7 +2747,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
                                                       "review.")] = None,
         revisit_when: Annotated[StrList, Field(description="record: 'dependency_added=NAME' / "
                                                            "'file_appears=GLOB'.")] = None,
-        supersedes: Annotated[OptStr, Field(description="record: the decision this one replaces.")] = None,
+        supersedes: Annotated[OptStr, Field(description="record/supersede: the decision this one replaces.")] = None,
+        link: Annotated[OptStr, Field(description="link: 'KIND ADR-N', e.g. 'amends ADR-0002'.")] = None,
         guard_ids: Annotated[StrList, Field(description="accept: guard ids; waive: exactly one.")] = None,
         at: Annotated[OptStr, Field(description="waive: 'path' or 'path:line' of the excused site.")] = None,
         reason: Annotated[OptStr, Field(description="waive: why the user excuses it.")] = None,
@@ -2728,8 +2761,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     ) -> dict[str, Any]:
         return emit(t.decision_record(action, decision_id=decision_id, chosen=chosen, rationale=rationale, title=title,
                                       brief_id=brief_id, guards=guards, governs=governs, revisit_when=revisit_when,
-                                      supersedes=supersedes, guard_ids=guard_ids, at=at, reason=reason, until=until,
-                                      document=document, user_statement=user_statement,
+                                      supersedes=supersedes, link=link, guard_ids=guard_ids, at=at, reason=reason,
+                                      until=until, document=document, user_statement=user_statement,
                                       question_id=question_id))
 
     @register("decision_check")
@@ -2737,8 +2770,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         base: Annotated[OptStr, Field(description="A git revision (e.g. 'origin/main'): findings in files changed "
                                                   "since it are new/touched, the rest pre-existing.")] = None,
         changed_only: Annotated[bool, Field(description="The same against HEAD (the agent's own changes).")] = False,
-        refresh: Annotated[bool, Field(description="Update a stale index first when a no_edge guard needs "
-                                                   "the graph.")] = True,
+        refresh: Annotated[bool, Field(description="Update a stale index first when an edge guard "
+                                                   "(no_edge, layers, allow_edges, public) needs the graph.")] = True,
     ) -> dict[str, Any]:
         return emit(t.decision_check(base=base, changed_only=changed_only, refresh=refresh))
 

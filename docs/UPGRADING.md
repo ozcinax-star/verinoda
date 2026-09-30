@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D92)
+## Upgrading from 0.3.2 (D60-D100)
 
 ### D63: Running a project's own tests safely
 
@@ -366,6 +366,77 @@ UPGRADING does not change.
 with the change in the last 1,000 commits and that no graph edge links to it, each a `strong_inference` claim with
 its commit count and the shared commits as evidence; `history_coupling` says how many commits were read. No new
 command or MCP tool; the tool counts in UPGRADING do not change.
+
+### D93: Installed-version library docs
+
+`verinoda api NAME --docs` (MCP `api_members` with `docs=true`) also quotes the definition's docstring and the
+section of the installed distribution's README that names it, each with `path:start-end` and the installed
+version, read from the installed files. Answers without the option are unchanged. The MCP tool count is
+unchanged.
+
+### D94: Commit rationale per symbol
+
+New: `verinoda history symbol NAME|path:A-B` (MCP `history_search` with `symbol`) lists the commits that changed
+a symbol's lines, each quoting its message. `analyze`'s why-answers now quote the commit body in the evidence and
+map working-tree lines to HEAD's before asking git; their claim text is unchanged. The MCP tool count is unchanged.
+
+### D95: Architecture rules as code
+
+`decide record --guard` and `decide guard` accept three new guard kinds for architecture rules (D95):
+`layers order=src/ui/**,src/core/**,src/db/**` (top first; no edge from a lower layer up), `allow_edges
+from=GLOB allowed=GLOB,...` (those files use only each other and the allowed ones) and `public module=GLOB
+api=GLOB,...` (outside code reaches the module only through its api files); the last two leave test code
+out unless `scope=all`. `decide check` reports each
+violating edge at its cited line and fails with exit 1, as for `no_edge`. Any glob of an edge guard may be
+`tag:NAME` for a set of globs defined under `[architecture.tags]` in `verinoda.toml` (or
+`[tool.verinoda.architecture.tags]` in `pyproject.toml`). Records written before are unchanged; a record
+using the new kinds is not enforced by an older Verinoda (the kind is reported as unknown). The MCP tool
+count does not change (no new tool), so UPGRADING's tool count needs no edit.
+
+### D96: Differential findings
+
+`verinoda review` / MCP `change_review` now list under `concerns` only the findings the change introduced; findings
+the base version's changed code already had are counted and listed under `differential.preexisting_findings`, and
+findings the change removed under `differential.fixed_findings`. Every finding has a `delta` field. Pass
+`--findings all` (MCP `findings: "all"`) for the previous list, with labels. The exit code follows what is listed:
+a change whose findings were all there before now exits 0. `counts` has two new keys, `preexisting` and `fixed`; `op-on-changed-line` findings carry `op_kind` and
+`io-in-loop` findings `base_had: loop` when the loop did that IO before.
+The MCP tool count does not change (no new tool), so UPGRADING's tool count needs no edit.
+
+### D97: What a merged change made stale
+
+`verinoda review` (and `change_review`) now has a `made_stale` key: the stored claims, notes and decision
+records the change makes stale, each with a status, the changed line and what it cites, plus a "Made stale by
+the change" section in the text. Nothing to do; no new command, no MCP tool count change (UPGRADING's tool
+count stays as it is), no store schema change.
+
+### D98: Decision record lifecycle
+
+`verinoda decide supersede OLD --by NEW` supersedes one existing record by another and updates both;
+`verinoda decide link ADR-N amends ADR-M` links two records and writes the reverse link on the other one;
+`verinoda decide toc` prints a table of contents with a Mermaid graph of the records (`--write
+docs/decisions/README.md` keeps it in a file). `verinoda ui` shows the records on a timeline (`#/d`). Records
+written from now on carry a `links:` line in their front matter; an older Verinoda reads such a record but
+drops the line when it rewrites the record. A record whose `supersedes` or `superseded-by` is not answered by
+the other record now shows a warning in `decide list` (nothing changes in what is enforced). MCP
+`decision_record` has two more actions (`supersede`, `link`) and one more argument (`link`); the tool count is
+unchanged, so UPGRADING's tool count needs no change.
+
+### D99: Butterfly view
+
+`verinoda butterfly NAME` prints a symbol's callers and callees, or a class's inheritance tree, with the
+line of each link; in `verinoda ui` a *Butterfly* button on a function, method or class note shows the
+same around the note. No re-scan needed. The MCP tool count is unchanged (no UPGRADING tool-count
+change).
+
+### D100: Access Widener and Access Transformer
+
+New command `verinoda access-check [FILE ...] [--json]`: every access widener (`.accesswidener`,
+`.classtweaker`) and access transformer (`accesstransformer.cfg`, `*_at.cfg`, the files the mod manifests name)
+entry checked against the class files of the build's classpath (`code_check.classpath` or the Loom build's),
+each with its `path:line`: `exists`, `absent` with the nearest real names, `malformed` or `unknown`. Exit 3 when
+an entry is absent or malformed, 4 when one is unknown, 2 when there is no such file. No MCP change; the tool
+count stays the same.
 
 ### D60-D62
 
