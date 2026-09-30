@@ -122,7 +122,7 @@ EXCERPT_MAX_LINES = 30
 EDGE_CAP = 25
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
-VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles")
+VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
 NETWORK_MODES = ("off", "cache", "on")
@@ -1057,6 +1057,16 @@ class AtlasTools:
                                         "'path/file.py::Name' or a node id; nothing was assumed for it")
                 res.update(freshness.summary(fresh))
                 return res
+            if view == "outline":  # the wiki page tree; the pages named in targets with their Mermaid diagrams
+                from verinoda import diagrams
+
+                # with targets only those pages: the whole tree would crowd their diagrams out of the budget
+                res = diagrams.outline(g, self.repo, pages=tg or None, diagrams=bool(tg), only=bool(tg),
+                                       stale=fresh.get("files") or ())
+                if not tg:
+                    res["next_step"] = "targets=[page id] for a page's Mermaid diagrams and their evidence"
+                res.update(freshness.summary(fresh))
+                return res
             res = am.VIEWS[view](g)
             if tg:
                 res["note"] = f"targets are only used by the impact view; ignored for {view}"
@@ -1848,7 +1858,8 @@ GATEWAY = "run_tool"
 GATEWAY_CATALOG: dict[str, str] = {
     "node_inspect": "node_inspect {name}: one symbol's definition and edges with file:line",
     "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between two symbols",
-    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles, targets?}",
+    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline, "
+                "targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
                   "their evidence re-checked",
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what the "
@@ -1997,8 +2008,9 @@ DESCRIPTIONS: dict[str, str] = {
         "Regexes are git's (POSIX extended). A parameter of another mode is an error."),
     "map_view": (
         "One architecture view: hierarchy, dependencies, dataflow, config, tests, history, impact "
-        "(dependents of targets; default the working-tree changes), or cycles (file dependency cycles and the "
-        "fewest dependencies to cut). 'coverage' states the method and its limits."),
+        "(dependents of targets; default the working-tree changes), cycles (file dependency cycles and the "
+        "fewest dependencies to cut), or outline (the wiki page tree; targets = page ids for their Mermaid "
+        "diagrams). 'coverage' states the method and its limits."),
     "change_review": (
         "What a change touches, by concern: the working tree vs HEAD (base=REV, staged), or planned targets "
         "('path.py[::Name]') + change. Dependents, findings ('no finding' is not 'safe'), tests reaching it, "
@@ -2393,10 +2405,11 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     @register("map_view")
     def map_view(
         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                "cycles"],
+                                "cycles", "outline"],
                         Field(description="Which architecture view to return.")],
-        targets: Annotated[list[str] | None, Field(description="impact view only: changed files or symbols; "
-                                                               "default = git working-tree changes.")] = None,
+        targets: Annotated[list[str] | None, Field(description="impact view: changed files or symbols (default = "
+                                                               "git working-tree changes); outline view: page ids "
+                                                               "whose diagrams to return.")] = None,
     ) -> dict[str, Any]:
         return emit(t.map_view(view, targets=targets))
 
