@@ -3,7 +3,8 @@
 Each memo or reuse is compared with the code it replaced (kept here verbatim as the reference) on real or
 generated inputs: case_ids' file keys, python_facts' import resolution, the deleted-file check, the snapshot's
 file listing handed to the search index and the lexicon, and the receiver sidecar built from the graph data
-the build already holds, reusing the snapshot's stat-cached hashes.
+the build already holds. The sidecar still reads and hashes every file: a rewrite that keeps the size and
+mtime changes its kept sha256, as it did before.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import os
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
 import copy  # noqa: E402
+import hashlib  # noqa: E402
 import json  # noqa: E402
 import shutil  # noqa: E402
 import sqlite3  # noqa: E402
@@ -346,7 +348,7 @@ def test_update_derives_what_listing_again_derived(orders, monkeypatch):
     assert _db_rows(db) == got_db and _lexicon_without_time(repo) == got_lex
 
 
-# -- the receiver sidecar: the build's own graph data, the snapshot's stat-cached hashes ---------------
+# -- the receiver sidecar: the build's own graph data; each file's bytes hashed, never its stat -----------
 
 def test_the_graph_from_data_is_the_graph_load_builds(orders):
     repo, st = orders
@@ -370,33 +372,22 @@ def test_the_sidecar_the_build_writes_is_the_one_a_reload_writes(orders):
     assert sc.read_bytes() == built
 
 
-def test_stat_cached_hashes_give_the_same_sidecar(orders, monkeypatch):
+def test_a_rewrite_that_keeps_size_and_mtime_is_hashed_again_by_the_sidecar(orders):
+    """The sidecar keeps each file's sha256 of its bytes (read and hashed every refresh), never the snapshot's
+    stat-cached hash: a rewrite that keeps the size and the mtime changes the kept sha256 as the baseline's does."""
     repo, st = orders
     workflow.scan(st, repo)
     sc = index_dir(repo) / "receiver_calls.json"
-    trusted = []
-    real_fresh = snapshot._StatCache.fresh
-
-    def fresh(self, rel, stat):
-        hit = real_fresh(self, rel, stat)
-        trusted.append(hit is not None)
-        return hit
-
-    monkeypatch.setattr(snapshot._StatCache, "fresh", fresh)
-    stats = index.refresh_receiver_sidecar(repo)
-    with_cache = sc.read_bytes()
-    assert any(trusted) and stats["files_parsed"] == 0
-    monkeypatch.setattr(snapshot._StatCache, "for_repo", classmethod(lambda cls, repo, store: None))
-    index.refresh_receiver_sidecar(repo)
-    assert sc.read_bytes() == with_cache
-
-    # a changed file: its cached hash is not trusted (or differs), so it is read and parsed again
+    repo_py = repo / "orders" / "repository.py"
+    before = repo_py.stat()
+    raw = repo_py.read_bytes()
+    i = raw.index(b"def ") + 4
+    swapped = raw[:i] + bytes([raw[i] ^ 0x20]) + raw[i + 1:]  # same size, other bytes
+    repo_py.write_bytes(swapped)
+    os.utime(repo_py, ns=(before.st_atime_ns, before.st_mtime_ns))
+    workflow.update(st, repo)  # the snapshot trusts the stat: nothing changed for it
     svc = repo / "orders" / "service.py"
     svc.write_bytes(svc.read_bytes() + b"\n\ndef extra(repo):\n    return repo.save(1)\n")
-    workflow.update(st, repo)
-    after = sc.read_bytes()
-    monkeypatch.undo()
-    sc.unlink()
-    index._PYINFO_CACHE.clear()
-    index.refresh_receiver_sidecar(repo)
-    assert sc.read_bytes() == after
+    workflow.update(st, repo)  # a build: the sidecar is refreshed
+    got = json.loads(sc.read_text(encoding="utf-8"))["files"]["orders/repository.py"]["sha256"]
+    assert got == hashlib.sha256(swapped).hexdigest()

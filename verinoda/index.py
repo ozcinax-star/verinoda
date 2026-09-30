@@ -2549,29 +2549,17 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
     old_files = old.get("files") or {}
     files: dict[str, dict] = {}
     parsed = 0
-    # The snapshot's stat-cached sha256 of each file (atlas.db ``file_stat``, trusted by the snapshot's own
-    # rule: same size and mtime, and the mtime older than the recording by the racy margin): a file whose
-    # cached hash is the one the kept facts were made from is not read and hashed again.
-    from verinoda.snapshot import _StatCache
-
-    stat_cache = _StatCache.for_repo(repo, None) if old_files else None
 
     def facts_for(f: str) -> dict | None:
         nonlocal parsed
         p = repo / f
         try:
-            st = p.stat()
-            key = (str(p), st.st_mtime_ns, st.st_size)  # _stat_key(p), taken before the read as py_file_info does
-            prev = old_files.get(f)
-            if prev and stat_cache is not None:
-                known = stat_cache.fresh(f, st)
-                if known is not None and prev.get("sha256") == known:
-                    files[f] = prev
-                    return prev.get("facts")
+            key = _stat_key(p)  # taken before the read, as py_file_info does
             data = p.read_bytes()
         except OSError:
             return None
         sha = hashlib.sha256(data).hexdigest()
+        prev = old_files.get(f)
         if prev and prev.get("sha256") == sha:
             files[f] = prev
             return prev.get("facts")
