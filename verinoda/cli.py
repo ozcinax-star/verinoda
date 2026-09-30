@@ -1099,6 +1099,8 @@ def cmd_when(args) -> int:
 def cmd_butterfly(args) -> int:
     from verinoda import butterfly, freshness, index
 
+    if not 1 <= args.depth <= butterfly.MAX_DEPTH:
+        raise SystemExit(f"error: --depth is 1-{butterfly.MAX_DEPTH} links")
     repo = _repo(args)
     _need_graph(repo)
     fresh = freshness.check(repo)

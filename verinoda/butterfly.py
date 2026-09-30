@@ -6,11 +6,15 @@ names the node it hangs from (``via``), the link's relation, the ``file:line`` t
 extractor's confidence. Every link is a claim ("A calls B") whose status is the ceiling of an unchecked
 graph edge (:func:`verinoda.graph_export.edge_status`: ``strong_inference`` for an EXTRACTED edge,
 ``weak_inference`` for an INFERRED one, ``unknown`` without a line): graph edges are extractions, never
-verification. A node already shown on a side is not listed again there (a recursive call, a diamond);
-the link that reached it first is the one given.
+verification. A node already shown on a side is not listed again there (a recursive call further out, a
+diamond); the link that reached it first is the one given. A direct recursive call (the centre calls
+itself) is listed once on each side, marked ``recursive``, and not walked further. A method is named with
+its class (``Wisp.spawn``), as ``verinoda when`` names it.
 
 Callers and callees are ``calls`` edges only. Code outside the project (a library class, a builtin) has no
-node of its own to open: it is a leaf, listed only in the inheritance view (``Exception``, ``Runnable``).
+node of its own to open: it is a leaf, listed only in the inheritance view (``Exception``,
+``PathAwareEntity``). A side counts what it left out (``left_out``: test code with ``tests=False``, code
+outside the project in the calls view), so an empty side is not taken for an empty index.
 """
 
 from __future__ import annotations
@@ -35,6 +39,18 @@ def _at(d: dict) -> str | None:
     return f or None
 
 
+def _line(d: dict) -> int:
+    loc = str(d.get("source_location") or "")
+    return int(loc[1:]) if loc.startswith("L") and loc[1:].isdigit() else 0
+
+
+def name(g, n: str) -> str:
+    """``Class.method`` for a method (its owner by the ``method`` edge), else the label."""
+    own = next((u for u, _d in g.in_edges(n, {"method"})), None)
+    base = g.label(n).lstrip(".").removesuffix("()")
+    return f"{g.label(own)}.{base}" if own else g.label(n)
+
+
 def _node_at(g, n: str) -> str | None:
     f, ln = g.file(n), g.line(n)
     return f"{f}:{ln}" if f and ln else f
@@ -51,8 +67,9 @@ def _hidden(g, n: str) -> bool:
 
 
 def default_mode(g, nid: str) -> str:
-    """``inherits`` for a class (it has a supertype or a subtype), else ``calls``."""
-    if g.G.nodes[nid].get("_callable_class") or any(True for _ in g.out_edges(nid, {"inherits", "implements"})) \
+    """``inherits`` for a type with a supertype or a subtype, else ``calls`` (a class with neither opens on
+    its callers)."""
+    if any(True for _ in g.out_edges(nid, {"inherits", "implements"})) \
             or any(True for _ in g.in_edges(nid, {"inherits", "implements"})):
         return "inherits"
     return "calls"
@@ -70,9 +87,11 @@ def butterfly(g, nid: str, *, mode: str | None = None, depth: int = 2, tests: bo
     depth = max(1, min(MAX_DEPTH, int(depth)))
     sides = []
     for key, rels, out in SIDES[mode]:
-        items, truncated = _walk(g, nid, set(rels), out, depth, mode, tests, keep, is_test)
-        sides.append({"key": key, "count": len(items), "truncated": truncated, "items": items})
-    return {"id": nid, "label": g.label(nid), "at": _node_at(g, nid), "mode": mode, "depth": depth, "sides": sides}
+        items, truncated, left_out = _walk(g, nid, set(rels), out, depth, mode, tests, keep, is_test)
+        sides.append({"key": key, "count": len(items), "truncated": truncated, "left_out": left_out,
+                      "items": items})
+    return {"symbol": name(g, nid), "id": nid, "at": _node_at(g, nid), "mode": mode, "depth": depth,
+            "sides": sides}
 
 
 def _walk(g, nid: str, rels: set[str], out: bool, depth: int, mode: str, tests: bool, keep, is_test):
@@ -80,21 +99,27 @@ def _walk(g, nid: str, rels: set[str], out: bool, depth: int, mode: str, tests: 
     items: list[dict] = []
     frontier = [nid]
     truncated = False
+    dropped: dict[str, set[str]] = {"tests": set(), "external": set()}
     for level in range(1, depth + 1):
         nxt = []
         for u in frontier:
             edges = g.out_edges(u, rels) if out else g.in_edges(u, rels)
-            # stated links before inferred ones, then by where they are written
-            for v, d in sorted(edges, key=lambda e: (e[1].get("confidence") != "EXTRACTED", str(_at(e[1]) or ""),
-                                                     e[0])):
-                if v in seen or v not in g.G or _hidden(g, v):
+            # stated links before inferred ones, then by where they are written (file, then line number)
+            for v, d in sorted(edges, key=lambda e: (e[1].get("confidence") != "EXTRACTED",
+                                                     str(e[1].get("source_file") or ""), _line(e[1]), e[0])):
+                recursive = v == u == nid  # the centre calls itself: listed once, not walked
+                if (v in seen and not recursive) or v not in g.G or _hidden(g, v):
+                    continue
+                if recursive and any(it["recursive"] for it in items):
                     continue
                 ext = is_external(g, v)
                 if ext and mode == "calls":
+                    dropped["external"].add(v)
                     continue
                 if keep is not None and not keep(v):
                     continue
                 if not tests and is_test is not None and is_test(g.file(v) or ""):
+                    dropped["tests"].add(v)
                     continue
                 if len(items) >= MAX_SIDE:
                     truncated = True
@@ -104,20 +129,20 @@ def _walk(g, nid: str, rels: set[str], out: bool, depth: int, mode: str, tests: 
                 a, b = (u, v) if out else (v, u)
                 rel = str(d.get("relation"))
                 verb = {"calls": "calls", "inherits": "extends", "implements": "implements"}.get(rel, rel)
-                items.append({"id": v, "label": g.label(v), "at": _node_at(g, v), "depth": level, "via": u,
+                items.append({"id": v, "label": name(g, v), "at": _node_at(g, v), "depth": level, "via": u,
                               "relation": rel, "edge_at": at, "confidence": d.get("confidence"),
-                              "external": ext,
-                              "claim": {"text": f"{g.label(a)} {verb} {g.label(b)}",
+                              "external": ext, "recursive": recursive,
+                              "claim": {"text": f"{name(g, a)} {verb} {name(g, b)}",
                                         "status": edge_status(d.get("confidence"), at),
                                         "evidence": [at] if at else []}})
-                if not ext:
+                if not ext and not recursive:
                     nxt.append(v)
             if truncated:
                 break
         frontier = nxt
         if truncated or not frontier:
             break
-    return items, truncated
+    return items, truncated, {k: len(v) for k, v in dropped.items() if v}
 
 
 def run(g, symbol: str, *, mode: str | None = None, depth: int = 2, stale=None, tests: bool = True) -> dict:
@@ -129,13 +154,14 @@ def run(g, symbol: str, *, mode: str | None = None, depth: int = 2, stale=None, 
     r = naming.resolve(g, symbol, stale=stale)
     if r.status == naming.EXACT and r.node:
         res = butterfly(g, r.node, mode=mode, depth=depth, tests=tests, is_test=is_test_file)
-        return {"status": "found", "query": symbol, **res, **({"resolution_note": r.note} if r.note else {})}
+        return {"status": "found", **res, **({"resolution_note": r.note} if r.note else {})}
     return {"status": "ambiguous" if r.status == naming.AMBIGUOUS else "not_found", "query": symbol,
             "candidates": r.rows(g, 10), "note": r.note}
 
 
 HEADS = {"callers": "called by", "callees": "calls", "supertypes": "extends / implements",
          "subtypes": "extended / implemented by"}
+LEFT_OUT = {"tests": "test code", "external": "outside the project"}
 
 
 def render(res: dict) -> str:
@@ -143,14 +169,16 @@ def render(res: dict) -> str:
         out = [f"{res['query']}: {res['status']}" + (f" ({res['note']})" if res.get("note") else "")]
         out += [f"  - {c['label']} ({c['at']})" for c in res.get("candidates") or []]
         return "\n".join(out)
-    out = [f"{res['label']} ({res['at']}), {res['mode']} view, {res['depth']} link(s) out:"]
+    out = [f"{res['symbol']} ({res['at']}), {res['mode']} view, {res['depth']} link(s) out:"]
     if res.get("resolution_note"):
         out.insert(0, f"note: {res['resolution_note']}")
     for side in res["sides"]:
+        left = side.get("left_out") or {}
         out.append(f"  {HEADS.get(side['key'], side['key'])}: {side['count']}"
-                   + (" (stopped)" if side["truncated"] else ""))
+                   + (" (stopped)" if side["truncated"] else "")
+                   + (f" ({', '.join(f'{n} left out: {LEFT_OUT[k]}' for k, n in left.items())})" if left else ""))
         if not side["items"]:
-            out.append("    none in the index")
+            out.append("    none shown" if left else "    none in the index")
         children: dict[str, list[dict]] = {}
         for it in side["items"]:
             children.setdefault(it["via"], []).append(it)
@@ -159,8 +187,10 @@ def render(res: dict) -> str:
             for it in children.get(parent, []):
                 where = it["edge_at"] or "no line"
                 ext = ", outside the project" if it["external"] else ""
-                out.append(f"{'  ' * indent}- {it['label']}  at {where}  [{it['claim']['status']}{ext}]")
-                walk(it["id"], indent + 1)
+                rec = ", recursive" if it.get("recursive") else ""
+                out.append(f"{'  ' * indent}- {it['label']}  at {where}  [{it['claim']['status']}{ext}{rec}]")
+                if not it.get("recursive"):
+                    walk(it["id"], indent + 1)
 
         walk(res["id"], 2)
     out.append("links are extractions from the index, not verified (`verinoda analyze` checks one against its line)")

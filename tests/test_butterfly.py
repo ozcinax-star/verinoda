@@ -69,11 +69,38 @@ def strip(xs):
 def fmt(xs):
     return str(xs)
 ''',
+    "app/more.py": '''def rec(n):
+    if n:
+        return rec(n - 1)
+    return 0
+
+
+class Box:
+    def open(self):
+        return self.peek()
+
+    def peek(self):
+        return 1
+
+
+def make():
+    b = Box()
+    return b.open()
+
+
+def only_tested():
+    return 1
+''',
     "tests/test_flow.py": '''from app.flow import run
+from app.more import only_tested
 
 
 def test_run():
     assert run()
+
+
+def test_only():
+    assert only_tested()
 ''',
 }
 
@@ -188,3 +215,59 @@ def test_the_ui_panel_data(repo):
         a.butterfly(file_note)
     with pytest.raises(ValueError):
         a.butterfly(nid, "sideways")
+
+
+def test_a_direct_recursive_call_is_listed_once_on_each_side(repo, capsys):
+    res = butterfly.run(index.load(repo), "app/more.py::rec")
+    for side in res["sides"]:
+        assert [(it["id"], it["recursive"], it["edge_at"]) for it in side["items"]] == [
+            (res["id"], True, "app/more.py:3")]
+    assert cli.main(["butterfly", "app/more.py::rec", "--repo", str(repo)]) == 0
+    text = capsys.readouterr().out
+    assert "none in the index" not in text and text.count("recursive]") == 2
+
+
+def test_a_class_without_supertypes_or_subtypes_opens_on_its_callers(repo):
+    res = butterfly.run(index.load(repo), "Box")
+    assert res["mode"] == "calls"
+    assert _labels(_sides(res)["callers"]) == {"make"}
+    assert butterfly.run(index.load(repo), "Polygon")["mode"] == "inherits"
+
+
+def test_an_empty_side_says_what_was_left_out(repo, capsys):
+    res = butterfly.run(index.load(repo), "app/more.py::only_tested", tests=False)
+    callers = _sides(res)["callers"]
+    assert callers["items"] == [] and callers["left_out"] == {"tests": 1}
+    text = butterfly.render(res)
+    assert "called by: 0 (1 left out: test code)\n    none shown\n" in text  # not "none in the index"
+    assert _sides(butterfly.run(index.load(repo), "app/more.py::only_tested"))["callers"]["left_out"] == {}
+
+
+def test_of_two_call_sites_the_first_line_is_cited(repo):
+    g = index.load(repo)
+    load = next(n for n in g.G if g.label(n) == "load()")
+    strip = next(n for n in g.G if g.label(n) == "strip()")
+    for ln in (10, 9):
+        g.G.add_edge(load, strip, relation="calls", confidence="EXTRACTED", source_file="app/flow.py",
+                     source_location=f"L{ln}")
+    callees = _sides(butterfly.butterfly(g, load, mode="calls", depth=1))["callees"]["items"]
+    assert [it["edge_at"] for it in callees] == ["app/flow.py:9"]
+
+
+def test_a_method_is_named_with_its_class(repo):
+    res = butterfly.run(index.load(repo), "app/more.py::Box.peek", depth=1)
+    assert res["symbol"] == "Box.peek"
+    opener = _sides(res)["callers"]["items"][0]
+    assert opener["label"] == "Box.open" and opener["claim"]["text"] == "Box.open calls Box.peek"
+
+
+def test_json_names_the_symbol_as_when_does(repo, capsys):
+    assert cli.main(["butterfly", "app/flow.py::run", "--repo", str(repo), "--json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["symbol"] == "run()" and "label" not in out and "query" not in out
+
+
+def test_a_depth_out_of_range_is_refused(repo):
+    for bad in ("0", "5"):
+        with pytest.raises(SystemExit, match="--depth"):
+            cli.main(["butterfly", "app/flow.py::run", "--repo", str(repo), "--depth", bad])

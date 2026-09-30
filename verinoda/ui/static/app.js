@@ -67,7 +67,8 @@
       impactDepth: "links back", impactStop: "stopped at", impactTests: "in tests", withTests: "with tests",
       pathBtn: "Path…", pathTo: "Search the note to reach…", pathNone: "No chain of calls, imports or references links them.",
       pathBack: "(the other way round: the target reaches this note)", pathTitle: "Path", close2: "close",
-      bfly: "Butterfly", bflyCalls: "calls", bflyInherits: "inheritance", bflyNone: "none in the index", bflyStop: "stopped",
+      bfly: "Butterfly", bflyCalls: "calls", bflyInherits: "inheritance", bflyNone: "none in the index", bflyLeftOut: "none shown ({n} left out: test code or code outside the project)",
+      bflyRec: "recursive", bflyGraphCut: "the graph shows {n} of {m} linked notes", bflyStop: "stopped",
       bflySide: { callers: "Called by", callees: "Calls", supertypes: "Extends / implements", subtypes: "Extended / implemented by" },
       bflyNote: "Links read from the index, not checked against their lines.",
       noteOn: "on", noNotes: "No notes of your own yet: open a note and press + Note.",
@@ -154,7 +155,8 @@
       impactDepth: "bağlantı geri", impactStop: "şurada durdu:", impactTests: "testlerde", withTests: "testlerle",
       pathBtn: "Yol…", pathTo: "Ulaşılacak notu ara…", pathNone: "Aralarında çağrı, import ya da başvuru zinciri yok.",
       pathBack: "(ters yönde: hedef bu nota ulaşıyor)", pathTitle: "Yol", close2: "kapat",
-      bfly: "Kelebek", bflyCalls: "çağrılar", bflyInherits: "kalıtım", bflyNone: "indekste yok", bflyStop: "durdu",
+      bfly: "Kelebek", bflyCalls: "çağrılar", bflyInherits: "kalıtım", bflyNone: "indekste yok", bflyLeftOut: "gösterilen yok ({n} dışarıda bırakıldı: test kodu ya da proje dışı kod)",
+      bflyRec: "özyinelemeli", bflyGraphCut: "grafik {m} bağlı nottan {n} tanesini gösteriyor", bflyStop: "durdu",
       bflySide: { callers: "Çağıranlar", callees: "Çağırdıkları", supertypes: "Genişlettiği / uyguladığı", subtypes: "Genişletenler / uygulayanlar" },
       bflyNote: "Bağlantılar indeksten okundu, satırlarına karşı denetlenmedi.",
       noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
@@ -463,18 +465,23 @@
       for (const it of side.items) { if (!kids.has(it.via)) kids.set(it.via, []); kids.get(it.via).push(it); }
       const list = (parent) => el("ul", { class: "links bfly-tree" }, (kids.get(parent) || []).map((it) => el("li", {},
         kindBadge(it.kind), noteLink(it), it.edge_at ? atLink(it.edge_at) : null,
-        el("span", { class: "rel", title: it.claim.text, text: it.claim.status }),
-        kids.has(it.id) ? list(it.id) : null)));
+        el("span", { class: "rel", title: it.claim.text, text: it.claim.status + (it.recursive ? ` · ${t("bflyRec")}` : "") }),
+        kids.has(it.id) && !it.recursive ? list(it.id) : null)));
+      const left = Object.values(side.left_out || {}).reduce((s, k) => s + k, 0);
       return el("div", { class: "bfly-side" },
         el("div", { class: "sec small", text: `${t("bflySide." + side.key)} · ${side.count}` + (side.truncated ? ` · ${t("bflyStop")}` : "") }),
-        side.items.length ? list(r.id) : el("p", { class: "muted small", text: t("bflyNone") }));
+        side.items.length ? list(r.id) : el("p", { class: "muted small", text: left ? fill(t("bflyLeftOut"), { n: left }) : t("bflyNone") }));
     }
     const [a, b] = r.sides;
     const mid = el("div", { class: "bfly-mid" }, kindBadge(r.kind), el("strong", { text: r.title }));
+    // the right pane shows the same: the note, its two sides and the links between them (at most 220 notes,
+    // shared by the two sides; the panel says when some are left out of the graph)
+    const la = a.items.filter((x) => !x.recursive), lb = b.items.filter((x) => !x.recursive);
+    const na = Math.min(la.length, Math.max(110, 220 - lb.length)), nb = Math.min(lb.length, 220 - na);
+    const items = [...la.slice(0, na), ...lb.slice(0, nb)], shown = new Set([r.id, ...items.map((x) => x.id)]);
+    if (items.length < la.length + lb.length) controls.append(" · ", fill(t("bflyGraphCut"), { n: items.length, m: la.length + lb.length }));
     box.replaceWith(panel("butterfly", `${t("bfly")} · ${n.title}`, controls, el("div", { class: "bfly" }, tree(a), mid, tree(b))));
-    // the right pane shows the same: the note, its two sides and the links between them
-    const items = [...a.items, ...b.items].slice(0, 220), shown = new Set([r.id, ...items.map((x) => x.id)]);
-    const outward = (x) => (b.items.includes(x) ? r.mode === "calls" : r.mode !== "calls");
+    const outward = (x) => (lb.includes(x) ? r.mode === "calls" : r.mode !== "calls");
     local.setData([{ id: r.id, title: r.title, kind: r.kind, group: n.community ? n.community.id : "other" },
       ...items.map((x) => ({ id: x.id, title: x.title, kind: x.kind, group: x.group, depth: x.depth }))],
       items.filter((x) => shown.has(x.via)).map((x) => (outward(x) ? { source: x.via, target: x.id, relation: x.relation }
