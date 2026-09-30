@@ -1096,6 +1096,24 @@ def cmd_when(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_butterfly(args) -> int:
+    from verinoda import butterfly, freshness, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    res = butterfly.run(index.load(repo), args.symbol, mode=args.mode, depth=args.depth, stale=fresh["files"],
+                        tests=not args.no_tests)
+    res.update(freshness.summary(fresh))
+
+    def render(r: dict) -> None:
+        print(butterfly.render(r))
+        _stale_note(r)
+
+    _emit(args, res, render)
+    return 0 if res["status"] == "found" else 2
+
+
 def cmd_extract(args) -> int:
     from verinoda import extract
 
@@ -2987,6 +3005,12 @@ def build_parser() -> argparse.ArgumentParser:
                                "around each call")
     sp.add_argument("symbol")
     sp.add_argument("--depth", type=int, default=6, help="caller hops to walk back (default 6)")
+    sp = add("butterfly", cmd_butterfly, "callers and callees of one symbol, or the types it extends and those "
+                                         "that extend it, as two trees with each link's file:line")
+    sp.add_argument("symbol")
+    sp.add_argument("--mode", choices=["calls", "inherits"], help="default: inherits for a type, else calls")
+    sp.add_argument("--depth", type=int, default=2, help="links out on each side (1-4, default 2)")
+    sp.add_argument("--no-tests", action="store_true", help="leave test code out")
     sp = add("extract", cmd_extract, "the whole function or class around a location: path:LINE, path#Symbol, or "
                                      "the locations in a compiler's or test run's output (the file as it is now; "
                                      "no index needed; exit 2 = a location not found)")
