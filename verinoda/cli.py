@@ -149,7 +149,11 @@ def _waiting_note(holder: dict | None) -> None:
 
 
 def _need_graph(repo: Path) -> None:
-    if not _auto_index(repo):
+    try:
+        indexed = _auto_index(repo)
+    except RuntimeError as e:  # the first-use build failed (a repository with no code files, say)
+        raise SystemExit(f"error: {repo} could not be indexed: {e}") from None
+    if not indexed:
         why = "" if (repo / ".git").exists() else " (not a git work tree, so it is not indexed on its own)"
         raise SystemExit(f"error: {repo} has no index yet - run `verinoda scan {repo}` first{why}")
 

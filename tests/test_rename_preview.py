@@ -241,3 +241,159 @@ def test_a_line_only_a_guessed_edge_ties_to_it_is_a_mention(repo):
     assert guessed["kind"] == "inferred" and guessed["status"] == "weak_inference" and "INFERRED" in guessed["why"]
     assert "weak_inference" not in res["counts"]["by_status"]
     assert "INFERRED edge" in rename_preview.render(res)
+
+
+SHAPES = {
+    "app/__init__.py": "",
+    "app/core.py": """class Base:
+    def area(self):
+        return 0
+
+
+class Other:
+    def area(self):
+        return 1
+
+
+def helper(compute_total=None):
+    return compute_total
+
+
+def compute_total(xs):
+    return sum(xs)
+
+
+class Sq(Base):
+    def area(self):
+        return 4
+
+    def twice(self):
+        return self.area() * Other().area()
+""",
+    "app/multi.py": """from app.core import (
+    helper,
+    compute_total,
+)
+
+X = compute_total([1])
+
+
+def go():
+    return compute_total([2])
+""",
+    "app/b.py": """from app.core import compute_total
+# compute_total is used here
+print(compute_total([3]))
+""",
+    "app/shapes_user.py": """from app.core import Sq, Other
+
+
+def g(s: Sq, o: Other):
+    return s.area() + o.area()
+""",
+    "app/untyped.py": """def h(s, o):
+    return s.area() + o.area()
+""",
+    "app/ff.py":'s = "a\x0cb"\n\x0c\n# compute_total here\n',
+    "app/big.txt": "compute_total\n" + "x" * 1_100_000 + "\n",
+}
+
+
+@pytest.fixture(scope="module")
+def shapes(tmp_path_factory) -> Path:
+    root = tmp_path_factory.mktemp("rename") / "shapes"
+    for rel, text in SHAPES.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(text.encode("utf-8"))
+    workflow.init(root)
+    st = open_store(root)
+    try:
+        workflow.scan(st, root)
+    finally:
+        st.close()
+    search_index._HANDLES.clear()
+    return root
+
+
+def test_a_line_that_calls_two_methods_of_the_name_is_one_site(shapes):
+    res = _run(shapes, "Sq.area", "surface")
+    sites = _at(res["sites"])
+    assert sites["app/core.py:24:21"]["status"] == "statically_verified"  # self.area()
+    assert "app/core.py:24:38" not in sites  # Other().area() is another class's method
+    other = _at(res["mentions"])["app/core.py:24:38"]
+    assert other["kind"] == "receiver" and "Other()" in other["why"]
+
+
+def test_a_declared_receiver_type_decides_which_method_a_guessed_call_is(shapes):
+    sq = _at(_run(shapes, "Sq.area", "surface")["sites"])
+    assert sq["app/shapes_user.py:5:14"]["status"] == "strong_inference" and "app/shapes_user.py:5:25" not in sq
+    other = _at(_run(shapes, "Other.area", "surface")["sites"])
+    assert "app/shapes_user.py:5:25" in other and "app/shapes_user.py:5:14" not in other
+    # no declared type: a guessed call on an unresolved receiver is a mention, not a site
+    g = index.load(shapes)
+    target = rename_preview.run(g, "Sq.area", "surface")["id"]
+    src = next(n for n in g.G.nodes if g.file(n) == "app/untyped.py" and g.label(n).startswith("h("))
+    g.G.add_edge(src, target, relation="calls", confidence="INFERRED", source_file="app/untyped.py",
+                 source_location="L2")
+    res = rename_preview.run(g, "Sq.area", "surface")
+    assert not any(s["at"] == "app/untyped.py:2" for s in res["sites"])
+    guessed = _at(res["mentions"])["app/untyped.py:2:14"]
+    assert guessed["kind"] == "inferred" and "not resolved" in guessed["why"]
+
+
+def test_a_parenthesized_import_and_the_importing_file_are_sites(shapes):
+    res = _run(shapes, "app/core.py::compute_total", "price_items")
+    sites = _at(res["sites"])
+    assert sites["app/multi.py:3:5"]["kind"] == "import"
+    assert sites["app/multi.py:3:5"]["status"] == "statically_verified"
+    # module-level calls in files that import it: bound by the import
+    assert sites["app/multi.py:6:5"]["kind"] == "bound" and "imports" in sites["app/multi.py:6:5"]["why"]
+    assert sites["app/b.py:3:7"]["kind"] == "bound"
+    assert not any(x["at"].startswith("app/multi.py") for x in res["not_spelled"])
+    helper = _at(_run(shapes, "helper", "assist")["sites"])
+    assert helper["app/multi.py:2:5"]["kind"] == "import"
+
+
+def test_a_parameter_of_the_same_name_in_its_module_is_not_a_site(shapes):
+    res = _run(shapes, "app/core.py::compute_total", "price_items")
+    sites, ments = _at(res["sites"]), _at(res["mentions"])
+    for at in ("app/core.py:11:12", "app/core.py:12:12"):
+        assert at not in sites and ments[at]["kind"] == "shadowed" and "parameter" in ments[at]["why"]
+
+
+def test_a_file_the_scan_cannot_read_is_named(shapes):
+    res = _run(shapes, "app/core.py::compute_total", "price_items")
+    cov = res["coverage"]
+    assert "app/big.txt" in cov["unread"] and cov["unread_count"] == 1
+    assert "app/big.txt" in rename_preview.render(res)
+
+
+def test_a_form_feed_does_not_move_the_line_numbers(shapes):
+    ments = _at(_run(shapes, "app/core.py::compute_total", "price_items")["mentions"])
+    assert "app/ff.py:3:3" in ments and "app/ff.py:5:3" not in ments
+
+
+def test_the_new_name_in_a_comment_is_no_conflict(shapes):
+    assert _run(shapes, "app/core.py::compute_total", "used")["conflicts"] == []
+    # in code it is
+    assert any(c["at"] == "app/multi.py:2" for c in _run(shapes, "app/core.py::compute_total", "helper")["conflicts"])
+
+
+def test_the_new_name_follows_the_language(repo):
+    g = index.load(repo)
+    assert rename_preview.run(g, "shop/pricing.py::compute_total", "price$")["status"] == "invalid"
+    assert rename_preview.run(g, "shop/pricing.py::compute_total", "ğtoplam")["status"] == "found"
+    assert rename_preview.run(g, "Square.area", "$yüzey")["status"] == "found"
+
+
+def test_a_repository_that_cannot_be_indexed_is_a_clean_error(tmp_path, monkeypatch, capsys):
+    import subprocess
+
+    root = tmp_path / "empty"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    monkeypatch.delenv("VERINODA_NO_AUTO_INDEX", raising=False)
+    with pytest.raises(SystemExit) as e:
+        cli.main(["rename-preview", "foo", "bar", "--repo", str(root)])
+    assert "could not be indexed" in str(e.value.code)
