@@ -392,6 +392,77 @@ def test_path_identity_memo_keeps_the_graph_byte_identical(tmp_path):
     assert watch._StoredSourcePaths._verinoda_memo is True  # build() installs it
 
 
+def test_path_identity_memo_restores_every_method():
+    from verinoda.project_index import watch
+
+    cls = watch._StoredSourcePaths
+    index.install_path_identity_memo()
+    names = ("identity", "in_watch_root", "rebase_preserved", "normalize")
+    memoised = [cls.__dict__[n] for n in names]
+    try:
+        index.uninstall_path_identity_memo()
+        assert [cls.__dict__[n] for n in names] == list(cls._verinoda_originals)
+        assert all(m is not o for m, o in zip(memoised, cls._verinoda_originals))
+    finally:
+        index.install_path_identity_memo()
+    assert [cls.__dict__[n] for n in names] != list(cls._verinoda_originals)
+
+
+def test_path_identity_memo_normalize_returns_what_upstream_returns(built):
+    """normalize() on every source_file of a real graph, the same paths absolute (under the root and
+    outside it) and the odd spellings: the memo's answer, first and again, is the vendored method's."""
+    from verinoda.project_index import watch
+    from verinoda.project_index.build import _norm_source_file
+
+    repo, _ = built
+    index.install_path_identity_memo()
+    cls = watch._StoredSourcePaths
+    real = cls._verinoda_originals[3]
+    existing = json.loads(graph_path(repo).read_text(encoding="utf-8"))
+    paths = cls(existing, out=index_dir(repo), project_root=repo, watch_root=repo,
+                normalize_source=_norm_source_file)
+    stored = {item.get("source_file") for b in ("nodes", "links") for item in existing.get(b, [])}
+    values = set(stored) | {None, "", ".", "./orders/../orders/api.py", "orders\\api.py", "orders//api.py",
+                            str(repo.parent / "elsewhere.py"), "/posix/abs.py", "D:/x/y.py"}
+    values |= {str(repo / v) for v in stored if v} | {(repo / v).as_posix() for v in stored if v}
+    assert len(values) > 20
+    for v in sorted(values, key=repr):
+        want = real(paths, v)
+        assert paths.normalize(v) == want
+        assert paths.normalize(v) == want  # from the memo
+    for fn in (real, cls.normalize):  # an unhashable value raises in both
+        with pytest.raises(AttributeError):
+            fn(paths, ["a", "list"])
+
+
+def test_path_identity_memo_keeps_a_full_update_byte_identical(tmp_path, monkeypatch):
+    """The path `verinoda update` takes (index.build with prune_missing, no changed list), with the
+    memo and without it (build() re-installs it, so installing is switched off for that run)."""
+    outs = []
+    for name, memo in (("m", True), ("n", False)):
+        repo = tmp_path / name / "orders_app"
+        shutil.copytree(EXAMPLE, repo, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", "*.pyc",
+                                                                     ".pytest_cache", "*.db"))
+        index.build(repo, force=True)
+        svc = repo / "orders" / "service.py"
+        svc.write_bytes(svc.read_bytes() + b"\n\ndef added_later():\n    return fetch_order\n")
+        with monkeypatch.context() as m:
+            if not memo:
+                index.uninstall_path_identity_memo()
+                m.setattr(index, "install_path_identity_memo", lambda: False)
+            try:
+                assert index.build(repo, prune_missing=True)["ok"]
+            finally:
+                index.install_path_identity_memo()
+        outs.append((graph_path(repo).read_bytes(), (index_dir(repo) / "receiver_calls.json").read_bytes()))
+    (g1, r1), (g2, r2) = outs
+    assert g1 == g2
+    # the sidecar is keyed by the graph file's identity (its mtime among it): compare the rest
+    s1, s2 = json.loads(r1), json.loads(r2)
+    s1.pop("graph", None), s2.pop("graph", None)
+    assert s1 == s2
+
+
 # -- deleted files never stay in the graph ---------------------------------------------------------------
 
 def test_prune_missing_files_drops_their_nodes_and_edges(tmp_path):

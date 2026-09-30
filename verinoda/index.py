@@ -900,14 +900,17 @@ def _as_written(topology: dict, repo: Path) -> dict:
 # -- vendored rebuild: path-identity memo ------------------------------------------------------
 
 def install_path_identity_memo() -> bool:
-    """Memoise ``watch._StoredSourcePaths.identity``/``in_watch_root``/``rebase_preserved``.
+    """Memoise ``watch._StoredSourcePaths.identity``/``in_watch_root``/``rebase_preserved``/``normalize``.
 
     The vendored incremental rebuild recomputes a pathlib identity for every
-    node and edge (about 60% of a one-file update on graphify_core). All three
+    node and edge (about 60% of a one-file update on graphify_core). All four
     methods are pure functions of the ``source_file`` string and of fields set
     once in ``__init__``, so a per-instance dict memo returns exactly what the
-    original would. Applied as a monkeypatch (the vendored file stays
-    read-only); idempotent. Returns True when the patch is in place.
+    original would. ``normalize`` is ``_norm_source_file`` against the fixed
+    ``project_root``: lexical, except a ``Path.resolve`` fallback that
+    :class:`_resolve_once` already answers once per build. Applied as a
+    monkeypatch (the vendored file stays read-only); idempotent. Returns True
+    when the patch is in place.
     """
     try:
         from verinoda.project_index import watch
@@ -919,6 +922,7 @@ def install_path_identity_memo() -> bool:
     if getattr(cls, "_verinoda_memo", False):
         return True
     orig_identity, orig_in_root, orig_rebase = cls.identity, cls.in_watch_root, cls.rebase_preserved
+    orig_normalize = cls.normalize
 
     def _memo(self, name: str) -> dict:
         memo = self.__dict__.get("_verinoda_memo_" + name)
@@ -946,6 +950,16 @@ def install_path_identity_memo() -> bool:
         except TypeError:
             return orig_in_root(self, source_file)
 
+    def normalize(self, source_file):
+        memo = _memo(self, "normalize")
+        try:
+            return memo[source_file]
+        except KeyError:
+            v = memo[source_file] = orig_normalize(self, source_file)
+            return v
+        except TypeError:  # unhashable source_file: no memo
+            return orig_normalize(self, source_file)
+
     def rebase_preserved(self, item):
         sf = item.get("source_file")
         memo = _memo(self, "rebase")
@@ -963,8 +977,9 @@ def install_path_identity_memo() -> bool:
 
     identity.__doc__ = orig_identity.__doc__
     cls.identity, cls.in_watch_root, cls.rebase_preserved = identity, in_watch_root, rebase_preserved
+    cls.normalize = normalize
     cls._verinoda_memo = True
-    cls._verinoda_originals = (orig_identity, orig_in_root, orig_rebase)
+    cls._verinoda_originals = (orig_identity, orig_in_root, orig_rebase, orig_normalize)
     return True
 
 
@@ -976,7 +991,7 @@ def uninstall_path_identity_memo() -> None:
         return
     cls = getattr(watch, "_StoredSourcePaths", None)
     if cls is not None and getattr(cls, "_verinoda_memo", False):
-        cls.identity, cls.in_watch_root, cls.rebase_preserved = cls._verinoda_originals
+        cls.identity, cls.in_watch_root, cls.rebase_preserved, cls.normalize = cls._verinoda_originals
         cls._verinoda_memo = False
 
 

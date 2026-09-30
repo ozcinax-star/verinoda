@@ -1225,22 +1225,35 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
     # the lone (wrong) "unambiguous" winner.
     from verinoda.project_index.extractors.base import _file_stem as _fs
     _alias_candidates: dict[str, set[str]] = {}
+    # Local change (Verinoda): what the loop derives from a source_file (absolute?, the
+    # file name, the canonical stem, the old stems) depends on the string alone and is
+    # lexical, so it is worked out once per distinct string for this call, not per node.
+    _sf_forms: dict[str, tuple] = {}
     for nid in node_set:
         attrs = G.nodes[nid]
         sf = attrs.get("source_file")
         if not sf:
             continue
-        rel = Path(str(sf))
-        if _is_abs(str(sf)):
+        sf_str = str(sf)
+        forms = _sf_forms.get(sf_str)
+        if forms is None:
+            rel = Path(sf_str)
+            if _is_abs(sf_str):
+                forms = (True, "", "", ())
+            else:
+                forms = (False, rel.name, make_id(_fs(rel)), tuple(_old_file_stems(rel)))
+            _sf_forms[sf_str] = forms
+        if forms[0]:
             continue
-        new_stem = make_id(_fs(rel))
-        if str(attrs.get("label", "")) == rel.name:
+        _, rel_name, new_stem, old_stems = forms
+        if str(attrs.get("label", "")) == rel_name:
             suffix = ""  # this node IS the file, whatever its (possibly salted) id
         else:
             suffix = ""
-            if _normalize_id(nid).startswith(new_stem):
-                suffix = _normalize_id(nid)[len(new_stem):]  # leading "_entity" or ""
-        for old_stem in _old_file_stems(rel):
+            norm_nid = _normalize_id(nid)
+            if norm_nid.startswith(new_stem):
+                suffix = norm_nid[len(new_stem):]  # leading "_entity" or ""
+        for old_stem in old_stems:
             if old_stem == new_stem:
                 continue
             alias = old_stem + suffix
@@ -1249,6 +1262,19 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
     for alias_key, candidates in _alias_candidates.items():
         if len(candidates) == 1:
             norm_to_id.setdefault(alias_key, next(iter(candidates)))
+    # Local change (Verinoda): an endpoint's lower-cased suffix, once per distinct
+    # source_file string for this call (a pure function of the string); anything
+    # that is not a str takes the upstream expression as it is.
+    _suffixes: dict[str, str] = {}
+
+    def _suffix_of(value) -> str:
+        if type(value) is not str:
+            return Path(value).suffix.lower()
+        ext = _suffixes.get(value)
+        if ext is None:
+            ext = _suffixes[value] = Path(value).suffix.lower()
+        return ext
+
     # Iterate edges in a deterministic order. The graph is undirected and stores
     # direction in _src/_tgt; when two edges collapse onto the same node pair the
     # last write wins, so an unstable iteration order flips _src/_tgt run-to-run
@@ -1356,8 +1382,8 @@ def build_from_json(extraction: dict, *, directed: bool = False, root: str | Pat
         # Python `import time` must not bind to a `time.ts`, #1749).
         _edge_rel = attrs.get("relation")
         if _edge_rel in ("calls", "imports", "imports_from", "references"):
-            src_ext = Path(G.nodes[src].get("source_file") or "").suffix.lower()
-            tgt_ext = Path(G.nodes[tgt].get("source_file") or "").suffix.lower()
+            src_ext = _suffix_of(G.nodes[src].get("source_file") or "")
+            tgt_ext = _suffix_of(G.nodes[tgt].get("source_file") or "")
             src_fam = _EDGE_LANG_FAMILY.get(src_ext)
             tgt_fam = _EDGE_LANG_FAMILY.get(tgt_ext)
             if _edge_rel == "calls":

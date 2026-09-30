@@ -77,9 +77,12 @@ Port adjustments (in `tests_upstream/conftest.py`, appended by the script):
 **Path-identity memo.** The vendored incremental rebuild
 (`project_index/watch.py`, class `_StoredSourcePaths`) recomputes a pathlib
 identity for every node and edge on every update. `identity()`,
-`in_watch_root()` and `rebase_preserved()` are pure functions of the
-`source_file` string and of fields set once in `__init__`. Verinoda
-therefore memoises them per instance.
+`in_watch_root()`, `rebase_preserved()` and `normalize()` are pure functions
+of the `source_file` string and of fields set once in `__init__`. Verinoda
+therefore memoises them per instance. `normalize()` is `_norm_source_file`
+against the fixed project root: lexical, apart from a `Path.resolve` fallback
+for an absolute path outside the root, which `index._resolve_once` already
+answers once per build.
 
 - **Where:** `verinoda.index.install_path_identity_memo()`, called from
   `verinoda.index.build()`. It is a monkeypatch. `watch.py` itself is
@@ -90,6 +93,12 @@ therefore memoises them per instance.
   builds two copies of `examples/orders_app`, changes one file in each and
   runs the vendored incremental rebuild, once with the memo and once
   without. It requires the two `graph.json` files to be byte-identical.
+  `test_path_identity_memo_keeps_a_full_update_byte_identical` does the same
+  through `index.build(prune_missing=True)`, the path `verinoda update` takes;
+  `test_path_identity_memo_normalize_returns_what_upstream_returns` compares
+  `normalize()` with the vendored method on every `source_file` of a real graph
+  and on absolute and odd spellings; `uninstall_path_identity_memo()` restores
+  all four methods.
 - **Measured effect** (round-3 search track, one run on the development
   machine, not a benchmark-harness result): a one-file update of
   `graphify_core` (226 files, `querylog.py` touched). The index step fell
@@ -223,6 +232,8 @@ installer list is a subset of the static list, and that ordinary commands
 | Version lookup | reports the `verinoda` distribution version |
 | Output directory | unchanged in the module (`GRAPHIFY_OUT`, default `graphify-out`); Verinoda entry points set `GRAPHIFY_OUT=.verinoda/index` before importing it |
 | `watch._StoredSourcePaths` (at run time only) | memoised by the path-identity monkeypatch; source file unchanged |
+| `ids.py` `normalize_id` (local change, backlog 1.1 stage A) | an exact `str` is answered from a bounded memo (`functools.lru_cache`, 262,144 entries) of the unchanged recipe, now `_normalize_id_recipe`; anything else (a `str` subclass, a non-string, an unhashable value) takes the recipe and raises where it raises. The recipe is a pure function of the string, so ids are unchanged; `make_id` and every caller that imported `normalize_id` go through it. `tests/test_build_memos.py` compares it with the recipe on every id, label and path of the fixtures' extraction and of Verinoda's own graph |
+| `build.py` `build_from_json` (local change, backlog 1.1 stage A) | the pre-migration alias index (#1504) works out a `source_file`'s forms (absolute or not, file name, canonical stem, old stems) once per distinct string of one call instead of per node, and normalises a node's id once instead of twice; the cross-language edge check takes an endpoint's lower-cased suffix once per distinct string of one call. Both memos are local to the call and keyed on the string alone. `tests/test_build_memos.py` traces the call and requires the alias candidates to equal those of the upstream loop (run without any memo) on the fixtures, the upstream alias cases and Verinoda's own graph; `_old_file_stems` still returns a fresh list, which `_semantic_id_remap` inserts into |
 | `tests_upstream/conftest.py` | appended port-adjustment block (above) |
 | `extractors/csharp.py` `_resolve_csharp_type_references` (local change, D65) | a dangling type reference finds the first placeholder of its label through a dict built once, not a scan of all nodes per reference; the same graph, the pass 4.2 s -> 0.05 s on a 591-file C# repository |
 | `extractors/engine.py` call binding, `extractors/go.py`, `extractors/rust.py` (local change, D65) | a member call binds to a same-file definition only through the method's own receiver (`self`/`cls`, `this`, `$this`, Ruby `self`/`self.class`, the Go receiver, Rust `self`/`Self::`/`Type::`, also with a turbofish) or a receiver whose type the file states (Go: a parameter, a local or package variable of `&T{}` / `T{}` / a constructor `NewT()`, a struct field, a method promoted from an embedded struct; PHP: a typed parameter, `$x = new T()`, a typed or promoted property, `$this->p = new T()`); an untyped PHP receiver binds only to the one same-named method of another class of the file; Python `super().m()` binds to an in-file base's `m` in C3 order (past `object`) or not at all; `self.m()` prefers the own class; bare Go/Rust calls never bind to a method. `cache._AST_CACHE_SCHEMA` is 7 |

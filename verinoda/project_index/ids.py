@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from functools import lru_cache
 
 __all__ = ["normalize_id", "make_id"]
 
@@ -72,6 +73,18 @@ def normalize_id(s: str) -> str:
     so every combining mark casefold introduced has been fully normalized before
     it is filtered (#2614 and its combining-mark follow-on).
     """
+    # Local change (Verinoda): an exact ``str`` is answered from a bounded memo. The
+    # recipe is a pure function of the string (no state, no file system), so the
+    # memo returns what the recipe returns; anything else (a ``str`` subclass, a
+    # non-string, an unhashable value) takes the recipe itself and raises where it
+    # raises. A build calls this about 130,000 times on far fewer distinct strings.
+    if type(s) is str:
+        return _normalize_id_memo(s)
+    return _normalize_id_recipe(s)
+
+
+def _normalize_id_recipe(s: str) -> str:
+    """The upstream body of :func:`normalize_id`, unmemoised."""
     cur = s
     for _ in range(6):
         nxt = unicodedata.normalize("NFKC", cur.casefold())
@@ -81,6 +94,10 @@ def normalize_id(s: str) -> str:
     cur = re.sub(r"[^\w]+", "_", cur, flags=re.UNICODE)
     cur = re.sub(r"_+", "_", cur)
     return cur.strip("_")
+
+
+# Local change (Verinoda): the memo behind normalize_id (see there).
+_normalize_id_memo = lru_cache(maxsize=1 << 18)(_normalize_id_recipe)
 
 
 def make_id(*parts: str) -> str:
