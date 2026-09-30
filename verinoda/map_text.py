@@ -157,8 +157,35 @@ def _impact(v: dict, cap: int) -> list[str]:
     return out
 
 
+def _cycles(v: dict, cap: int) -> list[str]:
+    cycles = v.get("cycles", [])
+    if not cycles:
+        return [f"no dependency cycles between the {v.get('files_with_dependencies', 0)} files with dependencies"]
+    exact = sum(c.get("break_method") == "exact" for c in cycles)
+    out = [f"{len(cycles)} cycles over {v.get('files_in_cycles', 0)} files; cutting {v.get('break_set_size', 0)} "
+           f"file dependencies breaks them all (the smallest set for {exact} of {len(cycles)})"]
+    for i, c in enumerate(cycles, 1):
+        if len(out) >= cap:
+            out += _more(i - 1, len(cycles), "cycles")
+            break
+        files = ", ".join(c["files"][:4]) + (f" ... {c['size'] - 4} more" if c["size"] > 4 else "")
+        out.append(f"   cycle {i}: {c['size']} files, {c['dependencies_total']} dependencies ({c['status']}"
+                   + (f", {c['in']}" if c.get("in") else "") + f"): {files}")
+        breaks = c.get("break_set", [])
+        m = max(1, min(len(breaks), cap - len(out)))
+        for b in breaks[:m]:
+            rel = ", ".join(b.get("relations", {}))
+            at = ", ".join(b.get("at", [])[:2])
+            refs = f"{b['references']} ref" + ("s" if b["references"] != 1 else "")
+            out.append(f"     cut {b['from']} -> {b['to']}  ({refs}: {rel}; {at})")
+            out.append(f"       closes {' -> '.join(b['closes'][:6])}" + (" ..." if len(b["closes"]) > 6 else ""))
+        if len(breaks) > m:
+            out.append(f"     ... {len(breaks) - m} more cuts in --json")
+    return out
+
+
 RENDERERS = {"hierarchy": _hierarchy, "dependencies": _dependencies, "dataflow": _dataflow,
-             "config": _config, "tests": _tests, "history": _history, "impact": _impact}
+             "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles}
 
 
 def render(res: dict, cap: int) -> str:

@@ -537,7 +537,7 @@ def test_relation_trace_passes_hints_reachability_and_note(repo, tools):
     assert execution["status"] == "found" and execution["reachability"] == "execution"
 
 
-@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history"])
+@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles"])
 def test_map_view_equals_core(repo, tools, view):
     from verinoda import architecture_map as am
     from verinoda import index

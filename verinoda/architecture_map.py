@@ -6,7 +6,8 @@ a scanner did not observe are never invented; heuristics are labelled.
 
 Views: hierarchy, dependencies (calls/imports), dataflow (entry -> persistence),
 config (env vars and config files), tests (test -> behaviour), history (git +
-decision records), impact (reverse dependencies of a change).
+decision records), impact (reverse dependencies of a change), cycles (dependency
+cycles between files and the fewest dependencies to cut).
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ import heapq
 import re
 from collections import Counter, defaultdict, deque
 from pathlib import Path, PurePosixPath
+
+import networkx as nx
 
 from verinoda import testcode
 from verinoda.index import CODE_RELATIONS, FLOW_RELATIONS, Graph
@@ -907,9 +910,251 @@ def impact(g: Graph, targets: list[str], depth: int = 4, *, stale=()) -> dict:
     }
 
 
+# -- 8. cycles ------------------------------------------------------------------------------
+
+CYCLE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits"}   # the dependencies view's edges
+EXACT_BREAK_MAX = 12      # up to this many files the smallest break set is searched exactly (2^n file orderings)
+CYCLE_EDGE_SITES = 3      # reference lines listed per file-to-file dependency
+CYCLE_EDGES_SHOWN = 60    # file-to-file dependencies listed per cycle (the break set is never cut)
+
+
+def _file_deps(g: Graph) -> dict[tuple[str, str], dict]:
+    """File -> file dependencies with the references behind them. A type-only import (``import type``) and a
+    deferred ``import(...)`` are left out: neither closes a cycle when the code loads. Prose files are no code."""
+    from verinoda.index import PROSE_SUFFIXES
+
+    deps: dict[tuple[str, str], dict] = {}
+    for u, v, d in g.edges(CYCLE_RELATIONS):
+        if d.get("type_only") or d.get("deferred"):
+            continue
+        fu, fv = g.file(u), g.file(v)
+        if not fu or not fv or fu == fv or fu.lower().endswith(PROSE_SUFFIXES) or fv.lower().endswith(PROSE_SUFFIXES):
+            continue
+        e = deps.setdefault((fu, fv), {"references": 0, "relations": Counter(), "extracted": 0, "sites": set()})
+        e["references"] += 1
+        e["relations"][d.get("relation")] += 1
+        extracted = d.get("confidence") == "EXTRACTED"
+        e["extracted"] += extracted
+        at = _edge_loc(d)
+        if at:
+            e["sites"].add((not extracted, at))
+    return deps
+
+
+def _exact_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]]) -> list[tuple[str, str]]:
+    """The cheapest feedback edge set of a small component: over every ordering of the files (dynamic
+    programming over subsets), the edges that point back against the order; cost = (edges, references)."""
+    n = len(nodes)
+    idx = {x: i for i, x in enumerate(nodes)}
+    outs: list[list[tuple[int, tuple[int, int]]]] = [[] for _ in nodes]
+    for (a, b), w in cost.items():
+        outs[idx[a]].append((idx[b], w))
+    best: list[tuple[int, int] | None] = [None] * (1 << n)
+    last = [0] * (1 << n)
+    best[0] = (0, 0)
+    for mask in range(1 << n):
+        c = best[mask]
+        if c is None:
+            continue
+        for v in range(n):
+            bit = 1 << v
+            if mask & bit:
+                continue
+            k, r = c
+            for j, (wk, wr) in outs[v]:   # v placed after the files in mask: its edges into them point back
+                if mask >> j & 1:
+                    k, r = k + wk, r + wr
+            nm = mask | bit
+            if best[nm] is None or (k, r) < best[nm]:
+                best[nm], last[nm] = (k, r), v
+    order, mask = [], (1 << n) - 1
+    while mask:
+        order.append(last[mask])
+        mask ^= 1 << last[mask]
+    pos = {nodes[v]: i for i, v in enumerate(reversed(order))}
+    return sorted(e for e in cost if pos[e[0]] > pos[e[1]])
+
+
+def _greedy_break(nodes: list[str], cost: dict[tuple[str, str], tuple[int, int]]) -> list[tuple[str, str]]:
+    """A small feedback edge set of a large component: the Eades-Lin-Smyth ordering (sinks to the end, sources
+    to the front, else the file with most outgoing minus incoming edges next), then every cut edge that closes
+    no cycle with what is kept is put back, the heaviest first. An upper bound, not proven the smallest."""
+    succ: dict[str, set[str]] = defaultdict(set)
+    pred: dict[str, set[str]] = defaultdict(set)
+    for a, b in cost:
+        succ[a].add(b)
+        pred[b].add(a)
+    alive = set(nodes)
+    outd = {x: len(succ[x]) for x in nodes}
+    ind = {x: len(pred[x]) for x in nodes}
+    left: list[str] = []
+    right: list[str] = []
+
+    def remove(x: str) -> None:
+        alive.discard(x)
+        for y in succ[x]:
+            ind[y] -= 1
+        for y in pred[x]:
+            outd[y] -= 1
+
+    while alive:
+        ends = sorted(x for x in alive if outd[x] == 0 or ind[x] == 0)
+        if ends:
+            for x in ends:
+                if x in alive:
+                    (right if outd[x] == 0 else left).append(x)
+                    remove(x)
+            continue
+        x = max(sorted(alive), key=lambda y: outd[y] - ind[y])
+        left.append(x)
+        remove(x)
+    pos = {x: i for i, x in enumerate(left + right[::-1])}
+    cut = [e for e in cost if pos[e[0]] > pos[e[1]]]
+    kept: dict[str, set[str]] = defaultdict(set)
+    for a, b in cost:
+        if pos[a] < pos[b]:
+            kept[a].add(b)
+    final = []
+    for a, b in sorted(cut, key=lambda e: (-cost[e][1], e)):
+        if _reaches(kept, b, a):
+            final.append((a, b))
+        else:
+            kept[a].add(b)
+    return sorted(final)
+
+
+def _reaches(succ: dict[str, set[str]], start: str, goal: str) -> bool:
+    seen, stack = {start}, [start]
+    while stack:
+        x = stack.pop()
+        if x == goal:
+            return True
+        for y in succ.get(x, ()):
+            if y not in seen:
+                seen.add(y)
+                stack.append(y)
+    return False
+
+
+def _shortest_back(succ: dict[str, set[str]], start: str, goal: str) -> list[str] | None:
+    """The shortest path start -> goal (breadth first, files in name order)."""
+    prev: dict[str, str | None] = {start: None}
+    q = deque([start])
+    while q:
+        x = q.popleft()
+        if x == goal:
+            path = [x]
+            while prev[path[-1]] is not None:
+                path.append(prev[path[-1]])
+            return path[::-1]
+        for y in sorted(succ.get(x, ())):
+            if y not in prev:
+                prev[y] = x
+                q.append(y)
+    return None
+
+
+def cycles(g: Graph) -> dict:
+    """Dependency cycles between files and the smallest set of file-to-file dependencies to cut.
+
+    A cycle is a strongly connected set of files over the dependencies view's edges. Its ``status`` is
+    ``strong_inference`` when the parser's own (EXTRACTED) edges already connect every file of it, else
+    ``weak_inference``: graph edges are extractions, never verification. Each dependency of the break set
+    names a cycle it closes (the dependency, then the shortest way back) with the reference lines of every
+    step, so the cut can be read in the code."""
+    deps = _file_deps(g)
+    roots = _aside_roots(g)
+    # a copy of the project and the project never load each other: an edge between them is a name the graph
+    # resolved into the wrong tree, and it would merge the two trees' cycles into one
+    crossing = [e for e in deps if e[0].startswith(roots) != e[1].startswith(roots)] if roots else []
+    for e in crossing:
+        del deps[e]
+    fg = nx.DiGraph()
+    fg.add_edges_from(deps)
+    comps = [sorted(c) for c in nx.strongly_connected_components(fg) if len(c) > 1]
+    out = []
+    for files in comps:
+        members = set(files)
+        inner = {e: deps[e] for e in deps if e[0] in members and e[1] in members}
+        cost = {e: (1, d["references"]) for e, d in inner.items()}
+        exact = len(files) <= EXACT_BREAK_MAX
+        cut = (_exact_break if exact else _greedy_break)(files, cost)
+        succ: dict[str, set[str]] = defaultdict(set)
+        succ_x: dict[str, set[str]] = defaultdict(set)   # the parser's own edges only
+        for a, b in inner:
+            succ[a].add(b)
+            if inner[(a, b)]["extracted"]:
+                succ_x[a].add(b)
+        xg = nx.DiGraph()
+        xg.add_nodes_from(files)
+        xg.add_edges_from((a, b) for (a, b), d in inner.items() if d["extracted"])
+        strong = nx.is_strongly_connected(xg)
+
+        def row(e: tuple[str, str]) -> dict:
+            d = inner[e]
+            sites = [at for _, at in sorted(d["sites"])]
+            return {"from": e[0], "to": e[1], "references": d["references"],
+                    "relations": dict(sorted(d["relations"].items())), "extracted": d["extracted"],
+                    "at": sites[:CYCLE_EDGE_SITES]}
+
+        breaks = []
+        for a, b in cut:
+            back = _shortest_back(succ_x, b, a) if inner[(a, b)]["extracted"] else None
+            how = "strong_inference" if back else "weak_inference"
+            back = back or _shortest_back(succ, b, a) or [b, a]
+            loop = [a, *back]
+            steps = [{"from": x, "to": y, "at": row((x, y))["at"][:1]} for x, y in zip(loop, loop[1:])]
+            breaks.append({**row((a, b)), "closes": loop, "closes_status": how, "steps": steps})
+        edges = sorted(inner, key=lambda e: (-inner[e]["references"], e))
+        names = ", ".join(files[:4]) + (f" and {len(files) - 4} more" if len(files) > 4 else "")
+        aside = bool(roots) and files[0].startswith(roots)   # a cycle lies wholly on one side
+        out.append({
+            "files": files, "size": len(files),
+            "claim": f"{names} depend on each other in a cycle ({len(files)} files, {len(inner)} dependencies)",
+            "status": "strong_inference" if strong else "weak_inference",
+            **({} if strong else {"note": "the parser's own edges do not connect every file of it: some link "
+                                          "rests on an INFERRED edge (a receiver's type, a name) only"}),
+            "break_set": breaks,
+            "break_method": "exact" if exact else "greedy",
+            "dependencies": [row(e) for e in edges[:CYCLE_EDGES_SHOWN]],
+            "dependencies_total": len(inner),
+            **({"in": ASIDE} if aside else {}),
+        })
+    out.sort(key=lambda c: ("in" in c, -c["size"], c["files"]))
+    limits = [
+        "graph edges are extractions, never verification: a cycle is strong_inference at most, weak_inference "
+        "when only INFERRED edges connect some of its files",
+        "calls, uses and inherits count as dependencies, not only imports: two files calling each other form a "
+        "cycle even without an import cycle (each dependency lists its relations)",
+        "type-only imports and deferred import(...) are left out; an import inside a function body counts like "
+        "one at the top of the file",
+        f"the break set is the fewest file-to-file dependencies to cut, then the fewest references behind them; "
+        f"exact for a cycle of up to {EXACT_BREAK_MAX} files, an upper bound (greedy, no cut can be put back) "
+        f"beyond; it names what to cut, not how",
+        "dynamic dispatch, reflection and DI containers are not resolved; package-level cycles are not computed",
+    ]
+    if roots:
+        limits.append("detected copies and reference trees (" + ", ".join(roots[:3]) + ") are kept apart from "
+                      "the project: their cycles come after the project's own, marked \"in\", and the "
+                      f"{len(crossing)} dependencies between them and the project are left out")
+    return {
+        "view": "cycles",
+        "coverage": {
+            "method": "strongly connected components of the file-level graph of AST call/import/use/inherit "
+                      "edges; smallest break set by search over file orderings (greedy ordering for large cycles)",
+            "limits": limits,
+        },
+        "level": "file",
+        "cycles": out,
+        "files_in_cycles": sum(c["size"] for c in out),
+        "break_set_size": sum(len(c["break_set"]) for c in out),
+        "files_with_dependencies": fg.number_of_nodes(),
+    }
+
+
 VIEWS = {
     "hierarchy": hierarchy, "dependencies": dependencies, "dataflow": dataflow,
-    "config": config, "tests": tests_view, "history": history,
+    "config": config, "tests": tests_view, "history": history, "cycles": cycles,
 }
 
 

@@ -126,7 +126,7 @@ def test_update_is_noop_on_unchanged_tree(repo):
         assert f"index {res['index_mode']}" in r.stdout
 
 
-@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history"])
+@pytest.mark.parametrize("view", ["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "cycles"])
 def test_map_views_json(repo, view):
     res = ok_json("map", str(repo), "--view", view, "--json", cwd=repo)
     assert list(res) == [view]
@@ -146,6 +146,12 @@ def test_map_impact_and_human_rendering(repo):
     assert one.returncode == 0 and "test functions" in one.stdout and "--view NAME" not in one.stdout
     cfg = ok_json("map", str(repo), "--view", "config", "--json", cwd=repo)["config"]
     assert {"ORDERS_DATABASE_URL", "ORDERS_MAX_ITEMS", "ORDERS_DISCOUNT_THRESHOLD"} <= set(cfg["env_vars"])
+
+
+def test_map_cycles_text(repo):
+    r = ra("map", str(repo), "--view", "cycles", cwd=repo)
+    assert r.returncode == 0 and "== cycles ==" in r.stdout and "limit:" in r.stdout
+    assert "cycles over" in r.stdout or "no dependency cycles" in r.stdout
 
 
 def test_map_on_unscanned_repo_fails_cleanly(tmp_path):
