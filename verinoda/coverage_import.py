@@ -6,7 +6,9 @@ Cobertura XML (coverage.py's ``coverage.xml``, istanbul's cobertura, gcovr, Cobe
 ``contexts`` name the test that ran each line when coverage recorded them with ``dynamic_context =
 test_function``). A report is found at the usual paths (:data:`REPORT_PATHS`, also one folder down for Gradle
 and Maven sub-projects) or given by path; every report found is read and merged (a line run in any of them
-ran).
+ran). A report found in a sub-project folder (``web/coverage/lcov.info``) names its files relative to that
+folder: its entries are kept under the folder (``web/src/index.ts``) and fit only files inside it, so two
+sub-projects' ``src/index.ts`` stay apart.
 
 A report's file names are tied to the repository's files by path: an absolute path under the repository, a
 path joined with a Cobertura ``<source>`` root, else the longest path suffix the two share (JaCoCo names
@@ -15,8 +17,9 @@ equally well leave it ``ambiguous``. Lines map to the innermost definition aroun
 (:func:`verinoda.treestate.symbol_at` over :func:`verinoda.anchors.compute_facts`).
 
 What a report says is a measurement made by another tool, on the tree that tool saw: a claim built from it is
-``strong_inference`` while the report is newer than the file, ``weak_inference`` when the file changed after
-the report was written (its lines may have moved). Nothing is run; the reports are read, never written.
+``strong_inference`` while every report that measured the file is newer than it, ``weak_inference`` when the
+file changed after one of them was written (its lines may have moved). Nothing is run; the reports are read,
+never written.
 """
 
 from __future__ import annotations
@@ -51,10 +54,16 @@ LIMITS = [
 
 @dataclass
 class FileCov:
-    key: str                                     # the file as the report names it, posix
+    key: str                                     # the file as the report names it, posix (under ``scope``)
     lines: dict[int, int] = field(default_factory=dict)   # line -> hits (JaCoCo: covered instructions)
     tests: dict[int, set[str]] = field(default_factory=dict)
     reports: set[str] = field(default_factory=set)
+    scope: str = ""   # the sub-project folder whose report named the file relative to it ("" = the root)
+
+    @property
+    def name(self) -> str:
+        """The path as the report printed it, without the sub-project folder."""
+        return self.key[len(self.scope) + 1:] if self.scope and self.key.startswith(self.scope + "/") else self.key
 
 
 @dataclass
@@ -82,19 +91,25 @@ class Coverage:
             for k in self.files:
                 self._by_name.setdefault(k.rsplit("/", 1)[-1].lower(), []).append(k)
         best: list[str] = []
-        best_n = 0
-        rparts = rel.split("/")
-        for k in self._by_name.get(rparts[-1].lower(), []):
-            kparts = k.split("/")
+        best_n: tuple[int, int] = (0, 0)
+        for k in self._by_name.get(rel.rsplit("/", 1)[-1].lower(), []):
+            fc = self.files[k]
+            # a sub-project's entry fits only files inside that sub-project, matched below its folder
+            if fc.scope and not rel.startswith(fc.scope + "/"):
+                continue
+            rparts = rel[len(fc.scope) + 1:].split("/") if fc.scope else rel.split("/")
+            kparts = fc.name.split("/")
             n = 0
             while n < min(len(kparts), len(rparts)) and kparts[-1 - n] == rparts[-1 - n]:
                 n += 1
             # the whole of the shorter path must match: `a/Foo.java` does not fit `b/Foo.java`
             if n < min(len(kparts), len(rparts)):
                 continue
-            if n > best_n:
-                best, best_n = [k], n
-            elif n == best_n:
+            # the report of the sub-project the file lies in comes before a report of the whole repository
+            score = (fc.scope.count("/") + 1 if fc.scope else 0, n)
+            if score > best_n:
+                best, best_n = [k], score
+            elif score == best_n:
                 best.append(k)
         out = (best[0], "suffix") if len(best) == 1 else (None, "ambiguous" if best else "absent")
         self._match[rel] = out
@@ -104,17 +119,17 @@ class Coverage:
         key, _how = self.resolve(rel)
         return self.files.get(key) if key else None
 
-    def newest(self, rel: str) -> float | None:
-        """Modification time of the newest report that measured ``rel``."""
+    def oldest(self, rel: str) -> float | None:
+        """Modification time of the oldest report that measured ``rel`` (its lines are merged with the others')."""
         fc = self.lines_of(rel)
         if fc is None:
             return None
         times = [r["mtime"] for r in self.read if r["file"] in fc.reports]
-        return max(times) if times else None
+        return min(times) if times else None
 
     def stale(self, rel: str) -> bool:
-        """Did ``rel`` change after the reports that measured it were written?"""
-        t = self.newest(rel)
+        """Did ``rel`` change after one of the reports that measured it was written?"""
+        t = self.oldest(rel)
         try:
             return t is None or (self.root / rel).stat().st_mtime > t
         except OSError:
@@ -136,30 +151,47 @@ def find_reports(root: Path) -> list[Path]:
     return out
 
 
+def _scope_of(name: str) -> tuple[str, bool]:
+    """The folder a report at repository path ``name`` names its files relative to, and whether that is
+    certain: a usual report path (``web/coverage/lcov.info`` -> ``web``), else the report's own folder, tried
+    only for files that exist there."""
+    for pat in sorted({*REPORT_PATHS, *SUBPROJECT_REPORT_PATHS}, key=len, reverse=True):
+        if name == pat:
+            return "", True
+        if name.endswith("/" + pat):
+            return name[:-len(pat) - 1], True
+    return (name.rsplit("/", 1)[0] if "/" in name else ""), False
+
+
 def load(root: Path, paths: list[str | Path] | None = None) -> Coverage:
     """Read the reports at ``paths`` (relative to ``root`` or absolute), or the ones :func:`find_reports`
-    finds, into one :class:`Coverage`."""
+    finds, into one :class:`Coverage`. A report that cannot be read is listed with its error."""
     root = Path(root).resolve()
     cov = Coverage(root)
     found = [Path(p) if Path(p).is_absolute() else root / p for p in paths] if paths else find_reports(root)
     for p in found:
         name = _display(root, p)
+        scope, strict = ("", False) if Path(name).is_absolute() else _scope_of(name)
         try:
             if p.stat().st_size > MAX_REPORT_BYTES:
                 cov.reports.append({"file": name, "error": f"larger than {MAX_REPORT_BYTES} bytes"})
                 continue
-            fmt, entries = parse(p.read_bytes(), root)
-        except (OSError, ValueError, ET.ParseError) as exc:
-            cov.reports.append({"file": name, "error": str(exc) or type(exc).__name__})
+            fmt, entries = parse(p.read_bytes(), root, scope=scope, strict=strict)
+            mtime = p.stat().st_mtime
+        # a report's content is another tool's output: whatever shape it has, it is an error entry, not a crash
+        except (OSError, ValueError, ET.ParseError, TypeError, AttributeError, KeyError, OverflowError,
+                RecursionError) as exc:
+            cov.reports.append({"file": name, "error": str(exc)[:200] or type(exc).__name__})
             continue
         for key, lines, tests in entries:
-            fc = cov.files.setdefault(key, FileCov(key))
+            fc = cov.files.setdefault(key, FileCov(key, scope=scope if scope and key.startswith(scope + "/")
+                                                   else ""))
             for ln, hits in lines.items():
                 fc.lines[ln] = fc.lines.get(ln, 0) + hits
             for ln, names in tests.items():
                 fc.tests.setdefault(ln, set()).update(names)
             fc.reports.add(name)
-        cov.reports.append({"file": name, "format": fmt, "files": len(entries), "mtime": p.stat().st_mtime})
+        cov.reports.append({"file": name, "format": fmt, "files": len(entries), "mtime": mtime})
     return cov
 
 
@@ -173,26 +205,37 @@ def _display(root: Path, p: Path) -> str:
 Entry = tuple[str, dict[int, int], dict[int, set[str]]]
 
 
-def parse(data: bytes, root: Path) -> tuple[str, list[Entry]]:
-    """``(format, [(file key, {line: hits}, {line: test names})])`` of one report."""
+def parse(data: bytes, root: Path, *, scope: str = "", strict: bool = True) -> tuple[str, list[Entry]]:
+    """``(format, [(file key, {line: hits}, {line: test names})])`` of one report. ``scope``: the folder the
+    report's relative paths are relative to (see :func:`_key`)."""
     head = data[:4096].lstrip(b"\xef\xbb\xbf \t\r\n")
+    where = _Where(Path(root), scope, strict)
     if head.startswith(b"<"):
         tree = ET.fromstring(data)
         if tree.tag == "report":
-            return "jacoco", _jacoco(tree)
+            return "jacoco", _jacoco(tree, where)
         if tree.tag == "coverage":
-            return "cobertura", _cobertura(tree, root)
+            return "cobertura", _cobertura(tree, where)
         raise ValueError(f"an XML report with root <{tree.tag}> is neither Cobertura nor JaCoCo")
     if head.startswith(b"{"):
-        return "coverage.py json", _coverage_json(json.loads(data.decode("utf-8")), root)
+        return "coverage.py json", _coverage_json(json.loads(data.decode("utf-8")), where)
     text = data.decode("utf-8", "replace")
     if re.search(r"^SF:", text, re.M):
-        return "lcov", _lcov(text, root)
+        return "lcov", _lcov(text, where)
     raise ValueError("not a coverage report this reader knows (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON)")
 
 
-def _key(root: Path, path: str) -> str:
-    """A report's file name as a repository-relative posix path when it lies under ``root``, else as given."""
+@dataclass
+class _Where:
+    root: Path
+    scope: str = ""
+    strict: bool = True
+
+
+def _key(root: Path, path: str, scope: str = "", strict: bool = True) -> str:
+    """A report's file name as a repository-relative posix path when it lies under ``root``, else as given. A
+    relative name from a report of sub-project ``scope`` is put under that folder when the file is there, or
+    when ``strict`` (the report lies at the sub-project's usual path) and the name is not a repository file."""
     p = path.strip().replace("\\", "/")
     if re.match(r"^[A-Za-z]:/|^/", p):
         try:
@@ -205,10 +248,16 @@ def _key(root: Path, path: str) -> str:
         return p
     while p.startswith("./"):
         p = p[2:]
-    return str(PurePosixPath(p)) if p else p
+    p = str(PurePosixPath(p)) if p else p
+    if scope and p:
+        if (root / scope / p).exists():
+            return f"{scope}/{p}"
+        if strict and not (root / p).exists():
+            return f"{scope}/{p}"
+    return p
 
 
-def _lcov(text: str, root: Path) -> list[Entry]:
+def _lcov(text: str, w: _Where) -> list[Entry]:
     out: dict[str, tuple[dict[int, int], dict[int, set[str]]]] = {}
     test = ""
     cur: tuple[dict[int, int], dict[int, set[str]]] | None = None
@@ -217,12 +266,12 @@ def _lcov(text: str, root: Path) -> list[Entry]:
         if line.startswith("TN:"):
             test = line[3:].strip()
         elif line.startswith("SF:"):
-            cur = out.setdefault(_key(root, line[3:]), ({}, {}))
+            cur = out.setdefault(_key(w.root, line[3:], w.scope, w.strict), ({}, {}))
         elif line.startswith("DA:") and cur is not None:
             parts = line[3:].split(",")
             try:
                 ln, hits = int(parts[0]), int(float(parts[1]))
-            except (ValueError, IndexError):
+            except (ValueError, IndexError, OverflowError):
                 continue
             cur[0][ln] = cur[0].get(ln, 0) + hits
             if hits > 0 and test:
@@ -232,7 +281,8 @@ def _lcov(text: str, root: Path) -> list[Entry]:
     return [(k, v[0], v[1]) for k, v in out.items()]
 
 
-def _cobertura(tree: ET.Element, root: Path) -> list[Entry]:
+def _cobertura(tree: ET.Element, w: _Where) -> list[Entry]:
+    root = w.root
     sources = [s.text.strip() for s in tree.iter("source") if s.text and s.text.strip()]
     out: dict[str, dict[int, int]] = {}
     for cls in tree.iter("class"):
@@ -245,23 +295,25 @@ def _cobertura(tree: ET.Element, root: Path) -> list[Entry]:
             if os.path.isabs(joined) and os.path.exists(joined):
                 key = _key(root, joined)
                 break
-            if not os.path.isabs(joined) and (root / joined).exists():
-                key = _key(root, joined)
-                break
-        key = key or _key(root, fn)
+            if not os.path.isabs(joined):
+                cand = _key(root, joined, w.scope, False)
+                if (root / cand).exists():
+                    key = cand
+                    break
+        key = key or _key(root, fn, w.scope, w.strict)
         lines = out.setdefault(key, {})
         # a class's own <lines> (its methods repeat them)
         for block in cls.findall("lines"):
             for ln in block.findall("line"):
                 try:
                     n, hits = int(ln.get("number", "")), int(float(ln.get("hits", "0")))
-                except ValueError:
+                except (ValueError, OverflowError):
                     continue
                 lines[n] = max(lines.get(n, 0), hits)
     return [(k, v, {}) for k, v in out.items()]
 
 
-def _jacoco(tree: ET.Element) -> list[Entry]:
+def _jacoco(tree: ET.Element, w: _Where) -> list[Entry]:
     out: list[Entry] = []
     for pkg in tree.iter("package"):
         pname = (pkg.get("name") or "").strip("/")
@@ -277,11 +329,11 @@ def _jacoco(tree: ET.Element) -> list[Entry]:
                     continue
                 if mi or ci:
                     lines[n] = ci
-            out.append((f"{pname}/{name}" if pname else name, lines, {}))
+            out.append((_key(w.root, f"{pname}/{name}" if pname else name, w.scope, w.strict), lines, {}))
     return out
 
 
-def _coverage_json(doc: dict, root: Path) -> list[Entry]:
+def _coverage_json(doc: dict, w: _Where) -> list[Entry]:
     files = doc.get("files")
     if not isinstance(files, dict):
         raise ValueError("a JSON report without a files object is not coverage.py's")
@@ -296,7 +348,7 @@ def _coverage_json(doc: dict, root: Path) -> list[Entry]:
             names = {c.split("|", 1)[0] for c in ctxs or [] if c and c.split("|", 1)[0]}
             if names and str(n).isdigit():
                 tests[int(n)] = names
-        out.append((_key(root, fn), lines, tests))
+        out.append((_key(w.root, fn, w.scope, w.strict), lines, tests))
     return out
 
 
@@ -358,8 +410,11 @@ def report(root: Path, paths: list[str] | None = None, *, reports: list[str] | N
             "no report at " + ", ".join(REPORT_PATHS)
         raise ValueError(f"no coverage report read ({why}); write one with your test runner (pytest --cov "
                          "--cov-report=xml, jest --coverage, gradle jacocoTestReport) or pass --report FILE")
-    wanted = [p.rstrip("/") for p in paths or []]
-    repo_files, unmatched, ambiguous = _repo_files(cov, wanted)
+    # "." and "./" are the whole repository; "./a.py" is "a.py"
+    wanted = [_norm_path(p) for p in paths or []]
+    repo_files, unmatched, ambiguous = _repo_files(cov, [] if "" in wanted else wanted)
+    paths_unmatched = [p for p, w in zip(paths or [], wanted)
+                       if w and not any(f == w or f.startswith(w + "/") for f in repo_files)]
     claims: list[dict] = []
     per_file = []
     for rel in sorted(repo_files):
@@ -405,6 +460,7 @@ def report(root: Path, paths: list[str] | None = None, *, reports: list[str] | N
         "files": per_file,
         "claims": claims[:limit],
         "report_files_not_in_repository": unmatched[:20],
+        "paths_not_measured": paths_unmatched,
         "ambiguous": ambiguous[:20],
     }
     if len(claims) > limit:
@@ -413,6 +469,14 @@ def report(root: Path, paths: list[str] | None = None, *, reports: list[str] | N
     if base_reports:
         res["changes"] = _changes(root, cov, load(root, base_reports), base or "HEAD")
     return res
+
+
+def _norm_path(p: str) -> str:
+    p = p.replace("\\", "/").strip()
+    while p.startswith("./"):
+        p = p[2:]
+    p = p.rstrip("/")
+    return "" if p in ("", ".") else p
 
 
 def _pct(a: int, b: int) -> float | None:
@@ -460,8 +524,12 @@ def _changes(root: Path, head: Coverage, old: Coverage, base: str) -> dict:
 
     if not old.read:
         return {"error": "no base report read: " + "; ".join(f"{r['file']}: {r.get('error')}" for r in old.reports)}
-    base_sha = treestate.resolve_commit(root, base)
-    changed = set(treestate.changes_vs_base(root, base_sha)["tree_files"])
+    # the head coverage stays when the base cannot be named (no git, no commit yet, a bad ref)
+    try:
+        base_sha = treestate.resolve_commit(root, base)
+        changed = set(treestate.changes_vs_base(root, base_sha)["tree_files"])
+    except (ValueError, OSError) as exc:
+        return {"error": f"the base {base!r} cannot be compared with the working tree: {exc}"}
     files, _u, _a = _repo_files(head, [])
     indirect, direct = [], []
     for rel in sorted(files):
@@ -493,6 +561,8 @@ def render_text(res: dict) -> str:
     out = [f"Coverage: {s['covered_lines']} of {s['measured_lines']} measured line(s) ran"
            + (f" ({s['percent']}%)" if s["percent"] is not None else "") + f" in {s['files']} file(s), from "
            + ", ".join(f"{r['file']} ({r.get('format') or 'error: ' + str(r.get('error'))})" for r in res["reports"])]
+    if res.get("paths_not_measured"):
+        out.append("  no report measured a file under: " + ", ".join(res["paths_not_measured"][:6]))
     if s["report_files_not_in_repository"] or s["ambiguous"]:
         out.append(f"  {s['report_files_not_in_repository']} report file(s) fit no file of the repository; "
                    f"{s['ambiguous']} file(s) fit two report entries (--json)")

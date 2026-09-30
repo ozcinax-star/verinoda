@@ -171,6 +171,20 @@ def _rel_in_repo(repo: Path, path: str, what: str) -> str:
     return path.replace("\\", "/")
 
 
+def _report_args(repo: Path, paths: list[str] | None) -> list[str] | None:
+    """Report files given on the command line: repository-relative, else relative to the working directory
+    (made absolute), else as given."""
+    if not paths:
+        return paths
+    out = []
+    for path in paths:
+        p = Path(path)
+        if not p.is_absolute() and not (repo / p).exists() and (Path.cwd() / p).exists():
+            path = str((Path.cwd() / p).resolve())
+        out.append(path)
+    return out
+
+
 def _path_line(repo: Path, spec: str, what: str) -> tuple[str, int]:
     path, sep, line = spec.rpartition(":")
     if not sep or not path or not line.isdigit() or int(line) < 1:
@@ -831,7 +845,7 @@ def cmd_review(args) -> int:
         res = rv.review(repo, store=st, base=args.base, staged=args.staged, targets=args.target,
                         change=args.change or ("body" if args.target else None), concerns=concerns,
                         run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars,
-                        coverage_reports=args.coverage)
+                        coverage_reports=_report_args(repo, args.coverage))
     finally:
         st.close()
     _emit(args, res, lambda r: _write(rv.render_text(r)))
@@ -847,8 +861,8 @@ def cmd_coverage(args) -> int:
         return 2
     paths = [_rel_in_repo(repo.resolve(), p, "path") for p in args.paths or []]
     try:
-        res = ci.report(repo, paths or None, reports=args.report, base_reports=args.base_report, base=args.base,
-                        limit=args.limit)
+        res = ci.report(repo, paths or None, reports=_report_args(repo, args.report),
+                        base_reports=_report_args(repo, args.base_report), base=args.base, limit=args.limit)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 4

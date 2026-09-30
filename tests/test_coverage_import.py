@@ -312,3 +312,151 @@ def test_review_with_a_stale_report_says_so_and_without_one_keeps_its_limit(tmp_
     (repo / "bad.xml").write_text("<nope/>", encoding="utf-8")
     res = _review(repo, coverage_reports=["bad.xml"])
     assert any(x["kind"] == "coverage_report" for x in res["unknown"]) and "coverage" not in res["tests"]
+
+
+# -- nested definitions, sub-projects, stale reports, unreadable reports, paths ---------------------------
+
+@needs_git
+def test_review_counts_a_line_once_for_the_innermost_changed_definition(tmp_path):
+    repo = _repo(tmp_path, {"calc.py": "class C:\n    X = 1\n\n    def f(self):\n        return 1\n"}, scan=True)
+    _edit(repo, "calc.py", "X = 1", "X = 2")
+    _edit(repo, "calc.py", "return 1", "return 2")
+    rp = repo / "coverage.xml"
+    rp.write_text(_cobertura("calc.py", {1: 1, 2: 1, 4: 1, 5: 0}), encoding="utf-8")
+    _fresh(rp)
+    res = _review(repo)
+    assert {c["symbol"] for c in res["changes"]} >= {"calc.py::C", "calc.py::C.f"}
+    cv = res["tests"]["coverage"]
+    assert cv["patch"] == {"measured_changed_lines": 2, "covered": 1, "percent": 50.0}
+    assert [(u["lines"], u["symbol"]) for u in cv["uncovered"]] == [("5", "calc.py::C.f")]
+    assert res["counts"]["uncovered_changed_lines"] == 1
+
+
+@needs_git
+def test_review_of_an_added_java_class_counts_each_line_once(tmp_path):
+    repo = _repo(tmp_path, {"src/main/java/com/ex/Calc.java": JAVA}, scan=True)
+    _write(repo, "src/main/java/com/ex/Util.java",
+           "package com.ex;\n\npublic class Util {\n    public int one() {\n        return 1;\n    }\n}\n")
+    rp = repo / "build/reports/jacoco/test/jacocoTestReport.xml"
+    rp.parent.mkdir(parents=True)
+    rp.write_text('<report name="t"><package name="com/ex"><sourcefile name="Util.java">'
+                  '<line nr="3" mi="3" ci="0"/><line nr="5" mi="2" ci="0"/></sourcefile></package></report>',
+                  encoding="utf-8")
+    _fresh(rp)
+    cv = _review(repo)["tests"]["coverage"]
+    assert cv["patch"]["measured_changed_lines"] == 2 and cv["patch"]["covered"] == 0
+    rows = {u["symbol"]: u["lines"] for u in cv["uncovered"]}
+    assert rows["src/main/java/com/ex/Util.java::Util.one"] == "5"
+    assert sorted(rows.values()) == ["3", "5"]
+
+
+@needs_git
+def test_sub_project_reports_stay_apart(tmp_path):
+    fn = "export function a(x: number): number {\n  return x;\n}\n"
+    java = "package com.ex;\nclass Foo {\n  int f() { return 1; }\n}\n"
+    repo = _repo(tmp_path, {"web/src/index.ts": fn, "admin/src/index.ts": fn,
+                            "mod-a/src/main/java/com/ex/Foo.java": java,
+                            "mod-b/src/main/java/com/ex/Foo.java": java})
+    for d, hits in (("web", 5), ("admin", 0)):
+        rp = repo / d / "coverage" / "lcov.info"
+        rp.parent.mkdir(parents=True)
+        rp.write_text(f"SF:src/index.ts\nDA:1,1\nDA:2,{hits}\nend_of_record\n", encoding="utf-8")
+        _fresh(rp)
+    # JaCoCo modules that share a package path
+    for mod, ran in (("mod-a", 1), ("mod-b", 0)):
+        rp = repo / mod / "build/reports/jacoco/test/jacocoTestReport.xml"
+        rp.parent.mkdir(parents=True)
+        rp.write_text(f'<report name="t"><package name="com/ex"><sourcefile name="Foo.java">'
+                      f'<line nr="3" mi="{1 - ran}" ci="{ran}"/></sourcefile></package></report>', encoding="utf-8")
+        _fresh(rp)
+    cov = ci.load(repo)
+    assert cov.lines_of("admin/src/index.ts").lines == {1: 1, 2: 0}
+    assert cov.lines_of("web/src/index.ts").lines == {1: 1, 2: 5}
+    assert cov.lines_of("mod-a/src/main/java/com/ex/Foo.java").lines == {3: 1}
+    assert cov.lines_of("mod-b/src/main/java/com/ex/Foo.java").lines == {3: 0}
+    by = {c["subject"]: c for c in ci.report(repo)["claims"]}
+    assert by["admin/src/index.ts::a"]["not_run"] == "2" and by["web/src/index.ts::a"]["not_run"] == ""
+    assert by["admin/src/index.ts::a"]["evidence_at"] == ["admin/src/index.ts:1", "admin/coverage/lcov.info"]
+    # a root-level file of the same relative path does not take a sub-project's entry
+    _write(repo, "src/index.ts", fn)
+    assert ci.load(repo).resolve("src/index.ts") == (None, "absent")
+
+
+@needs_git
+def test_a_stale_report_merged_with_a_fresh_one_makes_the_file_weak(tmp_path):
+    repo = _repo(tmp_path, {"calc.py": "def a():\n    return 1\n\n\ndef b():\n    return 2\n"})
+    old = repo / "coverage.xml"
+    old.write_text(_cobertura("calc.py", {6: 1}), encoding="utf-8")
+    os.utime(old, (1, 1))
+    new = repo / "lcov.info"
+    new.write_text("SF:calc.py\nDA:5,1\nDA:6,0\nend_of_record\n", encoding="utf-8")
+    _fresh(new)
+    by = {c["subject"]: c for c in ci.report(repo)["claims"]}
+    assert by["calc.py::b"]["status"] == "weak_inference" and "may have moved" in by["calc.py::b"]["claim"]
+
+
+@pytest.mark.parametrize("data", [
+    '{"files": {"a.py": {"executed_lines": [null]}}}',
+    '{"files": {"a.py": {"contexts": ["x"]}}}',
+    '{"files": {"a.py": {"contexts": {"1": [null, 5]}}}}',
+    "deep",
+], ids=["null line", "contexts list", "null context", "deep nesting"])
+def test_a_report_of_an_unexpected_shape_is_an_error_entry_not_a_crash(tmp_path, data):
+    if data == "deep":
+        data = '{"files":' + "[" * 50000 + "]" * 50000 + "}"
+    (tmp_path / "coverage.json").write_text(data, encoding="utf-8")
+    cov = ci.load(tmp_path, ["coverage.json"])
+    assert not cov.read and cov.reports[0]["error"]
+
+
+def test_infinite_hits_are_skipped_not_a_crash(tmp_path):
+    _fmt, [(_k, lines, _t)] = ci.parse(b"SF:a.py\nDA:1,inf\nDA:2,1\nend_of_record\n", tmp_path)
+    assert lines == {2: 1}
+    _fmt, [(_k, lines, _t)] = ci.parse(_cobertura("a.py", {1: 1}).replace("hits='1'", "hits='inf'").encode(),
+                                       tmp_path)
+    assert lines == {}
+
+
+@needs_git
+def test_review_with_a_malformed_discovered_report_does_not_crash(tmp_path):
+    repo = _repo(tmp_path, {"calc.py": PY}, scan=True)
+    _edit(repo, "calc.py", "return w * h", "return h * w")
+    (repo / "coverage.json").write_text('{"files": {"calc.py": {"executed_lines": [null]}}}', encoding="utf-8")
+    res = _review(repo)
+    assert "coverage" not in res["tests"]
+
+
+@needs_git
+def test_paths_dot_and_dot_slash_and_a_path_nothing_measured(tmp_path):
+    repo = _repo(tmp_path, {"calc.py": PY})
+    rp = repo / "coverage.xml"
+    rp.write_text(_cobertura("calc.py", {2: 1, 6: 0}), encoding="utf-8")
+    _fresh(rp)
+    assert ci.report(repo)["summary"]["measured_lines"] == 2
+    assert ci.report(repo, ["."])["summary"]["measured_lines"] == 2
+    assert ci.report(repo, ["./calc.py"])["summary"]["measured_lines"] == 2
+    res = ci.report(repo, ["nope"])
+    assert res["paths_not_measured"] == ["nope"] and "no report measured a file under: nope" in ci.render_text(res)
+
+
+def test_a_base_that_cannot_be_named_keeps_the_head_coverage(tmp_path):
+    _write(tmp_path, "a.py", "def f():\n    return 1\n")
+    (tmp_path / "lcov.info").write_text("SF:a.py\nDA:2,1\nend_of_record\n", encoding="utf-8")
+    (tmp_path / "base.info").write_text("SF:a.py\nDA:2,0\nend_of_record\n", encoding="utf-8")
+    res = ci.report(tmp_path, reports=["lcov.info"], base_reports=["base.info"])
+    assert res["summary"]["covered_lines"] == 1 and "error" in res["changes"]
+    assert "Coverage changes:" in ci.render_text(res)
+
+
+@needs_git
+def test_cli_report_path_relative_to_the_working_directory(tmp_path):
+    repo = _repo(tmp_path, {"web/src/a.ts": TS})
+    rp = repo / "web" / "coverage" / "lcov.info"
+    rp.parent.mkdir(parents=True)
+    rp.write_text("SF:src/a.ts\nDA:2,1\nend_of_record\n", encoding="utf-8")
+    env = {**os.environ, "PYTHONPATH": str(ROOT)}
+    r = subprocess.run([sys.executable, "-m", "verinoda", "coverage", "--repo", str(repo), "--report",
+                        "coverage/lcov.info", "--json"], capture_output=True, text=True, env=env, cwd=repo / "web")
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["summary"]["covered_lines"] == 1 and out["files"][0]["file"] == "web/src/a.ts"

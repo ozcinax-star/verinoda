@@ -4894,12 +4894,20 @@ def _line_coverage(ctx: _Ctx, changes: list[Change], tests: dict, reports: list[
     covered_by: dict[str, list[str]] = {}
     ran_symbols: set[str] = set()
     not_in, ambiguous = set(), set()
-    for c in code:
+    # an outer definition's changed lines hold its nested definitions' too: each line counts once, for the
+    # innermost change around it
+    owner: dict[tuple[str, int], tuple[int, int, int]] = {}
+    for i, c in enumerate(code):
+        span = (c.lines[1] - c.lines[0], -c.lines[0]) if c.lines else (1 << 30, 0)
+        for ln in c.new_changed:
+            if (c.file, ln) not in owner or (*span, i) < owner[(c.file, ln)]:
+                owner[(c.file, ln)] = (*span, i)
+    for i, c in enumerate(code):
         fc = cov.lines_of(c.file)
         if fc is None:
             (ambiguous if cov.resolve(c.file)[1] == "ambiguous" else not_in).add(c.file)
             continue
-        lines = {ln for ln in c.new_changed if ln in fc.lines}
+        lines = {ln for ln in c.new_changed if ln in fc.lines and owner[(c.file, ln)][2] == i}
         ran = {ln for ln in lines if fc.lines[ln] > 0}
         measured += len(lines)
         covered += len(ran)
