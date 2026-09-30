@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D107)
+## Upgrading from 0.3.2 (D60-D108)
 
 ### D63: Running a project's own tests safely
 
@@ -487,6 +487,12 @@ New command `verinoda brief [--max-chars N] [--json]`: a project brief (name, ru
 commands, CI commands, layout, conventions) read from the files on every call, each line with `file:line`, under
 a character budget (default 2,000). It is not the decision brief: `verinoda decide brief` is unchanged. No MCP
 change: the tool count in UPGRADING.md stays as it is.
+
+### D108: Docs coupled to code, drift check and trivial auto-fix
+
+New: `verinoda docs check [PATHS] [--fix] [--exclude GLOB]` checks the paths and line references in the
+repository's documents against the working tree (exit 1 when one is broken, renamed, moved or changed); `--fix`
+repairs renamed paths and moved line numbers. The MCP tool count is unchanged.
 
 ### D60-D62
 

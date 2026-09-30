@@ -124,7 +124,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 12.1 | **Docs coupled to code, drift check and trivial auto-fix** | Code references in ordinary repo docs checked on each change; renames and moved lines fixed, the rest flagged; a CI check | Swimm | `verinoda docs check` fails on a broken reference and `--fix` repairs a rename |
 | 12.5 | **Undocumented decisions** | Find structural choices no decision record covers (a single storage path, an exclusive library) | Codex ADR workflow | candidates listed as `weak_inference` for the user to record or dismiss |
 | 12.6 | **Specs traced to code and tests** | Requirement criteria (EARS style) linked to code and tests through claims; criteria with no evidence reported | Kiro specs, GitHub spec-kit, Tessl | `verinoda spec check` lists unevidenced criteria |
 | 12.8 | **Issue and chat sources (opt-in)** | PR, issue, Jira and Slack threads as "why" evidence, with contradictions between sources shown | Unblocked, Glean, Tabnine | a why-answer cites a PR discussion |
