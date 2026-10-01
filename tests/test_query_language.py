@@ -322,8 +322,11 @@ def test_a_known_relation_with_no_edge_is_answered_not_refused(proj):
 
 
 def test_deep_nesting_is_refused():
-    with pytest.raises(graphquery.QueryError, match="nested more than"):
+    with pytest.raises(graphquery.QueryError, match="nested in more than 30 parentheses and NOTs"):
         graphquery.parse("match (f) where " + "not " * 100 + "f.name = 'x'")
+    with pytest.raises(graphquery.QueryError, match="nested in more than 30 parentheses and NOTs"):
+        graphquery.parse("match (f) where " + "(" * 31 + "f.name = 'x'" + ")" * 31)
+    graphquery.parse("match (f) where " + "(" * 30 + "f.name = 'x'" + ")" * 30)   # each parenthesis counts one
     with pytest.raises(graphquery.QueryError, match="over 4000 characters"):
         graphquery.parse("match (f) where " + " or ".join(["f.name = 'x'"] * 400))
 
@@ -380,3 +383,190 @@ def test_cli_json_shape_and_exit_codes(proj, capsys):
     assert "note: stopped at 1 row(s)" in text
     assert cli.main(["q", "--repo", str(proj), DONE_WHEN, "--verify"]) == 0
     assert "[statically_verified]" in capsys.readouterr().out
+
+
+# -- review round: cycles, directions, budgets inside a text scan, odd input, failed branches -------------
+
+REC = '''def fact(n):
+    return 1 if n < 2 else n * fact(n - 1)
+
+
+def ping(n):
+    return pong(n - 1) if n else 0
+
+
+def pong(n):
+    return ping(n - 1) if n else 0
+
+
+def outer():
+    def inner():
+        return 1
+    return inner()
+
+
+def chain1():
+    return chain2()
+
+
+def chain2():
+    return chain3()
+
+
+def chain3():
+    return leaf()
+
+
+def leaf():
+    return 0
+
+
+def caller():
+    return fact(3)
+
+
+class WithMethods:
+    def run(self):
+        return leaf()
+
+
+class Empty:
+    pass
+
+
+def tri1(n):
+    return tri2(n - 1) if n else 0
+
+
+def tri2(n):
+    return tri3(n - 1) if n else 0
+
+
+def tri3(n):
+    return tri1(n - 1) if n else 0
+'''
+
+SLOW = "def slow():\n" + "    x = 'aaaaaaaaaaaaaaaaaaaaaaaa'\n" * 1500 + "    return x\n"
+
+
+@pytest.fixture(scope="module")
+def rec(tmp_path_factory) -> Path:
+    root = tmp_path_factory.mktemp("gqrec") / "rec"
+    for rel, text in {".gitignore": ".verinoda/\n", "rec.py": REC, "slow.py": SLOW}.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8", newline="\n")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "one")
+    workflow.init(root)
+    st = open_store(root)
+    try:
+        workflow.scan(st, root)
+    finally:
+        st.close()
+    return root
+
+
+def test_a_self_loop_and_a_cycle_back_to_the_start_match(rec):
+    loop = _q(rec, "match (a)-[calls]->(a) return a")
+    assert _names(loop, "a") == [("fact()",)]
+    (hop,) = loop["rows"][0]["evidence"]["paths"][0]
+    assert (hop["from"], hop["to"], hop["at"]) == ("fact()", "fact()", "rec.py:2")
+    assert _names(_q(rec, "match (a)-[calls*1..1]->(a) return a"), "a") == [("fact()",)]
+    cycles = _q(rec, 'match (a)-[calls*1..3]->(a) where a.file = "rec.py" return a')
+    assert _names(cycles, "a") == [("fact()",), ("tri1()",), ("tri2()",), ("tri3()",)]
+    tri = next(r for r in cycles["rows"] if r["values"]["a"]["label"] == "tri1()")
+    assert [(h["from"], h["to"]) for h in tri["evidence"]["paths"][0]] == [
+        ("tri1()", "tri2()"), ("tri2()", "tri3()"), ("tri3()", "tri1()")]
+    # a lower bound above one walks by level: the same cycles, and no self-loop used twice
+    assert _names(_q(rec, "match (a)-[calls*3]->(a) return a"), "a") == [("tri1()",), ("tri2()",), ("tri3()",)]
+    # the extraction keeps one edge between two nodes: pong() calling ping() back is not an edge
+    assert _names(_q(rec, 'match (a)-[calls]->(b) where a.name = "pong" return b'), "b") == []
+    # a recursive function is not uncalled
+    uncalled = _q(rec, 'match (a:function) where a.file = "rec.py" and not exists (a)<-[calls]-() return a.name')
+    names = {r[0] for r in _names(uncalled, "a.name")}
+    assert "fact" not in names and {"caller", "chain1", "outer"} <= names
+    # *0..1 gives the start once, not again through its self-loop
+    zero = _q(rec, 'match (a)-[calls*0..1]->(b) where a.name = "fact" return b')
+    assert _names(zero, "b") == [("fact()",)] and zero["rows"][0]["bindings"] == 1
+
+
+def test_a_path_walked_from_its_other_end_is_cited_in_the_order_the_pattern_reads(rec):
+    res = _q(rec, 'match (a:function), (b)-[calls*3]->(a) where a.name = "leaf" return b')
+    assert _names(res, "b") == [("chain1()",)]
+    (path,) = res["rows"][0]["evidence"]["paths"]
+    assert [(h["from"], h["to"], h["walked"]) for h in path] == [
+        ("chain1()", "chain2()", "forward"), ("chain2()", "chain3()", "forward"), ("chain3()", "leaf()", "forward")]
+    assert ("path chain1() -calls-> chain2() (rec.py:20) -calls-> chain3() (rec.py:24) -calls-> leaf() (rec.py:28)"
+            in graphquery.render(res))
+    back = _q(rec, 'match (a)<-[calls*3]-(b) where a.name = "leaf" return b')
+    (path,) = back["rows"][0]["evidence"]["paths"]
+    assert [(h["from"], h["to"], h["walked"]) for h in path] == [
+        ("chain3()", "leaf()", "backward"), ("chain2()", "chain3()", "backward"), ("chain1()", "chain2()", "backward")]
+    assert ("path leaf() <-calls- chain3() (rec.py:28) <-calls- chain2() (rec.py:24) <-calls- chain1() (rec.py:20)"
+            in graphquery.render(back))
+
+
+def test_an_either_way_walk_never_goes_back_along_the_same_edge(rec):
+    res = _q(rec, 'match (a)-[contains*2]-(c) where a.name = "fact" return c')
+    names = {r[0] for r in _names(res, "c")}
+    assert "fact()" not in names and "ping()" in names
+    text = graphquery.render(res)
+    assert "path fact() <-contains- rec.py (rec.py:1) -contains-> ping() (rec.py:5)" in text
+
+
+def test_the_timeout_holds_inside_a_text_scan(rec):
+    import time
+
+    t0 = time.perf_counter()
+    res = _q(rec, 'match (f:function) where f.name = "slow" and f.text ~ "(a|aa)*c"', timeout=0.5)
+    assert time.perf_counter() - t0 < 5
+    assert res["truncated"] == "timeout" and not res["complete"]
+
+
+@pytest.mark.parametrize("query, fragment", [
+    ("match (f) limit ²", "unexpected character '²'"),
+    ("match (f) limit 1٣", "unexpected character '٣'"),
+    ("match (f٣) return f", "unexpected character '٣'"),
+    ('match (f) where f.name ~ "a{1,99999999999}"', "cannot be compiled"),
+    ("match (f) where f.line<-1", "`<-` is an edge arrow here"),
+])
+def test_odd_input_is_a_query_error(rec, query, fragment, capsys):
+    with pytest.raises(graphquery.QueryError) as exc:
+        _q(rec, query)
+    assert fragment in exc.value.message
+    assert cli.main(["q", "--repo", str(rec), query]) == 2
+    capsys.readouterr()
+
+
+def test_the_caret_of_an_unknown_count_variable_points_at_it():
+    with pytest.raises(graphquery.QueryError) as exc:
+        graphquery.parse("match (f) return count(g)")
+    assert exc.value.where()["column"] == 24
+
+
+def test_a_branch_that_failed_cites_nothing(rec):
+    res = _q(rec, 'match (f:function) where f.file = "rec.py" and '
+                  '((exists (f)-[calls]->(x) and f.name = "nomatch") or f.name = "chain1") return f')
+    assert _names(res, "f") == [("chain1()",)]
+    assert "paths" not in res["rows"][0]["evidence"]
+    # the absence is said for the rows a NOT EXISTS kept, not for the rows the other branch kept
+    mix = _q(rec, 'match (f:function) where f.file = "rec.py" and '
+                  '(not exists (f)<-[calls]-() or f.name = "leaf") return f')
+    by = {r["values"]["f"]["label"]: r for r in mix["rows"]}
+    assert graphquery.ABSENCE_NOTE in by["outer()"]["uncertain"]
+    assert "uncertain" not in by["leaf()"]
+    assert by["leaf()"]["status"] == "strong_inference"
+    ver = _q(rec, 'match (f:function) where f.name = "leaf" and (not exists (f)<-[calls]-() or f.line > 0)',
+             verify=True)
+    assert ver["rows"][0]["status"] == "statically_verified"
+
+
+def test_classes_with_and_without_methods_and_a_nested_function(rec):
+    assert _names(_q(rec, 'match (c:class) where c.file = "rec.py" return c'), "c") == [("Empty",),
+                                                                                         ("WithMethods",)]
+    assert _names(_q(rec, "match (c:class)-[method]->(m:method) return c, m"), "c", "m") == [("WithMethods",
+                                                                                              ".run()")]
+    nested = _q(rec, 'match (f:function) where f.name = "outer" and f.text ~ "return 1" return f')
+    assert [ln["at"] for ln in nested["rows"][0]["evidence"]["lines"]] == ["rec.py:15"]

@@ -35,8 +35,9 @@ is ever run, and a regular expression is compiled by :mod:`re` (300 characters a
 Status: graph edges are extractions, so a row is ``strong_inference`` at most when every
 edge it rests on is ``EXTRACTED`` and ``weak_inference`` when one is ``INFERRED``; a row citing a file changed
 since the index is ``unknown``. ``verify=True`` re-reads the cited lines (the call sites through
-:func:`verinoda.entail.call_site`, the definitions, the route declarations) and raises a row to
-``statically_verified`` only when every part of it is confirmed in Python code and no part is an absence.
+:func:`verinoda.entail.call_site`, the definitions; a route declaration must be a readable line of a Python file,
+the route table being parsed from the current files) and raises a row to ``statically_verified`` only when every
+part of it is confirmed in Python code and no part is an absence.
 """
 
 from __future__ import annotations
@@ -114,6 +115,10 @@ _PUNCT = ("->", "<-", "<=", ">=", "!=", "..", "(", ")", "[", "]", ",", ":", "|",
           ">")
 
 
+_DIGITS = frozenset("0123456789")
+_WORD_TAIL = frozenset("_0123456789")
+
+
 def tokenize(text: str) -> list[Tok]:
     out: list[Tok] = []
     i, n = 0, len(text)
@@ -124,15 +129,15 @@ def tokenize(text: str) -> list[Tok]:
             continue
         if c.isalpha() or c == "_":
             j = i + 1
-            while j < n and (text[j].isalnum() or text[j] == "_"):
+            while j < n and (text[j].isalpha() or text[j] in _WORD_TAIL):
                 j += 1
             word = text[i:j]
             out.append(Tok("kw", word.lower(), i) if word.lower() in KEYWORDS else Tok("ident", word, i))
             i = j
             continue
-        if c.isdigit():
+        if c in _DIGITS:   # ASCII digits only: `²` or `٣` are not numbers here
             j = i
-            while j < n and text[j].isdigit():
+            while j < n and text[j] in _DIGITS:
                 j += 1
             if j < n and (text[j].isalpha() or text[j] == "_"):
                 raise QueryError("a number runs into a name", j, text)
@@ -412,27 +417,25 @@ class _Parser:
                 self.err("expected '->' or '-' after ']'")
         return RelPat(tuple(rels) or None, direction, lo, hi, t.pos)
 
+    # ``depth`` counts the parentheses and NOTs a condition sits in
     def cond(self, depth: int):
-        if depth > MAX_COND_DEPTH:
-            raise QueryError(f"the condition is nested more than {MAX_COND_DEPTH} levels", self.peek().pos,
-                             self.text)
-        items = [self.cond_and(depth + 1)]
+        items = [self.cond_and(depth)]
         while self.is_("kw", "or"):
             self.next()
-            items.append(self.cond_and(depth + 1))
+            items.append(self.cond_and(depth))
         return items[0] if len(items) == 1 else BoolOp("or", items)
 
     def cond_and(self, depth: int):
-        items = [self.cond_not(depth + 1)]
+        items = [self.cond_not(depth)]
         while self.is_("kw", "and"):
             self.next()
-            items.append(self.cond_not(depth + 1))
+            items.append(self.cond_not(depth))
         return items[0] if len(items) == 1 else BoolOp("and", items)
 
     def cond_not(self, depth: int):
         if depth > MAX_COND_DEPTH:
-            raise QueryError(f"the condition is nested more than {MAX_COND_DEPTH} levels", self.peek().pos,
-                             self.text)
+            raise QueryError(f"the condition is nested in more than {MAX_COND_DEPTH} parentheses and NOTs",
+                             self.peek().pos, self.text)
         if self.is_("kw", "not"):
             t = self.next()
             return Not(self.cond_not(depth + 1), t.pos)
@@ -452,6 +455,9 @@ class _Parser:
         elif t.kind == "kw" and t.value == "glob":
             op = "glob"
             self.next()
+        elif t.kind == "punct" and t.value == "<-":
+            raise QueryError("`<-` is an edge arrow here; write `< 1` with a space (numbers are whole and not "
+                             "negative)", t.pos, self.text)
         else:
             self.err("expected an operator (=, !=, ~, glob, <, <=, >, >=)")
         v = self.peek()
@@ -480,13 +486,15 @@ class _Parser:
         if t.kind == "kw" and t.value == "count":
             self.next()
             self.expect("punct", "(", "'(' after COUNT")
+            pos = t.pos
             if self.is_("punct", "*"):
                 self.next()
                 var = None
             else:
-                var = str(self.ident("variable name").value)
+                v = self.ident("variable name")
+                var, pos = str(v.value), v.pos   # an unknown variable is pointed at, not COUNT
             self.expect("punct", ")", "')' to close COUNT")
-            return Item("count", var, None, t.pos)
+            return Item("count", var, None, pos)
         var = self.ident("variable name or COUNT(...)")
         if self.is_("punct", "."):
             self.next()
@@ -584,6 +592,9 @@ def _check_cmp(c: Cmp, text: str) -> None:
             c.rx = re.compile(v)
         except re.error as exc:
             raise QueryError(f"not a regular expression: {exc.msg}", c.pos, text) from None
+        except (OverflowError, RecursionError, ValueError, MemoryError) as exc:   # `a{1,99999999999}`, deep groups
+            raise QueryError(f"the regular expression cannot be compiled: {type(exc).__name__}", c.pos,
+                             text) from None
 
 
 # -- evaluation -----------------------------------------------------------------------------------------
@@ -596,10 +607,18 @@ def _bare(label: str) -> str:
     return str(label or "").strip().lstrip(".").split("(")[0]
 
 
+# A hop is ``(source, target, data, forward)``: the edge in the graph's own direction, and whether the walk went
+# from its source to its target (False: it was walked backwards, against the edge).
+ABSENCE = "absence"   # marks, among a condition's witnesses, a NOT EXISTS that held
+ABSENCE_NOTE = ("rests on an absence in the graph: an edge the extraction cannot see (dynamic dispatch, "
+                "reflection, a call through a variable) is not there")
+
+
 @dataclass
 class _Binding:
     nodes: dict[str, str]
-    paths: list[list[tuple[str, str, dict]]]
+    paths: list[list[tuple[str, str, dict, bool]]]
+    absence: bool = False
 
 
 class _Eval:
@@ -633,8 +652,6 @@ class _Eval:
                 self.pushed.setdefault(next(iter(vs)), []).append(c)
             else:
                 self.residual.append(c)
-        self.negated = any(isinstance(x, Exists) and _under_not(q.where, x) for x in _walk_cond(q.where))
-
     # budget
     def spend(self, n: int = 1) -> None:
         self.used += n
@@ -771,6 +788,7 @@ class _Eval:
             first, lines = span
             self.spend(1 + len(lines) // 50)
             for i, ln in enumerate(lines):
+                self.check_time()   # per line: a slow pattern over a long definition stops at the deadline
                 if c.rx.search(ln):
                     hits.append((first + i, ln.strip()[:160]))
                     if len(hits) >= LINES_PER_NODE:
@@ -779,12 +797,29 @@ class _Eval:
         return bool(hits)
 
     def eval_cond(self, c, nodes: dict[str, str], ev: list | None = None) -> bool:
+        """Whether ``c`` holds; ``ev`` receives the witnesses (EXISTS paths, :data:`ABSENCE` for a NOT EXISTS
+        that held) of the branches that made it true, never those of a branch that failed."""
         if isinstance(c, BoolOp):
             if c.op == "and":
-                return all(self.eval_cond(x, nodes, ev) for x in c.items)
-            return any(self.eval_cond(x, nodes, ev) for x in c.items)
+                local: list | None = [] if ev is not None else None
+                for x in c.items:
+                    if not self.eval_cond(x, nodes, local):
+                        return False
+                if ev is not None:
+                    ev.extend(local)
+                return True
+            for x in c.items:
+                local = [] if ev is not None else None
+                if self.eval_cond(x, nodes, local):
+                    if ev is not None:
+                        ev.extend(local)
+                    return True
+            return False
         if isinstance(c, Not):
-            return not self.eval_cond(c.item, nodes, None)
+            held = not self.eval_cond(c.item, nodes, None)
+            if held and ev is not None and any(isinstance(x, Exists) for x in _walk_cond(c.item)):
+                ev.append(ABSENCE)
+            return held
         if isinstance(c, Exists):
             for b in self.match_pattern(c.pattern, nodes, local=True):
                 if ev is not None:
@@ -844,20 +879,24 @@ class _Eval:
         return out
 
     # edges
-    def neighbours(self, u: str, rel: RelPat):
-        """``{v: best edge (u, v, d) in the graph's own direction}`` one step from ``u``."""
+    def neighbours(self, u: str, rel: RelPat, avoid: frozenset = frozenset()):
+        """``{v: best hop (source, target, data, forward)}`` one step from ``u``; ``avoid``: edges (by
+        :func:`_edge_key`) the path already used, never walked again (an either-way walk would go back along
+        the edge it came by)."""
         G = self.g.G
         rels = set(rel.rels) if rel.rels else None
-        best: dict[str, tuple[str, str, dict]] = {}
+        best: dict[str, tuple[str, str, dict, bool]] = {}
         sides = []
         if rel.direction in ("out", "both"):
-            sides.append(((v, (u, v, d)) for _, v, d in G.out_edges(u, data=True)))
+            sides.append(((v, (u, v, d, True)) for _, v, d in G.out_edges(u, data=True)))
         if rel.direction in ("in", "both"):
-            sides.append(((w, (w, u, d)) for w, _, d in G.in_edges(u, data=True)))
+            sides.append(((w, (w, u, d, False)) for w, _, d in G.in_edges(u, data=True)))
         for side in sides:
             for v, e in side:
                 self.spend()
                 if rels is not None and e[2].get("relation") not in rels:
+                    continue
+                if avoid and _edge_key(e) in avoid:
                     continue
                 cur = best.get(v)
                 if cur is None or _edge_rank(e[2]) < _edge_rank(cur[2]):
@@ -866,18 +905,24 @@ class _Eval:
 
     def step(self, u: str, rel: RelPat):
         """``(v, hops)`` reachable from ``u`` in ``lo..hi`` steps; one path per end node, the shortest (at the
-        same length, one with no INFERRED edge when there is one)."""
+        same length, one with no INFERRED edge when there is one). ``u`` itself is an end at length 0 when
+        ``lo`` is 0, and at the length of a path back to it (a self-loop, a cycle) otherwise; no edge is used
+        twice in one path."""
         if rel.lo == 0:
             yield u, []
         if rel.hi == 0:
             return
         if rel.lo <= 1:
-            seen = {u}
+            # breadth first: each node is an end once (the start only when it was not one at length 0) and is
+            # expanded once
+            seen = {u} if rel.lo == 0 else set()
+            expanded = {u}
             frontier = {u: []}
             for depth in range(1, rel.hi + 1):
                 nxt: dict[str, list] = {}
                 for x, hops in frontier.items():
-                    for v, e in self.neighbours(x, rel).items():
+                    avoid = frozenset(_edge_key(h) for h in hops)
+                    for v, e in self.neighbours(x, rel, avoid).items():
                         if v in seen:
                             continue
                         cand = hops + [e]
@@ -885,9 +930,9 @@ class _Eval:
                             nxt[v] = cand
                 for v, hops in nxt.items():
                     seen.add(v)
-                    if depth >= rel.lo and not (rel.lo == 0 and v == u):
-                        yield v, hops
-                frontier = nxt
+                    yield v, hops
+                frontier = {v: h for v, h in nxt.items() if v not in expanded}
+                expanded.update(frontier)
                 if not frontier:
                     return
             return
@@ -897,7 +942,8 @@ class _Eval:
         for depth in range(1, rel.hi + 1):
             nxt = {}
             for x, hops in frontier.items():
-                for v, e in self.neighbours(x, rel).items():
+                avoid = frozenset(_edge_key(h) for h in hops)
+                for v, e in self.neighbours(x, rel, avoid).items():
                     cand = hops + [e]
                     if v not in nxt or (_weak(nxt[v]) and not _weak(cand)):
                         nxt[v] = cand
@@ -913,7 +959,8 @@ class _Eval:
     # patterns
     def match_pattern(self, p: Pattern, bound: dict[str, str], local: bool = False):
         """Bindings extending ``bound`` that match ``p``; ``local``: an EXISTS pattern (its new variables are
-        existential and carry no WHERE condition)."""
+        existential and carry no WHERE condition). The paths come back in the pattern's order, each hop in the
+        order the pattern reads it, also when the pattern was walked from its other end."""
         nodes, rels = list(p.nodes), list(p.rels)
         first, last = nodes[0], nodes[-1]
         if first.var in bound:
@@ -946,7 +993,9 @@ class _Eval:
             b = dict(bound)
             b[start.var] = s
             for nb, paths in self._extend(nodes, rels, 1, b, [], local):
-                yield _Binding(nb, paths[::-1] if flip else paths)
+                if flip:   # walked from the last node: each path, and each hop's direction, read the other way
+                    paths = [[(a, z, d, not fwd) for a, z, d, fwd in path[::-1]] for path in paths[::-1]]
+                yield _Binding(nb, paths)
 
     def _extend(self, nodes, rels, i, b, paths, local):
         if i == len(nodes):
@@ -979,29 +1028,21 @@ class _Eval:
             for c in self.residual:
                 if not self.eval_cond(c, b, witness):
                     return
-            yield _Binding(b, paths + witness)
+            yield _Binding(b, paths + [w for w in witness if w is not ABSENCE], absence=ABSENCE in witness)
             return
         for m in self.match_pattern(pats[k], b):
             yield from self._join(k + 1, m.nodes, paths + m.paths)
-
-
-def _under_not(root, target) -> bool:
-    def walk(c, neg: bool) -> bool:
-        if c is target:
-            return neg
-        if isinstance(c, BoolOp):
-            return any(walk(x, neg) for x in c.items)
-        if isinstance(c, Not):
-            return walk(c.item, True)
-        return False
-
-    return walk(root, False) if root is not None else False
 
 
 def _edge_rank(d: dict) -> tuple:
     loc = str(d.get("source_location") or "")
     line = int(loc[1:]) if loc.startswith("L") and loc[1:].isdigit() else 10 ** 9
     return (d.get("confidence") != "EXTRACTED", line)
+
+
+def _edge_key(e) -> tuple:
+    """One edge of the multigraph: its ends and its data (two parallel edges have two data dicts)."""
+    return (e[0], e[1], id(e[2]))
 
 
 def _weak(hops) -> bool:
@@ -1031,7 +1072,7 @@ def _binding_status(ev: _Eval, b: _Binding) -> tuple[str, list[str], list[str]]:
     files: set[str] = set()
     status = "strong_inference"
     for path in b.paths:
-        for u, v, d in path:
+        for _u, _v, d, _fwd in path:
             if d.get("confidence") != "EXTRACTED":
                 status = "weak_inference"
             if d.get("source_file"):
@@ -1046,9 +1087,8 @@ def _binding_status(ev: _Eval, b: _Binding) -> tuple[str, list[str], list[str]]:
     if stale:
         status = "unknown"
         unc.append("cites a file changed since the index: the row may no longer hold (`verinoda update`)")
-    if ev.negated:
-        unc.append("rests on an absence in the graph: an edge the extraction cannot see (dynamic dispatch, "
-                   "reflection, a call through a variable) is not there")
+    if b.absence:   # a NOT EXISTS that held on the branch that kept this row
+        unc.append(ABSENCE_NOTE)
     return status, unc, stale
 
 
@@ -1067,8 +1107,12 @@ def _evidence(ev: _Eval, b: _Binding, named: list[str]) -> dict:
             for r in ev.routes().get(n, [])[:3]:
                 out["routes"].append({"var": var, **r})
     for path in b.paths:
-        out["paths"].append([{"from": str(g.label(u)), "to": str(g.label(v)), "relation": d.get("relation"),
-                              "confidence": d.get("confidence"), "at": _at_edge(d)} for u, v, d in path])
+        # each hop is the edge as the graph has it (from -> to); `walked` says whether the pattern read it that
+        # way ("forward") or against it ("backward": an incoming or either-way edge)
+        out["paths"].append([{"from": str(g.label(u)), "to": str(g.label(v)), "from_id": u, "to_id": v,
+                              "relation": d.get("relation"), "confidence": d.get("confidence"),
+                              "at": _at_edge(d), "walked": "forward" if fwd else "backward"}
+                             for u, v, d, fwd in path])
     return {k: v for k, v in out.items() if v}
 
 
@@ -1222,8 +1266,9 @@ def run(repo: Path, text: str, *, graph=None, max_rows: int = MAX_ROWS, max_expa
         n_handlers = len(ev.routes())
         notes.append(f"handler: {n_handlers} handler(s) in the route table (`verinoda routes`)"
                      + (f"; {ev.route_error}" if getattr(ev, "route_error", None) else ""))
-    if ev.negated:
-        notes.append("NOT EXISTS reads an absence in the graph: an edge the extraction cannot see is not there")
+    if any(ABSENCE_NOTE in r.get("uncertain", []) for r in out_rows):
+        notes.append("NOT EXISTS reads an absence in the graph: an edge the extraction cannot see is not there "
+                     "(the rows that rest on one say so)")
     if aggregate and verify:
         notes.append("--verify confirms rows, not counts: the counted rows were not re-read")
     res["notes"] = list(dict.fromkeys(notes))
@@ -1231,8 +1276,8 @@ def run(repo: Path, text: str, *, graph=None, max_rows: int = MAX_ROWS, max_expa
                      "INFERRED edge) unless --verify confirms every part of it in Python code",
                      "a path is cited once per pair of ends (the shortest; at that length one without an INFERRED "
                      "edge when there is one)",
-                     "the time budget is checked between nodes and edges: one regular expression that backtracks "
-                     "badly on one long line is not interrupted"]
+                     "the time budget is checked between nodes, edges and the lines a text condition reads: one "
+                     "regular expression that backtracks badly on one long line is not interrupted"]
     return res
 
 
@@ -1260,7 +1305,7 @@ def _verify_row(ev: _Eval, row: dict) -> None:
         row["verified"] = {"result": "not checked", "why": "a cited file changed since the index"}
         return
     for path in b.paths:
-        for u, v, d in path:
+        for u, v, d, _fwd in path:
             at = _at_edge(d)
             rel = d.get("relation")
             if rel not in ("calls",):
@@ -1290,8 +1335,19 @@ def _verify_row(ev: _Eval, row: dict) -> None:
         f, ln = g.file(n), g.line(n)
         if "handler" in ev.kinds(n) and any("handler" in ks for ks in ev.var_kinds.get(var, ())):
             for r in ev.routes().get(n, [])[:1]:
-                if not r["at"].rpartition(":")[0].endswith(".py"):
+                rf, _, rl = r["at"].rpartition(":")
+                if not rf.endswith(".py"):
                     problems.append(f"{r['at']}: a route outside Python is read by pattern, not parsed")
+                    continue
+                if rf not in ev.lines_cache:
+                    from verinoda.index import file_lines
+
+                    ev.lines_cache[rf] = file_lines(g.root / rf)
+                rlines = ev.lines_cache[rf] or []
+                if not (rl.isdigit() and 0 < int(rl) <= len(rlines) and rlines[int(rl) - 1].strip()):
+                    problems.append(f"{r['at']}: the route declaration line cannot be read")
+                else:
+                    checked += 1
         if not f:
             continue
         span = ev.node_lines(n)
@@ -1309,7 +1365,7 @@ def _verify_row(ev: _Eval, row: dict) -> None:
             checked += 1
         if not f.endswith((".py", ".pyi")):
             problems.append(f"{f}:{ln}: definitions are re-read by name only outside Python")
-    if ev.negated:
+    if b.absence:
         problems.append("the row rests on an absence in the graph, which re-reading lines cannot confirm")
     if problems:
         row["verified"] = {"result": "not confirmed", "checked": checked, "problems": problems[:8]}
@@ -1350,10 +1406,15 @@ def render(res: dict) -> str:
             for p in e.get("paths", []):
                 if not p:
                     continue
-                s = str(p[0]["from"])
+                # in the order the pattern reads it; an edge walked against its direction is drawn `<-rel-`
+                fwd0 = p[0].get("walked", "forward") == "forward"
+                s = str(p[0]["from"] if fwd0 else p[0]["to"])
                 for h in p:
                     mark = "" if h["confidence"] == "EXTRACTED" else "?"
-                    s += f" -{h['relation']}{mark}-> {h['to']} ({h['at']})"
+                    if h.get("walked", "forward") == "forward":
+                        s += f" -{h['relation']}{mark}-> {h['to']} ({h['at']})"
+                    else:
+                        s += f" <-{h['relation']}{mark}- {h['from']} ({h['at']})"
                 out.append(f"{pre}path {s}")
             for ln in e.get("lines", []):
                 out.append(f"{pre}line {ln['at']}  {ln['text']}")
