@@ -13457,6 +13457,315 @@ query errors (exit 2); the caret of `count(g)`; a failed `and` branch cites no `
 and `--verify` follow the branch that kept the row; classes with and without methods and a nested function's
 lines; 30 nested parentheses are read and 31 refused.
 
+## 129. Import JVM checker findings (D156, 2026-10-01)
+
+### 129.1 Why
+
+A Java project's strongest static findings often come from checkers that run inside its own build: Error Prone's
+bug patterns and NullAway's null checks are javac plugins, and `jdeps -jdkinternals` lists the classes that use
+JDK-internal APIs a newer JDK removes or hides. Their output is already on disk (a Gradle or Maven log, a CI log, a
+jdeps report) but Verinoda could read it only when the project had turned it into SARIF, which Error Prone and
+jdeps do not write by themselves. An agent asked "is this dereference safe?" or "will this build on JDK 21?" had
+to read the log by hand, and nothing tied a line of the log to the file and symbol it is about.
+
+### 129.2 Decisions
+
+- New command `verinoda import-findings FILE ... [--tool auto|errorprone|nullaway|jdeps] [--path P] [--limit N]`,
+  module `jvm_findings.py`, next to `verinoda sarif` (the other "a tool's findings as evidence" reader) rather than
+  inside it: `sarif` reads one format, this reads build logs whose shape is a convention of javac and jdeps. No MCP
+  tool (the tools stay at 40). Exit 4 when no file could be read, 2 for a bad `--limit`; a file read with no
+  finding is a note on that file, not an error (a clean build has none).
+- Nothing is run. javac, Gradle, Maven and jdeps are never started from the repository: the files are what the
+  build already wrote. This keeps the command outside the trust gate `codecheck_external` needs for running the
+  project's own checkers.
+- javac diagnostics: `PATH.java:LINE: severity: [Check] message` and Maven's `PATH.java:[LINE,COL] [Check]
+  message` (the level from `[WARNING]` / `[ERROR]` when the line has none). The severity word may be in javac's
+  locale (`Warnung:`, `Fehler:`, `警告:`, `エラー:`, `错误：`); a word not in the list is a warning. Before
+  matching, a line loses a CI timestamp (`2026-09-30T10:00:00.1234567Z`, Jenkins' `[2026-09-30T10:00:00.123Z]`),
+  ANSI colours and a Maven or Ant (`[javac]`) tag with the one space after each, so the same reader takes a plain
+  javac run, a Gradle console, a Maven log, an Ant log and a GitHub Actions or Jenkins log, and the quoted line
+  keeps its indentation. The lines after a diagnostic, up to the next one, a count (`2 warnings`) or a Gradle
+  marker, or a blank line when no caret follows it, give the quoted source line (the line before the caret), the
+  column (the caret's position, or Maven's), more message lines, the `(see URL)` link and Error Prone's "Did you
+  mean ...?" fix (several lines when it quotes several lines of code). Log lines end at `\n` only, so a lone `\r`
+  in progress output does not shift the numbers.
+- Which tool: the check name in brackets. `[NullAway]` is NullAway; any other CamelCase check is an Error Prone bug
+  pattern (Error Prone's and its plugins' checks are CamelCase); a lower-case one (`[unchecked]`, `[removal]`,
+  `[this-escape]`) is javac's own `-Xlint` category and a message with no check is a compile error: both counted
+  (`javac_other`), not listed. `--tool errorprone` keeps NullAway's findings too (it is an Error Prone plugin);
+  `--tool nullaway` only those. The tool's version is named when the log names its artifact
+  (`error_prone_core-2.36.0.jar`, `com.uber.nullaway:nullaway:0.12.3`, a Maven repository path), with that log
+  line as evidence; javac's diagnostics never print it.
+- jdeps: JDK 9 and later print one line per use (`com.ex.Foo -> sun.misc.Unsafe  JDK internal API
+  (jdk.unsupported)`) under an `archive -> module` header; JDK 8 prints the class with its archive and the `->`
+  lines under it. Both are read, and the "JDK Internal API / Suggested Replacement" table is attached to each use
+  (the API's own row, its top-level class's, else the longest package row). A dependence that does not say "JDK
+  internal API" (plain `jdeps -verbose` output) is counted (`not_internal`). A use of an API in the "JDK removed
+  internal API" group is an `error`, any other a `warning`.
+- Files: a printed path is tied to the repository as an absolute path under the root (exact), a path relative to
+  the root (exact), else by suffix: for an absolute path from another machine (a CI runner's checkout) the
+  longest suffix that is a repository file, as `verinoda sarif` does; for a relative path that is not a repository
+  file (javac run in a sub-project folder) the one repository file ending with it, `ambiguous` when several do.
+  An absolute path that exists on this machine outside the repository, or one inside it that is not a file now,
+  is not tied to another file. Maven's `/C:/...` and Windows backslashes are read.
+- Classes (jdeps names classes, not files): the top-level class's package path (`com.ex.Foo$1` ->
+  `.../com/ex/Foo.java`; `.kt` too, and Kotlin's file facade `UtilKt` -> `Util.kt`), unique in the repository
+  among the files that declare the class's package (a default-package class needs a file with no `package`
+  line). The line is the first code line naming the internal API, with `//` and `/* ... */` comments (javadoc
+  lines with or without a leading `*`) removed: its qualified name (an import, a qualified use, a `Class.forName`
+  string) or an import of its package (`import sun.misc.*`) give `strong_inference`; else its simple name outside
+  strings is a guess (`weak_inference`), not tried when the file imports another class of that simple name
+  (`import java.lang.ref.Cleaner` for `jdk.internal.ref.Cleaner`); with none, the claim cites the file alone
+  (`weak_inference`). An inner or anonymous class's use is the same line of the same
+  file as its top-level class's and is dropped as a repeat. A class with no source file here (a dependency's jar,
+  shaded code) is counted and named (`unknown_classes`).
+- Status, as for SARIF: a log is the named tool's statement about the tree it compiled, not checked here, so
+  `strong_inference` at most. javac quotes the source line it reports on, which is better evidence of position
+  than file times: when the current file still has that text at that line the finding is `strong_inference` even
+  if the file changed after the log or was tied only by a path suffix (the code the tool saw is still there, and
+  the text confirms the suffix guess); when the text moved to one other line the finding moves there,
+  `weak_inference`; when it is gone, it stays at its line, `weak_inference` (the finding may be fixed). Without a
+  quote (Maven, jdeps) the file's age decides: `weak_inference` when it changed after the log or was tied by
+  suffix. Not `observed`: Verinoda did not see the run, unlike `check --checker`, which runs the checker itself.
+- Each claim: `subject` `Tool/Check` (`jdeps/<api>`), `stated_by` the tool, `tool_version` when known, `rule`,
+  `level`, `at` the repository `file:line`, `column`, `quoted`, `suggestion`, `see`, the enclosing `symbol`
+  (`treestate.symbol_at`), and `evidence_at` the file line, the log line it came from (`build.log:5`) and the log
+  line naming the version. jdeps claims add `class`, `internal_api`, `module`, `archive` and `replacement`. Errors
+  first, then by file and line number; a diagnostic printed twice (Maven repeats compile errors in its failure
+  summary, an incremental build may compile a file twice) is listed once (`duplicates`), while two findings at two
+  columns of one line are two.
+- A file whose text starts with `{` is read by `sarif.report` (a build that already writes Error Prone's findings
+  as SARIF); its tools are named by the file and `--tool` does not filter it. A log that starts with a UTF-16
+  byte-order mark is decoded as UTF-16 (PowerShell 5.1's `>` writes it), and so is such a SARIF file; a log that
+  is not UTF-8 is decoded in this machine's ANSI code page, else cp1252, when it decodes whole; else the bytes
+  that do not decode are replaced.
+  A line that looks like a diagnostic but does not parse (a broken line number) is counted (`unreadable`).
+- The claims are printed (text, `--json`), not written to the project's claim store, as `verinoda sarif` and
+  `verinoda coverage` do: a log is re-read when it changes, and the store's claims are what an agent or a user
+  asserted.
+- A path from a log is never checked on disk when it is a UNC or device path (`\\host\share`, `\\?\`,
+  `\\.\`): on Windows a file check on it contacts the host over SMB and can send the user's NTLM hash. It is
+  tied by suffix only. `verinoda sarif` has the same guard.
+- Review round: the jdeps line was `strong_inference` on a match of the simple name alone (a public class of the
+  same name: `java.lang.ref.Cleaner` for `jdk.internal.ref.Cleaner`) and on javadoc lines without a leading `*`;
+  now only a qualified name or a package import on a code line is strong, comments are tracked over lines, and
+  the simple name is a guess. Ant's `[javac]` tag and a timestamp took the source line's indentation with them
+  (every Ant column was 1). A localized severity word (`Warnung:`) dropped the finding as javac's own. A blank
+  line inside an Error Prone message lost the quoted line, column and link. A default-package class of a
+  dependency was tied to a repository file of the same name in another package. A UNC path in a log was checked
+  on disk. Two findings at two columns of one line were merged as a repeat. Smaller: log lines are split at
+  `\n` only, Jenkins timestamps are stripped, a non-UTF-8 log is decoded in the ANSI code page, claims sort by
+  line number, the log is cleaned once for both readers, an `a -> b c` line outside a jdeps archive header is not
+  counted as a jdeps dependence, and a UTF-16 SARIF file is read. The first version of this draft said comment
+  lines were skipped and a reflection use cited the file only; both were false for javadoc lines without a
+  leading `*`.
+
+### 129.3 Measured
+
+Windows 11, Python 3.13.14, while a benchmark ran on the same machine:
+
+- A synthetic Gradle-style log of 50,000 lines (5,000 NullAway diagnostics with quoted line and caret, each from a
+  CI runner path tied by suffix, and 30,000 `> Task` lines) read in 1.34 s and 1.37 s (two runs), 5,000 claims.
+- `tests/test_jvm_findings.py`: 19 tests in about 3 s.
+
+No real project's log was measured: none of Verinoda's test corpora is built with Error Prone, NullAway or jdeps
+on this machine, and the command does not run builds.
+
+### 129.4 Not done
+
+- A finding is the named tool's statement on the tree it compiled; Verinoda does not check it, and a log from
+  another branch is read as if it were this tree's unless the quoted lines disagree.
+- The formats are javac's and jdeps' as documented and as their current versions print them; a build tool that
+  rewrites diagnostics differently (an IDE's export, a custom Gradle reporter) is not read, and its lines are not
+  even counted unless they keep `File.java:` and a `[Check]`. Kotlin compiler messages (`w: file.kt:...`) are not
+  read.
+- A class's file is found by package path: a non-public top-level Java class may live in a file of another name,
+  and a Kotlin class in any file of its package; such classes are `unknown_class`. A use of an internal API
+  through reflection with a computed name has no line that names it. String literals are removed only for the
+  simple-name guess: a string holding the qualified name (`Class.forName("sun.misc.Unsafe")`) is a use.
+- A relative path that is a file at the repository root is taken as that file, even when javac ran in a
+  sub-project folder with the same relative layout (a multi-module repository with identical layouts); the log
+  does not say which folder javac ran in.
+- A log of up to 200 MB is read whole and held as cleaned lines (cleaned once for both readers): a log near the
+  cap takes a few GB of memory. It is not streamed.
+- The column comes from the caret and is off when the quoted line has tabs.
+- Error Prone's and NullAway's versions are known only when the log names their artifacts; jdeps' never.
+- javac's own `-Xlint` warnings and compile errors are counted, not listed.
+- The claims are not stored in the claim store and do not feed `review` or `check`.
+
+### 129.5 Tests
+
+`tests/test_jvm_findings.py` (19): javac output with a NullAway warning and an Error Prone error (tool, check,
+level, column from the caret, quoted line, link, "Did you mean" fix, enclosing method, the log line as evidence,
+errors first) and javac's own `-Xlint` warning and compile error counted; a GitHub Actions Gradle log with
+timestamps and ANSI colours, a CI runner path tied by suffix and confirmed by the quoted line, and the versions of
+Error Prone and NullAway from the artifacts it downloaded; a Maven log with `/C:/` paths, `[line,col]`, the level
+from the tag and a repeated error dropped, and a Windows backslash path; a file changed after the log (a finding
+moved with its quoted line, one whose line is gone, one without a quote by file age); JDK 11 jdeps output (removed
+API an error, the replacement table, the import line, Kotlin's `UtilKt` and a package import, an anonymous class
+dropped as a repeat, a shaded class unknown, a dependence on no internal API counted); JDK 8 jdeps output;
+malformed lines, an Ant `[javac]` line and the parsers' odd input; files elsewhere on this machine, a deleted file
+inside the repository, a path matching two modules, a missing file, an empty and a binary file; `--tool` and
+`--path`; a UTF-16 log from PowerShell with a path relative to the repository; Error Prone SARIF and a broken SARIF
+file; the CLI's text, JSON, `--tool`, `--limit` and exit codes 0, 2 and 4. Review round: the jdeps line is
+`strong_inference` only when named (another imported `Cleaner`, a javadoc line without `*`, a computed reflection
+name, the simple name only, a default-package class in the repository and one from a jar); an Ant log and GitHub
+and Jenkins timestamps keep the caret's column; German, Japanese and Chinese severity words; a blank line inside
+an Error Prone message; UNC and device paths never checked (logs and SARIF); two columns on one line; line
+numbers with a lone `\r` and a form feed, numeric order, a cp1252 log, a UTF-16 SARIF file and a quoted lambda
+not counted as a jdeps dependence.
+
+## 130. Mixin debug export as evidence (D157, 2026-10-01)
+
+### 130.1 Why
+
+`verinoda mixin-check` (D141) says whether the names a Mixin writes exist in the target's class file, and
+`--conflicts` (D145) predicts from the annotations what two mods' Mixins on one method do. Neither says what a
+Mixin really did to the class the game ran: whether its injector applied, where its handler landed, what an
+`@Overwrite` replaced. SpongePowered Mixin can write that down itself: started with `-Dmixin.debug.export=true`
+it writes every class it transformed to `.mixin.out/class/<internal name>.class` in the game's working folder,
+with `@MixinMerged(mixin = ..., priority = ...)` on every method a Mixin merged, and with
+`-Dmixin.checks.interfaces=true` an audit of the interface methods a class lacks. A Mixin claim of `verinoda
+analyze` read only the annotation ("the target class's bytecode is not checked"). This decision reads those
+files, when they exist, as what each Mixin really changed, and makes a Mixin claim cite the exported class.
+
+### 130.2 Decisions
+
+- No new command and no MCP tool (the core profile keeps its five; the tool count stays 40): `verinoda
+  mixin-check` gains an `export` section and `--export PATH` (repeatable; a `.mixin.out` folder, the folder
+  holding one, or its `class` folder). A new module, `mixinexport.py`.
+- Opt-in by existence: the exports looked for are `.mixin.out`, `run/.mixin.out`, `runs/*/.mixin.out` and
+  `run/*/.mixin.out` of the repository and of each build that holds a Mixin, and those given. Nothing is run,
+  downloaded or written; only the class files of the project's `@Mixin` targets are opened (the export may
+  hold thousands).
+- An exported class is read with `jvmclass.class_code()` (members, interfaces, what each method's bytecode
+  calls) and `jvmclass.class_annotations()` (the `@MixinMerged` of each method: `mixin`, `priority`).
+  `class_code()` now also returns the class's interfaces (`ifaces`).
+- Per injector or `@Overwrite` of the project's Mixins, per target, a row with the source `path:line`:
+  - `applied` (`observed`): the handler is in the export with `@MixinMerged` naming this Mixin, found by the
+    names Mixin and MixinExtras give a merged handler (`handler$zza000$name`, with Fabric's mod id inside
+    `handler$zza000$mymod$name`; `redirect`, `modify`, `args`, `localvar`, `constant`, `wrapOperation`,
+    `wrapWithCondition`, `modifyExpressionValue`, `modifyReturnValue`, `modifyReceiver`, `wrapMethod`), else by
+    its own name; the methods whose bytecode calls it are named (`called_from`). An `@Overwrite` is applied when
+    the method carries the annotation, and the row says it replaced the original's body when the classpath has
+    the original.
+  - `merged` (`observed`): the handler is there, and no method calls it (or none whose code was walked).
+  - `not_applied` (`strong_inference`): the exported class holds no handler of this injector; the row says
+    whether the Mixin merged other methods there or none at all. The export may be older than the source, so
+    this is not proven for the current code.
+  - `unknown`: the export holds no class file for the target (it was not loaded in that run), with the next
+    step; an exported class this reader cannot read.
+  - Each `observed` row cites the exported class file (`run/.mixin.out/class/net/.../X.class`), the handler
+    with its descriptor and the `@MixinMerged` mixin and priority.
+- Staleness: when the Mixin's source file is newer than the exported class (modification times), an
+  `applied` or `merged` row keeps `observed` (it was observed in that run) and says the export shows the
+  earlier version; a `not_applied` row becomes `unknown` with "start the game again".
+- Per target class, once, what the export holds beyond the original class file on the classpath (the one
+  `mixin-check` already reads): the merged methods per Mixin (added, or replacing one of the original), the
+  calls into merged methods and who makes them, fields and interfaces added, methods with no `@MixinMerged`
+  added, methods gone, and each original method's calls gained or lost (ten each, two hundred methods at
+  most, with the total). Without the original only the merged methods are told (`original: null`).
+- `audit/mixin_implementation_report.csv` (class, method, descriptor, interface; a header row skipped) is read
+  as `observed` rows with `file:line` evidence, two hundred at most.
+- No export at all: the section is one `unknown` with how to turn it on (the JVM argument for Loom and
+  ForgeGradle run configurations). The exit code stays the name check's (3 absent, 4 unknown, 2 no Mixin):
+  export rows are evidence about a past run, not a verdict on the names.
+- `--export` with `--conflicts`, `--with` or `--log` is an error; a path that is not a folder is an error, a
+  folder that holds no export is a note.
+- `analyze`'s Mixin claim ("`h` runs inside `Mob.checkSpawnRules` at its start", D48) gets a second supporting
+  evidence when the export shows the handler applied or merged: the handler's source lines recorded as
+  `experiment` (a run's observation, as runtime traces are), `meta.kind = mixin_export`, its locator naming the
+  exported class file, the handler, the `@MixinMerged` annotation and the callers. The claim stays
+  `strong_inference`; "the target class's bytecode is not checked" is replaced by "observed in Mixin's debug
+  export" (and, when the claim names a point or a cancel, that those are read from the annotation). A
+  `not_applied` or `unknown` export result, or no export, is an uncertainty of the claim with the next step.
+- Review round:
+  - Overloads: the first version matched a handler by name only, so two injectors whose handlers share a name
+    (`onDamage(CallbackInfo)` on `damage`, `onDamage(float, CallbackInfo)` on `heal`) were both `applied` with
+    the one exported handler, and `claim_evidence()` cited it for both. Now a merged method goes to one
+    injector only; where injectors share a handler name, each takes the merged method whose descriptor has
+    the parameter types written in the source (without type arguments or package; a type variable matches
+    any reference type). The other is `not_applied` (its row says the merged method of that name is another
+    injector's); when the types do not tell them apart (not read, or the same), the rows are `unknown`
+    (`ambiguous`) with the next step. An `@Overwrite` takes the overload its parameters name, not the first.
+  - Target names as paths: a `@Mixin(targets = "../../x")` from the source was joined onto the export folder,
+    so a class file outside the export and the repository was read (and a non-class file's existence told).
+    Now only a valid JVM internal name (Java identifiers with `$`, split by `/`) is looked up, and only a
+    file that resolves inside the export's `class/`. An export found (not given) whose folder, `class/` or
+    `audit/` resolves outside the repository (a symbolic link or junction) is not read, with a note.
+  - A `--export` folder that holds no export: the note is now in the text output too (it was only in the
+    JSON).
+  - `claim_evidence()` gives `unmatched` (with why and next) when an export exists but no `@Mixin` of the
+    file names the handler on the target class; `analyze` no longer says "no Mixin debug export" then.
+  - An `applied` row whose callers do not include a method its selectors name (a remapped name, another
+    target) keeps `applied` (`observed`) and says so (`selector_mismatch`).
+  - Audit CSV rows cite the line their record starts on (a quoted newline no longer shifts the lines after).
+
+### 130.3 Measured
+
+- The tests' synthetic export (a target with an `@Inject` handler called from `damage`, an `@Overwrite`, a
+  `@Redirect` handler replacing a call, a merged `@ModifyVariable` handler nothing calls, a field and an
+  interface added, a Mixin of another class with no export and one with no merged method): 3 applied, 1
+  merged, 2 not applied, 1 unknown; the 24 tests of `tests/test_mixin_export.py` run in 6.6 s, the analysis
+  test's scan included (16 before the review round).
+- A synthetic target of 1,000 methods, each calling a handler merged by one of 30 other Mixins, 20 of them
+  also the project Mixin's (2,020 methods, 139,010 bytes): `mixin-check` 0.251 s without the export, 0.256 s
+  with it (20 applied). Of 5,000 methods (10,020 methods, 693,680 bytes): 0.230 s without, 0.922 s and
+  0.967 s with it (two runs).
+- Not measured on a real game's export: no `.mixin.out` exists on this machine (the two CurseForge instances
+  hold none), and the game was not started.
+
+### 130.4 Not done
+
+- Only what the export holds: a class is exported when the game loads it, so a target never loaded in that
+  run is `unknown`; the export is of the last run and may be older than the code (staleness is told from file
+  modification times, which a `git checkout` also moves: then a `not_applied` is `unknown`, never wrong in the
+  other direction).
+- Mixin does not mark merged fields or added interfaces with the Mixin that brought them: they are listed per
+  class, not per Mixin.
+- A handler is matched by Mixin's naming (`prefix$id$[mod$]name`); a handler renamed in another way (an
+  `@Unique` clash, a future naming) is matched only by its own name, else `not_applied`. Whether the part
+  before the name is a mod id is not known: `handler$id$a$b` is the handler of `a$b` when the Mixin has one,
+  else of `b`. Handlers that share a name are told apart only by their parameter types' simple names: two
+  overloads whose types differ only in package are `unknown`; a lone handler whose types do not match the
+  descriptor (a type this reader does not resolve) is still matched by name.
+- Whether a handler is called from the method its selector names is compared by name only (no descriptor,
+  no pattern or regex selector); a mismatch is told, not a verdict.
+- `analyze`'s Mixin claims are built from the first `@Mixin` class of a file; a handler in a second `@Mixin`
+  class of the same file gets `unmatched` from the export, not its row (`mixin-check` reads every class).
+- A folder given with `--export` is read wherever it resolves (the user named it); class files are still read
+  only from inside its `class/`.
+- Where in the method a handler is called (its `@At`, `ordinal`, `shift`) is not compared with the
+  annotation; `called_from` names the methods only.
+- The decompiled sources Mixin writes with `-Dmixin.debug.export.decompile` (`.mixin.out/*.java`) and the
+  other audit files are not read; the audit CSV is read as Mixin 0.8 writes it (four columns).
+- An exported class file over 16 MiB is `unknown`.
+- `analyze` reuses a claim of the same text in the same snapshot, so an export written after a claim was made
+  is cited from the next snapshot (`verinoda update`) on.
+
+### 130.5 Tests
+
+`tests/test_mixin_export.py`: `class_code()` reads the interfaces; against a planted classpath and export, an
+`@Inject` handler (`handler$zza000$mymod$onDamage`) applied with its caller, `@MixinMerged` mixin and priority and
+the exported class as evidence, an `@Overwrite` applied replacing the original, a `@Redirect` handler applied,
+a `@ModifyVariable` handler merged with no caller, an injector with no handler and a Mixin with no merged
+method `not_applied`, a target not exported `unknown` with the next step; per class the methods merged per
+Mixin (added, replaced, another mod's), the field and interface added and the calls gained and lost; no export
+one `unknown` with the next step and the CLI's exit code unchanged; no classpath (merged methods still named);
+a source newer than the export (`not_applied` becomes `unknown`, `applied` keeps `observed` with the note);
+`--export` given as the export, its parent or its `class` folder, the audit CSV, the text output, a missing
+folder and `--export` with `--conflicts` errors; an unreadable exported class `unknown`; handler-name prefixes and
+the handler of `x` told from that of `mod$x` with and without a mod id in the merged name;
+`analyze`'s Mixin claim citing `run/.mixin.out/class/net/minecraft/world/entity/Mob.class` with the handler, the
+`@MixinMerged` annotation and its caller, and the "bytecode is not checked" uncertainty gone. Review round:
+two overloaded `onDamage` handlers with one exported (the other `not_applied`, also through
+`claim_evidence()`); same-named handlers assigned by descriptor, never twice, `unknown` when not told apart, an
+`@Overwrite` overload by its parameters; the source's parameter types (generics, inner class, arrays, type
+variables, varargs) against a descriptor; `../` and absolute targets reading nothing outside the export; a found
+`.mixin.out` that is a link or junction out of the repository not read; a `--export` folder with no export
+noted in the text output; `unmatched` from `claim_evidence()`; a handler called only from a method its selector
+does not name; audit lines after a quoted newline.
+
 ## Sources
 
 - **Retrieval:**

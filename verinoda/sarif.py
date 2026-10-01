@@ -311,10 +311,12 @@ def _repo_path(root: Path, al: dict, run: dict) -> tuple[str | None, bool]:
         return (key, False) if (root / key).is_file() else (None, False)
     # an absolute path from another machine (a CI runner's): the longest suffix that is a repository file; not
     # for a file that exists here (it is that file, outside the repository) nor one under a third-party folder
-    try:
-        here = Path(path).exists()
-    except (OSError, ValueError):
-        here = False
+    here = False
+    if not posix.startswith("//"):   # a UNC or device path is never opened: on Windows that contacts its host
+        try:
+            here = Path(path).exists()
+        except (OSError, ValueError):
+            here = False
     if here or _FOREIGN.intersection(parts):
         return None, False
     for i in range(1, len(parts)):
@@ -326,7 +328,8 @@ def _repo_path(root: Path, al: dict, run: dict) -> tuple[str | None, bool]:
 
 def parse(data: bytes) -> list[dict]:
     """The runs of one SARIF file (a ValueError when it is not SARIF 2.1)."""
-    doc = json.loads(data.decode("utf-8-sig"))
+    # UTF-16 when it starts with that byte-order mark (PowerShell 5.1's > writes it), else UTF-8
+    doc = json.loads(data.decode("utf-16") if data[:2] in (b"\xff\xfe", b"\xfe\xff") else data.decode("utf-8-sig"))
     if not isinstance(doc, dict) or not str(doc.get("version", "")).startswith("2.1") or \
             not isinstance(doc.get("runs"), list):
         raise ValueError("not a SARIF 2.1 log (a JSON object with version 2.1.0 and runs)")

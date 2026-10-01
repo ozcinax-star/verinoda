@@ -1281,6 +1281,23 @@ def cmd_sarif(args) -> int:
     return 0
 
 
+def cmd_import_findings(args) -> int:
+    from verinoda import jvm_findings as jf
+
+    repo = _repo(args)
+    if args.limit < 1:
+        print("error: --limit must be a positive number", file=sys.stderr)
+        return 2
+    paths = [_rel_in_repo(repo.resolve(), p, "--path") for p in args.path or []]
+    res = jf.report(repo, _report_args(repo, args.files), paths or None, tool=args.tool, limit=args.limit)
+    _emit(args, res, lambda r: _write(jf.render_text(r)))
+    if all(x.get("error") for x in res["inputs"]):
+        print("error: no file read: " + "; ".join(f"{x['file']}: {x.get('error')}" for x in res["inputs"]),
+              file=sys.stderr)
+        return 4
+    return 0
+
+
 def cmd_health(args) -> int:
     from verinoda import health as hl
 
@@ -1681,15 +1698,21 @@ def cmd_mixin_check(args) -> int:
     if missing:
         raise SystemExit(f"error: not a file: {', '.join(missing)}")
     paths = [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths]
+    for e in args.export_paths or []:
+        if not (Path(e).is_dir() or (repo / e).is_dir()):
+            raise SystemExit(f"error: not a folder: {e}")
     if args.conflicts or args.log or args.with_paths:
         from verinoda import mixinconflicts
 
+        if args.export_paths:
+            raise SystemExit("error: --export is read by mixin-check without --conflicts, --with or --log")
         if args.log and not Path(args.log).is_file():
             raise SystemExit(f"error: not a file: {args.log}")
         res = mixinconflicts.lookup(repo, paths or None, args.with_paths, Path(args.log) if args.log else None)
         _emit(args, res, lambda r: print(mixinconflicts.render(r)))
         return mixinconflicts.exit_code(res)
-    res = mixincheck.lookup(repo, paths)
+    exports = [str(Path(e).resolve()) if Path(e).is_dir() else e for e in args.export_paths or []]
+    res = mixincheck.lookup(repo, paths, exports or None)
     _emit(args, res, lambda r: print(mixincheck.render(r)))
     if res["status"] == "no_mixins":
         return 2
@@ -4511,6 +4534,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("files", nargs="+", metavar="FILE", help="SARIF files to read")
     sp.add_argument("--path", action="append", help="only results in these files or folders (repeatable)")
     sp.add_argument("--limit", type=int, default=40, help="results shown (default 40)")
+    sp = add("import-findings", cmd_import_findings,
+             "JVM checkers' findings read as evidence: Error Prone and NullAway diagnostics from javac, Gradle, Maven "
+             "or Ant logs, jdeps -jdkinternals output, or their SARIF; each a claim at its file:line with the tool "
+             "named, its statement, not checked here; nothing is run; exit 4 = no file read")
+    sp.add_argument("files", nargs="+", metavar="FILE", help="build logs, jdeps output or SARIF files to read")
+    sp.add_argument("--tool", choices=("auto", "errorprone", "nullaway", "jdeps"), default="auto",
+                    help="whose findings to keep from a log (default auto: all three; errorprone includes "
+                         "NullAway, an Error Prone plugin); a SARIF file is read whole")
+    sp.add_argument("--path", action="append", help="only findings in these files or folders (repeatable)")
+    sp.add_argument("--limit", type=int, default=40, help="findings shown (default 40)")
     sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
                                    "parameters, and near-duplicate functions with a similarity score")
     sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
@@ -4637,6 +4670,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--log", metavar="PATH", help="a game log or crash report (.gz too): each Mixin failure in it "
                                                   "named with its mod, by the config that lists it (implies "
                                                   "--conflicts)")
+    sp.add_argument("--export", dest="export_paths", action="append", metavar="PATH",
+                    help="a Mixin debug export folder (.mixin.out, written with -Dmixin.debug.export=true) to read "
+                         "besides the ones found (.mixin.out, run/.mixin.out, runs/*/.mixin.out): what each Mixin "
+                         "really changed in its target, the exported class file as evidence (repeatable)")
     sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")
