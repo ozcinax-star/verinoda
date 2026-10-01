@@ -1,0 +1,69 @@
+{
+  "repo": "Graphify-Labs/graphify",
+  "tag": "v0.9.73",
+  "sha": "ef4450d9c28acb2b8cdc22d369c1777b77148eef",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based. build, build_from_json, cluster and god_nodes are also defined in the sample corpus worked/mixed-corpus/raw/ (build.py:8 and 31, cluster.py:27, analyze.py:35), so checks name the graphify/ file.",
+  "facts": [
+    {
+      "id": "def-build-from-json",
+      "fact": "build_from_json (an extraction dict to a networkx graph) is defined at graphify/build.py:874",
+      "source": "graphify/build.py:874",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"build_from_json\" and f.file = \"graphify/build.py\" return f", "cites": ["graphify/build.py:874"]}
+    },
+    {
+      "id": "build-calls-build-from-json",
+      "fact": "build (graphify/build.py:1532) returns build_from_json(combined, ...) at graphify/build.py:1596",
+      "source": "graphify/build.py:1532, graphify/build.py:1596",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"build\" and a.file = \"graphify/build.py\" and b.name = \"build_from_json\" and b.file = \"graphify/build.py\" return a, b", "cites": ["graphify/build.py:1596"]}
+    },
+    {
+      "id": "cluster-calls-partition",
+      "fact": "cluster (graphify/cluster.py:232) calls _partition(connected, resolution=resolution) at graphify/cluster.py:295 (_partition defined graphify/cluster.py:105)",
+      "source": "graphify/cluster.py:295, graphify/cluster.py:105",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"cluster\" and a.file = \"graphify/cluster.py\" and b.name = \"_partition\" return a, b", "cites": ["graphify/cluster.py:295"]}
+    },
+    {
+      "id": "cluster-reaches-leiden",
+      "fact": "cluster (graphify/cluster.py:232) -> _partition (cluster.py:295) -> _native_leiden (cluster.py:141, defined cluster.py:22)",
+      "source": "graphify/cluster.py:232, graphify/cluster.py:295, graphify/cluster.py:141, graphify/cluster.py:22",
+      "check": {"kind": "trace", "source": "graphify/cluster.py::cluster", "target": "_native_leiden", "source_at": "graphify/cluster.py:232", "target_at": "graphify/cluster.py:22", "via_at": ["graphify/cluster.py:295", "graphify/cluster.py:141"]}
+    },
+    {
+      "id": "cluster-calls-cohesion",
+      "fact": "cluster calls cohesion_score(G, nodes) at graphify/cluster.py:348 to decide whether to split a community (cohesion_score defined graphify/cluster.py:383)",
+      "source": "graphify/cluster.py:348, graphify/cluster.py:383",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"cluster\" and a.file = \"graphify/cluster.py\" and b.name = \"cohesion_score\" return a, b", "cites": ["graphify/cluster.py:348"]}
+    },
+    {
+      "id": "def-god-nodes",
+      "fact": "god_nodes is defined at graphify/analyze.py:112",
+      "source": "graphify/analyze.py:112",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"god_nodes\" and f.file = \"graphify/analyze.py\" return f", "cites": ["graphify/analyze.py:112"]}
+    },
+    {
+      "id": "def-extract-python",
+      "fact": "extract_python is defined at graphify/extract.py:2011 and registered for .py at graphify/extract.py:6695",
+      "source": "graphify/extract.py:2011, graphify/extract.py:6695",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"extract_python\" return f", "cites": ["graphify/extract.py:2011"]}
+    },
+    {
+      "id": "main-calls-run-cli",
+      "fact": "The console entry main (graphify/__main__.py:686) calls _run_cli() at graphify/__main__.py:693 (defined graphify/__main__.py:710)",
+      "source": "graphify/__main__.py:686, graphify/__main__.py:693, graphify/__main__.py:710",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"main\" and a.file = \"graphify/__main__.py\" and b.name = \"_run_cli\" return a, b", "cites": ["graphify/__main__.py:693"]}
+    },
+    {
+      "id": "query-communities",
+      "fact": "Community detection (Leiden, with a Louvain fallback) is in graphify/cluster.py (_partition at 105, louvain_communities at 174)",
+      "source": "graphify/cluster.py:105, graphify/cluster.py:174",
+      "check": {"kind": "query", "question": "how are graph communities detected with leiden or louvain", "top_k": 8, "expect_file": "graphify/cluster.py"}
+    },
+    {
+      "id": "query-god-nodes",
+      "fact": "The most connected nodes (god nodes) are found in graphify/analyze.py (god_nodes at 112)",
+      "source": "graphify/analyze.py:112",
+      "check": {"kind": "query", "question": "how are the most connected god nodes of the graph found", "top_k": 8, "expect_file": "graphify/analyze.py"}
+    }
+  ]
+}

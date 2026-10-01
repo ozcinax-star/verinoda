@@ -1,0 +1,69 @@
+{
+  "repo": "axios/axios",
+  "tag": "v1.20.0",
+  "sha": "84a9f3b9a4f3244b8c8e818f557d64c7b964fb25",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based.",
+  "facts": [
+    {
+      "id": "def-dispatch-request",
+      "fact": "dispatchRequest (sends the request through the adapter) is defined at lib/core/dispatchRequest.js:35 (`export default function dispatchRequest(_config)`)",
+      "source": "lib/core/dispatchRequest.js:35",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"dispatchRequest\" return f", "cites": ["lib/core/dispatchRequest.js:35"]}
+    },
+    {
+      "id": "request-calls-private",
+      "fact": "Axios.request (lib/core/Axios.js:40) calls this._request at lib/core/Axios.js:42 (_request defined lib/core/Axios.js:83)",
+      "source": "lib/core/Axios.js:40, lib/core/Axios.js:42, lib/core/Axios.js:83",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"request\" and a.file = \"lib/core/Axios.js\" and b.name = \"_request\" return a, b", "cites": ["lib/core/Axios.js:42"]}
+    },
+    {
+      "id": "private-request-merges-config",
+      "fact": "Axios._request (lib/core/Axios.js:83) calls mergeConfig(this.defaults, config) at lib/core/Axios.js:93 (mergeConfig defined lib/core/mergeConfig.js:28)",
+      "source": "lib/core/Axios.js:93, lib/core/mergeConfig.js:28",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"_request\" and b.name = \"mergeConfig\" return a, b", "cites": ["lib/core/Axios.js:93"]}
+    },
+    {
+      "id": "dispatch-checks-cancel",
+      "fact": "dispatchRequest (lib/core/dispatchRequest.js:35) calls throwIfCancellationRequested at lib/core/dispatchRequest.js:41 (defined lib/core/dispatchRequest.js:18)",
+      "source": "lib/core/dispatchRequest.js:35, lib/core/dispatchRequest.js:41, lib/core/dispatchRequest.js:18",
+      "check": {"kind": "trace", "source": "dispatchRequest", "target": "throwIfCancellationRequested", "source_at": "lib/core/dispatchRequest.js:35", "target_at": "lib/core/dispatchRequest.js:18", "via_at": ["lib/core/dispatchRequest.js:41"]}
+    },
+    {
+      "id": "request-reaches-adapter",
+      "fact": "Axios._request (lib/core/Axios.js:83) calls dispatchRequest (`dispatchRequest.call(this, newConfig)` at lib/core/Axios.js:242, also bound at 195 and called at 229), which calls adapters.getAdapter at lib/core/dispatchRequest.js:52 (getAdapter defined lib/adapters/adapters.js:65; index.d.ts:737 declares a getAdapter type too, so the target names the file)",
+      "source": "lib/core/Axios.js:83, lib/core/Axios.js:242, lib/core/dispatchRequest.js:52, lib/adapters/adapters.js:65",
+      "check": {"kind": "trace", "source": "_request", "target": "lib/adapters/adapters.js::getAdapter", "source_at": "lib/core/Axios.js:83", "target_at": "lib/adapters/adapters.js:65", "via_at": ["lib/core/dispatchRequest.js:52"], "via_files": ["lib/core/Axios.js"]}
+    },
+    {
+      "id": "create-instance-binds",
+      "fact": "createInstance (lib/axios.js:28) calls bind(Axios.prototype.request, context) at lib/axios.js:30 (bind defined lib/helpers/bind.js:10)",
+      "source": "lib/axios.js:30, lib/helpers/bind.js:10",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"createInstance\" and b.name = \"bind\" return a, b", "cites": ["lib/axios.js:30"]}
+    },
+    {
+      "id": "def-merge-config",
+      "fact": "mergeConfig is defined at lib/core/mergeConfig.js:28",
+      "source": "lib/core/mergeConfig.js:28",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"mergeConfig\" and f.file = \"lib/core/mergeConfig.js\" return f", "cites": ["lib/core/mergeConfig.js:28"]}
+    },
+    {
+      "id": "def-get-adapter",
+      "fact": "getAdapter (picks xhr, http or fetch) is defined at lib/adapters/adapters.js:65",
+      "source": "lib/adapters/adapters.js:65",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"getAdapter\" and f.file = \"lib/adapters/adapters.js\" return f", "cites": ["lib/adapters/adapters.js:65"]}
+    },
+    {
+      "id": "query-interceptors",
+      "fact": "Request and response interceptors are chained around dispatchRequest in lib/core/Axios.js (chain at lines 185-206)",
+      "source": "lib/core/Axios.js:195",
+      "check": {"kind": "query", "question": "where are request and response interceptors chained around the request", "top_k": 8, "expect_file": "lib/core/Axios.js"}
+    },
+    {
+      "id": "query-http-adapter",
+      "fact": "The Node.js transport (http/https requests, redirects, proxies) is lib/adapters/http.js",
+      "source": "lib/adapters/http.js:518",
+      "check": {"kind": "query", "question": "how does the node http adapter send the request and follow redirects", "top_k": 8, "expect_file": "lib/adapters/http.js"}
+    }
+  ]
+}

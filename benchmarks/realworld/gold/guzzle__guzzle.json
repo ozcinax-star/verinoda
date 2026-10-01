@@ -1,0 +1,69 @@
+{
+  "repo": "guzzle/guzzle",
+  "tag": "8.2.0",
+  "sha": "93939470950a9b11e2e84204166ef5e048c55fe4",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based. send and sendAsync are also declared in src/ClientInterface.php (110, 193), so checks name src/Client.php.",
+  "facts": [
+    {
+      "id": "def-transfer",
+      "fact": "Client::transfer (private) is defined at src/Client.php:1499",
+      "source": "src/Client.php:1499",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"transfer\" and f.file = \"src/Client.php\" return f", "cites": ["src/Client.php:1499"]}
+    },
+    {
+      "id": "sendasync-calls-transfer",
+      "fact": "Client::sendAsync (src/Client.php:319) calls $this->transfer at src/Client.php:328",
+      "source": "src/Client.php:319, src/Client.php:328",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"sendAsync\" and a.file = \"src/Client.php\" and b.name = \"transfer\" return a, b", "cites": ["src/Client.php:328"]}
+    },
+    {
+      "id": "send-calls-sendasync",
+      "fact": "Client::send (src/Client.php:414) calls $this->sendAsync($request, $options)->wait() at src/Client.php:422",
+      "source": "src/Client.php:414, src/Client.php:422",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"send\" and a.file = \"src/Client.php\" and b.name = \"sendAsync\" return a, b", "cites": ["src/Client.php:422"]}
+    },
+    {
+      "id": "requestasync-calls-transfer",
+      "fact": "Client::requestAsync (src/Client.php:527) calls $this->transfer($request, $options) at src/Client.php:561",
+      "source": "src/Client.php:527, src/Client.php:561",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"requestAsync\" and a.file = \"src/Client.php\" and b.name = \"transfer\" return a, b", "cites": ["src/Client.php:561"]}
+    },
+    {
+      "id": "send-reaches-apply-options",
+      "fact": "Client::send (src/Client.php:414) -> sendAsync (src/Client.php:422) -> transfer (src/Client.php:328) -> applyOptions (src/Client.php:1505, defined src/Client.php:1524)",
+      "source": "src/Client.php:414, src/Client.php:422, src/Client.php:328, src/Client.php:1505, src/Client.php:1524",
+      "check": {"kind": "trace", "source": "src/Client.php::send", "target": "applyOptions", "source_at": "src/Client.php:414", "target_at": "src/Client.php:1524", "via_at": ["src/Client.php:422", "src/Client.php:328", "src/Client.php:1505"]}
+    },
+    {
+      "id": "stack-create-chooses-handler",
+      "fact": "HandlerStack::create (src/HandlerStack.php:56) calls Utils::chooseHandler() at src/HandlerStack.php:58 (defined src/Utils.php:73)",
+      "source": "src/HandlerStack.php:58, src/Utils.php:73",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"create\" and a.file = \"src/HandlerStack.php\" and b.name = \"chooseHandler\" return a, b", "cites": ["src/HandlerStack.php:58"]}
+    },
+    {
+      "id": "stack-create-pushes-redirect",
+      "fact": "HandlerStack::create pushes Middleware::redirect() at src/HandlerStack.php:60 (Middleware::redirect defined src/Middleware.php:213)",
+      "source": "src/HandlerStack.php:60, src/Middleware.php:213",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"create\" and a.file = \"src/HandlerStack.php\" and b.name = \"redirect\" return a, b", "cites": ["src/HandlerStack.php:60"]}
+    },
+    {
+      "id": "def-choose-handler",
+      "fact": "Utils::chooseHandler (picks the curl or stream handler) is defined at src/Utils.php:73",
+      "source": "src/Utils.php:73",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"chooseHandler\" return f", "cites": ["src/Utils.php:73"]}
+    },
+    {
+      "id": "query-redirects",
+      "fact": "Following redirects is done by src/RedirectMiddleware.php (__invoke at line 63)",
+      "source": "src/RedirectMiddleware.php:63",
+      "check": {"kind": "query", "question": "how are HTTP redirects followed", "top_k": 8, "expect_file": "src/RedirectMiddleware.php"}
+    },
+    {
+      "id": "query-cookies",
+      "fact": "Cookies are stored and added to requests by src/Cookie/CookieJar.php (extractCookies at line 252, withCookieHeader at line 376)",
+      "source": "src/Cookie/CookieJar.php:252, src/Cookie/CookieJar.php:376",
+      "check": {"kind": "query", "question": "how are cookies stored and added to outgoing requests", "top_k": 8, "expect_file": "src/Cookie/CookieJar.php"}
+    }
+  ]
+}

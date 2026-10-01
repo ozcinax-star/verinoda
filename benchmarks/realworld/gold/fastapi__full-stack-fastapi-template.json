@@ -1,0 +1,69 @@
+{
+  "repo": "fastapi/full-stack-fastapi-template",
+  "tag": "0.12.0",
+  "sha": "84c5a9e11a9e58262599e3d772f5386924e02ca7",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based. A route fact names the full path a client calls: the router prefix (items.py:10 `prefix=\"/items\"`) under the API prefix (main.py:49 `prefix=settings.API_V1_STR`, config.py:22 `API_V1_STR: str = \"/api/v1\"`); its method is in the fact text only, because the runner's routes judge reads a `method` key the route table does not have (it has `methods`).",
+  "facts": [
+    {
+      "id": "def-authenticate",
+      "fact": "crud.authenticate (email and password check) is defined at backend/app/crud.py:45",
+      "source": "backend/app/crud.py:45",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"authenticate\" and f.file = \"backend/app/crud.py\" return f", "cites": ["backend/app/crud.py:45"]}
+    },
+    {
+      "id": "login-calls-authenticate",
+      "fact": "login_access_token (backend/app/api/routes/login.py:24) calls crud.authenticate at login.py:30",
+      "source": "backend/app/api/routes/login.py:30",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"login_access_token\" and b.name = \"authenticate\" return a, b", "cites": ["backend/app/api/routes/login.py:30"]}
+    },
+    {
+      "id": "login-reaches-verify-password",
+      "fact": "A login checks the password: login_access_token (login.py:24) -> crud.authenticate (login.py:30) -> verify_password (crud.py:50 and crud.py:52), defined at backend/app/core/security.py:29",
+      "source": "backend/app/api/routes/login.py:24, backend/app/api/routes/login.py:30, backend/app/crud.py:50, backend/app/crud.py:52, backend/app/core/security.py:29",
+      "check": {"kind": "trace", "source": "login_access_token", "target": "verify_password", "source_at": "backend/app/api/routes/login.py:24", "target_at": "backend/app/core/security.py:29", "via_at": ["backend/app/api/routes/login.py:30"], "via_files": ["backend/app/crud.py"]}
+    },
+    {
+      "id": "users-create-calls-crud",
+      "fact": "The users route create_user (backend/app/api/routes/users.py:57) calls crud.create_user at users.py:68 (defined backend/app/crud.py:10)",
+      "source": "backend/app/api/routes/users.py:68, backend/app/crud.py:10",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"create_user\" and a.file = \"backend/app/api/routes/users.py\" and b.name = \"create_user\" and b.file = \"backend/app/crud.py\" return a, b", "cites": ["backend/app/api/routes/users.py:68"]}
+    },
+    {
+      "id": "def-get-current-user",
+      "fact": "get_current_user (the token dependency) is defined at backend/app/api/deps.py:30; its body uses the unparenthesized `except InvalidTokenError, ValidationError:` (deps.py:36, Python 3.14 syntax)",
+      "source": "backend/app/api/deps.py:30, backend/app/api/deps.py:36",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"get_current_user\" and f.file = \"backend/app/api/deps.py\" return f", "cites": ["backend/app/api/deps.py:30"]}
+    },
+    {
+      "id": "route-login-access-token",
+      "fact": "POST /api/v1/login/access-token is handled by login_access_token (decorator login.py:23, router without prefix at login.py:20, included at api/main.py:7 and main.py:49)",
+      "source": "backend/app/api/routes/login.py:23, backend/app/api/main.py:7, backend/app/main.py:49, backend/app/core/config.py:22",
+      "check": {"kind": "routes", "path": "/api/v1/login/access-token", "handler": "login_access_token"}
+    },
+    {
+      "id": "route-read-item",
+      "fact": "GET /api/v1/items/{id} is handled by read_item (decorator items.py:48 under the router prefix /items at items.py:10, included at api/main.py:10 and main.py:49)",
+      "source": "backend/app/api/routes/items.py:48, backend/app/api/routes/items.py:10, backend/app/api/main.py:10, backend/app/main.py:49",
+      "check": {"kind": "routes", "path": "/api/v1/items/{id}", "handler": "read_item"}
+    },
+    {
+      "id": "schema-user-table",
+      "fact": "The table user is declared by the SQLModel class User(UserBase, table=True) at backend/app/models.py:52 and created by the migration e2412789c190 (op.create_table(\"user\", ...) at line 21-22)",
+      "source": "backend/app/models.py:52, backend/app/alembic/versions/e2412789c190_initialize_models.py:21",
+      "check": {"kind": "schema", "table": "user"}
+    },
+    {
+      "id": "frontend-login-calls-sdk",
+      "fact": "The frontend hook's login (frontend/src/hooks/useAuth.ts:41) calls LoginService.loginAccessToken at useAuth.ts:42 (defined frontend/src/client/sdk.gen.ts:27)",
+      "source": "frontend/src/hooks/useAuth.ts:42, frontend/src/client/sdk.gen.ts:27",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"login\" and a.file = \"frontend/src/hooks/useAuth.ts\" and b.name = \"loginAccessToken\" return a, b", "cites": ["frontend/src/hooks/useAuth.ts:42"]}
+    },
+    {
+      "id": "query-jwt",
+      "fact": "The JWT access token is created in backend/app/core/security.py (create_access_token at line 22)",
+      "source": "backend/app/core/security.py:22",
+      "check": {"kind": "query", "question": "where is the JWT access token created and signed", "top_k": 8, "expect_file": "backend/app/core/security.py"}
+    }
+  ]
+}
