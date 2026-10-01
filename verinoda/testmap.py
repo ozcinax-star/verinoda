@@ -7,7 +7,8 @@ Every traced pytest run Verinoda makes (``verinoda observe``, ``analyze --observ
 * ``test_map_tests``: one row per test whose call phase ran - the run, its commit, whether the trace was
   complete, the test's outcome and how many functions it ran;
 * ``test_map``: one row per (test, file, function) the test ran in any of its phases (setup, call, teardown),
-  with the file's content id (:func:`verinoda.treestate.content_id`) in the copy that ran - its fingerprint.
+  with the file's content id (:func:`verinoda.treestate.content_id`) in the copy that ran - its fingerprint -
+  and ``fixture`` = 1 when it ran in a setup or teardown phase.
 
 A test seen again in a complete trace has its rows replaced (what it runs now); an incomplete trace (a budget
 stopped it) only adds rows, since a function it did not record may still have run. Both tables are a derived
@@ -16,6 +17,9 @@ cache of the append-only ``runtime_calls``: rewriting them loses nothing.
 :func:`affected` reads the map for a change: the tests that ran a changed function. A test's mapping is
 **current** when every file it recorded has, now, the content it had in that run (or, for a file the change
 touches, its base content) - otherwise the test may run other code now and is not trusted to be unaffected.
+A mapping rules a test out only when it is complete, current and its test passed (a failing test stopped early),
+and never for a changed function that ran in a fixture phase: a module- or session-scoped fixture runs once, in
+the first test that uses it, so the map does not show the later tests that share it.
 :func:`pytest_command` turns the selected test ids into one command line.
 
 What the map says is run-scoped (it ran F in run R at commit C), never "always": a test that did not run F then
@@ -25,6 +29,7 @@ may run it after the change (a new call, other data). The selection built on it 
 
 from __future__ import annotations
 
+import re
 import shlex
 from collections import defaultdict
 from typing import Callable, Iterable
@@ -37,7 +42,8 @@ MAX_COMMAND_CHARS = 4000
 LIMITS = [
     "the map is run-scoped: a test that did not run a function when it was observed may run it after the change",
     "only pytest runs traced by Verinoda update the map; child processes and other runners are not seen",
-    "module-level statements, config and data files are matched by static reach only",
+    "module-level statements, config and data files, classes and added definitions are matched by static reach only",
+    "code a module- or session-scoped fixture runs is recorded for the first test that used it only",
 ]
 
 
@@ -64,7 +70,7 @@ def update(store: Store, run_id: str, file_ids: dict[str, str] | None = None) ->
     ran = {t for t, v in outcomes.items() if ((v or {}).get("phases") or {}).get("call")}
     if not ran:
         return {"tests": 0, "functions": 0}
-    reach: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    reach: dict[str, dict[tuple[str, str], int]] = defaultdict(dict)
     for r in store.all("SELECT callee_path, callee_qual, tests FROM runtime_calls WHERE run_id = ? AND callee_path <> ?",
                        (run_id, EXT)):
         qual = clean_qual(r["callee_qual"])
@@ -73,7 +79,8 @@ def update(store: Store, run_id: str, file_ids: dict[str, str] | None = None) ->
         for ctx in r["tests"] or []:
             tp = _ctx_test(ctx)
             if tp and tp[0] in ran:
-                reach[tp[0]].add((r["callee_path"], qual))
+                k = (r["callee_path"], qual)
+                reach[tp[0]][k] = reach[tp[0]].get(k, 0) | (tp[1] in ("setup", "teardown"))
     complete = bool(run.get("complete"))
     from verinoda.runtime.trace import phase_outcome
 
@@ -84,9 +91,12 @@ def update(store: Store, run_id: str, file_ids: dict[str, str] | None = None) ->
         for t in sorted(ran):
             if complete:
                 c.execute("DELETE FROM test_map WHERE test = ?", (t,))
-            fns = sorted(reach.get(t, ()))
-            c.executemany("INSERT OR REPLACE INTO test_map (test, path, qual, fingerprint, run_id) VALUES (?,?,?,?,?)",
-                          [(t, p, q, fids.get(p), run_id) for p, q in fns])
+            fns = sorted((reach.get(t) or {}).items())
+            # an incomplete run adds rows: a fixture flag already set stays set
+            c.executemany("INSERT INTO test_map (test, path, qual, fingerprint, run_id, fixture) VALUES (?,?,?,?,?,?)"
+                          " ON CONFLICT (test, path, qual) DO UPDATE SET fingerprint = excluded.fingerprint,"
+                          " run_id = excluded.run_id, fixture = MAX(fixture, excluded.fixture)",
+                          [(t, p, q, fids.get(p), run_id, int(fx)) for (p, q), fx in fns])
             rows += len(fns)
             n = c.execute("SELECT COUNT(*) FROM test_map WHERE test = ?", (t,)).fetchone()[0]
             c.execute("INSERT OR REPLACE INTO test_map_tests (test, run_id, commit_sha, complete, outcome, functions,"
@@ -109,16 +119,19 @@ def affected(store: Store, changed: Iterable[tuple[str, str]], versions: Callabl
     may have for the mapping to be current (its working and base versions). Tests are keyed by their
     :func:`runner_id` (the parameter sets of one test are one entry). Returns ``observed`` ({test: {"reaches":
     [file::qual], "run", "commit", "complete", "current"}}), ``not_reached`` (candidates whose every mapping is
-    complete and current and ran none of the changed functions) and ``mapped`` (the number of tests in the map).
+    complete and current, whose test passed, and ran none of the changed functions; empty when a changed function
+    ran in a fixture phase) and ``mapped`` (the number of tests in the map).
     """
     rows = store.all("SELECT * FROM test_map_tests ORDER BY updated_at, run_id")
     changed = [(f, q.split("#")[0]) for f, q in changed if f and q]
     hits: dict[str, set[str]] = defaultdict(set)
+    shared = False   # a changed function ran in a fixture phase: tests sharing that fixture are not all mapped
     for f in sorted({f for f, _ in changed}):
-        for r in store.all("SELECT test, qual FROM test_map WHERE path = ?", (f,)):
+        for r in store.all("SELECT test, qual, fixture FROM test_map WHERE path = ?", (f,)):
             for cf, cq in changed:
                 if cf == f and _covers(r["qual"], cq):
                     hits[runner_id(r["test"])].add(f"{f}::{cq}")
+                    shared = shared or bool(r["fixture"])
     variants: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         variants[runner_id(r["test"])].append(r)
@@ -138,9 +151,13 @@ def affected(store: Store, changed: Iterable[tuple[str, str]], versions: Callabl
         if vs:
             meta[t] = {"run": vs[-1]["run_id"], "commit": vs[-1]["commit_sha"],
                        "complete": all(v["complete"] for v in vs), "current": all(current(v["test"]) for v in vs)}
+            passed = all(v["outcome"] in ("passed", "skipped") for v in vs)
+            if not passed:
+                meta[t]["outcome"] = next(v["outcome"] for v in vs if v["outcome"] not in ("passed", "skipped"))
     observed = {t: {"reaches": sorted(v), **meta.get(t, {})} for t, v in sorted(hits.items())}
-    not_reached = sorted({c for c in candidates if runner_id(c) not in hits and meta.get(runner_id(c), {})
-                          .get("complete") and meta[runner_id(c)]["current"]})
+    not_reached = [] if shared else sorted({
+        c for c in candidates if runner_id(c) not in hits and meta.get(runner_id(c), {}).get("complete")
+        and meta[runner_id(c)]["current"] and "outcome" not in meta[runner_id(c)]})
     return {"observed": observed, "not_reached": not_reached, "mapped": len(variants)}
 
 
@@ -149,6 +166,20 @@ def runner_id(test: str) -> str:
     runs every parameter set, and brackets are no shell's business."""
     head, sep, last = test.rpartition("::")
     return f"{head}{sep}{last.split('[', 1)[0]}"
+
+
+_PLAIN = re.compile(r"[\w./:+=-]+")
+
+
+def shell_arg(a: str) -> str:
+    """``a`` quoted for the shell the command is pasted into: bare when plain, else in double quotes, which
+    cmd.exe, PowerShell and POSIX shells read alike when ``a`` holds no double quote, dollar, backtick,
+    backslash, exclamation or percent sign; POSIX quoting past that."""
+    if _PLAIN.fullmatch(a):
+        return a
+    if not re.search(r'["$`\\!%]', a):
+        return f'"{a}"'
+    return shlex.quote(a)
 
 
 def pytest_command(test_ids: Iterable[str]) -> dict | None:
@@ -163,7 +194,7 @@ def pytest_command(test_ids: Iterable[str]) -> dict | None:
     args = ids
     if len(ids) > MAX_COMMAND_IDS:
         by, args = "file", list(dict.fromkeys(t.split("::", 1)[0] for t in ids))
-    cmd = "python -m pytest -q " + " ".join(shlex.quote(a) for a in args)
+    cmd = "python -m pytest -q " + " ".join(shell_arg(a) for a in args)
     out = {"command": cmd, "by": by, "tests": len(ids)}
     if len(cmd) > MAX_COMMAND_CHARS:
         out["command"] = cmd[:MAX_COMMAND_CHARS].rsplit(" ", 1)[0]
@@ -184,7 +215,7 @@ def compact(aff: dict) -> dict:
         if len(text) > MAX_COMPACT_CHARS and by == "test":
             files = dict.fromkeys(r["test"].split("::", 1)[0] for r in aff.get("tests") or []
                                   if r["test"].split("::", 1)[0].endswith(".py"))
-            text, by = "python -m pytest -q " + " ".join(shlex.quote(f) for f in files), "file"
+            text, by = "python -m pytest -q " + " ".join(shell_arg(f) for f in files), "file"
         if len(text) > MAX_COMPACT_CHARS:
             text, out["truncated"] = text[:MAX_COMPACT_CHARS].rsplit(" ", 1)[0], True
         out.update(command=text, by=by)

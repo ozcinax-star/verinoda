@@ -5445,7 +5445,10 @@ def _affected(ctx: _Ctx, changes: list[Change], static: list[dict]) -> dict | No
     """The tests to run for the change, each labelled: ``observed`` (the test map shows it ran a changed function),
     ``changed`` (a test the change edits) and ``static`` (static reach, for the tests the map has no current,
     complete record of); tests whose current, complete mapping ran none of the changed functions are left out
-    and counted. One pytest command runs the Python ones (:func:`verinoda.testmap.pytest_command`)."""
+    and counted - only a test whose static reach is changed functions alone, since the tracer records calls, not
+    a class body, a class attribute read or a definition the change adds. An observed test whose definition is
+    gone from the working tree (renamed or deleted since its run) is dropped and counted. One pytest command
+    runs the Python ones (:func:`verinoda.testmap.pytest_command`)."""
     from verinoda import testhistory, testmap, treestate
 
     fns = [(c.file, c.qual) for c in changes if not c.test and c.qual and c.file.endswith(".py")
@@ -5468,12 +5471,24 @@ def _affected(ctx: _Ctx, changes: list[Change], static: list[dict]) -> dict | No
                 ids.add(treestate.content_id(t.encode("utf-8")))
         return ids
 
-    m = (testmap.affected(ctx.store, fns, versions, candidates=[t["test"] for t in static])
+    # the changes the map can show a test not running: a function's body, signature or removal
+    fn_set = set(fns)
+    provable = {c.symbol for c in changes if (c.file, c.qual) in fn_set and (ctx.sym(
+        c.file, c.qual or "", "old" if c.kind == "removed" else "new") or {}).get("kind") != "class"}
+    m = (testmap.affected(ctx.store, fns, versions,
+                          candidates=[t["test"] for t in static if set(t["reaches"]) <= provable])
          if ctx.store is not None else {"observed": {}, "not_reached": [], "mapped": 0})
     rows: list[dict] = []
+    cache: dict = {}
+    stale = 0
     for t, v in m["observed"].items():
+        at = testhistory._locate(ctx.repo, t, cache)
+        if not at or not at.rpartition(":")[2].isdigit():   # the test is gone: pytest would run nothing
+            stale += 1
+            continue
         rows.append({"test": t, "source": "observed", "reaches": v["reaches"], "run": v.get("run"),
-                     "commit": (v.get("commit") or "")[:12] or None, "current": v.get("current", False)})
+                     "commit": (v.get("commit") or "")[:12] or None, "current": v.get("current", False),
+                     **({"outcome": v["outcome"]} if v.get("outcome") else {})})
     seen = {r["test"] for r in rows}
     for t in changed:
         if t not in seen:
@@ -5484,14 +5499,14 @@ def _affected(ctx: _Ctx, changes: list[Change], static: list[dict]) -> dict | No
         if t["test"] not in seen and t["test"] not in skipped:
             seen.add(t["test"])
             rows.append({"test": t["test"], "source": "static", "reaches": t["reaches"], "distance": t["distance"]})
-    cache: dict = {}
     for r in rows:
         r["status"] = "strong_inference"
         r["at"] = testhistory._locate(ctx.repo, r["test"], cache)
     by = {k: sum(1 for r in rows if r["source"] == k) for k in ("observed", "changed", "static")}
     return {"tests": rows[:MAX_AFFECTED], "total": len(rows), "by": by,
             "not_reached_when_observed": sorted(skipped)[:20], "not_reached_total": len(skipped),
-            "mapped_tests": m["mapped"], "command": testmap.pytest_command(r["test"] for r in rows),
+            "mapped_tests": m["mapped"], **({"stale_in_map": stale} if stale else {}),
+            "command": testmap.pytest_command(r["test"] for r in rows),
             "basis": "observed: the persistent test map (the functions each test ran in its last traced run); "
                      "static: reverse reach in the graph, for tests the map has no current, complete record of; "
                      "changed: tests the change edits",
@@ -5876,7 +5891,9 @@ def render_text(res: dict) -> str:
         out.append(f"  affected tests: {a['total']} ({by['observed']} observed in the test map, {by['changed']} "
                    f"changed, {by['static']} static fallback)"
                    + (f"; {a['not_reached_total']} reaching it statically left out (their mapped run did not reach "
-                      "it)" if a.get("not_reached_total") else ""))
+                      "it)" if a.get("not_reached_total") else "")
+                   + (f"; {a['stale_in_map']} mapped test(s) no longer defined left out" if a.get("stale_in_map")
+                      else ""))
         for r in a["tests"][:8]:
             how = (f"observed (run {r['run']}, commit {r.get('commit') or '?'}"
                    + ("" if r.get("current") else ", files changed since") + ")") if r["source"] == "observed" \

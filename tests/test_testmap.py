@@ -101,12 +101,40 @@ def test_affected_reads_hits_freshness_and_parameter_sets():
     assert res["not_reached"] == ["t.py::b"] and res["mapped"] == 3
 
 
+def test_fixture_code_and_failing_tests_never_rule_a_test_out():
+    st = Store(":memory:")
+    # a module-scoped fixture ran make_db once, in a's setup; b shares it and records nothing of it
+    rid = _run(st, {"t.py::a": CALL, "t.py::b": CALL, "t.py::c": CALL},
+               [("app.py", "make_db", ["t.py::a|setup"]), ("app.py", "other", ["t.py::b|call", "t.py::c|call"])])
+    testmap.update(st, rid, {"app.py": "fp"})
+    assert st.one("SELECT fixture FROM test_map WHERE test = 't.py::a'")["fixture"] == 1
+    res = testmap.affected(st, [("app.py", "make_db")], lambda p: {"fp"}, candidates=["t.py::a", "t.py::b"])
+    assert list(res["observed"]) == ["t.py::a"] and res["not_reached"] == []
+    # a call-phase function still rules b out; an incomplete rerun keeps the fixture flag
+    res = testmap.affected(st, [("app.py", "other")], lambda p: {"fp"}, candidates=["t.py::a"])
+    assert res["not_reached"] == ["t.py::a"]
+    testmap.update(st, _run(st, {"t.py::a": CALL}, [("app.py", "make_db", ["t.py::a|call"])], complete=False),
+                   {"app.py": "fp"})
+    assert st.one("SELECT fixture FROM test_map WHERE test = 't.py::a'")["fixture"] == 1
+    # a test that failed stopped early: its mapping never rules it out
+    st2 = Store(":memory:")
+    rid = _run(st2, {"t.py::x": {"setup": "passed", "call": "failed", "teardown": "passed"}},
+               [("app.py", "setup_x", ["t.py::x|call"])])
+    testmap.update(st2, rid, {"app.py": "fp"})
+    res = testmap.affected(st2, [("app.py", "compute")], lambda p: {"fp"}, candidates=["t.py::x"])
+    assert res["not_reached"] == []
+    res = testmap.affected(st2, [("app.py", "setup_x")], lambda p: {"fp"})
+    assert res["observed"]["t.py::x"]["outcome"] == "failed"
+
+
 def test_runner_id_and_pytest_command():
     assert testmap.runner_id("tests/t.py::C::test_a[x-1]") == "tests/t.py::C::test_a"
     cmd = testmap.pytest_command(["tests/t.py::test_a[1]", "tests/t.py::test_a[2]", "-p.py::x",
                                  "src/test/FooTest.java::bar", "tests/u v.py::test_b"])
-    assert cmd == {"command": "python -m pytest -q tests/t.py::test_a 'tests/u v.py::test_b'", "by": "test",
+    # double quotes: cmd.exe, PowerShell and POSIX shells read the id with a space alike
+    assert cmd == {"command": 'python -m pytest -q tests/t.py::test_a "tests/u v.py::test_b"', "by": "test",
                    "tests": 2}
+    assert testmap.shell_arg("tests/a$b.py") == "'tests/a$b.py'" and testmap.shell_arg("t/x.py::C::t") == "t/x.py::C::t"
     assert testmap.pytest_command(["src/test/FooTest.java::bar"]) is None
     many = [f"tests/t{i % 3}.py::test_{i}" for i in range(testmap.MAX_COMMAND_IDS + 1)]
     by_file = testmap.pytest_command(many)
@@ -183,3 +211,28 @@ def test_observe_fills_the_map_and_review_prints_the_affected_tests(tmp_path):
     assert mcp["affected_tests"]["n"] == 4 and mcp["affected_tests"]["observed"] == 4
     assert mcp["affected_tests"]["command"] == aff["command"]["command"]
     assert "affected" not in (mcp.get("tests") or {})
+
+    # a test renamed since its observed run: its map rows are stale; the id would make pytest run nothing
+    gone = "tests/test_pricing.py::test_compute_total"
+    tp = repo / "tests" / "test_pricing.py"
+    tp.write_bytes(tp.read_bytes().replace(b"def test_compute_total(", b"def test_compute_total_renamed("))
+    _git(repo, "add", "tests/test_pricing.py")
+    _git(repo, "commit", "-q", "-m", "rename")
+    st = open_store(repo)
+    workflow.scan(st, repo)
+    g = index.load(repo)
+    aff = rv.review(repo, store=st, graph=g)["tests"]["affected"]
+    assert gone not in {t["test"] for t in aff["tests"]} and aff["stale_in_map"] == 1
+    assert gone + " " not in aff["command"]["command"] + " "
+    assert all(t["at"] and t["at"].rpartition(":")[2].isdigit() for t in aff["tests"] if t["source"] == "observed")
+
+    # a class body changes (a new __init__ the tracer has no row for): static reach is not overruled by the map
+    _git(repo, "checkout", "--", "orders/pricing.py")
+    sp = repo / "orders" / "service.py"
+    sp.write_bytes(sp.read_bytes().replace(
+        b"class ValidationError(ValueError):\n    pass",
+        b"class ValidationError(ValueError):\n    def __init__(self, msg):\n        super().__init__(msg.upper())"))
+    aff = rv.review(repo, store=st, graph=g)["tests"]["affected"]
+    assert EMPTY in {t["test"] for t in aff["tests"]} and EMPTY not in aff["not_reached_when_observed"]
+    assert EMPTY in aff["command"]["command"]
+    st.close()

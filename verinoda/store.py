@@ -550,7 +550,8 @@ BEGIN SELECT RAISE(ABORT, 'the quarantine log is append-only'); END;
 """
 
 # v8: the persistent test-to-code map (verinoda/testmap.py): per test the run that last mapped it, and the
-# in-repository functions it ran with each file's content id in that run. A derived cache of runtime_calls,
+# in-repository functions it ran with each file's content id in that run (and whether it ran in a setup or
+# teardown phase: fixture code a wider-scoped fixture may share with other tests). A derived cache of runtime_calls,
 # rewritten on every observed run (no append-only triggers).
 _SCHEMA_V8 = """
 CREATE TABLE IF NOT EXISTS test_map_tests (
@@ -568,6 +569,7 @@ CREATE TABLE IF NOT EXISTS test_map (
     qual TEXT NOT NULL,
     fingerprint TEXT,
     run_id TEXT NOT NULL,
+    fixture INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (test, path, qual)
 );
 CREATE INDEX IF NOT EXISTS idx_test_map_path ON test_map(path, qual);
