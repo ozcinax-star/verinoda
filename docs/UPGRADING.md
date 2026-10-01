@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D167)
+## Upgrading from 0.4.0 (D137-D168)
 
 ### D137: Trigram regex index
 
@@ -407,6 +407,26 @@ Nothing to migrate. A single-project server (`mcp serve`, `--repo`, `--repo-of`)
   `fuzzy`. The rename preview (`rename_preview`) and the callers/callees view (`butterfly`) run
   only on an exact match. They now return the matched node as a candidate, with the note, instead
   of running.
+
+### D168: JavaScript assigned methods and nested functions
+
+The AST cache schema is now 12 (10 on the branch; merged after the id and definition-line fixes), so the first `verinoda scan` or `verinoda update` after upgrading extracts every
+file again.
+
+JavaScript and TypeScript graphs gain symbols:
+
+- methods assigned to a module-level object (`res.json`, `app.render`; label `.json()`, owner `res`), alias chains
+  included;
+- functions bound inside functions (`useAuth`'s `login`).
+
+Calls made inside those functions now start from them. So `q`, `trace`, impact and `map` answers that named the
+outer function for such a call now name the inner one. A selector like `lib/response.js::sendFile` now resolves to
+the method instead of a same-named function that differs only in case. In the dead view, code reached only through
+a member of a weak unit is weak as well (`via`).
+
+A bare call or a name passed by value in one file no longer binds to a nested function, an object-assigned method
+or a `Foo.prototype` method of another file. Some cross-file edges therefore go away, including right ones
+to a function a hook returns and the caller destructures (`const { logout } = useAuth()`).
 
 ## Upgrading from 0.3.2 (D60-D136)
 
