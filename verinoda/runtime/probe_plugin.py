@@ -568,7 +568,7 @@ def _check_properties(props: list, names: list[str], args: list, kwargs: dict, r
     violated, errors = [], []
     for k, code in enumerate(props):
         if ref_error is not None:
-            errors.append([k, ref_error])
+            errors.append([k, ref_error, "import"])  # not evaluated, unlike a property that raised
             continue
         if code is None:
             errors.append([k, "SyntaxError"])

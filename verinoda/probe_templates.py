@@ -9,13 +9,16 @@ Three kinds, each run by the probe on its own generated inputs before the file i
 The written pytest file holds the inputs the probe generated (annotations, call sites, mined boundaries, edges,
 then hypothesis when it is installed, else a fixed pseudo-random list) as source, so it needs neither Verinoda
 nor hypothesis to run. Its header and the probe's result say on how many of those inputs the property was
-*observed* to hold in the probe's runs: an observation over a finite list, never a verification. An existing file
-is never overwritten.
+*observed* to hold in the probe's runs: an observation over a finite list, never a verification. An input on which
+the property itself raises (the inverse, or ``f`` applied to its own result) is a counterexample. An existing file
+is never overwritten; the file puts the import roots of the functions it calls on ``sys.path`` itself, so it does
+not depend on how pytest is started.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import keyword
+from pathlib import Path, PurePosixPath
 
 from verinoda import probe_inputs as pin
 
@@ -62,12 +65,22 @@ def plan(kind: str, qual: str, call_kind: str, params: list[dict], module: str,
             raise ValueError("--inverse is for the roundtrip template")
         many = len(params) > 1
         prop = f"{qual}(result{', *__args__[1:], **__kwargs__' if many else ''}) == result"
-        extra = {"check": f"{qual}(result{', *args[1:], **kwargs' if many else ''}) == result"}
+        extra = {"check": f"{qual}(result{', *args[1:], **kwargs' if many else ''}) == result",
+                 "shown": f"{qual}(result, *rest) == result" if many else prop}  # rest: the call's other arguments
     clash = set(refs) & ({p["name"] for p in params} | {"result"})
     if clash:
         raise ValueError(f"a parameter of {qual} is named {sorted(clash)[0]!r}, like the function the property "
                          "calls")
-    return {"kind": kind, "property": prop, "refs": refs, "first": first, **extra}
+    return {"kind": kind, "property": prop, "shown": prop, "refs": refs, "first": first, **extra}
+
+
+def check_importable(rel: str, module: str) -> None:
+    """ValueError when the written file could not import ``module`` (the name of ``rel``) with a plain
+    ``from module import name``: a part that is not an identifier, or a keyword."""
+    bad = [part for part in module.split(".") if not part.isidentifier() or keyword.iskeyword(part)]
+    if bad:
+        raise ValueError(f"{rel} cannot be imported by name (module {module!r}): a property test file imports the "
+                         "functions it calls, so their files need names that are Python identifiers")
 
 
 def default_path(repo: Path, qual: str, kind: str) -> str:
@@ -76,8 +89,9 @@ def default_path(repo: Path, qual: str, kind: str) -> str:
 
 
 def check_path(repo: Path, path: str) -> str:
-    """The repository-relative path of the file to write; ValueError when it exists, is outside the repository
-    or is not a ``.py`` file."""
+    """The repository-relative path of the file to write; ValueError when it exists, is outside the repository,
+    is under a hidden folder (``.git``, ``.verinoda``, ``.venv``: never collected by pytest, or not the user's
+    code) or is not a ``.py`` file."""
     repo = Path(repo).resolve()
     p = Path(path)
     full = (p if p.is_absolute() else repo / p).resolve()
@@ -85,6 +99,10 @@ def check_path(repo: Path, path: str) -> str:
         rel = full.relative_to(repo).as_posix()
     except ValueError:
         raise ValueError(f"{path} is outside the repository") from None
+    hidden = [part for part in PurePosixPath(rel).parts[:-1] if part.startswith(".")]
+    if hidden:
+        raise ValueError(f"{path} is under the hidden folder {hidden[0]}: a property test is written where pytest "
+                         "collects it")
     if full.suffix != ".py":
         raise ValueError(f"{path} is not a .py file")
     if full.exists():
@@ -100,42 +118,66 @@ def _pinnable(o: dict) -> bool:
     return "r" in o and not o.get("h") and not notes & {"masked", "raised", "digits"}
 
 
+def property_raised(err: list) -> bool:
+    """Did the property itself raise (a counterexample), rather than not run: the functions it calls could not
+    be imported (the plugin's third element), or a side effect was blocked?"""
+    return len(err) == 2 and not str(err[1]).startswith("blocked")
+
+
 def observe(tmpl: dict, prop_index: int | None, cases: list[dict], rows_h: dict, rows_b: dict,
             skip: set[int], differing: set[int]) -> tuple[dict, list[int]]:
     """What was observed, and the inputs for the file (counterexamples first). ``skip``: inputs not compared
-    (not run on a side, blocked, nondeterministic)."""
+    (not run on a side, blocked, nondeterministic). An input on which the property raised is a counterexample;
+    one on which the functions it calls could not be imported (or a side effect was blocked) is not evaluated."""
     chosen: list[int] = []
+    raised, not_run = 0, None
     if tmpl["kind"] == "equivalence":
         evaluated = [i for i in range(len(cases)) if i not in skip and all(
             "r" in r["x"][0] or "e" in r["x"][0] for r in (rows_h[i], rows_b[i]))]
         bad = [i for i in evaluated if i in differing]
         pool = [i for i in bad + [i for i in evaluated if i not in differing] if _pinnable(rows_b[i]["x"][0])]
-        what = "the working tree returned or raised what the base did"
     else:
         evaluated, bad = [], []
         for i in range(len(cases)):
             o = (rows_h.get(i) or {}).get("x", [{}])[0]
-            if i in skip or "r" not in o or any(e[0] == prop_index for e in o.get("pe") or []):
+            if i in skip or "r" not in o:
+                continue
+            perr = [e for e in o.get("pe") or [] if e[0] == prop_index]
+            if perr and not property_raised(perr[0]):
+                not_run = not_run or str(perr[0][1])
                 continue
             evaluated.append(i)
-            if prop_index in (o.get("pv") or []):
+            if perr:
+                raised += 1
+                bad.append(i)
+            elif prop_index in (o.get("pv") or []):
                 bad.append(i)
         pool = bad + [i for i in evaluated if i not in set(bad)]
-        what = f"`{tmpl['property']}`"
     for i in pool:
         if len(chosen) >= EMIT_MAX:
             break
         if len(pin.call_source(cases[i], full=True)) <= SOURCE_MAX:
             chosen.append(i)
     n, k = len(evaluated), len(bad)
-    if not n:
-        status, text = "not_evaluated", f"{what}: not evaluated on any input (every call raised or was not compared)"
-    elif k:
-        status, text = "did_not_hold", f"{what} did not hold on {k} of {n} generated inputs"
+    shown = f"`{tmpl.get('shown') or tmpl['property']}`"
+    if tmpl["kind"] == "equivalence":
+        texts = ("same outcome as the base: not evaluated on any input (every call was left out of the comparison)",
+                 f"the working tree did not return or raise what the base did on {k} of {n} generated inputs",
+                 f"the working tree returned or raised what the base did on all {n} generated inputs it was "
+                 "compared on (an observation, not a verification)")
     else:
-        status, text = "observed_to_hold", (f"{what} held on all {n} generated inputs it was evaluated on (an "
-                                            "observation, not a verification)")
-    return {"status": status, "observed": text, "evaluated": n, "counterexamples": k}, chosen
+        texts = (f"{shown}: not evaluated on any input (" + (f"the property could not run: {not_run}" if not_run
+                                                              else "every call raised or was not compared") + ")",
+                 f"{shown} did not hold on {k} of {n} generated inputs"
+                 + (f" (it raised on {raised})" if raised else ""),
+                 f"{shown} held on all {n} generated inputs it was evaluated on (an observation, not a "
+                 "verification)")
+    status, text = (("not_evaluated", texts[0]) if not n else ("did_not_hold", texts[1]) if k else
+                    ("observed_to_hold", texts[2]))
+    obs = {"status": status, "observed": text, "evaluated": n, "counterexamples": k}
+    if raised:
+        obs["property_raised"] = raised
+    return obs, chosen
 
 
 REPR_HELPERS = '''
@@ -166,8 +208,10 @@ def _type_name(v):
 
 
 def render(tmpl: dict, obs: dict, chosen: list[int], cases: list[dict], rows_b: dict, qual: str, module: str,
-           pid: str, runs: dict, materialize_max: int) -> str:
-    """The pytest file's text."""
+           pid: str, runs: dict, materialize_max: int, dropped: int = 0) -> str:
+    """The pytest file's text. ``tmpl["path"]`` is where it goes and ``tmpl["roots"]`` the repository-relative
+    import roots it puts on ``sys.path``; ``dropped`` inputs were left out because their outcome changed with
+    the hash seed."""
     kind = tmpl["kind"]
     imports: dict[str, set[str]] = {module: {qual.split(".")[0]}}
     for name, mod in tmpl["refs"].items():
@@ -193,6 +237,9 @@ def render(tmpl: dict, obs: dict, chosen: list[int], cases: list[dict], rows_b: 
             "# Observed on these generated inputs only, never verified: other inputs may break it.",
             f"# {len(chosen)} of the probe's inputs are below" + (" (counterexamples first)."
                                                                   if obs["counterexamples"] else ".")]
+    if dropped:
+        head.append(f"# {dropped} more were left out: their outcome changed under another PYTHONHASHSEED (an order "
+                    "that depends on string hashing).")
     if kind == "equivalence":
         head.append("# Each expected outcome is the BASE version's; whether a change was intended is the user's "
                     "decision.")
@@ -216,9 +263,14 @@ def render(tmpl: dict, obs: dict, chosen: list[int], cases: list[dict], rows_b: 
                  "    args, kwargs = make()",
                  f"    result = {qual}(*args, **kwargs)",
                  f"    assert {tmpl['check']}"]
-    std = ["import itertools", ""] if kind == "equivalence" else []
-    lines = head + std + ["import pytest", ""]
-    lines += [f"from {m} import {', '.join(sorted(names))}" for m, names in sorted(imports.items())]
+    std = ["import itertools"] if kind == "equivalence" else []
+    depth = len(PurePosixPath(tmpl.get("path") or "x.py").parts) - 1
+    lines = head + std + ["import sys", "from pathlib import Path", "", "import pytest", "",
+                          f"_REPO = Path(__file__).resolve().parents[{depth}]",
+                          f"for _root in {tuple(tmpl.get('roots') or ('.',))!r}:  # where the imports below are found",
+                          "    if str(_REPO / _root) not in sys.path:",
+                          "        sys.path.insert(0, str(_REPO / _root))", ""]
+    lines += [f"from {m} import {', '.join(sorted(names))}  # noqa: E402" for m, names in sorted(imports.items())]
     if kind == "equivalence":
         lines += REPR_HELPERS.rstrip("\n").split("\n")
     return "\n".join(lines + body) + "\n"

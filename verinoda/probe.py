@@ -687,10 +687,11 @@ def parse_output(data: bytes) -> dict:
 
 
 def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str, symbol: str, ref: str | None,
-              commit: str | None, timeout: float) -> dict:
+              commit: str | None, timeout: float, hash_seed: int | None = None) -> dict:
     """Run the corpus on one side (resuming after a call that hung or ended the process); rows keyed by input
     index. A call that hung leaves faulthandler's stack in ``probe_hang.txt``; a process that ended without it
-    (``os._exit``, a crash) is recorded as an exit with the run's exit code, never as a hang."""
+    (``os._exit``, a crash) is recorded as an exit with the run's exit code, never as a hang. ``hash_seed``
+    replaces the pinned PYTHONHASHSEED=0."""
     n = len(spec["cases"])
     plugins = {f"{PLUGIN_MODULE}.py": plugin_source(), f"{SPEC_MODULE}.py": _spec_module(spec)}
     res: dict = {"side": side, "experiments": [], "rows": {}, "hangs": [], "exits": [], "import_error": None,
@@ -699,6 +700,8 @@ def _run_side(store: Store, repo: Path, spec: dict, *, side: str, probe_id: str,
     start = 0
     for _attempt in range(MAX_RESUMES + 1):
         env = {"VERINODA_PROBE_START": str(start), "VERINODA_PROBE_SIDE": side, "VERINODA_PROBE_OUT": OUT_FILE}
+        if hash_seed is not None:
+            env["PYTHONHASHSEED"] = str(hash_seed)
         hyp = f"probe {probe_id}: {symbol} on the {'base commit' if ref else 'working tree'}" + \
             (f" from input {start}" if start else "")
         try:
@@ -1192,10 +1195,14 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
                 raise ValueError(f"the inverse {grel}::{gqual} is not a Python function in the working tree")
             if _call_kind(gnode, gqual) == "method":
                 raise ValueError(f"the inverse {gqual} is an instance method: name a function")
-            inv = (pin.module_name(grel, lambda r: (repo / r).is_file())[0], gqual, grel)
+            gmod, groot = pin.module_name(grel, lambda r: (repo / r).is_file())
+            ptpl.check_importable(grel, gmod)
+            inv = (gmod, gqual, grel)
             roots.append((grel, gqual))
-        mod0 = pin.module_name(rel, lambda r: (repo / r).is_file())[0]
+        mod0, root0 = pin.module_name(rel, lambda r: (repo / r).is_file())
+        ptpl.check_importable(rel, mod0)
         tmpl = ptpl.plan(template, qual, kind, params, mod0, inv, differential)
+        tmpl["roots"] = [root0] + ([groot] if inv and groot != root0 else [])
         tmpl["path"] = ptpl.check_path(repo, test_file or ptpl.default_path(repo, qual, template))
         if tmpl["property"]:
             tmpl["index"] = len(props)
@@ -1240,6 +1247,7 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
     mod, root = pin.module_name(rel, lambda r: (repo / r).is_file())
     sys_path = [root] + (["."] if root != "." else []) + (["src"] if (repo / "src").is_dir() and root != "src"
                                                           else [])
+    sys_path += [r for r in (tmpl or {}).get("roots") or [] if r not in sys_path]  # an inverse under another root
     spec = {"module": mod, "file": rel, "qual": qual, "call": call,
             "params": [p["name"] for p in params if p["kind"] != "kwonly"], "sys_path": sys_path, "cases": cases,
             "repeat": 2, "per_call_timeout": per_call, "block": not allow_side_effects, "properties": props}
@@ -1448,16 +1456,22 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
     # properties, undeclared exceptions, nondeterminism
     violations, prop_errors = [], []
     for k, ptxt in enumerate(props):
-        hit = [i for i, row in rows_h.items() if k in (row["x"][0].get("pv") or []) and not row["x"][0].get("hang")]
-        errs = [e for row in rows_h.values() for e in (row["x"][0].get("pe") or []) if e[0] == k]
+        raised = set()  # a template property that raised did not hold (an inverse that fails is no inverse)
+        if tmpl and k == tmpl.get("index"):
+            ptxt = tmpl["shown"]
+            raised = {i for i, row in rows_h.items() if any(e[0] == k and ptpl.property_raised(e)
+                                                            for e in row["x"][0].get("pe") or [])}
+        hit = [i for i, row in rows_h.items() if (k in (row["x"][0].get("pv") or []) or i in raised)
+               and not row["x"][0].get("hang")]
+        errs = [e for row in rows_h.values() for e in (row["x"][0].get("pe") or []) if e[0] == k
+                and not (raised and ptpl.property_raised(e))]
         if errs:
             prop_errors.append({"property": ptxt, "count": len(errs), "error": errs[0][1]})
         if hit:
             hit.sort(key=simple)
             violations.append({"property": ptxt, "count": len(hit), "examples": [
                 {**_example(label, cases, meta, rows_b, rows_h, j),
-                 **({"holds_at_base": k not in (rows_b.get(j, {}).get("x", [{}])[0].get("pv") or [])}
-                    if differential and rows_b.get(j) else {})} for j in hit[:EXAMPLES_PER_CLASS]]})
+                 **_at_base(k, rows_b.get(j) if differential else None)} for j in hit[:EXAMPLES_PER_CLASS]]})
     declared = _declared(project, project.gate.checked, head_node, sites["raises"])
     pclasses = _project_classes(project)
     undeclared: dict[str, list[int]] = {}
@@ -1582,8 +1596,11 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         timeouts=to_out or None,
         limits=limits, **res_common)
     if tmpl:
-        res["property_test"] = _property_test(repo, tmpl, cases, rows_h, rows_b, set(not_run) | set(nondet),
-                                              {i for ix in classes.values() for i in ix}, spec, qual, pid, runs)
+        res["property_test"] = _property_test(
+            repo, tmpl, cases, rows_h, rows_b, set(not_run) | set(nondet), {i for ix in classes.values() for i in ix},
+            spec, qual, pid, runs, lambda cs, seed: _run_side(store, repo, cs, side="head", probe_id=pid, symbol=sym,
+                                                              ref=None, commit=head_commit, timeout=run_timeout,
+                                                              hash_seed=seed))
     elif emit_test and differences:
         res["regression_test"] = emit_tests(res, cases, rows_b, rows_h, spec, qual, base_sha, pid)
     if record:
@@ -1596,17 +1613,69 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
     return _finish(store, repo, res, out_dir, t0)
 
 
-def _property_test(repo, tmpl, cases, rows_h, rows_b, skip, differing, spec, qual, pid, runs) -> dict:
-    """Observe the template's property on the probe's inputs and write the pytest file (never over a file)."""
+def _at_base(k: int, row: dict | None) -> dict:
+    """``holds_at_base`` of a property violation's example, only when the property was evaluated at the base."""
+    o = (row or {}).get("x", [{}])[0]
+    if "r" not in o or any(e[0] == k for e in o.get("pe") or []):
+        return {}
+    return {"holds_at_base": k not in (o.get("pv") or [])}
+
+
+HASH_SEEDS = (1, 2, 3)  # the property test's inputs run again under these seeds: an input whose outcome changes is
+# left out of the file, which runs under pytest's random seed
+
+
+def _seed_key(tmpl: dict, o: dict) -> tuple:
+    """What the written file checks of one outcome: the result text (equivalence) or the property's verdict."""
+    if tmpl["kind"] == "equivalence":
+        return _out_key(o)
+    k = tmpl.get("index")
+    return ("r" in o, k in (o.get("pv") or []), any(e[0] == k for e in o.get("pe") or []))
+
+
+def _property_test(repo, tmpl, cases, rows_h, rows_b, skip, differing, spec, qual, pid, runs, rerun) -> dict:
+    """Observe the template's property on the probe's inputs and write the pytest file (never over a file).
+    ``rerun(spec, seed)`` runs a spec on the working tree under another hash seed (that side's result)."""
     obs, chosen = ptpl.observe(tmpl, tmpl.get("index"), cases, rows_h, rows_b, skip, differing)
-    out = {"kind": tmpl["kind"], "property": tmpl["property"] or "same result as the base", **obs,
-           "path": tmpl["path"], "inputs_in_file": len(chosen), "written": False}
+    out = {"kind": tmpl["kind"], "property": tmpl.get("shown") or "same result as the base", **obs,
+           "claim_status": "unknown", "path": tmpl["path"], "inputs_in_file": 0, "written": False}
     if tmpl.get("inverse"):
         out["inverse"] = tmpl["inverse"]
+    dropped = 0
+    bad = set(chosen[:obs["counterexamples"]])  # counterexamples come first
+    if chosen:
+        cspec = {**spec, "cases": [cases[i] for i in chosen]}
+        cspec.pop("scaling", None)
+        for seed in HASH_SEEDS:
+            side = rerun(cspec, seed)
+            runs.setdefault("hash_seed", []).extend(side["experiments"])
+            if side.get("error") or side.get("import_error"):
+                out["hash_seed_check"] = f"not completed: {side.get('error') or 'import error'}"
+                break
+            keep = [i for k, i in enumerate(chosen) if (side["rows"].get(k) or {}).get("x")
+                    and _seed_key(tmpl, side["rows"][k]["x"][0]) == _seed_key(tmpl, rows_h[i]["x"][0])]
+            dropped += len(chosen) - len(keep)
+            chosen = keep
+        if dropped:
+            out["hash_order_dropped"] = dropped
+    out["inputs_in_file"] = len(chosen)
+    # a claim's status: holding on the listed inputs is a search, never evidence of 'always'; a counterexample
+    # seen again in the runs under the other hash seeds is an observed fact
+    out["claim_status"] = {"observed_to_hold": "weak_inference", "did_not_hold": "experiment_verified" if (
+        bad & set(chosen) and "hash_seed_check" not in out) else "strong_inference"}.get(obs["status"], "unknown")
     if not chosen:
-        out["why"] = "no input could be written as source (every call raised, or the base result has no plain text)"
+        out["why"] = "no input could be written as source: " + (
+            obs["observed"].split(": ", 1)[-1] if obs["status"] == "not_evaluated" else
+            "their outcome changed under another PYTHONHASHSEED" if dropped else
+            "the inputs' source is too long, or the base results have no plain text")
         return out
-    text = ptpl.render(tmpl, obs, chosen, cases, rows_b, qual, spec["module"], pid, runs, MATERIALIZE_MAX)
+    text = ptpl.render(tmpl, obs, chosen, cases, rows_b, qual, spec["module"], pid, runs, MATERIALIZE_MAX,
+                       dropped)
+    try:
+        ast.parse(text)
+    except SyntaxError as exc:  # a name the file cannot spell: never leave a file that stops pytest's collection
+        out["why"] = f"the file would not parse ({exc.msg}): not written"
+        return out
     try:
         ptpl.write(repo, tmpl["path"], text)
         out["written"] = True
@@ -1731,6 +1800,24 @@ def _record_claims(store, repo, res, rel, qual, head_node, cases, rows_b, rows_h
                       evidence=[(ev, "supports")])
         d["claim_id"] = c["id"]
         d["claim_status"] = c["status"]
+    pt = res.get("property_test")
+    if pt and pt["claim_status"] != "unknown":
+        meta = {"kind": "probe_property_test", "probe_id": res["probe_id"], "symbol": sym, "template": pt["kind"],
+                "property": pt["property"], "evaluated": pt["evaluated"], "counterexamples": pt["counterexamples"],
+                "corpus_sha256": corpus_sha, "base_commit": base_sha, "tree_hash": trees.get("head"),
+                "experiments": runs, "outcome": "pass",
+                "scope": "observed on the generated inputs in these runs; never evidence for 'always'"}
+        ev = evmod.source_evidence(repo, rel, head_node.lineno, commit=head_commit, source_type="experiment",
+                                   meta=meta)
+        if ev is not None:
+            ev["locator"] = f"probe {res['probe_id']}: {pt['evaluated']} inputs, runs {runs}"[:300]
+            ev["excerpt"] = pt["observed"][:400]
+            c = cl.create(f"In probe {res['probe_id']}, {pt['observed']}."[:1000], project=project, snapshot=snap,
+                          subjects=[sym], status=pt["claim_status"], kind="behaviour",
+                          spec={"probe": {"id": res["probe_id"], "class": f"template_{pt['kind']}", "symbol": sym}},
+                          evidence=[(ev, "supports")])
+            pt["claim_id"] = c["id"]
+            pt["claim_status"] = c["status"]
     if res["status"] in ("no_difference_found", "nothing_found"):
         meta = {"kind": "probe_summary", "probe_id": res["probe_id"], "symbol": sym, "outcome": "pass",
                 "inputs": res["inputs"]["count"], "compared": res["inputs"].get("compared"),
@@ -2034,6 +2121,8 @@ def render(res: dict) -> str:
         text = "; ".join(f"{side[k]} {', '.join(runs[k])}" for k in ("base", "head") if runs.get(k))
         if runs.get("confirm"):
             text += "; confirmation " + "; ".join(f"{side[k]} {', '.join(v)}" for k, v in runs["confirm"].items() if v)
+        if runs.get("hash_seed"):
+            text += "; other hash seeds " + ", ".join(runs["hash_seed"])
         lines.append(f"  runs (experiments): {text}")
     if res.get("guarantees"):
         g = res["guarantees"]
@@ -2048,9 +2137,12 @@ def render(res: dict) -> str:
         lines.append(f"  next: {res['next_step']}")
     pt = res.get("property_test")
     if pt:
-        lines.append(f"  property test ({pt['kind']}): " + (f"{pt['observed']}; " if pt.get("observed") else "")
+        lines.append(f"  property test ({pt['kind']}" + (f", {pt['claim_status']}" if pt.get("claim_status") else "")
+                     + "): " + (f"{pt['observed']}; " if pt.get("observed") else "")
                      + (f"written to {pt['path']} ({pt['inputs_in_file']} inputs)" if pt["written"] else
-                        f"not written: {pt.get('why')}"))
+                        f"not written: {pt.get('why')}")
+                     + (f"; {pt['hash_order_dropped']} left out: their outcome changed with the hash seed"
+                        if pt.get("hash_order_dropped") else ""))
     if res.get("regression_test"):
         lines += ["", res["regression_test"]]
     return "\n".join(lines)
