@@ -16,7 +16,9 @@ lower bounds. Names resolve exactly or not at all: an ambiguous name is unknown 
 
 The batch shares one freshness check, one route table and one lines cache; questions run in order, with no
 thread, no model and no network, so the same batch on the same index gives the same bytes (``seconds`` aside).
-Nothing is written: answers are not stored as claims.
+Nothing is written: answers are not stored as claims. An answer whose cell of (type, answer, status) was measured
+on the frozen held-out gold sets, with enough answers and the same engine, carries ``measured: k/n held-out``
+(:mod:`verinoda.tq_measured`); it is a frequency on that set and changes nothing else.
 """
 
 from __future__ import annotations
@@ -465,7 +467,8 @@ def _ast_calls(b: _Batch, a_nodes: list[str], token: str) -> tuple[list[str], bo
         f, sp = b.g.file(n), b.g.span(n)
         lines = b.lines(f) if f and f.endswith((".py", ".pyi")) and sp else None
         tree = entail._py_tree("\n".join(lines)) if lines is not None else None
-        at = {sp[0], b.g.line(n)}   # the span may start at a decorator; the def line is the node's line
+        # the span may start at a decorator; the def line is the node's line (no span: not a definition read here)
+        at = {sp[0], b.g.line(n)} if sp else set()
         fns = [d for d in ast.walk(tree) if isinstance(d, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
                and d.lineno in at] if tree is not None else []
         if not fns:
@@ -931,6 +934,12 @@ def ask(repo: Path, questions, *, graph=None, verify: bool = True, need: str = "
     answers: list[dict] = []
     done: dict[str, dict] = {}
     invalid = False
+    try:
+        from verinoda import tq_measured
+
+        cells = tq_measured.shown_cells()
+    except Exception:  # noqa: BLE001 - an unreadable calibration table shows nothing, it never fails a batch
+        cells = {}
     for qid, spec, err in batch:
         row: dict = {"id": qid}
         if spec is not None:
@@ -958,6 +967,10 @@ def ask(repo: Path, questions, *, graph=None, verify: bool = True, need: str = "
             row.update({"answer": None, "status": "invalid", "why": err[:400]})
         elif row["answer"] is not None and not _enough(row["status"], (spec or {}).get("need") or need):
             row["enough"] = False
+        if err is None and cells:
+            m = tq_measured.measured(spec["type"], row, cells)
+            if m:
+                row["measured"] = m
         answers.append(_order_keys(row))
     cut_ids = [a["id"] for a in answers if a.get("cut")]
     for a in answers:
@@ -1024,6 +1037,8 @@ def render(res: dict, *, echo_questions: bool = True) -> str:
             parts.append(", ".join(a["at"]))
         if a.get("via"):
             parts.append(a["via"])
+        if a.get("measured"):
+            parts.append(f"measured: {a['measured']}")
         if a.get("other"):
             parts.append("other: " + ", ".join(a["other"]))
         if a.get("why"):
