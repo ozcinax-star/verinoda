@@ -162,8 +162,8 @@ def test_record_transition_updates_claim_and_appends_history(st):
     assert (c["status"], c["confidence"], c["valid_env"]) == ("stale", 0.3, "py3")
     h = st.history(ids["claim"])
     assert [x["to_status"] for x in h] == ["unknown", "weak_inference", "stale"]
-    # every transition records the snapshot it was made at (the claim's code time)
-    assert h[-1]["payload"] == {"changed": ["a.py"], "snapshot": c["snapshot_id"]} and c["snapshot_id"]
+    # every transition records the snapshot whose tree it read; unstated, the working tree (no commit)
+    assert h[-1]["payload"] == {"changed": ["a.py"], "snapshot": None}
     assert [x["seq"] for x in h] == sorted(x["seq"] for x in h)
 
 

@@ -38,8 +38,8 @@ def _commit(repo: Path, files: dict[str, str], msg: str) -> str:
 
 @pytest.fixture()
 def story(tmp_path):
-    """c0 (before the claim), c1 (claim made), c2 (an unrelated file changed: rebound), c3 (its file changed:
-    stale)."""
+    """c0 (before the claim), c1 (claim made), c2 (an unrelated file changed: nothing recorded), c3 (its file
+    changed: stale)."""
     repo = tmp_path / "as of ğ"
     repo.mkdir()
     _git(repo, "init", "-q")
@@ -131,3 +131,72 @@ def test_an_invalidation_in_the_working_tree_is_at_no_commit(story):
     st.record_transition(cid, from_status="stale", to_status="stale", from_conf=0.1, to_conf=0.1, reason="wt",
                          actor="t", payload={"new_snapshot": None})
     assert asof.events(st, st.claim(cid))[-1]["snapshot"] is None
+
+
+def test_an_older_commit_checked_later_does_not_hide_the_record_at_rev(story):
+    """After `git checkout c0` and an update, the claim goes stale at c0: c1 still answers from c1's own record."""
+    repo, st, cid, (c0, c1, c2, c3) = story
+    _git(repo, "checkout", "-q", c1)
+    workflow.update(st, repo)
+    (r,) = [x for x in asof.at_commit(st, repo, c1)["claims"] if x["id"] == cid]
+    assert (r["status_then"], r["verdict"]) == (st.history(cid)[1]["to_status"], "observed")
+
+
+def test_a_transition_on_the_working_tree_is_at_no_commit(story):
+    repo, st, cid, (c0, c1, c2, c3) = story
+    first = st.history(cid)[1]["to_status"]
+    cl = Claims(st, repo)
+    cl.attach(cid, evmod.source_evidence(repo, "a.py", 2, 2, commit=None), "refutes")
+    cl.set_status(cid, "contradicted", reason="a counterexample on the working tree", actor="t", downgrade=False)
+    e = asof.events(st, st.claim(cid))[-1]
+    assert e["status"] == "contradicted" and e["snapshot"] is None
+    (r,) = [x for x in asof.at_commit(st, repo, c1)["claims"] if x["id"] == cid]
+    assert (r["status_then"], r["verdict"]) == (first, "observed")
+
+
+def test_a_dirty_snapshot_is_at_no_commit(tmp_path):
+    repo = tmp_path / "dirty"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    c1 = _commit(repo, {".gitignore": ".verinoda/\n", "a.py": "def a():\n    return 1\n"}, "one")
+    (repo / "a.py").write_text("def a():\n    return 99\n", encoding="utf-8", newline="\n")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        snap = st.latest_snapshot()
+        assert snap["dirty"]
+        ev = evmod.source_evidence(repo, "a.py", 1, 2, commit=snap["commit_sha"])
+        c = Claims(st, repo).create("a() returns 99", project="p", snapshot=snap, status="statically_verified",
+                                    evidence=[(ev, "supports")], subjects=["a.py"])
+        (r,) = [x for x in asof.at_commit(st, repo, c1)["claims"] if x["id"] == c["id"]]
+        assert r["verdict"] == "unknown" and r["status_then"] is None
+        res = asof.at_commit(st, repo, c1)
+        assert res["counts"].get("no_record") == 1 and asof.at_commit(st, repo, c1, status="unknown")["claims"] == []
+    finally:
+        st.close()
+
+
+def test_weak_inference_is_not_held_and_times_parse():
+    assert "weak_inference" not in asof.HOLDING
+    assert asof._parse_time(" 2026-05-01 ").isoformat() == "2026-05-01T23:59:59+00:00"
+    assert asof._parse_time("2026-05-01T12:00:00Z").isoformat() == "2026-05-01T12:00:00+00:00"
+
+
+def test_older_rows_rebuilt_with_a_verify_rebind():
+    class St:
+        def history(self, _):
+            return [
+                {"seq": 1, "to_status": "unknown", "reason": "created", "payload": {}, "created_at": "t1"},
+                {"seq": 2, "to_status": "strong_inference", "reason": "initial assessment", "payload": {},
+                 "created_at": "t2"},
+                {"seq": 3, "to_status": "stale", "reason": "x", "payload": {"new_snapshot": "s2"}, "created_at": "t3"},
+                {"seq": 4, "to_status": "strong_inference", "reason": "verify: evidence re-checked", "payload": {},
+                 "created_at": "t4"},
+                {"seq": 5, "to_status": "strong_inference", "reason": "verify: rebound to current snapshot",
+                 "payload": {"snapshot_id": "s3", "commit_sha": "c3"}, "created_at": "t5"},
+            ]
+
+    ev = asof.events(St(), {"id": "c", "snapshot_id": "s1"})
+    assert [(e["snapshot"], e["sure"]) for e in ev] == [("s1", True), ("s1", True), ("s2", True), (None, False),
+                                                         ("s3", True)]

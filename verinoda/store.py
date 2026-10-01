@@ -828,15 +828,10 @@ class Store:
         fields.update(extra_fields or {})
         payload = dict(payload or {})
         if "snapshot" not in payload:
-            # the snapshot the transition was made at: the one an invalidation saw the change in (None: the
-            # working tree), else the claim's after the transition. A claim's code time (verinoda/asof.py).
-            if "new_snapshot" in payload:
-                payload["snapshot"] = payload["new_snapshot"]
-            else:
-                snap = fields.get("snapshot_id") if "snapshot_id" in fields else \
-                    (self.one("SELECT snapshot_id FROM claims WHERE id = ?", (cid,)) or {}).get("snapshot_id")
-                if snap:
-                    payload["snapshot"] = snap
+            # the snapshot whose tree the transition read, when the caller knows it: an invalidation's
+            # new_snapshot, a rebind's snapshot_id; else None (the working tree, at no known commit). A claim's
+            # code time (verinoda/asof.py).
+            payload["snapshot"] = payload["new_snapshot"] if "new_snapshot" in payload else fields.get("snapshot_id")
         with self.tx():
             self._update("claims", "id", cid, fields)
             self.conn.execute(
