@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SHADER_SUFFIXES = (".glsl", ".fsh", ".vsh", ".vert", ".frag", ".comp", ".geom")
+SHADER_SUFFIXES = (".glsl", ".fsh", ".vsh", ".vert", ".frag", ".comp", ".geom", ".gsh", ".csh", ".tcs", ".tes")
 _SKIP = {"build", ".gradle", "out", "bin", "node_modules", ".git", ".verinoda", "run", ".idea", "graphify-out"}
 _BLOCK = re.compile(r"(?:layout\s*\([^)]*\)\s*)?uniform\s+([A-Za-z_]\w*)\s*\{([^}]*)\}\s*(\w+)?\s*;", re.S)
 _FIELD = re.compile(r"^\s*(?:(?:lowp|mediump|highp|flat)\s+)*([a-z]\w*)\s+([A-Za-z_]\w*)\s*(\[\s*(\w+)\s*\])?\s*;")
@@ -256,9 +256,12 @@ def constant_tables(repo: Path, shader_files: list[str] | None = None,
     return out
 
 
-def check(repo: Path) -> dict:
+def check(repo: Path, *, use_glslang: bool = False) -> dict:
     """What disagrees between the shaders and Java: a block no writer matches exactly (a field added on one side,
-    the other not), mirrored constants with different values or on one side only."""
+    the other not), mirrored constants with different values or on one side only; then what the shader text
+    itself gets wrong (:func:`verinoda.shaderlint.lint`: includes, brackets, ``#version``, uniforms, macros)."""
+    from verinoda import shaderlint
+
     bl, wr = blocks(repo), writers(repo)
     pairs = link(bl, wr)
     paired = {p["block"].name for p in pairs}
@@ -291,7 +294,14 @@ def check(repo: Path) -> dict:
         for n in t["only_java"]:
             issues.append({"kind": "constant_one_sided", "name": n, "at": t["java_at"],
                            "why": f"in {t['java']}, not in the shader's {t['prefix']} table"})
-    return {"blocks": len(bl), "writers": len(wr), "paired": len(pairs), "issues": issues}
+    lint = shaderlint.lint(repo, use_glslang=use_glslang)
+    issues += lint["issues"]
+    edges = lint["edges"]
+    return {"blocks": len(bl), "writers": len(wr), "paired": len(pairs), "shader_files": lint["files"],
+            "stages": lint["stages"], "includes": {"edges": len(edges),
+                                                    "missing": sum(e["status"] == "missing" for e in edges),
+                                                    "cycles": len(lint["cycles"])},
+            **({"glslang": lint["glslang"]} if "glslang" in lint else {}), "issues": issues}
 
 
 def where_from(repo: Path, name: str) -> dict:
@@ -318,10 +328,18 @@ def where_from(repo: Path, name: str) -> dict:
                    "through a helper is not paired)"}
 
 
-def lookup(repo: Path, name: str | None, *, check_only: bool = False) -> dict:
-    """``verinoda shader NAME`` (where a uniform field comes from) or ``--check`` (what disagrees)."""
+def lookup(repo: Path, name: str | None, *, check_only: bool = False, include_graph: bool = False,
+           use_glslang: bool = False) -> dict:
+    """``verinoda shader NAME`` (where a uniform field comes from), ``--check`` (what disagrees) or ``--includes``
+    (the include edges with their lines)."""
+    if include_graph:
+        from verinoda import shaderlint
+
+        edges = shaderlint.includes(repo)
+        return {"status": "found", "kind": "includes", "edges": edges,
+                "cycles": shaderlint.cycles(edges)}
     if check_only or not name:
-        res = check(repo)
+        res = check(repo, use_glslang=use_glslang)
         res["tables"] = [{k: t[k] for k in ("prefix", "java")} | {"same": len(t["same"])}
                          for t in constant_tables(repo)]
         return {"status": "found", "kind": "check", **res}
@@ -329,11 +347,23 @@ def lookup(repo: Path, name: str | None, *, check_only: bool = False) -> dict:
 
 
 def render(res: dict) -> str:
+    if res["kind"] == "includes":
+        from verinoda import shaderlint
+
+        return shaderlint.render_includes(res["edges"]) + "".join(
+            f"\n  include cycle: {' -> '.join(c['files'])} ({c['at']})" for c in res["cycles"])
     if res["kind"] == "check":
+        inc = res["includes"]
         out = [f"{res['blocks']} uniform block(s), {res['writers']} Java writer(s), {res['paired']} paired; "
                + (", ".join(f"{t['prefix']}* = {t['java']} ({t['same']} agree)" for t in res["tables"])
-                  or "no mirrored constant table")]
-        out += [f"  {i['kind']}: {i.get('block') or i.get('name')} ({i['at']}) - {i['why']}" for i in res["issues"]]
+                  or "no mirrored constant table"),
+               f"{res['shader_files']} shader file(s), {res['stages']} pack stage(s), {inc['edges']} include(s)"
+               + (f", {inc['missing']} missing" if inc["missing"] else "")
+               + (f", {inc['cycles']} cycle(s)" if inc["cycles"] else "")
+               + (f"; glslang: {res['glslang']}" if res.get("glslang") else "")]
+        out += [f"  {i['kind']}: {i.get('block') or i.get('name')} ({i['at']}) - {i['why']}"
+                + (f" [{i['status']}]" if i.get("status") and i["status"] != "verified" else "")
+                for i in res["issues"]]
         if not res["issues"]:
             out.append("  nothing disagrees")
         return "\n".join(out)

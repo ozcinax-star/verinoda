@@ -1277,10 +1277,13 @@ def cmd_secret_scan(args) -> int:
 def cmd_shader(args) -> int:
     from verinoda import shaders
 
-    res = shaders.lookup(_repo(args), args.name, check_only=args.check)
+    res = shaders.lookup(_repo(args), args.name, check_only=args.check, include_graph=args.includes,
+                         use_glslang=args.glslang)
     _emit(args, res, lambda r: print(shaders.render(r)))
     if res["kind"] == "check":
         return 3 if res["issues"] else 0
+    if res["kind"] == "includes":
+        return 0
     return 0 if res["status"] == "found" else 2
 
 
@@ -3637,9 +3640,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("paths", nargs="*", help="files to scan instead of the stored ones")
     sp.add_argument("--fix", action="store_true", help="redact the findings in place (line numbers are kept)")
     sp = add("shader", cmd_shader, "GLSL uniform blocks and the Java that fills them: where a field (Weather.y) comes "
-                                   "from; --check: blocks and writers that differ, mirrored constants that disagree")
+                                   "from; --check: blocks and writers that differ, mirrored constants that disagree, "
+                                   "and shader lint (includes, brackets, #version, Iris/OptiFine uniforms and macros)")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
-    sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
+    sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java and what "
+                                                         "the shader text gets wrong, with lines (exit 3)")
+    sp.add_argument("--includes", action="store_true", help="the #include / #moj_import edges with their lines")
+    sp.add_argument("--glslang", action="store_true", help="with --check: also compile each pack stage with "
+                                                           "glslangValidator when it is installed (off by default)")
     sp = add("access-check", cmd_access_check, "access wideners and access transformers checked against the class "
                                                "files of the build's classpath: each entry exists, is absent (with "
                                                "the nearest real names), malformed or unknown, with its line "
