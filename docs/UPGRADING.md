@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D166)
+## Upgrading from 0.4.0 (D137-D167)
 
 ### D137: Trigram regex index
 
@@ -370,6 +370,43 @@ Nothing to migrate. A single-project server (`mcp serve`, `--repo`, `--repo-of`)
   again.
 - **Harness.** A routes gold check's `method` now really is checked against `methods`, and `at`
   (file:line) is accepted. summary.md merges environment lines whose `verinoda/` code is the same.
+
+### D167: Distinct symbols never share a node
+
+`verinoda update` is enough, and no `scan` is needed:
+
+- The extractor's source changed and the AST cache schema went up (now 11). So the extraction stamp
+  recorded in build_stats.json no longer matches, and the next `update` rebuilds the whole graph,
+  even when no file changed. The old AST cache entries are not reused: they live under
+  `cache/ast/v<version>-s8/`, which is swept.
+- `verinoda scan` rebuilds everything too.
+- Most ids stay. The definitions that used to vanish get new `<id>_<6 hex>` ids. Some ids that
+  existed before change, or now name a different symbol:
+  - When a private twin was declared before its public twin (`__transform` before `_transform` in
+    axios, `_Q` before `function q`), the old graph gave the plain id to the private one. Now it
+    goes to the public one, and the private one gets `<id>_<hash>`.
+  - Java `_x` methods that share an id with `x` were numbered in `x`'s overload family
+    (`..._x_2`, `..._x_3`). They now have `<id>_<hash>` and `<id>_<hash>_2`. `x`'s own overloads
+    keep `..._x_2` and so on, but a number that used to belong to `_x` can now belong to an
+    overload of `x`.
+
+  A record keyed by such a node id (a claim's subject id, a saved selector that is a node id) names
+  the other symbol after the rebuild. Evidence anchors pin cited lines by symbol name and
+  fingerprint (`verinoda/anchors.py`), not by node id. Records about a merged node were already
+  about a mix of two symbols. After the rebuild they stay on the public definition.
+- The rebuild record (`rebuild_record.json`) is keyed by a stamp of project_index and index.py, and
+  both changed, so it is not reused.
+- `python_facts.json` and the Python cross-file cache are keyed by their own code stamps, which did
+  not change. They hold no node ids of the split definitions: their call sources are re-routed by
+  `case_ids` on each build.
+- A process that keeps running across the upgrade, such as an MCP server, sees changed code files
+  and stops trusting its rebuild record. Restart it to pick up the new resolver.
+- Answers change in one visible way. A selector written as code that matches a symbol only when
+  case is folded (`sendFile` for `sendfile`, in a case-sensitive language) is now `similar` with a
+  note, or `ambiguous` when it matches several, never `exact`. `trace` shows the note under
+  `fuzzy`. The rename preview (`rename_preview`) and the callers/callees view (`butterfly`) run
+  only on an exact match. They now return the matched node as a candidate, with the note, instead
+  of running.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
