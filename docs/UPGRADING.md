@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D164)
+## Upgrading from 0.4.0 (D137-D165)
 
 ### D137: Trigram regex index
 
@@ -324,6 +324,19 @@ Nothing to migrate. A single-project server (`mcp serve`, `--repo`, `--repo-of`)
   `index_status()` and `project_entry()`; `build_server(None, hub=ProjectHub(...))`; `listed_of()` and
   `index_state()` in `verinoda.mcp.server`. `serve()` takes `projects=`, `max_loaded=`, `transport=`, `host=`,
   `port=` and `state_file=`.
+
+### D165: Definition lines: overload implementations and annotated declarations
+
+- The first `update` after upgrading rebuilds the graph: the extraction stamp and
+  `_AST_CACHE_SCHEMA` 9 both change.
+- Java, Kotlin and C# methods and classes with an annotation or attribute above their name are then
+  cited one or more lines lower, at the name. Their spans do not change.
+- Python functions with `@overload` stubs are cited at the implementation, with the stubs' lines
+  in `metadata.overloads`.
+- Claims citing the old line still resolve: the span covers the annotation, and review and anchor
+  lookups accept the first line too.
+- Tree-sitter anchor facts are computed again once (new cache key `ts1.def2`). Anchors already
+  stored keep their scheme and stay valid.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
