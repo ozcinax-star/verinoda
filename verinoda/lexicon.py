@@ -108,7 +108,8 @@ CODE_SUFFIXES = {".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".
                  ".kt", ".kts", ".scala", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp",
                  ".hh", ".hxx", ".ipp", ".inl", ".tpp",
                  ".swift", ".lua", ".sh", ".bash", ".ps1", ".sql", ".ex", ".exs", ".jl", ".zig", ".m",
-                 ".groovy", ".dart", ".vue", ".svelte"}
+                 ".groovy", ".dart", ".vue", ".svelte",
+                 ".cbl", ".cob", ".cobol", ".cpy", ".erl", ".hrl", ".escript", ".r", ".sol", ".vb"}
 DOC_SUFFIXES = {".md", ".rst", ".txt", ".adoc"}
 # Endings that keep a word's meaning: ``persist`` is in the vocabulary through ``persistence``.
 DERIVATIONAL = frozenset("""

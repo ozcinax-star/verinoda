@@ -1374,7 +1374,8 @@ def _targets(ctx: _Ctx, sub: _Sub, n: int = 2) -> list[str]:
 
 _CODE_SUFFIXES = {".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".java", ".kt", ".scala", ".rb", ".php",
                   ".cs", ".c", ".h", ".cc", ".cpp", ".hpp", ".swift", ".lua", ".sh", ".ex", ".exs", ".jl", ".zig",
-                  ".m", ".groovy", ".dart", ".mjs", ".cjs", ".ps1"}
+                  ".m", ".groovy", ".dart", ".mjs", ".cjs", ".ps1",
+                  ".cbl", ".cob", ".cobol", ".cpy", ".erl", ".hrl", ".escript", ".r", ".sol", ".vb"}
 
 
 WHEN_PATHS = 2  # "when does X run": the event paths turned into claims (the rest: `verinoda when X`)

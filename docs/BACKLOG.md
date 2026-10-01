@@ -29,7 +29,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 1.1 | **Update proportional to the change** | Per-file hashes, re-extract only changed files and patch their nodes and edges into the graph, no whole-corpus rebuild; branch switch detected | claude-context, narsil-mcp, codebase-memory-mcp, CodeGraph, GitHub Stack Graphs | an update of one edited file on Verinoda's own repository takes seconds, and its graph equals a full scan's node for node and edge for edge |
-| 1.4 | **Broader language coverage** | Pull the grammars upstream Graphify added after the fork (COBOL, R, Solidity, Erlang, OCaml, Terraform attributes, Razor and others) | Graphify, codebase-memory-mcp | each new language has an extraction fixture test |
 | 1.5 | **Daemon and multi-project server** | One MCP server over several indexed projects; HTTP transport with a token; `list_projects`, `index_status` | Graphify, codebase-memory-mcp, Codanna, Kodit | two projects answered from one server process |
 | 1.6 | **Multi-repository index** | Index several local repositories as one group with cross-repo symbol links | Sourcegraph, Graphify merge-graphs, GitNexus | a call from repo A to a function in repo B is an edge with its call site |
 
@@ -99,7 +98,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 13.7 | **Measured frequencies for typed answers** | `verinoda benchmark tq-audit`: a held-out calibration table keyed by gold and engine hashes; an answer shows `measured: k/n` only for cells with n of 30 or more; a reliability report for the claim confidence caps (no cap changed) | TypeSafe Jev (calibrated outputs) | the report and its table are committed; a changed engine hides `measured` (test); the report lists observed precision against each cap |
 
 ## 14 - Outputs and views
 

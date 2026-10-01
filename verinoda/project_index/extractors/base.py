@@ -1,6 +1,7 @@
 # DO NOT import from verinoda.project_index.extract here — direction is extract.py → extractors/ only.
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from verinoda.project_index.ids import make_id
@@ -53,6 +54,25 @@ _LANGUAGE_BUILTIN_GLOBALS: frozenset[str] = frozenset({
 
 def _make_id(*parts: str) -> str:
     return make_id(*parts)
+
+
+class _CaseIds:
+    """Verinoda patch: keep two symbols of one file whose names differ only in case apart.
+
+    make_id folds case, so ``Foo`` and ``foo`` would mint one id and an extractor
+    that keeps the first node per id would drop the second. The first name seen
+    keeps the id; another spelling gets ``<id>_<6 hex of sha1(name)>``, the form
+    verinoda.case_ids gives a split member.
+    """
+
+    def __init__(self) -> None:
+        self._first: dict[str, str] = {}
+
+    def __call__(self, nid: str, name: str) -> str:
+        first = self._first.setdefault(nid, name)
+        if first == name:
+            return nid
+        return f"{nid}_{hashlib.sha1(name.encode('utf-8')).hexdigest()[:6]}"
 
 
 def _file_stem(path: Path) -> str:

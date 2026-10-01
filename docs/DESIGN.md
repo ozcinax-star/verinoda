@@ -14519,6 +14519,439 @@ One test runs the real Verinoda on a tiny git repository, through every step gro
 marker file if executed. The test asserts that no marker appears, that there are no crashes, that
 the gold hit is found and that the clone is clean afterwards.
 
+## 135. Measured frequencies for typed answers (D162, 2026-10-01)
+
+### 135.1 Why
+
+`verinoda tq` (D159) answers closed questions with a value and a status, but a status is a rule's ceiling, not a
+measured rate: nothing told an agent how often a `calls ... = no | strong_inference` had been right. The spec
+(docs/drafts/13.6-13.8-spec.md, sections 4, 5, 7 and the 13.7 build plan) asks for a frequency where one was
+measured and nothing where it was not: `measured: k/n held-out` on an answer only for a cell of (question type,
+answer, status) with at least 30 held-out answers, from a table keyed by the gold set and by the code that decided
+the answers, so a table measured on other code or another set is never shown. The same run gives the first
+observed precision per status next to `claims.CONFIDENCE_CAP`, which DESIGN line 50 says was never recalibrated.
+
+### 135.2 Decisions
+
+- **A second held-out set, frozen first.** The first set's 34 held-out cases put no cell near 30, so
+  `benchmarks/tq_gold2/` was written and committed on its own (c720287) before `tq` ran on any of its questions:
+  323 cases, all held-out (no dev split), 302 on this repository at c23c483 (the `verinoda/` package without
+  `project_index/` and `benchmark/questions/`, copied by `git archive`) and 21 on `examples/orders_app`.
+  Candidates came from a stdlib-`ast` script with a fixed seed (no Verinoda code): definitions whose name is
+  defined once (top-level, methods, functions nested in functions), absent names made of two words of real names,
+  near misses of real names (`exact_node`), direct, module (`graphquery.run`-style) and `self.m()` calls of a
+  function defined once, calls through `from X import NAME as ALIAS` (and two traps where the alias spells another
+  function's name), callers that never spell a function of their own file, and callers that spell a function's
+  name only as a variable or word. Each case was then checked by hand: the cited line read, the binding import
+  read for each cross-file call, the caller's calls listed and read for each no, each absent name searched as a
+  whole word in every file of the copy. `MANIFEST.json` holds the file's sha256, the repositories' copy specs and
+  the orders_app hashes; a test checks them.
+- **Cells and the display rule.** A cell is (type, answer kind, status); answer kinds are `yes`, `no`, `?`,
+  `count`, `files`, `none`, `rows`, `invalid`. `tq` shows a cell's `k/n held-out @<gold sha8>` only when the cell
+  has n >= 30 held-out answers, the question was asked with options (`depth=`, `scope=`, `as=`, taint's `in=`;
+  `need` and `id` change no answer) that a held-out answer of the cell was asked with, verify is on, its answer is decided (never for `?`), the first set's dev split has an answer in
+  the same cell and its precision lies inside the held-out Wilson 95 % interval (the spec's condition; it can
+  hide a cell whose dev side is better than its held-out side), and both hashes below match. It is a frequency on
+  a named set, never a probability, and it changes no answer and no status. In the text form it follows `via`;
+  in JSON it is the `measured` key the spec reserved.
+- **The gold hash** is the sha256 of the lines `<path> <sha256>` of the frozen held-out files
+  (`tq_gold/held_out.json`, `tq_gold2/held_out.json`), sorted. `tq_measured.GOLD_FILES` names them with their
+  hashes; the table must carry exactly these and their combined hash, and in a source checkout the files on disk
+  must still hash to them (re-checked on every batch, so editing a gold file hides `measured` at once).
+- **The engine hash** is the sha256 of the lines `<path>\0<sha256 of the file's bytes, CRLF read as LF>`, one per
+  file sorted by path relative to the package: `tq.py`, `index.py`, every package module they import at any
+  depth (a static AST walk of every `import` statement, those inside functions included; a name imported from a
+  package counts as its submodule when one exists) and every `.py` under `project_index/`; never
+  `tq_measured.py` (the display rule) or `benchmark/` (the harness that writes the table). Today that is 186
+  files (97 outside `project_index/`), an over-approximation of the code that decides an answer. A missing root
+  gives no hash and nothing is shown. It is computed at run time from the installed sources; the walk is cached
+  per process and re-checked on each batch by the mtime and size of every file in it, the paths its imports
+  probed and did not find, and the file list of `project_index/` (about 50-80 ms per batch on this OneDrive
+  checkout). Any edit to these files hides every `measured` until `benchmark tq-audit` is run again and its
+  table committed. The audit refuses a run during which the hash changed.
+- **The scorer and the code the gold is about.** The table records `score_sha`, the hash of
+  `benchmarks/tq_gold/score.py` (which decides right and wrong); in a source checkout a scorer with another hash
+  hides every `measured`. The audit checks each set's MANIFEST.json `fixtures` (under the set) and `examples`
+  (under the repository) hashes as well as its gold files and stops (exit 2) when one changed.
+- **The runner.** `verinoda benchmark tq-audit` (`verinoda/benchmark/tq_audit.py`) checks every gold file against
+  its MANIFEST.json and `GOLD_FILES`, indexes each repository once through the verdict audit's `base_copy`, asks
+  the questions in batches of 20 with verify on, scores them with `benchmarks/tq_gold/score.py` (`?` is never
+  wrong; a count is right as a lower bound) and writes `verinoda/data/tq_calibration.json` (gold files and hash,
+  engine hash and file count, the commit, every held-out cell with its Wilson interval, the dev cell and
+  `shown`/`why_not_shown`) and `benchmarks/results/tq-audit-DATE/report.{json,md}` (every case, the wrong ones, the
+  cells, the reliability table). Exit 1 when an answer at a verified status is wrong, 2 when a gold file (or a
+  fixture or example it is about) changed. The committed run exits 1 (`v-alias-11`, `v-alias-12`, below).
+- **No cap is changed.** The reliability table lists, per status, the decided held-out answers, how many were
+  right, the Wilson interval and whether `CONFIDENCE_CAP` lies inside, below or above it. Changing a cap stays its
+  own reviewed decision (spec section 5).
+- **Study F (the instructions sentence).** The spec's pre-registered rule adds `Several yes/no or count facts:
+  run_tool tq.` to the core instructions only if a paired agent study (>= 24 tasks over 4 repositories, one model
+  in the loop) shows recall kept, median cache-weighted cost down >= 10 % with a bootstrap CI excluding 0, turns
+  not up and over-trust not up. The study was not run in this build (it needs a model in the loop, which this
+  build does not use). Applying the rule as written: its conditions are not shown, so the sentence is not added;
+  no instructions text was edited (test_mcp's instruction and menu limits pass unchanged). This result belongs in
+  DESIGN 132.
+- **Review round.** The reviewer confirmed two findings, both fixed with regression tests. (1) The engine
+  hash listed twelve modules by hand and missed what they import: `naming.py` folds names with
+  `textnorm.fold_tr`, and with `fold_tr` truncated to four characters the hash did not change, `exists
+  placeholder_xyz` on orders_app flipped to a wrong `yes | statically_verified` that still carried `measured:
+  77/77`. The hash now covers the import closure described above (`textnorm.py`, `evidence.py`, `codecheck.py`,
+  `search_index.py`, `guards.py`, `question_plan.py`, `treestate.py`, `testcode.py`, `snapshot.py`,
+  `python_cross.py`, `python_facts.py` and the rest); tests edit a module reached only through another module
+  and one imported inside a function, and edit `textnorm.py` in a copy of the package and see the committed
+  table's cells disappear. (2) `exists NAME scope=lib` is decided by `codecheck.api` reading the installed
+  library, another engine, yet carried the project index cell's `82/82` because the cell key had no options;
+  no held-out case uses `scope=lib`. A cell now records the options its held-out answers were asked with and is
+  shown only for those (all four n >= 30 cells were measured with no options only, so `calls A B depth=2` and
+  `exists X scope=lib` show nothing); `exists json.no_such_fn_xyz scope=lib` on the orders_app copy now has no
+  `measured`. From the minors: `--no-verify` batches show nothing (the table was measured with verify on); the
+  scorer's hash is in the table and the MANIFEST `fixtures`/`examples` hashes are checked by the audit; the
+  README row names `--json` and says the committed run exits 1. The draft overstated the engine hash ("the
+  modules that decide a tq answer"); it now says what the hash covers. The audit was rerun after the fix on
+  3fda4e1: every count below is unchanged, only the engine hash, commit and time changed.
+- **Fixed on the way.** The held-out run found `calls bisect _rev_list` failing with `TypeError` inside tq: the
+  name resolved to the graph's external module node `bisect` (no file, no span) and the AST check behind a no
+  indexed its span. `_ast_calls` now skips a node without a span (a regression test reproduces it). The answer is
+  now a wrong weak no instead of a failed question; the resolution itself is in Limits.
+
+### 135.3 Measured
+
+All on 2026-10-02, Windows, the repository's `.venv`, commit 3fda4e1 (review round), engine sha256
+06b0e5c6... over 186 files, scorer sha256 c932e489..., gold sha256 4962f768..., verify on. Audit time 75.5 s with
+the indexed copies reused (166.8 s with fresh copies, indexing this repository's copy included). Before the
+review round (commit 4dbc14a, engine 29997d9a... over the hand-listed modules) the same run gave the same counts.
+
+Held-out (34 + 323 = 357 cases): 350 decided, 347 right, 3 wrong, 7 unknown (every unknown with a next step);
+locator hits 166/167 (the miss: `exists tokenize`, see Limits). Dev (the first set's 75): 1 wrong
+(`reaches run_by_name target`, the known `getattr` trap, weak no), 4 unknown.
+
+Cells: 22; 4 reach n >= 30, all decided; 3 are shown.
+
+| type | answer | status | held-out right/n | Wilson 95 % | dev right/n | shown |
+|---|---|---|---|---|---|---|
+| exists | yes | statically_verified | 77/77 | 0.953-1.000 | 7/7 | yes |
+| exists | no | strong_inference | 82/82 | 0.955-1.000 | 3/3 | yes |
+| calls | no | strong_inference | 64/64 | 0.943-1.000 | 7/7 | yes |
+| calls | yes | statically_verified | 75/77 | 0.910-0.993 | 10/10 | no: dev above the interval |
+| calls | no | weak_inference | 24/25 | 0.805-0.993 | 0/0 | no: n < 30 |
+
+The other 17 cells have n <= 6 (callers, which, reaches, route, writes, reads, taint, q, tested, and the unknown
+cells).
+
+Reliability against `CONFIDENCE_CAP` (held-out, decided answers of every type):
+
+| status | cap | right/n | precision | Wilson 95 % | cap vs interval |
+|---|---|---|---|---|---|
+| statically_verified | 0.9 | 154/156 | 0.987 | 0.955-0.997 | below |
+| strong_inference | 0.7 | 157/157 | 1.000 | 0.976-1.000 | below |
+| weak_inference | 0.4 | 36/37 | 0.973 | 0.862-0.995 | below |
+| experiment_verified, primary_source_verified, observed, stale | 0.95, 0.85, 0.9, 0.3 | 0 | - | - | no answer |
+
+Every cap with data lies below the observed interval on this set; no cap was changed.
+
+Wrong answers on held-out:
+
+- `calls diff_file is_test_file` and `calls diff_trees is_test_file`: gold no, answered yes at
+  `statically_verified`. `treestate.py` imports `is_test_or_support_file as is_test_file`; the graph has an
+  EXTRACTED `calls` edge from `diff_file` to `testcode.is_test_file` at treestate.py:754, and the verify re-read
+  confirms it because the line spells `is_test_file(`. This breaks D159's gate A (0 wrong at a verified status)
+  on the new set; the first set's gate still holds. The ten import-alias yes cases (the alias's real target) were
+  all right at `statically_verified`.
+- `calls bisect _rev_list`: gold yes, answered no at `weak_inference` (the name resolved to the module `bisect`).
+
+Shapes on the second set: absent names 60/60 and near misses 18/18 strong no; caller not spelling the callee
+55/55 strong no; spelled but not called 24/24 weak no (1 `?`: `references` names 2 symbols); definitions 66/66
+yes (12 nested, 14 methods; 65 verified, 1 strong); `self` calls 16/16 and alias calls 10/10 verified yes;
+direct and module calls 48/50 yes (1 `?`: `stale_files` at ui/data.py:344 has no edge; 1 the `bisect` miss);
+orders_app 20/20 decided right, 1 `?` (`OrderRepository.__init__`, its constructor call has no edge).
+
+### 135.4 Not done
+
+- Three cells are shown, all on `exists` and `calls`, and two of them are absences. Every other type has fewer
+  than 30 held-out answers; their answers carry no `measured`.
+- One author wrote both the rules and the gold. The second set was frozen before tq ran on it, but its
+  candidates were drawn from shapes the rules were designed around (names defined once, a callee never spelled);
+  the frequencies say how tq does on such questions, not on the questions an agent will ask. 302 of 357 held-out
+  cases are on this repository.
+- The `calls yes statically_verified` cell is hidden by the dev rule (dev 10/10 above 0.910-0.993), not by n; the
+  rule hides a cell whose dev side looks better as well as worse.
+- Found and not fixed (engine changes measured on the held-out set would need a fresh set to measure them):
+  an import alias that spells another function's name gives a wrong `statically_verified` yes; a name that is
+  both a project function and an imported module (`bisect`, `tokenize`) resolves to the external module node,
+  which gave the wrong weak no above and a `tokenize` yes with no location (right by chance).
+- The engine hash follows static `import` statements only: a module loaded with `importlib` or `__import__`
+  is not followed (none of the package's own modules is loaded that way today; `anchors.py` loads
+  tree-sitter grammars and `codecheck_env.py` the inspected library's modules with `importlib`; a grammar
+  package's version is not hashed), and non-Python data files the engine reads (the
+  packaged `data/`) are not hashed. It is also wide: 186 files, so most edits to the package hide `measured`
+  until the audit is rerun and its table committed.
+- The cells carry no integrity hash: `shown_cells` trusts the committed table's `shown`, `n` and `right`, so a
+  hand edit to `tq_calibration.json` is not detected (only the gold, scorer and engine hashes are checked).
+- A cell's options are a list of those seen, not counts per option: a cell measured on 40 default questions and
+  one `depth=3` question would show its whole k/n for `depth=3`. Today every n >= 30 cell has only the default
+  options.
+- In an installed wheel the gold files and the scorer are absent, so only the recorded hashes are compared; the
+  on-disk re-hash runs in a source checkout only.
+- Study F was not run; the instructions sentence is not added.
+- The audit needs a source checkout with c23c483 in its history; without it the second set's cases on this
+  repository are skipped.
+
+### 135.5 Tests
+
+- `tests/test_tq_measured.py` (16; with test_mcp.py and test_docs.py 110 passed in the review round): the second set is frozen (MANIFEST hash, ids, repositories, pinned commit,
+  orders_app hashes) and `GOLD_FILES` names both frozen held-out files; every case parses and a yes cites a line;
+  the engine hash covers the import closure of `tq.py` (a module reached through another, one imported inside a
+  function, a module created where an import pointed, a new `project_index/` file; never `tq_measured.py`,
+  `benchmark/` or an unrelated module), ignores CRLF and is None without a root; on the real package it reaches
+  `textnorm.py`, `evidence.py`, `codecheck.py` and `search_index.py`, and an edit to `textnorm.py` in a copy of
+  the package hides the committed table's cells; the gold hash is order-free; Wilson values; the display rule (n >= 30, `shown`, decided only); a doctored
+  engine hash, a changed or missing scorer hash, a changed gold hash, other gold files, another schema, an engine edit after the table, a gold file
+  changed or missing on disk, a missing or broken table each hide `measured`; `tq.ask` shows `measured` in JSON and
+  text only for the cell and its measured options (not for `depth=2`, `scope=lib` or a `--no-verify` batch) and
+  survives an unreadable table; the calibration rule (n, decided, dev inside the
+  interval) and the reliability table against the caps; a changed gold file stops the audit; an end-to-end audit
+  on a tiny frozen set (verdicts, summary, table, report written, a table of another gold set never shown); the
+  CLI's exit codes 0/1/2; the committed table's hashes, intervals and shown cells, and its report.
+- `tests/test_tq.py`: a name resolved to a node without a span no longer fails the question (fails without the
+  fix); the MCP text test allows a `measured` part before `why`.
+
+## 136. Broader language coverage from upstream Graphify (D163, 2026-10-01)
+
+### 136.1 Why
+
+Verinoda's extractor is Graphify pinned at `20a20d3` (after v0.9.65). By v0.9.73 upstream had added five
+languages and changed three existing extractors. A project in one of those languages got nothing from the index:
+detect did not classify its files, or classified them and then had no extractor for them. The backlog row names
+COBOL, R, Solidity, Erlang, OCaml, Terraform attributes and Razor. I compared upstream's `graphify/extractors/`,
+`extract.py` (`_DISPATCH`, `_EXTRA_FOR_EXTENSION`, the language-family and case tables, the resolver
+registrations, the shebang table), `detect.py` `CODE_EXTENSIONS` and `analyze.py` `_LANG_FAMILY` with ours. The
+checkout was a shallow clone of tag `v0.9.73` (HEAD `ef4450d9c28acb2b8cdc22d369c1777b77148eef`), read only;
+none of its code was run.
+
+What upstream has and we did not:
+
+| Language / change | Upstream | Here before | Grammar |
+|---|---|---|---|
+| COBOL (`.cbl .cob .cobol .cpy`) | new `extractors/cobol.py` | not classified | none (regex) |
+| VB.NET (`.vb`) | new `extractors/vbnet.py` + partial-class resolver | not classified | `tree-sitter-vb-dotnet==0.3.0` |
+| R (`.r`/`.R`, `Rscript` shebang) | new `extractors/r.py` + sourced-call resolver | classified as code, no extractor (the #1689 warning) | `tree-sitter-language-pack==0.11.0` |
+| Erlang (`.erl .hrl .escript`) | new `extractors/erlang.py` + remote-call resolver | not classified | `tree-sitter-language-pack==0.11.0` |
+| Solidity (`.sol`) | new `extractors/solidity.py` + type-reference resolver | not classified | `tree-sitter-solidity==1.2.13` |
+| OCaml classes | `class ... = object ... end`: class, methods, instance variables | OCaml read, classes dropped | `tree-sitter-ocaml` (existing extra) |
+| Razor `@functions` | `.cshtml` `@functions { }` read like `@code { }` | Razor read, `@functions` methods dropped | none |
+| Terraform attributes | secret redaction inside lists, `{name, value}` pairs in a plain list, sensitive `variable`/`output` blocks | redaction in maps only | `tree-sitter-hcl` (existing extra) |
+
+OCaml, Terraform and Razor were already here; for them the backlog's point is the attribute and construct
+changes above. No other language or file type in v0.9.73 is missing here (`.mcfunction` is ours only).
+
+### 136.2 Decisions
+
+- **Ported as vendored code.** The five new modules are upstream's files with the module-path rewrite of
+  `tools/port_upstream.py`, plus the review-round fixes below, each marked "Verinoda patch". `ocaml.py`, `razor.py` and `terraform.py` are upstream's v0.9.73
+  files; they had no local changes. Each changed spot in `extract.py`, `detect.py`, `analyze.py`,
+  `extractors/__init__.py` and the three extractors carries a "Verinoda patch: ported from upstream Graphify
+  v0.9.73 (ef4450d)" comment. The rest of `extract.py` stays at the pinned commit. Upstream's other changes since
+  the pin are not taken here (Python import ambiguity, JSX calls, enum containers, Go package sinks and more).
+  `docs/UPSTREAM.md` lists the ported files under Modified. Upstream's `LICENSE`, `LICENSE-MIT` and `NOTICE` were
+  already kept and cover these files; the vendored files carry no per-file notice, and the new ones follow that.
+- **Each grammar is an optional extra, pinned as upstream pins it.** These are `vbnet`, `r`, `erlang` and
+  `solidity`. `languages` installs every optional grammar that has prebuilt wheels on all three systems: the new
+  three packages plus `tree-sitter-sql`, `-hcl`, `-pascal`, `-ocaml` and `-commonlisp`. It leaves out
+  `tree-sitter-dm`, which builds from source outside Windows, and `robotframework`, which is not a grammar.
+  `all` gains the three new packages. `tree-sitter-language-pack` 0.11.0 bundles its grammars as compiled
+  modules (169 `.pyd` files under `bindings/`, `r.pyd` and `erlang.pyd` among them). Its `__init__` imports only standard-library modules and three
+  tree-sitter packages and has no download path, so nothing goes on the network.
+- **A missing grammar is a reported, not-extracted file.** The extractors never raise for a missing grammar;
+  they return `{"nodes": [], "edges": [], "error": "... not installed"}`, and the build goes on. This was
+  upstream's behaviour and is unchanged. New `verinoda/grammars.py` turns that into a report. After a scan, or
+  an update that rebuilt the graph, `not_extracted` lists the project's files that need an optional grammar this
+  install cannot load and that have no node in the graph. They are grouped by grammar, each group with the reason
+  (`tree-sitter-solidity is not installed`, or `... is installed but failed to load: <error>`) and the line
+  `pip install "verinoda[solidity]"`. The CLI prints one warning line per group. This covers the older optional
+  grammars too (SQL, Terraform, OCaml, Common Lisp, DreamMaker, Robot Framework). They failed just as silently
+  before; only the vendored build log said so, and it named `graphifyy[...]`. A test keeps `grammars.SUFFIXES`
+  equal to the extractor's own `_EXTRA_FOR_EXTENSION`.
+- **Installing a grammar reads the skipped files on the next `update`.** `grammars.signature()` is part of
+  `buildlock.extraction_stamp`. It names the optional grammars whose package is found, using `find_spec` with no
+  import, in 10 ms. So the first `update` after installing or removing one rebuilds the graph with no changed
+  file. The vendored pipeline does not stamp files that failed, so it extracts them again.
+- **The minimum downstream wiring, so that `query`, `trace` and `tq` work:**
+  - spans from the grammars (`index._TS_LANGS`: `.sol`, `.vb`, and `.r` through the language pack);
+  - a tree-sitter definition that ends at column 0 of a line now ends on the line before. VB.NET's
+    `method_declaration` includes the newline after `End Function`. The rule also shortens Groovy and Scala
+    definitions whose node ends at column 0; they were one line too long (the following `}` or blank line), and
+    a test pins one Groovy span. graph.json is unchanged on every corpus measured, since it holds no spans;
+  - `lang:cobol|erlang|r|solidity|vbnet` (aliases `cob`, `erl`, `sol`, `vb`, `vb.net`);
+  - an Erlang function, labelled `name/arity`, is named exactly by `name` (`naming._Names`,
+    `retrieval._names_symbol`). Before, `trace checkout total` resolved only by similarity, and `tq`, which takes
+    exact names only, could not name it;
+  - the new suffixes join the code-suffix tables (`analysis` callers, `lexicon` vocabulary, `verdict_gate`
+    sites) and `check`'s `OTHER_LANGUAGES`, so a file there is `not_checked` and is never passed;
+  - Erlang, R and Solidity join `case_ids`' case-sensitive suffixes. COBOL and VB.NET are case-insensitive, as
+    upstream's `_CASE_INSENSITIVE_EXTS` says. Those three extractors kept only the first node per (case-folded)
+    id, so the split had nothing to split until the review round; now they mint the second spelling's id
+    themselves (below).
+- **Review round.** A reviewer confirmed five findings; all are fixed, each with a regression test in
+  `tests/test_languages_ported.py`:
+  - VB.NET nested types were dropped with all their members and calls. tree-sitter-vb-dotnet 0.3.0 wraps only
+    a top-level type in `type_declaration`; a nested `Class`/`Structure`/`Module` block is a direct child of the
+    outer block. `scan()` now recurses into both forms and puts a nested type under its outer type (`contains`),
+    with the outer type's full name as its namespace.
+  - COBOL scope terminators (`END-READ.`, `END-EVALUATE.`, ...) became paragraphs and took the later
+    `PERFORM`/`CALL` edges. A name starting with `END-` is never a paragraph now, and in fixed format a
+    paragraph header must start in Area A (columns 8-11), which also rejects a lone `WS-B.` closing a
+    statement in Area B.
+  - Names that differ only in case were merged in R, Solidity and Erlang (above). `extractors/base.py`
+    `_CaseIds`: the first spelling seen in a file keeps the id, another spelling gets
+    `<id>_<6 hex of sha1(name)>`, the form `case_ids` gives a split member. Scanned end to end: `Foo()` calls
+    `foo()`, contract `t` owns `x()`, `f/0` calls `'F'/0`.
+  - A COBOL `COPY` of a copybook in another directory (a COPYLIB layout) made a ghost node. The extractor now
+    links only a copybook that exists next to the program; any other `COPY` is left as a pending entry that the
+    new `cobol_copybooks` resolver binds by stem, ignoring case, among the extracted COBOL files (one in the
+    program's directory wins, otherwise exactly one match). No match, or several, gives no edge. The resolver
+    finds the program again by file and label, because the ids a pending entry carries are not final yet.
+  - The draft said no existing output changed; the column-0 span rule changes Groovy and Scala spans (above).
+  Cheap minors fixed too: an Erlang export in base notation (`f/2#1`) no longer drops its file with a
+  `ValueError`, and `NOTICE` now names the v0.9.73 files and the "Verinoda patch" convention. The other minors
+  are under Limits.
+- **Erlang spans stay heuristic.** tree-sitter-erlang makes each clause group a separate `fun_decl`, so a
+  function with two clause groups would get the first group's end. The next-symbol rule gives the whole function
+  on the fixture.
+
+### 136.3 Measured
+
+Windows 11, Python 3.13.14, the main checkout's `.venv` with the grammars below installed. Each corpus was
+copied to a temporary folder and scanned with `python -m verinoda scan --json` three times per code version.
+"base" is `competitor-backlog` at `c23c483` (from `git archive`), "new" is this branch. The figures are the
+`index_seconds` medians and graph.json compared as sets of `(id, label, source_file, source_location)` nodes and
+`(source, target, relation, confidence, source_location)` edges.
+
+| Corpus | Files | base | new | Graph difference |
+|---|---|---|---|---|
+| `tests/fixtures/languages` (the 12 new fixture files) | 12 | 0 nodes, 0 edges, 0.69 s | 54 nodes, 60 edges, 0.90 s | +54 nodes, +60 edges, all from the new suffixes |
+| `tests_upstream/fixtures` (the other languages) | 111 | 750 / 828, 5.21 s | 750 / 828, 5.02 s | none |
+| `examples/orders_app` | 11 | 41 / 74, 0.91 s | 41 / 74, 0.92 s | none |
+| gin (Go, pinned clone) | 260 | 1963 / 4615, 6.96 s | 1963 / 4615, 6.32 s | none |
+| guzzle (PHP, pinned clone) | 176 | 3927 / 7869, 13.13 s | 3927 / 7869, 13.94 s | none |
+
+- Review round (one scan each, after the fixes): `tests/fixtures/languages` 54 nodes, 60 edges and
+  `tests_upstream/fixtures` 750 / 828 with the same four `not_extracted` groups; unchanged.
+- The scan-time differences on the unchanged corpora are within run-to-run noise (base gin runs: 7.79, 6.80,
+  6.96 s).
+- On `tests_upstream/fixtures` the new scan reported `not_extracted`: 7 SQL, 2 Robot Framework, 1 Common Lisp
+  and 1 DreamMaker files, each with its reason and install line (those grammars are not installed here).
+  Before, those 11 files were dropped with no word in the scan output.
+- Extraction of each fixture directory alone through `extract()` (first call in a process, grammar import
+  included): COBOL 77 ms (3 files), Erlang 110 ms, R 50 ms, Solidity 64 ms, VB.NET 66 ms.
+- `grammars.signature()`: 10 ms (six grammars found, nothing imported).
+- End to end on the fixture repository: `trace PlaceOrder Validate` (VB.NET, across the two partial files),
+  `trace report drop_missing` (R, through `source()`), `trace transfer _move` (Solidity),
+  `trace MAIN-PARA TAXCALC` (COBOL `CALL`, INFERRED) and `trace checkout total` (Erlang `cart:total/1`, exact
+  name) each found the path. `query "lang:solidity transfer"` and `lang:vbnet` / `lang:erlang` rank only that
+  language's units, with tree-sitter spans for VB.NET (`PlaceOrder` 5-9) and Solidity.
+- Grammar wheels installed into the main checkout's `.venv` (`uv pip install`, all from PyPI and all listed in
+  upstream's `pyproject.toml`): `tree-sitter-vb-dotnet==0.3.0`, `tree-sitter-language-pack==0.11.0` (it pulled
+  its own dependencies `tree-sitter-embedded-template==0.25.0` and `tree-sitter-yaml==0.7.2`),
+  `tree-sitter-solidity==1.2.13`, and the existing extras' grammars from upstream's dev group to test the
+  OCaml and Terraform ports: `tree-sitter-ocaml==0.26.0` (`>=0.25.0`) and `tree-sitter-hcl==1.2.0` (`>=1.2.0`).
+
+### 136.4 Not done
+
+- **Without the extras**, a default install reads COBOL only. VB.NET, R, Erlang and Solidity are reported under
+  `not_extracted`, and their extraction tests are skipped where the grammar is missing.
+- **Language-specific layers are not wired for the new languages.** These stay at file level or heuristics:
+  - `anchors` facets and claim fingerprints, so staleness is per file;
+  - `extract` (the definition around a line), `grep-ast`, `health` and the review rules: no tree-sitter for
+    these languages;
+  - `routes`, `schema` and `taint`;
+  - `check` / `api` (the files are `not_checked`);
+  - test detection for R `testthat`, Erlang `_SUITE`/EUnit and Solidity Foundry tests;
+  - the receiver-call pass.
+  The OCaml, Common Lisp and other older optional languages were in the same state before this change.
+- **Spans:** COBOL and Erlang use the next-symbol heuristic (capped at 80 lines). That is right for COBOL
+  paragraphs. An Erlang function keeps the lines up to the next function.
+- **What the extractors give is upstream's:**
+  - COBOL `CALL` edges to another program are INFERRED and match the program name only;
+  - VB.NET `Imports` of a .NET namespace is an external-namespace node;
+  - R binds a call only through an explicit `source()` of the defining file;
+  - Erlang binds remote calls by module, name and arity;
+  - Solidity: a contract method calling a same-file free function gets no edge (only free-to-free calls bind),
+    `import {Base as B}` with `contract C is B` gives an external node `B` instead of an edge to `Base`, and
+    `super.hook()` is not linked;
+  - VB.NET: an unqualified call to a `Module` function from a class (`Fmt(Name)` with `Fmt` in
+    `Module Helpers`) and `MyBase.Init()` into an inherited base class get no edge; only `Me`/`MyClass`/
+    unqualified own-type calls and `Type.Method()` bind;
+  - Terraform redaction misses a heredoc value (`<<EOF ... password=... EOF`) and name/value pairs inside
+    `jsonencode(...)`; plain lists, maps, sensitive variables/outputs and `.tfvars` are covered.
+- **Case-only name pairs:** in R, Solidity and Erlang the spelling defined first keeps the plain id, while
+  `case_ids` (other languages) gives it to the spelling that sorts first. Both are stable while the names stay.
+- **`.cl` is Common Lisp**, as upstream's `_DISPATCH` has it. A C or GPU project with OpenCL `.cl` kernels and
+  no Common Lisp grammar sees them under `not_extracted` as Common Lisp files with a `verinoda[commonlisp]`
+  install line.
+- **COBOL copybooks** are bound by stem among the files scanned; a copybook outside the scan, or a stem that
+  several directories hold (none of them the program's), gives no `imports_from` edge.
+  Upstream's own tests for these extractors were not copied or run (the rule: no third-party tests run); ours
+  are new fixtures.
+- **`not_extracted` has gaps:**
+  - It reads suffixes only. An extensionless `Rscript` file whose grammar is missing is not listed (the build
+    log still has the vendored warning).
+  - A file kept out of the graph for another reason (`.graphifyignore`) while its grammar is missing is listed
+    with the grammar reason.
+- **Installing or removing a grammar is noticed only by a new process.** The extraction stamp is computed once
+  per process, so a long-running `mcp serve` does not see the change until it restarts. Two installs with
+  different optional grammars rebuild each other's graph on `update`; their graphs differ anyway.
+- **Deprecation warnings:** `tree-sitter-solidity` 1.2.13's binding hands `Language` an int, and tree-sitter
+  0.25 warns that this is deprecated (seen in tests, hidden in normal runs). A future tree-sitter that drops int
+  support will make Solidity report "failed to load" until the pin moves.
+- **Pre-existing failures:** three `tests_upstream` tests failed before this change and still fail on Windows:
+  - `test_terraform_modules::test_same_named_directories_and_cross_file_references_stay_separate` (a `\` vs `/`
+    path comparison; it fails with the base `terraform.py` too; checked);
+  - two Markdown tests in `test_languages.py` (cp1254 console encoding, frontmatter).
+  None of them touches the ported code.
+
+### 136.5 Tests
+
+`tests/test_languages_ported.py` (26 tests), with fixtures written for it in `tests/fixtures/languages/`. The
+fixtures are small programs of our own; nothing is copied from upstream.
+
+- One fixture test per new language, asserting nodes and calls/imports edges:
+  - COBOL: paragraphs, `PERFORM ... THRU` both ends, `COPY` imports_from the copybook, `CALL` to the other
+    program;
+  - Erlang: a local call, a `cart:total` remote call, `-include`, exports, behaviour;
+  - R: `source()` imports_from, calls bound only through the sourced file, no edges to `mean`/`print`;
+  - Solidity: import, inheritance, method and call edges, a modifier `uses` edge;
+  - VB.NET: `Imports`, calls, and a call into the other partial-class file.
+- The ported changes to existing extractors: OCaml class / method / instance variable, Razor `@functions`, and
+  Terraform redaction in lists, name/value pairs in a list and a sensitive variable.
+- Review round: VB.NET nested types with their members and a call; COBOL `END-READ.`/`END-EVALUATE.` and an
+  Area B name are not paragraphs; a COPYLIB copybook in another directory is linked (to the real node) and a
+  missing one gives no edge; `Foo`/`foo` (R), `T`/`t` (Solidity) and `f`/`'F'` (Erlang) stay two symbols with
+  their call; an Erlang base-notation export; a Groovy span ending at column 0.
+- A missing grammar, one parametrized test per tree-sitter language (`sys.modules[...] = None`): the extractor
+  returns an error result with "not installed", `grammars.problem` names the distribution, and the whole
+  `extract()` goes on without the file.
+- Scan and update end to end (git repo with all fixtures, Solidity blocked):
+  - `scan` reports exactly the two `.sol` files with the reason and the install line, and the other languages
+    are in the graph;
+  - `update` is a no-op;
+  - "installing" the grammar makes the next `update` rebuild with 0 changed files, and the `.sol` files are in
+    the graph.
+- `grammars.SUFFIXES` equals the extractor's `_EXTRA_FOR_EXTENSION`; `not_extracted` grouping and `describe`;
+  the extraction stamp changes with a grammar.
+- Spans (VB.NET 5-9 not 5-10, Solidity, R), the `lang:` filter names, Erlang exact naming, LF fixtures.
+
+Runs (one pytest process at a time):
+- `tests/test_languages_ported.py`: 20 passed (before the review round).
+- `tests/test_index.py test_workflow_index.py test_query_filters.py test_retrieval.py test_case_ids.py
+  test_lexicon.py test_verdict_gate.py test_codecheck.py test_cli.py test_analysis.py` plus the 17 tests of the
+  new file at that point: 482 passed.
+- `tests_upstream/test_ocaml.py test_terraform.py test_terraform_modules.py test_extractors_registry.py
+  test_languages.py test_dotnet.py test_language_resolvers.py test_detect.py test_analyze.py`: 771 passed,
+  58 skipped, 3 failed (the pre-existing three above).
+- `tests/test_mcp.py tests/test_docs.py`: 94 passed.
+- Review round, after merging `competitor-backlog`: `tests/test_languages_ported.py tests/test_mcp.py
+  tests/test_docs.py`: 120 passed (26 + 94). The five new regression tests failed on the code before the fixes.
+
 ## Sources
 
 - **Retrieval:**
