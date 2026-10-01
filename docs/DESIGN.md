@@ -11594,6 +11594,107 @@ the DSL reader, the model check with nested elements, relations between tags, no
 `tests/test_ui.py` (the API), `tests/test_ui_browser.py` (the page in a headless browser, also from the exported
 file), `tests/test_mcp.py` (`map_view` dsm and model).
 
+## 116. Hooks on the agent's own tool calls (D143, 2026-10-01)
+
+### 116.1 Why
+
+D62 built the answer - a Grep's searched symbols with their definition, callers and callees, as a Claude Code
+PostToolUse hook output (MCP `grep_context`), and later `read_context` for a file read - but left it as a template
+nobody installs, for Claude Code's Grep tool only. In the threshold study 22 of 133 searches went through `grep` in
+Bash, which the hook did not see, and Codex (whose only search is the shell) and Cursor got nothing. GitNexus,
+Codanna and CodeGraph install such hooks for the agents. Done when: a Grep in Claude Code returns the matching
+symbols' callers without a Verinoda call.
+
+### 116.2 Decisions
+
+- **`verinoda agent-hooks install|uninstall|status [--agent claude,codex,cursor|all] [--scope project|user]
+  [--dry-run]`** (module `verinoda/agent_hooks.py`), apart from `install` (skills and MCP) and from `hooks` (git
+  hooks): opt-in, since D62's adoption study did not show that the hook pays for every user.
+  - Claude Code, project: `.claude/settings.json` gets the `mcp_tool` entries of
+    `agents/templates/claude_hooks.json` - Grep (`pattern`), Bash (`command`, new) and Read/Edit/MultiEdit/Write
+    (`file_path`) calling `run_tool` `grep_context` / `read_context` on the project's running server: no process
+    per call. A warning when `.mcp.json` registers no `verinoda` server.
+  - Claude Code, user: `~/.claude/settings.json` gets a command hook (`verinoda tool-hook --agent claude`) on
+    Grep|Bash|Read|Edit|MultiEdit|Write: another project may have no server, and the command answers `{}` there.
+  - Codex: `.codex/hooks.json` (user: `$CODEX_HOME` or `~/.codex`), a `PostToolUse` command hook on `^Bash$`;
+    Codex documents `hookSpecificOutput.additionalContext` on PostToolUse as developer context.
+  - Cursor: `.cursor/hooks.json` (`version: 1`), a `postToolUse` command hook with matcher `Grep|Shell|Read|Write`;
+    Cursor reads `additional_context` from its output.
+  - Only Verinoda's own entries are written, replaced or removed: an `mcp_tool` hook on the `verinoda` server
+    calling `grep_context` / `read_context`, or a command running `tool-hook`. Other keys and hooks stay, with the
+    file's indent and line endings; a file that is not a JSON object (or whose `hooks` is not one) is refused
+    (exit 2). Install twice: `unchanged`. Uninstall deletes a file it leaves empty (`{}` or only `version`).
+  - The command names `verinoda` when the one on PATH is this build, else this machine's interpreter (`-P -m
+    verinoda`), with a warning for a project file, which is shared.
+- **`verinoda tool-hook [--agent claude|codex|cursor]`** (module `verinoda/tool_hook.py`): the tool call as JSON
+  on stdin, read as UTF-8 bytes whatever the console code page (a project path with `ş` was lost through the
+  locale decoding before this), the answer as ASCII-escaped JSON on stdout, always exit 0, `{}` for anything it
+  does not answer or any error. `__main__` dispatches it before importing the CLI.
+  - A search is the Grep tool's `pattern`, or the patterns of a shell command: each simple command (split at
+    pipes, `&&`, `||`, `;`) run by `grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack`, `git grep`, `findstr` (`/c:`) or
+    `Select-String` (`-Pattern`); `-e` / `--regexp` values, else the first argument that is not an option, the
+    values of options that take one skipped. A read or edit is the `file_path` / `path` / `target_file`.
+  - The text is D62's, now one function (`grep_text`) that MCP `grep_context` calls too: the longest 4 words of
+    at least 4 characters, regex and language keywords left out, resolved by their exact name; at most 2 lines,
+    450 characters. A word no symbol is named by exactly is dropped before `naming.resolve`, whose fuzzy scorer
+    took seconds on a large graph for an unknown word (the answer is the same: only exact resolutions were used).
+  - A command hook is a new process per call, so each word's line (or its absence) is kept in
+    `.verinoda/index/hook_memo.sqlite`, valid while the graph file has the same size and modification time; the
+    graph is loaded only for a word not seen since the last index build.
+  - The project is the nearest folder with `.verinoda` above the event's `cwd` (Cursor: its first workspace root),
+    else above the working directory; none: `{}`.
+- MCP `grep_context` takes `command` as well as `pattern` (both optional now), for the Bash `mcp_tool` hook.
+
+- **Review round** (one reviewer, eight confirmed findings, all fixed with tests): the memo's stamp covers
+  `receiver_calls.json` as well as `graph.json` (an update can rewrite the receiver-call edges and keep the graph
+  file, as the MCP server's cache already knew); only a command ending in `verinoda... tool-hook --agent NAME`
+  counts as Verinoda's (a user's `my-verinoda-tool-hook-audit.py` hook is kept); a blank hook file is read as
+  empty; the command is written for bash, cmd and PowerShell alike - `verinoda tool-hook ...` when the PATH one is
+  this build, else the program with forward slashes, quoted only for a space (then a warning: PowerShell cannot
+  start a quoted path); Claude Code's `PowerShell` tool is hooked with Bash; each search program has its own
+  options that take a value (`rg -r`, `rg -T`, `ag -G`, ...), a pattern from a file (`-f`, `findstr /g:`) gives
+  none, bundled short options are read (`-ve PAT`, `-A3`); a command is split at newlines and parentheses too, and
+  `git -C dir grep`, `timeout N`, `nice` and `sudo -u user` are looked through; regex escapes (``) and shell
+  variables (`$NAME`) are no names; the home folder (whose `.verinoda` holds the install manifest) is never a
+  project, and a project needs Verinoda's database or config; the working directory is used only when the event
+  names no folder; MCP `grep_context` decides that a shell command searches nothing before waiting for the server
+  lock; a hook file's BOM and tab indentation are kept.
+
+### 116.3 Measured
+
+On this repository's index (2026-09-30, 30,971 graph nodes, a 36 MB graph.json), `python -m verinoda tool-hook`
+as a separate process, wall time including the interpreter's start: a remembered word 0.40-0.43 s (three runs), a
+remembered unknown word 0.40 s, a word not seen since the index 2.8 s (the graph's load); before the exact-name
+check an unknown word took 7.4 s, and before the `__main__` fast path an empty event took 0.65 s. The `mcp_tool`
+path of Claude Code's project hooks keeps D62's figure (about 0.1 s warm, the server holds the graph). Not
+measured: whether the context changes what agents find (D62's study measured the Grep hook: no gain shown).
+
+### 116.4 Not done
+
+- Codex's file reads are shell commands (`cat`, `sed -n`, `Get-Content`): only its searches get context.
+- Cursor's `Grep` tool input is read from `pattern`, `query` or `regex`; Cursor documents the tool names, not every
+  tool's input fields.
+- A shell pattern is read from the command line as written: a pattern from a variable or a file (`-f`), or a
+  search program not listed, is not seen.
+- A word the graph does not know exactly adds nothing (no fuzzy guess); a renamed symbol is known after the next
+  index build. The memo does not expire within one index build.
+- The first search of each new word in a large project waits for the graph to load (2.8 s on 31,000 nodes), within
+  the hook's 15 s timeout.
+- Codex loads a project's `.codex/hooks.json` only when that project's `.codex` layer is trusted.
+- The `verinoda` console script reaches the CLI first (about 70 ms more than `python -m verinoda`); the command
+  hooks Verinoda writes use whichever the PATH has.
+- Uninstall deletes a hook file it leaves empty, also one that held only Verinoda's entries before the install.
+- `setup` does not install these hooks (opt-in, as D62 decided); Gemini CLI, Copilot, Kiro and others are not
+  covered.
+
+### 116.5 Tests
+
+`tests/test_tool_hook.py` (shell patterns of 11 command forms, tool calls told apart, the answer in each agent's
+shape on a scanned project under a non-ASCII path, the memo kept and cleared with the index, a read, no project,
+the command as a subprocess with UTF-8 input, install/uninstall/status for the three agents keeping other hooks,
+user scope, a broken file refused, dry run and CLI), `tests/test_mcp.py` (`grep_context` with a shell command; the
+template's Bash entry; the gateway's parameters).
+
 ## Sources
 
 - **Retrieval:**
