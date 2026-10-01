@@ -17,7 +17,8 @@ Where it runs, and what that does and does not keep out:
   the CLI (``decide check``, ``decide baseline``): MCP, ``update``'s summary line and ``what-if`` report a
   script guard as ``unknown``, and MCP refuses to record one;
 * a child process of Verinoda's own interpreter, never the project's: ``-I`` (no ``PYTHON*`` variables, no
-  user site, neither the script's folder nor the working folder on ``sys.path``) and ``-B``; the environment
+  user site, neither the script's folder nor the working folder on ``sys.path``), ``-B`` and ``-X utf8`` (the
+  script's ``open()`` reads UTF-8 whatever the machine's code page); the environment
   is the short allowlist the test runs get (no tokens or keys), ``HOME`` / ``TMP`` a fresh folder deleted
   afterwards; the working folder is the project root; stdin is the request, nothing else;
 * a timeout (``timeout=`` seconds, default 60, at most 600): the child is killed and the guard is ``unknown``;
@@ -45,7 +46,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 DEFAULT_TIMEOUT = 60
 MAX_TIMEOUT = 600
@@ -115,7 +116,8 @@ def run(repo: Path, rel: str, *, timeout: int = DEFAULT_TIMEOUT, spec: str = "")
     t0 = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="vn-guard-") as home:
         try:
-            proc = subprocess.Popen([sys.executable, "-I", "-B", str(Path(__file__).resolve())],
+            # -X utf8: the script's open() reads UTF-8 on every machine, not the locale's code page
+            proc = subprocess.Popen([sys.executable, "-I", "-B", "-X", "utf8", str(Path(__file__).resolve())],
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     cwd=str(repo), env=_env(Path(home)))
         except OSError as exc:
@@ -162,7 +164,10 @@ def cited_line(repo: Path, f: dict) -> tuple[str, int] | str:
         return f"cited {shown}, which is not a path inside the repository (relative, no '..')"
     if isinstance(line, bool) or not isinstance(line, int) or line < 1:
         return f"cited {shown} without a line number (1 or more)"
-    p = Path(repo) / rel
+    root = Path(repo).resolve()
+    p = (root / rel).resolve()
+    if root not in p.parents:  # a link or junction out of the repository is no evidence about it
+        return f"cited {shown}, which resolves outside the repository"
     try:
         with open(p, "rb") as fh:
             n = len(fh.read().splitlines())
@@ -170,7 +175,7 @@ def cited_line(repo: Path, f: dict) -> tuple[str, int] | str:
         return f"cited {shown}, which is not a readable file of the repository"
     if line > n:
         return f"cited {shown}, but the file has {n} line(s)"
-    return PurePosixPath(rel).as_posix(), line
+    return p.relative_to(root).as_posix(), line  # the file's own spelling (case on Windows)
 
 
 # -- the child side (stdlib only; nothing from Verinoda) ----------------------------------------------
@@ -228,11 +233,12 @@ class _Tail:
 class GuardAPI:
     """What ``check(guard)`` gets: the project's graph and claims to read, and two ways to report."""
 
-    def __init__(self, req: dict, conn=None) -> None:
+    def __init__(self, req: dict, conn=None, conn_error: str = "") -> None:
         self.repo = req["repo"]
         self.spec = req.get("spec") or ""
         self._graph_file = req.get("graph")
         self._conn = conn
+        self._conn_error = conn_error
         self._nodes: dict[str, dict] | None = None
         self._edges: list[dict] | None = None
         self._found: list[dict] = []
@@ -288,7 +294,7 @@ class GuardAPI:
     def claims(self, status: str | None = None, limit: int = 1000) -> list[dict]:
         """Stored claims, newest first, each with its supporting evidence as ``path:line``."""
         if self._conn is None:
-            raise RuntimeError("no claims store: run `verinoda init` / `verinoda scan` first")
+            raise RuntimeError(self._conn_error or "no claims store: run `verinoda init` / `verinoda scan` first")
         q = "SELECT id, text, status, kind FROM claims" + (" WHERE status = ?" if status else "") + \
             " ORDER BY created_at DESC LIMIT ?"
         rows = self._conn.execute(q, ((status,) if status else ()) + (max(1, int(limit)),)).fetchall()
@@ -325,16 +331,16 @@ def _child() -> int:
     result = sys.stdout.buffer  # the result channel; the script's prints go to a tail kept in memory
     tail = _Tail(OUTPUT_TAIL)
     sys.stdout = sys.stderr = tail  # type: ignore[assignment]
-    conn = None
+    conn, conn_error = None, ""
     if req.get("db"):
         import sqlite3
 
         try:  # opened before the hook (which refuses new connections), read-only
             conn = sqlite3.connect(Path(req["db"]).as_uri() + "?mode=ro", uri=True)
             conn.execute("PRAGMA query_only = ON")
-        except sqlite3.Error:
-            conn = None
-    api = GuardAPI(req, conn)
+        except sqlite3.Error as exc:
+            conn, conn_error = None, f"the claims store could not be opened read-only: {exc}"
+    api = GuardAPI(req, conn, conn_error)
     sys.addaudithook(_hook)
     res: dict = {_MARK: 1, "status": "ok"}
     try:

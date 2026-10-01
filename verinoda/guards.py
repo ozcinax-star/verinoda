@@ -2220,7 +2220,8 @@ def check_script(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], S
             continue
         rel, line = at
         scan.via.setdefault((rel, line), set()).add(str(g.get("path")))  # a changed script makes its findings new
-        out.append((level, rel, line, f"{str(f.get('why') or 'reported by the script')[:300]} (script {g.get('path')})"))
+        why = str(f.get("why") or "reported by the script")[:300]
+        out.append((level, rel, line, f"{why} (script {g.get('path')})"))
     return out, scan, what
 
 

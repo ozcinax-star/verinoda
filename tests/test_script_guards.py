@@ -196,6 +196,43 @@ def test_a_linked_script_outside_the_repository_is_not_run(tmp_path):
     assert sg.run(repo, "guards/rule.py")["status"] == "error"
 
 
+def test_a_citation_through_a_link_out_of_the_repository_is_unknown(tmp_path):
+    repo = _project(tmp_path, "def check(guard):\n    guard.violation('ext/x.py', 1, 'outside')\n"
+                              "    guard.violation('APP/VIEWS.PY', 1, 'case')\n")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "x.py").write_text("x = 1\n", encoding="utf-8")
+    try:
+        os.symlink(outside, repo / "ext", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        if os.name != "nt":
+            pytest.skip("symbolic links cannot be created here")
+        import _winapi
+
+        _winapi.CreateJunction(str(outside), str(repo / "ext"))
+    res = guards.check(repo, run_scripts=True)
+    assert any("resolves outside the repository" in u for u in _unknown(res)), _unknown(res)
+    if os.name == "nt":  # a case-insensitive file system: cited with the file's own spelling
+        assert [v["at"] for v in res["violations"]] == ["app/views.py:1"]
+
+
+def test_a_script_with_spaces_and_non_ascii_in_its_name_reads_utf8(tmp_path):
+    repo = tmp_path / "r ş"
+    _write(repo, "app/notes.py", "# Sipariş ğüşıöç\nx = 1\n")
+    _write(repo, "guards/kural ğ.py", "def check(guard):\n"
+                                      "    if 'Sipariş' in open('app/notes.py').read():\n"
+                                      "        guard.possible('app/notes.py', 1, 'şu satır')\n")
+    st = open_store(repo)
+    try:
+        dm.record(st, repo, chosen="c", rationale="r", guards=['script "path=guards/kural ğ.py"'],
+                  user_statement="add it")
+    finally:
+        st.close()
+    res = guards.check(repo, run_scripts=True)
+    (p,) = res["possible"]
+    assert p["at"] == "app/notes.py:1" and p["why"].startswith("şu satır") and "guards/kural ğ.py" in p["why"]
+
+
 def test_not_run_without_the_cli_or_in_an_untrusted_project(tmp_path, monkeypatch):
     from verinoda.mcp.server import AtlasTools
 
