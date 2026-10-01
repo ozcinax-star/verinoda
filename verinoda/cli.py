@@ -1179,6 +1179,8 @@ def cmd_tour(args) -> int:
             res = tours.check(repo, args.check, fix=args.fix)
             _emit(args, res, lambda r: print(tours.render_check(r)))
             return res["exit"]
+        if args.fix:
+            raise tours.TourError("--fix goes with --check FILE")
         if not (args.source and args.target):
             raise tours.TourError("give SOURCE and TARGET (or --check FILE)")
         from verinoda import freshness, index
@@ -1187,13 +1189,24 @@ def cmd_tour(args) -> int:
         fresh = freshness.check(repo)
         tour = tours.build(repo, index.load(repo), args.source, args.target, mode=args.mode, title=args.title,
                            stale=fresh["files"])
-        path = tours.write(repo, tour, args.out)
+        path, notes = tours.write(repo, tour, args.out, force=args.force)
     except tours.TourError as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    res = {"tour": str(path), "steps": len(tour["steps"]), "ref": tour.get("ref"), "title": tour["title"]}
-    _emit(args, res, lambda r: print(f"wrote {r['tour']}: {r['steps']} step(s), pinned to "
-                                     f"{(r['ref'] or 'no commit')[:12]} (open it with the CodeTour extension)"))
+    res = {"tour": str(path), "steps": len(tour["steps"]), "ref": tour.get("ref"), "title": tour["title"],
+           **({"unpinned": tour["verinoda"]["unpinned"]} if tour["verinoda"].get("unpinned") else {}),
+           **({"notes": notes} if notes else {})}
+
+    def render(r: dict) -> None:
+        print(f"wrote {r['tour']}: {r['steps']} step(s), "
+              + (f"pinned to {r['ref'][:12]}" if r.get("ref") else r.get("unpinned", "not pinned"))
+              + " (open it with the CodeTour extension)")
+        for n in r.get("notes") or []:
+            print(f"  note: {n}")
+
+    _emit(args, res, render)
     return 0
 
 
@@ -3702,6 +3715,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out", help="the file to write (default .tours/<title>.tour)")
     sp.add_argument("--check", metavar="FILE", help="check a tour Verinoda wrote against the code as it is now")
     sp.add_argument("--fix", action="store_true", help="with --check: write moved steps' lines back")
+    sp.add_argument("--force", action="store_true",
+                    help="overwrite a tour file Verinoda did not write, or one edited since it wrote it")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
