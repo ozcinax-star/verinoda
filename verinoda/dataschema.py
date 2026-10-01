@@ -44,7 +44,8 @@ CODE_SUFFIXES = (".py", ".java", ".kt", ".sql")
 _SQL_START = re.compile(r"^\s*(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|REPLACE|MERGE|ALTER|DROP)\b", re.I)
 # the shape of a statement, not only its first word ("Merge a class ..." and "Update the index" are prose)
 _SQL_SHAPE = re.compile(
-    r"^\s*(?:SELECT\b[\s\S]*?\bFROM\b|INSERT\s+(?:OR\s+\w+\s+)?INTO\b|UPDATE\s+(?:OR\s+\w+\s+)?\S+\s+SET\b|"
+    r"^\s*(?:SELECT\b[\s\S]*?\bFROM\b|INSERT\s+(?:OR\s+\w+\s+)?INTO\b|"
+    r"UPDATE\s+(?:OR\s+\w+\s+)?\S+(?:\s+(?:AS\s+)?\w+)?\s+SET\b|"
     r"DELETE\s+FROM\b|WITH\s+(?:RECURSIVE\s+)?\w+\s*(?:\([^)]*\))?\s+AS\s*\(|"
     r"CREATE\s+(?:TEMP\w*\s+|UNIQUE\s+|VIRTUAL\s+)*(?:TABLE|INDEX|VIEW|TRIGGER)\b|REPLACE\s+INTO\b|MERGE\s+INTO\b|"
     r"ALTER\s+TABLE\b|DROP\s+(?:TABLE|INDEX|VIEW)\b)", re.I)
@@ -59,18 +60,24 @@ _SQL_PATTERNS = [
     (re.compile(r"\bINSERT\s+(?:OR\s+\w+\s+)?INTO\s+" + _NAME, re.I), "write"),
     (re.compile(r"\bREPLACE\s+INTO\s+" + _NAME, re.I), "write"),
     (re.compile(r"\bMERGE\s+INTO\s+" + _NAME, re.I), "write"),
-    (re.compile(r"\bUPDATE\s+(?:OR\s+\w+\s+)?" + _NAME + r"\s+SET\b", re.I), "write"),
+    (re.compile(r"\bUPDATE\s+(?:OR\s+\w+\s+)?" + _NAME + r"(?:\s+(?:AS\s+)?(?!SET\b)\w+)?\s+SET\b", re.I),
+     "write"),   # `UPDATE orders o SET`, JPQL `UPDATE Order o SET`
     (re.compile(r"\bDELETE\s+FROM\s+" + _NAME, re.I), "write"),
     (re.compile(r"\b(?P<kw>FROM|JOIN)\s+" + _NAME, re.I), "read"),
 ]
 _SQL_NOT_TABLES = {"select", "where", "lateral", "unnest", "values", "dual", "set", "only", "if", "not",
                    "exists", "on", "as", "table", "index", "into", "or", "and"}
 _SYSTEM_SCHEMAS = {"information_schema", "pg_catalog", "sys", "performance_schema", "mysql"}
-_COLUMN_SKIP = {"primary", "foreign", "unique", "constraint", "check", "key", "index", "exclude"}
+_COLUMN_SKIP = {"primary", "foreign", "unique", "constraint", "check", "key", "index", "exclude", "fulltext",
+                "spatial"}
 # SQL text with its comments blanked and its string literals emptied (positions and line breaks kept)
-_SQL_LEXEME = re.compile(r"'(?:[^']|'')*'?|--[^\n]*|/\*[\s\S]*?(?:\*/|\Z)")
+# (a backslash escapes inside a literal, as MySQL and Postgres E'' strings allow: 'O\'Brien')
+_SQL_LEXEME = re.compile(r"'(?:[^'\\]|\\.|'')*'?|--[^\n]*|/\*[\s\S]*?(?:\*/|\Z)")
+_SQL_LEXEME_HASH = re.compile(r"'(?:[^'\\]|\\.|'')*'?|--[^\n]*|/\*[\s\S]*?(?:\*/|\Z)|(?m:^[ \t]*#[^\n]*)")
+# a literal that runs over a line opening a statement has lost its closing quote: the text is lexed line by line
+_RUNAWAY = re.compile(r"\n[ \t]*(?:CREATE|ALTER|DROP|INSERT)\b", re.I)
 _CTE = re.compile(r"(?:\bWITH\s+(?:RECURSIVE\s+)?|,\s*)" + _OPEN + r"(\w+)" + _CLOSE
-                  + r"\s*(?:\([^)]*\))?\s+AS\s+(?:NOT\s+)?(?:MATERIALIZED\s+)?\(", re.I)
+                  + r"\s*(?:\([^)]*\))?\s+AS\s*(?:NOT\s+)?(?:MATERIALIZED\s+)?\(", re.I)
 _SELECT = re.compile(r"\bSELECT\b", re.I)
 _LEADING_COMMENTS = re.compile(r"^(?:\s*(?:--[^\n]*|/\*[\s\S]*?\*/))+")
 
@@ -107,15 +114,26 @@ def _norm(name: str) -> str:
 
 # -- SQL text ---------------------------------------------------------------------------------------
 
-def _blank_sql(text: str) -> str:
-    """``text`` with its comments blanked and its string literals emptied, same length and line breaks."""
+def _blank_sql(text: str, hash_comments: bool = False) -> str:
+    """``text`` with its comments blanked and its string literals emptied, same length and line breaks
+    (``hash_comments``: a line starting with ``#`` is a comment too, as in MySQL files)."""
+    rx = _SQL_LEXEME_HASH if hash_comments else _SQL_LEXEME
+    runaway = False
+
     def blank(m):
+        nonlocal runaway
         tok = m.group()
         if tok.startswith("'"):
+            if "\n" in tok and _RUNAWAY.search(tok):
+                runaway = True
             return "'" + re.sub(r"[^\n]", " ", tok[1:-1]) + "'" if len(tok) > 1 else tok
         return re.sub(r"[^\n]", " ", tok)
 
-    return _SQL_LEXEME.sub(blank, text)
+    out = rx.sub(blank, text)
+    if runaway and "\n" in text:   # a quote the patterns misread must not hide the rest of the file
+        return "\n".join(rx.sub(lambda m: re.sub(r"[^']", " ", m.group()) if m.group().startswith("'")
+                                else re.sub(r"[^\n]", " ", m.group()), line) for line in text.split("\n"))
+    return out
 
 
 def _in_call(text: str, positions: list[int]) -> set[int]:
@@ -146,12 +164,12 @@ def _in_call(text: str, positions: list[int]) -> set[int]:
     return out
 
 
-def sql_matches(text: str) -> list[dict]:
+def sql_matches(text: str, hash_comments: bool = False) -> list[dict]:
     """Each table a SQL text names: ``{"name", "raw", "schema", "op", "pos"}`` (``op`` create, migrate, write or
     read; ``pos`` where the name starts). Comments and string literals are not read, a ``FROM`` inside a function
     call (``EXTRACT(year FROM d)``) is not a table, a CTE's name (``WITH recent AS (...)``) is not one, and a
     system catalog (``information_schema.tables``) is left out."""
-    text = _blank_sql(text)
+    text = _blank_sql(text, hash_comments)
     ctes = {m.group(1).lower() for m in _CTE.finditer(text)} if re.search(r"\bWITH\b", text, re.I) else set()
     out: list[dict] = []
     claimed: list[tuple[int, int]] = []
@@ -164,7 +182,8 @@ def sql_matches(text: str) -> list[dict]:
             name, schema = m.group("n").lower(), (m.group("s") or "").lower()
             if not name or name in _SQL_NOT_TABLES or schema in _SYSTEM_SCHEMAS or name.startswith("sqlite_"):
                 continue
-            if op == "read" and name in ctes:
+            if op == "read" and (name in ctes or re.search(r"\bDISTINCT\s+$", text[max(0, m.start() - 20):m.start()],
+                                                             re.I)):   # a CTE, or `x IS DISTINCT FROM b`
                 continue
             claimed.append((s, e))
             out.append({"name": name, "raw": m.group("n"), "schema": schema, "op": op, "pos": s,
@@ -181,9 +200,9 @@ def sql_tables(text: str) -> list[tuple[str, str]]:
     return [(x["name"], x["op"]) for x in sql_matches(text)]
 
 
-def create_columns(text: str, table: str) -> list[str]:
+def create_columns(text: str, table: str, hash_comments: bool = False) -> list[str]:
     """The column names of ``CREATE TABLE table (...)`` in ``text`` (constraints and comments left out)."""
-    text = _blank_sql(text)
+    text = _blank_sql(text, hash_comments)
     m = re.search(r"\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:" + _OPEN + r"\w+" + _CLOSE
                   + r"\s*\.\s*){0,2}" + _OPEN + re.escape(table) + _CLOSE + r"\s*\(", text, re.I)
     if not m:
@@ -271,8 +290,22 @@ def looks_like_sql(text: str) -> bool:
         return False
     if m.group(1).isupper():
         return True
-    return bool(re.search(r"\?|%s|%\(\w+\)s|(?<!:):\w|=|\*|\bwhere\b|\bvalues\b", text, re.I))
+    if not re.search(r"\?|%s|%\(\w+\)s|(?<!:):\w|=|\*|\bwhere\b|\bvalues\b", text, re.I):
+        return False
+    # written in lower case, a statement has to go on as SQL after its table name: "delete from cache failed
+    # for %s" and "Insert into queue failed key=%s" are messages
+    return bool(_LOWER_SQL.match(text))
 
+
+_TNAME = r"[`\"\[]?[A-Za-z_][\w$.]*[`\"\]]?"
+_LOWER_SQL = re.compile(
+    r"\s*(?:delete\s+from\s+" + _TNAME + r"(?:\s+(?:as\s+)?\w+)?\s*(?:\bwhere\b|\busing\b|\breturning\b|;|$)"
+    r"|insert\s+(?:or\s+\w+\s+)?into\s+" + _TNAME + r"\s*(?:\(|\bvalues\b|\bselect\b|\bdefault\b)"
+    r"|update\s+(?:or\s+\w+\s+)?" + _TNAME + r"(?:\s+(?:as\s+)?\w+)?\s+set\s+[\w.`\"\[\]]+\s*="
+    r"|select\s[\s\S]*?\bfrom\s+" + _TNAME + r"(?:\s+(?:as\s+)?(?!(?:where|join|inner|left|right|full|cross|"
+    r"natural|group|order|limit|offset|union|having|on)\b)\w+)?\s*(?:\b(?:where|join|inner|left|right|full|cross|"
+    r"natural|group|order|limit|offset|union|having)\b|[;,)]|$)"
+    r"|with\b|create\b|alter\b|drop\b|replace\b|merge\b)", re.I)
 
 _DJANGO_IMPORT = re.compile(r"^\s*(?:from|import)\s+django\b", re.M)
 
@@ -284,6 +317,17 @@ def _py_facts(text: str, rel: str) -> dict:
 
 
 _FUNCS = (ast.FunctionDef, ast.AsyncFunctionDef)
+_LOG_METHODS = {"debug", "info", "warning", "warn", "error", "exception", "critical", "fatal", "log"}
+
+
+def _message_call(n: ast.Call) -> bool:
+    """A call whose strings are messages: logging (``log.info``, ``logger.warning``, ``logging.error``,
+    ``self.log.debug``), ``warnings.warn``, ``print``."""
+    chain = _dotted(n.func)
+    if chain in (("print",), ("warn",)) or chain[-2:] == ("warnings", "warn"):
+        return True
+    return len(chain) >= 2 and chain[-1] in _LOG_METHODS and any(
+        x.lower().strip("_") in ("log", "logger", "logging") or x.lower().endswith("logger") for x in chain[:-1])
 _POP = object()   # a marker on the stack: leaving a function
 
 
@@ -304,7 +348,9 @@ class _PyFacts:
     def __init__(self, out: dict, rel: str, django: bool = False):
         self.out, self.rel, self.app, self.django = out, rel, _django_app(rel), django
         self.funcs: list[tuple[ast.AST, dict[str, str]]] = []   # (function, name -> class it was built from)
-        self.consts: dict[str, str] = {}   # a module or class constant holding a SQL statement -> its text
+        self.consts: dict[str, str] = {}   # a module constant holding a SQL statement -> its text
+        self.class_consts: dict[str, dict[str, str]] = {}   # class -> its constants holding a SQL statement
+        self._locals: dict[int, set[str]] = {}
 
     @staticmethod
     def _docstring(node):
@@ -317,8 +363,8 @@ class _PyFacts:
     def _sql_constants(self, tree: ast.Module, skip: set[int]) -> None:
         """``SQL = "SELECT ..."`` at module or class level: its tables are defined there, its reads and writes
         belong to the functions that name it."""
-        scopes = [tree.body] + [n.body for n in tree.body if isinstance(n, ast.ClassDef)]
-        for body in scopes:
+        scopes = [(None, tree.body)] + [(n.name, n.body) for n in tree.body if isinstance(n, ast.ClassDef)]
+        for owner, body in scopes:
             for s in body:
                 if not (isinstance(s, (ast.Assign, ast.AnnAssign)) and s.value is not None):
                     continue
@@ -328,7 +374,10 @@ class _PyFacts:
                 text = _const_str(s.value)
                 if not text or not looks_like_sql(text):
                     continue
-                self.consts[targets[0].id] = text
+                if owner is None:
+                    self.consts[targets[0].id] = text
+                else:
+                    self.class_consts.setdefault(owner, {})[targets[0].id] = text
                 self._string(s.value, uses=False)
                 for c in ast.walk(s.value):
                     skip.add(id(c))
@@ -369,14 +418,27 @@ class _PyFacts:
             elif t is ast.ImportFrom:
                 self._import(n)
             elif t is ast.Call:
+                if _message_call(n):   # a log line, a warning, a print: its text is a message, not SQL
+                    self._skip_strings([*n.args, *(k.value for k in n.keywords)], skip)
                 _py_call(n, self.funcs[-1] if self.funcs else (None, {}), self.out, self.app)
+            elif t is ast.Raise:
+                if isinstance(n.exc, ast.Call):   # raise ValueError("Insert into outbox failed ...")
+                    self._skip_strings([*n.exc.args, *(k.value for k in n.exc.keywords)], skip)
             elif t is ast.Name:
-                if self.funcs and n.id in self.consts and isinstance(n.ctx, ast.Load):
+                # a module constant named in a function - not a local of the same name
+                if self.funcs and n.id in self.consts and isinstance(n.ctx, ast.Load) \
+                        and n.id not in self._local_names(self.funcs[-1][0]):
                     self._sql(self.consts[n.id], n.lineno, defs=False, via=f"SQL constant {n.id}")
                 continue
             elif t is ast.Attribute:
-                if self.funcs and n.attr in self.consts and isinstance(n.ctx, ast.Load):
-                    self._sql(self.consts[n.attr], n.lineno, defs=False, via=f"SQL constant {n.attr}")
+                # a class constant through self, cls or the class's own name - not any object's attribute
+                if self.funcs and isinstance(n.ctx, ast.Load) and isinstance(n.value, ast.Name):
+                    owner = n.value.id
+                    pools = list(self.class_consts.values()) if owner in ("self", "cls") else \
+                        [self.class_consts.get(owner, {})]
+                    text = next((c[n.attr] for c in pools if n.attr in c), None)
+                    if text:
+                        self._sql(text, n.lineno, defs=False, via=f"SQL constant {n.attr}")
             elif t is ast.Constant:
                 if type(n.value) is str and id(n) not in skip:
                     self._string(n)
@@ -388,6 +450,24 @@ class _PyFacts:
                         if type(c) in (ast.Constant, ast.JoinedStr, ast.BinOp):
                             skip.add(id(c))
             stack.extend(reversed(list(ast.iter_child_nodes(n))))
+
+    @staticmethod
+    def _skip_strings(nodes, skip: set[int]) -> None:
+        for a in nodes:
+            for c in ast.walk(a):
+                if type(c) in (ast.Constant, ast.JoinedStr, ast.BinOp):
+                    skip.add(id(c))
+
+    def _local_names(self, fn) -> set[str]:
+        """The names a function binds itself (its parameters and assignments): they hide a module constant."""
+        got = self._locals.get(id(fn))
+        if got is None:
+            a = fn.args
+            got = {x.arg for x in [*a.posonlyargs, *a.args, *a.kwonlyargs, *([a.vararg] if a.vararg else []),
+                                   *([a.kwarg] if a.kwarg else [])]}
+            got |= {c.id for c in ast.walk(fn) if isinstance(c, ast.Name) and isinstance(c.ctx, ast.Store)}
+            self._locals[id(fn)] = got
+        return got
 
     def _typed_params(self, fn) -> dict[str, str]:
         """Parameters typed with a class name (``session: Session``), and those types recorded for the
@@ -512,14 +592,17 @@ def _py_model(cls: ast.ClassDef, rel: str, app: str | None, out: dict, django_fi
                                                         for t in s.targets)
                       and isinstance(s.value, ast.Constant) and s.value.value is True for s in body)
     meta = next((s for s in body if isinstance(s, ast.ClassDef) and s.name == "Meta"), None)
-    db_table, db_line, abstract = None, None, False
+    db_table, db_line, abstract, proxy = None, None, False, False
     if meta is not None:
         for s in meta.body:
             if isinstance(s, ast.Assign) and isinstance(s.targets[0], ast.Name):
                 if s.targets[0].id == "db_table":
                     db_table, db_line = _const_str(s.value), s.lineno
-                if s.targets[0].id == "abstract" and isinstance(s.value, ast.Constant) and s.value.value is True:
+                true = isinstance(s.value, ast.Constant) and s.value.value is True
+                if s.targets[0].id == "abstract" and true:
                     abstract = True
+                if s.targets[0].id == "proxy" and true:   # the parent's table, none of its own
+                    proxy = True
     name = declared = via = None
     line = cls.lineno
     if tablename:
@@ -543,6 +626,7 @@ def _py_model(cls: ast.ClassDef, rel: str, app: str | None, out: dict, django_fi
     out.setdefault("django", []).append({
         "class": cls.name, "line": cls.lineno, "bases": [b[-1] for b in bases if b], "direct": direct,
         "abstract": abstract, "app": app or "", "columns": cols, "pk": pk, **({"m2m": m2m} if m2m else {}),
+        **({"proxy": True} if proxy else {}),
         **({"db_table": _norm(db_table), "decl_line": db_line} if db_table else {})})
 
 
@@ -575,7 +659,10 @@ def _py_call(n: ast.Call, ctx: tuple, out: dict, app: str | None = None) -> None
             for k, v in zip(opts.keys, opts.values):
                 if _const_str(k) == "db_table":
                     db_table = _const_str(v)
-        if mname:   # the table of the migration's own app (two apps may each have an `Item`)
+        proxy = isinstance(opts, ast.Dict) and any(
+            _const_str(k) == "proxy" and isinstance(v, ast.Constant) and v.value is True
+            for k, v in zip(opts.keys, opts.values))
+        if mname and not proxy:   # the table of the migration's own app (two apps may each have an `Item`)
             table = _norm(db_table) if db_table else (f"{app}_{mname.lower()}" if app else None)
             out["uses"].append({"line": n.lineno, "model": mname, "op": "migrate", "via": "django CreateModel",
                                 **({"table": table} if table else {})})
@@ -624,8 +711,9 @@ def _py_call(n: ast.Call, ctx: tuple, out: dict, app: str | None = None) -> None
 # comments, text blocks / raw strings, strings and char literals, in the order they start
 _JVM_LEXEME = re.compile(r'//[^\n]*|/\*[\s\S]*?(?:\*/|\Z)|"""[\s\S]*?(?:"""|\Z)|"(?:\\.|[^"\\\n])*"?|'
                          r"'(?:\\.|[^'\\\n])+'")
-_JAVA_ENTITY = re.compile(r"@Entity\b(?P<eargs>\s*\([^)]*\))?(?P<between>(?:\s*@[\w.]+(?:\([^)]*\))?)*)\s*"
-                          r"(?:public\s+|data\s+|open\s+|abstract\s+|final\s+)*class\s+(?P<cls>\w+)")
+_JAVA_ENTITY = re.compile(r"@(?:[\w.]*\.)?Entity\b")
+_JAVA_CLASS_HEAD = re.compile(r"(?:(?:public|protected|private|internal|data|open|abstract|final|sealed)\s+)*"
+                              r"class\s+(\w+)")
 _JAVA_REPO = re.compile(r"interface\s+(?P<repo>\w+)\s*(?:<[^>]*>)?\s*(?:extends|:)\s*[^{]*?\b(?:Jpa|Crud|"
                         r"PagingAndSorting|ListCrud|Mongo|Reactive)\w*Repository\s*<\s*(?P<entity>\w+)")
 _JAVA_FIELD = re.compile(r"\b(?P<type>[A-Z]\w*)(?:<[^>]*>)?\s+(?P<var>[a-z]\w*)\s*[;,)=]")
@@ -673,55 +761,99 @@ def _closing(code: str, open_at: int) -> int:
     return len(code)
 
 
+def _entities(code: str):
+    """``(start, (args start, args end) or None, class name, class name position)`` of each ``@Entity`` class:
+    the annotations between ``@Entity`` and ``class`` are skipped by balanced parentheses (``@Table(name = "x",
+    indexes = {@Index(...)})``)."""
+    for m in _JAVA_ENTITY.finditer(code):
+        i, eargs = m.end(), None
+        j = len(code) - len(code[i:].lstrip())
+        if code[j:j + 1] == "(":
+            k = _closing(code, j)
+            eargs, i = (j, k + 1), k + 1
+        while True:
+            j = len(code) - len(code[i:].lstrip())
+            a = re.match(r"@[\w.]+", code[j:])
+            if not a:
+                break
+            i = j + a.end()
+            j = len(code) - len(code[i:].lstrip())
+            if code[j:j + 1] == "(":
+                i = _closing(code, j) + 1
+        j = len(code) - len(code[i:].lstrip())
+        c = _JAVA_CLASS_HEAD.match(code, j)
+        if c:
+            yield m.start(), eargs, c.group(1), c.start(1)
+
+
+def _top_level_name(code: str, text: str, a: int, b: int) -> str | None:
+    """The ``name = "..."`` argument of the annotation whose parentheses are ``a``..``b`` - not a nested
+    ``@Index(name = ...)``."""
+    depth = 0
+    for i in range(a + 1, b):
+        ch = code[i]
+        if ch in "({":
+            depth += 1
+        elif ch in ")}":
+            depth -= 1
+        elif depth == 0 and ch == "n":
+            m = re.compile(r"\bname\s*=\s*\"([^\"]*)\"").match(text, i)
+            if m and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] == "_")):
+                return m.group(1)
+    return None
+
+
 def _jpql_context(code: str, pos: int) -> bool | None:
     """True when the string at ``pos`` is JPQL (an ``@Query`` without ``nativeQuery = true``, a ``createQuery``
     argument), False when it is SQL by declaration (``nativeQuery = true``, ``createNativeQuery``), None when
-    nothing says."""
-    before = code[max(0, pos - 400):pos]
-    m = None
-    for m in re.finditer(r"@Query\s*\(|\bcreate(?P<native>Native)?Query\s*\(", before):
-        pass
-    if m is None:
-        return None
-    open_at = max(0, pos - 400) + m.end() - 1
-    end = _closing(code, open_at)
-    if end < pos:   # that call closed before the string
-        return None
-    if m.group("native"):
-        return False
-    if m.group().startswith("create"):
-        return True
-    return not re.search(r"\bnativeQuery\s*=\s*true\b", code[open_at:end])
+    nothing says. The enclosing call is found by parenthesis depth, however long its arguments."""
+    depth = 0
+    i = pos - 1
+    while i >= 0:
+        ch = code[i]
+        if ch == ")":
+            depth += 1
+        elif ch == "(":
+            if depth == 0:
+                m = re.search(r"(?:@(?:[\w.]*\.)?Query|\bcreate(?P<native>Native)?Query)\s*$", code[max(0, i - 80):i])
+                if m:
+                    if m.group("native"):
+                        return False
+                    if m.group().startswith("create"):
+                        return True
+                    return not re.search(r"\bnativeQuery\s*=\s*true\b", code[i:_closing(code, i)])
+            else:
+                depth -= 1
+        elif ch in ";{}" and depth == 0:   # a statement or declaration boundary: no enclosing query call
+            return None
+        i -= 1
+    return None
 
 
 def _jvm_facts(text: str, rel: str) -> dict:
     out: dict = {"tables": [], "models": [], "uses": [], "injects": [], "repos": []}
-    kotlin = rel.endswith(".kt")
+    kotlin = rel.lower().endswith(".kt")
     code, strings = _jvm_scan(text)   # comments and strings blanked, positions kept
 
     def line_of(pos: int) -> int:
         return text.count("\n", 0, pos) + 1
 
     class_ends = [m.end() for m in re.finditer(r"\bclass\s+\w+", code)]
-    for m in _JAVA_ENTITY.finditer(code):
-        cls = m.group("cls")
+    for start, eargs, cls, cls_at in _entities(code):
         entity = cls
-        if m.group("eargs"):   # @Entity(name = "Purchase"): the JPQL name, and the default table's
-            en = re.search(r"\bname\s*=\s*\"([^\"]+)\"", text[m.start("eargs"):m.end("eargs")])
-            if en:
-                entity = en.group(1)
-        prev = max((e for e in class_ends if e <= m.start()), default=0)
-        head_start = max(prev, m.start() - 400)   # an annotation of this class, not of the one before
+        if eargs:   # @Entity(name = "Purchase"): the JPQL name, and the default table's
+            entity = _top_level_name(code, text, eargs[0], eargs[1] - 1) or cls
+        prev = max((e for e in class_ends if e <= start), default=0)
+        head_start = max(prev, start - 400)   # an annotation of this class, not of the one before
         name, declared, via, decl = snake(entity), False, \
-            "JPA default: the entity name in snake_case (Spring Boot naming)", line_of(m.start("cls"))
-        for t in re.finditer(r"@Table\s*\(", code[head_start:m.end()]):
+            "JPA default: the entity name in snake_case (Spring Boot naming)", line_of(cls_at)
+        for t in re.finditer(r"@(?:[\w.]*\.)?Table\s*\(", code[head_start:cls_at]):
             a = head_start + t.start()
-            b = _closing(code, head_start + t.end() - 1)
-            tn = re.search(r"\bname\s*=\s*\"([^\"]+)\"", text[a:b])
+            tn = _top_level_name(code, text, head_start + t.end() - 1, _closing(code, head_start + t.end() - 1))
             if tn:
-                name, declared, via, decl = tn.group(1), True, "JPA @Table(name)", line_of(a)
+                name, declared, via, decl = tn, True, "JPA @Table(name)", line_of(a)
         out["tables"].append({"name": _norm(name), "line": decl, "via": via, "columns": [], "declared": declared})
-        out["models"].append({"class": cls, "line": line_of(m.start("cls")), "table": _norm(name),
+        out["models"].append({"class": cls, "line": line_of(cls_at), "table": _norm(name),
                               "declared": declared, "decl_line": decl,
                               **({"entity": entity} if entity != cls else {})})
     for m in _JAVA_REPO.finditer(code):
@@ -802,15 +934,15 @@ def _sql_facts(text: str, rel: str) -> dict:
     out: dict = {"tables": [], "models": [], "uses": [], "injects": []}
     migration = bool(re.search(r"(^|/)(migrations?|db/migrate|flyway|liquibase|schema)(/|$)", rel, re.I)
                      or re.match(r"V\d+(_\d+)*__", rel.rsplit("/", 1)[-1]))
-    blank = _blank_sql(text)
+    blank = _blank_sql(text, hash_comments=True)
     upper = blank.upper()
-    for x in sql_matches(text):   # over the whole text: a statement may span lines
+    for x in sql_matches(text, hash_comments=True):   # over the whole text: a statement may span lines
         table, op, pos = x["name"], x["op"], x["pos"]
         line = text.count("\n", 0, pos) + 1
         if op == "create":
             start = max(0, upper.rfind("CREATE", 0, pos))
             out["tables"].append({"name": table, "line": line, "via": "CREATE TABLE in " + (
-                "a migration" if migration else "a SQL file"), "columns": create_columns(text[start:], table),
+                "a migration" if migration else "a SQL file"), "columns": create_columns(text[start:], table, True),
                 "declared": True})
         elif op == "migrate":
             end = blank.find(";", pos)
@@ -825,12 +957,13 @@ def _sql_facts(text: str, rel: str) -> dict:
 
 def file_facts(text: str, rel: str) -> dict:
     """The tables, models, uses and injections one file holds."""
+    low = rel.lower()   # `V1__init.SQL` is a SQL file too
     try:
-        if rel.endswith(".py"):
+        if low.endswith(".py"):
             return _py_facts(text, rel)
-        if rel.endswith((".java", ".kt")):
+        if low.endswith((".java", ".kt")):
             return _jvm_facts(text, rel)
-        if rel.endswith(".sql"):
+        if low.endswith(".sql"):
             return _sql_facts(text, rel)
     except (SyntaxError, ValueError, RecursionError):
         return {"unreadable": True}
@@ -848,7 +981,22 @@ _SHAPES = {
     "dep_aliases": {"name": str, "target": str, "line": int, "via": str},
     "annots": {"name": str, "line": int},
 }
+# the optional keys linking reads, with their types
+_OPTIONAL = {"table": str, "model": str, "repo_type": str, "owner_line": int, "decl_line": int, "owner_class": str,
+             "db_table": str, "entity": str, "columns": list, "target": str, "app": str, "m2m": list}
 _OPS = {"write": "writes_table", "read": "reads_table", "migrate": "migrates", "create": "migrates"}
+
+
+_DB_CALL = re.compile(
+    r"\.\s*(?:" + "|".join(sorted(WRITE_METHODS | READ_METHODS)) + r"|execute\w*|query\w*|batchUpdate|save\w*|"
+    r"find\w*|delete\w*|update\w*|insert\w*)\s*\(|\bsession\b|"
+    r"\b(?:select|insert|update|delete|get_object_or_404|get_list_or_404)\s*\(")
+
+
+def line_uses_table(line: str) -> bool:
+    """Does a cited line hold an ORM or database call (``session.add(o)``, ``Order.objects.filter(...)``,
+    ``conn.execute(SQL)``, ``repo.save(o)``) - the kind of line the pass reads a table use from?"""
+    return bool(_DB_CALL.search(line or ""))
 
 
 def _typed(v, t) -> bool:
@@ -870,8 +1018,10 @@ def valid_facts(fx) -> bool:
                 return False
             if any(t is list and not all(isinstance(x, str) for x in item[k]) for k, t in shape.items()):
                 return False
+            if any(k in item and not _typed(item[k], tp) for k, tp in _OPTIONAL.items()):
+                return False
             cols = item.get("columns")
-            if cols is not None and (not isinstance(cols, list) or not all(isinstance(c, str) for c in cols)):
+            if cols is not None and not all(isinstance(c, str) for c in cols):
                 return False
             if key == "uses" and (item["op"] not in _OPS or not any(
                     isinstance(item.get(k), str) for k in ("table", "model", "repo_type"))):
@@ -926,7 +1076,7 @@ def collect(g, read=None, old: dict | None = None) -> tuple[dict, list, list, di
             files[f] = prev
             continue
         text = data.decode("utf-8", errors="replace").lstrip("\ufeff")
-        if f.endswith(".py") and not _PY_HINT.search(text):   # nothing a table could come from: not parsed
+        if f.lower().endswith(".py") and not _PY_HINT.search(text):   # nothing a table could come from: not parsed
             files[f] = {"sha256": sha, "facts": {}}
             continue
         files[f] = {"sha256": sha, "facts": file_facts(text, f)}
@@ -959,6 +1109,21 @@ def _django_models(facts: dict[str, dict]) -> list[dict]:
                 known.add(name)
                 grew = True
 
+    def base_of(c: dict, b: str) -> dict:
+        """The class ``b`` that ``c`` extends: one in the same file, else the one its file imports (two apps
+        may each have an ``Item``), else the first."""
+        cands = by_name[b]
+        same = [x for x in cands if x["file"] == c["file"]]
+        if same:
+            return same[0]
+        target = ((facts.get(c["file"]) or {}).get("imports") or {}).get(b)
+        if target:
+            mod = target.rpartition(".")[0]
+            hit = [x for x in cands if _module_of(x["file"]) == mod or _module_of(x["file"]).startswith(mod + ".")]
+            if hit:
+                return hit[0]
+        return cands[0]
+
     def chain(c: dict, seen: set[str]) -> tuple[list[str], str | None]:
         """(inherited columns, the concrete parent) of ``c``."""
         cols: list[str] = []
@@ -966,7 +1131,7 @@ def _django_models(facts: dict[str, dict]) -> list[dict]:
         for b in c["bases"]:
             if b not in known or b in seen:
                 continue
-            parent = by_name[b][0]
+            parent = base_of(c, b)
             if parent.get("abstract"):
                 pc, pconc = chain(parent, seen | {b})
                 cols += pc + list(parent["columns"])
@@ -975,10 +1140,38 @@ def _django_models(facts: dict[str, dict]) -> list[dict]:
                 concrete = concrete or b
         return cols, concrete
 
+    def own_table(name: str, c: dict) -> tuple | None:
+        if c.get("db_table"):
+            return c["db_table"], True, "django Meta.db_table", c.get("decl_line") or c["line"]
+        if c["app"]:
+            return f"{c['app']}_{name.lower()}", False, "django default: <app>_<model>", c["line"]
+        return None
+
+    def proxied(c: dict, seen: set[str]) -> tuple[str, str] | None:
+        """(concrete model, its table) behind a proxy model."""
+        for b in c["bases"]:
+            if b not in known or b in seen:
+                continue
+            parent = base_of(c, b)
+            if parent.get("proxy") or parent.get("abstract"):
+                hit = proxied(parent, seen | {b})
+            else:
+                hit = (b, own_table(b, parent)[0]) if own_table(b, parent) else None
+            if hit:
+                return hit
+        return None
+
     out = []
     for name in sorted(known):
         for c in by_name[name]:
             if c.get("abstract"):
+                continue
+            if c.get("proxy"):   # Meta.proxy: the concrete parent's table, no table of its own
+                hit = proxied(c, {name})
+                if hit:
+                    out.append({"file": c["file"], "class": name, "line": c["line"], "table": hit[1],
+                                "declared": False, "via": f"django proxy of {hit[0]}", "decl_line": c["line"],
+                                "columns": [], "proxy": True})
                 continue
             inherited, concrete = chain(c, {name})
             cols = list(dict.fromkeys(inherited + list(c["columns"])))
@@ -986,14 +1179,10 @@ def _django_models(facts: dict[str, dict]) -> list[dict]:
                 cols = [f"{concrete.lower()}_ptr_id"] + cols
             elif not c.get("pk") and "id" not in cols:
                 cols = ["id"] + cols
-            if c.get("db_table"):
-                table, declared, via = c["db_table"], True, "django Meta.db_table"
-                line = c.get("decl_line") or c["line"]
-            elif c["app"]:
-                table, declared, via, line = f"{c['app']}_{name.lower()}", False, "django default: <app>_<model>", \
-                    c["line"]
-            else:
+            own = own_table(name, c)
+            if own is None:
                 continue
+            table, declared, via, line = own
             out.append({"file": c["file"], "class": name, "line": c["line"], "table": table, "declared": declared,
                         "via": via, "decl_line": line, "columns": cols})
             for j in c.get("m2m") or []:   # the join table Django makes: <table>_<field>
@@ -1044,7 +1233,8 @@ def link(g, facts: dict[str, dict]):
         for m in fx.get("models") or []:
             models.setdefault(m["class"], []).append({**m, "file": f})
     for m in _django_models(facts):
-        define(m["table"], m["file"], m["decl_line"], m["via"], m["declared"], m["columns"])
+        if not m.get("proxy"):   # a proxy model maps to its parent's table and defines none
+            define(m["table"], m["file"], m["decl_line"], m["via"], m["declared"], m["columns"])
         if m["class"]:   # a join table has no model class
             models.setdefault(m["class"], []).append(m)
     entities: dict[str, list[dict]] = {}
@@ -1180,6 +1370,12 @@ def _read_tables(conn) -> dict[str, list[str]]:
             for n in names}
 
 
+# tables a framework keeps for itself in the project's database (not defined by the project's code)
+_FRAMEWORK_TABLE = re.compile(r"(?:django_migrations|django_session|django_content_type|django_admin_log|"
+                              r"django_site|auth_\w+|alembic_version|flyway_schema_history|databasechangelog\w*|"
+                              r"schema_migrations|ar_internal_metadata)$")
+
+
 def live_sqlite(path: Path) -> dict[str, list[str]]:
     """{table: columns} of a local SQLite database, read without writing anything beside it: opened
     ``immutable`` (no lock, no ``-shm`` / ``-wal`` file made), or, when it has a write-ahead log, a temporary
@@ -1240,7 +1436,9 @@ def report(g, *, db: Path | None = None, table: str | None = None) -> dict:
             want_name = _norm(table)
             live = {n: c for n, c in live.items() if n == want_name}
             code = {n: t for n, t in code.items() if n == want_name}
-        diff = {"database": str(db), "only_in_database": sorted(set(live) - set(code)),
+        framework = sorted(n for n in set(live) - set(code) if _FRAMEWORK_TABLE.match(n))
+        diff = {"database": str(db), "only_in_database": sorted(set(live) - set(code) - set(framework)),
+                "framework_tables": framework,
                 "only_in_code": sorted(n for n, t in code.items() if t["defs"] and n not in live),
                 "columns": []}
         for name in sorted(set(live) & set(code)):
@@ -1251,7 +1449,9 @@ def report(g, *, db: Path | None = None, table: str | None = None) -> dict:
                                         "only_in_database": sorted(have - want)})
         diff["status"] = "observed"
         diff["basis"] = ("the database file as read now (read only: opened immutable, or a temporary copy with its "
-                         "write-ahead log); the code side as above")
+                         "write-ahead log; opened immutable, a hot rollback journal of an unfinished write is not "
+                         "applied); framework bookkeeping tables (migrations, sessions, auth) are listed apart and "
+                         "are no difference; the code side as above")
         out["live"] = diff
     return out
 
@@ -1277,6 +1477,8 @@ def render(res: dict) -> str:
     if live:
         out.append(f"  live database {live['database']}: only there {live['only_in_database'] or '-'}; "
                    f"only in the code {live['only_in_code'] or '-'}")
+        if live.get("framework_tables"):
+            out.append(f"      framework tables (no difference): {', '.join(live['framework_tables'])}")
         for d in live["columns"]:
             out.append(f"      {d['table']}: columns only in the code {d['only_in_code'] or '-'}, only in the "
                        f"database {d['only_in_database'] or '-'}")

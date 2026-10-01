@@ -112,7 +112,7 @@ def _aside_roots(g, text: str) -> tuple[str, ...]:
 
 COPY, NOT_PRODUCT, LOCAL = "copy or reference tree", "test, example or fixture code", "local to a function"
 TABLE = "a database table"   # a table node (verinoda.dataschema) gives way to code of the same name
-REASONS = (COPY, NOT_PRODUCT, LOCAL, TABLE)
+REASONS = (TABLE, COPY, NOT_PRODUCT, LOCAL)   # a table first: any code of the name wins over it
 
 
 def not_product(f: str | None) -> bool:

@@ -1854,8 +1854,12 @@ def _flow(repo, spec: dict, ev: dict, text: str, subjects: list[str]) -> Grade:
             if (not kinds or kind in kinds) and rx.search(shown):
                 return Grade("full", f"sink line matches the {kind} pattern")
         if kinds & {"table-write", "table-read"}:   # a table use the schema pass read (verinoda.dataschema)
-            return Grade("partial", "sink line is a table read or write inferred from the code (an ORM call or "
-                                    "SQL the schema pass read), not a sink pattern")
+            from verinoda.dataschema import line_uses_table
+
+            if line_uses_table(shown):
+                return Grade("partial", "sink line holds an ORM or database call the schema pass read as a table "
+                                        "read or write, not a sink pattern")
+            return Grade("none", "sink line shows no ORM or database call")
         return Grade("none", "sink line shows none of the claimed sink operations")
     return _general(repo, ev, text)
 

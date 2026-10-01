@@ -368,6 +368,8 @@ log = logging.getLogger(__name__)
 def post_list(request):
     posts = Post.objects.filter(title__startswith="a")
     log.info(f"Delete from cache failed for {request}")
+    log.info("Delete from cache failed for %s", request)
+    log.warning("Insert into queue failed key=%s", request)
     if not posts:
         raise ValueError(f"Insert into outbox failed: {request}")
     return posts
@@ -386,12 +388,42 @@ def remember(request):
 
 class Item(models.Model):
     sku = models.CharField(max_length=20)
+
+
+class SpecialItem(Item):
+    class Meta:
+        proxy = True
 ''',
-    "shop/views.py": '''from shop.models import Item
+    "shop/views.py": '''from shop.models import Item, SpecialItem
 
 
 def items(request):
     return Item.objects.all()
+
+
+def specials(request):
+    return SpecialItem.objects.filter(sku__startswith="S")
+''',
+    "shop/migrations/0002_specialitem.py": '''from django.db import migrations
+
+
+class Migration(migrations.Migration):
+    operations = [
+        migrations.CreateModel(name="SpecialItem", fields=[], options={"proxy": True}, bases=("shop.item",)),
+    ]
+''',
+    "tests/__init__.py": "",
+    "tests/test_helpers.py": '''def shop_item():
+    return {"sku": "S1"}
+
+
+def test_shop_item():
+    assert shop_item()
+''',
+    "billing/nested.py": '''def outer():
+    def billing_item():
+        return 1
+    return billing_item()
 ''',
     "shop/migrations/__init__.py": "",
     "shop/migrations/0001_initial.py": '''from django.db import migrations, models
@@ -984,3 +1016,186 @@ def test_review_minors(py2, spring):
     assert ("OrderService", "OrderRepository", "Spring constructor injection (Lombok)") in inj, inj
     assert ("OrderService", "AuditDao", "Spring @Autowired") in inj, inj
     assert ("LabelService", "AuditDao", "Spring constructor injection") in inj, inj
+
+
+# -- review round 2 -----------------------------------------------------------------------------------
+
+MYSQL_DUMP = """-- MySQL dump 10.13
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE `users` (
+  `id` int NOT NULL,
+  `name` varchar(40),
+  FULLTEXT KEY `ft_name` (`name`),
+  SPATIAL KEY `sp` (`id`)
+);
+INSERT INTO `users` VALUES (1,'O\\\\'Brien'),(2,'it''s');
+# a MySQL comment: DROP TABLE ghost;
+DROP TABLE IF EXISTS `orders`;
+CREATE TABLE `orders` (`id` int NOT NULL);
+CREATE TABLE `payments` (`id` int NOT NULL);
+"""
+
+
+def test_r2_an_escaped_quote_in_a_dump_hides_no_later_table():
+    fx = dataschema.file_facts(MYSQL_DUMP, "db/dump.SQL")   # an upper-case suffix is a SQL file too
+    assert [(t["name"], t["columns"]) for t in fx["tables"]] == \
+        [("users", ["id", "name"]), ("orders", ["id"]), ("payments", ["id"])]
+    assert "ghost" not in {u["table"] for u in fx["uses"]}
+    pg = "CREATE TABLE notes (id int);\nINSERT INTO notes VALUES (E'it\\\\'s');\nCREATE TABLE later (id int);\n"
+    assert [t["name"] for t in dataschema.file_facts(pg, "db/pg.sql")["tables"]] == ["notes", "later"]
+    # standard SQL: a backslash is no escape ('C:\\'); the literal runs away, the file is re-read line by line
+    std = "CREATE TABLE paths (p text);\nINSERT INTO paths VALUES ('C:\\\\');\nCREATE TABLE after_it (id int);\n"
+    assert [t["name"] for t in dataschema.file_facts(std, "db/std.sql")["tables"]] == ["paths", "after_it"]
+
+
+def test_r2_a_test_or_nested_function_wins_over_a_table(py2, capsys):
+    from verinoda import cli, naming
+
+    g = index.load(py2)
+    for name in ("shop_item", "billing_item"):
+        pool, aside = naming.exact_nodes(g, name)
+        assert [g.label(n) for n in pool] == [f"{name}()"] and f"table:{name}" in aside, (name, pool, aside)
+    assert cli.main(["butterfly", "shop_item", "--repo", str(py2), "--json"]) == 0
+    assert "table:shop_item" not in json.loads(capsys.readouterr().out).get("id", "")
+
+
+def test_r2_messages_are_not_sql(py2):
+    for s in ("Delete from cache failed for %s", "Insert into queue failed key=%s",
+              "Insert into outbox failed for {} = {}", "delete from cache?"):
+        assert not dataschema.looks_like_sql(s), s
+    for s in ("delete from cache where id = ?", "insert into t (a) values (?)", "update t set a = ?",
+              "select * from users u where id = ?", "select count(*) from users"):
+        assert dataschema.looks_like_sql(s), s
+    fx = dataschema.file_facts('''import logging
+import warnings
+
+log = logging.getLogger(__name__)
+
+
+def items(key):
+    log.info("DELETE FROM cache WHERE k = %s failed", key)
+    warnings.warn("DELETE FROM cache is slow")
+    print("DELETE FROM cache")
+    raise RuntimeError("DELETE FROM cache failed")
+''', "app/items.py")
+    assert fx["uses"] == []
+    t = _tables(dataschema.report(index.load(py2, augment=False)))
+    assert not {"cache", "queue", "outbox"} & set(t)
+
+
+def test_r2_a_table_sink_grade_reads_the_line(py2):
+    from verinoda import entail
+    from verinoda import evidence as evmod
+
+    for line in ("def main():", "import os", "    return 1"):
+        assert not dataschema.line_uses_table(line), line
+    assert dataschema.line_uses_table("    return session.scalars(select(Account)).all()")
+    spec = {"sink_kinds": ["table-read"]}
+    ev = evmod.source_evidence(py2, "api/orders.py", 1, 1, commit=None, meta={"sink": True})   # def orders(...):
+    assert entail._flow(py2, spec, ev, "", []).grade == "none"
+    ev = evmod.source_evidence(py2, "api/routes.py", 16, 16, commit=None, meta={"sink": True})
+    assert "session.scalars" in _line(py2, "api/routes.py:16")
+    assert entail._flow(py2, spec, ev, "", []).grade == "partial"
+
+
+def test_r2_entities_with_nested_annotations_and_qualified_names():
+    java = '''package app;
+
+@Entity
+@Table(indexes = {@Index(name = "ix_status", columnList = "status")}, name = "orders")
+public class Order { }
+
+@Entity
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"a", "b"}))
+public class Thing { }
+
+@jakarta.persistence.Entity
+@jakarta.persistence.Table(name = "shipments")
+public class Shipment { }
+'''
+    got = {t["name"]: t["via"] for t in dataschema.file_facts(java, "src/main/java/app/E.java")["tables"]}
+    assert got == {"orders": "JPA @Table(name)", "thing": dataschema.file_facts(java, "x.java")["tables"][1]["via"],
+                   "shipments": "JPA @Table(name)"}
+    assert got["thing"].startswith("JPA default")
+
+
+def test_r2_a_long_query_annotation_is_still_jpql():
+    filler = " " * 450
+    repo = ('package app;\n\npublic interface R extends JpaRepository<Order, Long> {\n'
+            '    @Query(value = "SELECT o FROM Order o WHERE o.status = :s",\n'
+            f'           {filler}countQuery = "SELECT count(o) FROM Order o")\n'
+            '    List<Order> page(String s);\n\n'
+            "    @Query(\"UPDATE Order o SET o.status = 'x'\")\n"
+            '    void close();\n}\n')
+    uses = dataschema.file_facts(repo, "src/R.java")["uses"]
+    assert all("model" in u and u["via"] == "JPQL in @Query" for u in uses), uses
+    assert ("write", "Order") in {(u["op"], u["model"]) for u in uses}   # UPDATE <entity> <alias> SET
+    assert dataschema.sql_tables("UPDATE orders o SET status = 'x'") == [("orders", "write")]
+
+
+def test_r2_a_django_proxy_model_has_its_parent_table(py2):
+    g = index.load(py2)
+    t = _tables(dataschema.report(g))
+    assert "shop_specialitem" not in t
+    assert ("read", "specials()") in {(u["op"], u["by"]) for u in t["shop_item"]["uses"]}
+    assert ("SpecialItem", "maps_to", "shop_item") in _rels(g)
+
+
+def test_r2_optional_keys_of_a_sidecar_entry_are_type_checked(py2):
+    bad_use = {"uses": [{"line": 3, "op": "read", "via": "x", "table": 5, "model": "Order"}]}
+    bad_inject = {"injects": [{"line": 3, "target": "f", "via": "x", "owner_line": "abc"}]}
+    assert not dataschema.valid_facts(bad_use) and not dataschema.valid_facts(bad_inject)
+    assert dataschema.valid_facts({"uses": [{"line": 3, "op": "read", "via": "x", "table": "t"}]})
+    g = index.load(py2, augment=False)
+    files, *_ = dataschema.collect(g)
+    damaged = {**files, "api/routes.py": {"sha256": files["api/routes.py"]["sha256"], "facts": bad_use},
+               "api/deps.py": {"sha256": files["api/deps.py"]["sha256"], "facts": bad_inject}}
+    _f, _n, _e, rep = dataschema.collect(g, old=damaged)
+    assert "accounts" in {x["name"] for x in rep["tables"]}
+
+
+def test_r2_cte_names_constants_and_distinct():
+    assert dataschema.sql_tables("WITH recent AS(SELECT * FROM events) SELECT * FROM recent") == [("events", "read")]
+    assert dataschema.sql_tables("SELECT * FROM a WHERE x IS DISTINCT FROM b") == [("a", "read")]
+    fx = dataschema.file_facts('''QUERY = "SELECT * FROM users WHERE id = ?"
+
+
+class Repo:
+    ALL = "SELECT * FROM orders WHERE x = 1"
+
+    def mine(self):
+        return self.ALL
+
+
+def shadow():
+    QUERY = "hello"
+    return QUERY
+
+
+def other(cfg):
+    return cfg.ALL
+
+
+def real(conn):
+    return conn.execute(QUERY)
+''', "app/c.py")
+    assert sorted((u["line"], u["table"]) for u in fx["uses"]) == [(8, "orders"), (21, "users")]
+
+
+def test_r2_framework_tables_are_no_difference(py2, tmp_path, capsys):
+    from verinoda import cli
+
+    db = tmp_path / "dj.db"
+    conn = sqlite3.connect(db)
+    for ddl in ("CREATE TABLE shop_item (id INTEGER, sku TEXT)", "CREATE TABLE django_migrations (id INTEGER)",
+                "CREATE TABLE auth_user (id INTEGER)", "CREATE TABLE django_session (session_key TEXT)",
+                "CREATE TABLE alembic_version (version_num TEXT)"):
+        conn.execute(ddl)
+    conn.commit()
+    conn.close()
+    assert cli.main(["schema", "--repo", str(py2), "--db", str(db), "--table", "shop_item", "--json"]) == 0
+    capsys.readouterr()
+    live = dataschema.report(index.load(py2, augment=False), db=db)["live"]
+    assert live["framework_tables"] == ["alembic_version", "auth_user", "django_migrations", "django_session"]
+    assert not set(live["framework_tables"]) & set(live["only_in_database"])
+    assert "hot rollback journal" in live["basis"]
