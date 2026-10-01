@@ -33,15 +33,21 @@ on disk.
 Each criterion gets one status: ``broken`` (a reference does not resolve, or cites a stale or contradicted
 claim), ``verified`` (a verified claim), ``tested`` (a test that exists), ``unchecked`` (a claim could not be read:
 no Verinoda state) or ``unevidenced`` (nothing above: no reference, only code pointers or claims that are
-inference). The exit code is 1 while a criterion is broken or unevidenced, or two criteria share an id; else 3
-when something was not checked (a claim with no state to read, a configured folder that does not exist);
-2 on an error; 0 otherwise. A claim's status is read as recorded: ``verinoda update`` marks claims stale.
+inference). A criterion's sentence may wrap onto the lines below it; ``none``, ``tbd`` or ``todo`` on an evidence
+line is no reference. A SHALL line with no id, an evidence line with no criterion above it, an empty evidence
+line and a second criterion with an id already used (case-insensitive, across files) are problems.
+
+The exit code is 1 while a criterion is broken or unevidenced or a spec line has a problem; else 3 when
+something was not checked (a claim with no state to read, a spec file that could not be read, a configured
+folder that does not exist); 2 on an error; 0 otherwise. A claim's status is read as recorded:
+``verinoda update`` marks claims stale.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import unicodedata
 from pathlib import Path
 
 from verinoda import anchors
@@ -65,11 +71,13 @@ _EVID = re.compile(r"^\s*(?:[-*+]\s+)?(?:\*\*|__)?evidence(?:\*\*|__)?\s*:(?:\*\
                    re.IGNORECASE)
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _HEADING = re.compile(r"^ {0,3}#{1,6}(\s|$)")
+_LIST = re.compile(r"^\s*(?:[-*+]|\d+[.)])(?:\s|$)")
 _SHALL = re.compile(r"\bSHALL\b")
 _CLAIM_ID = re.compile(r"^clm_[0-9a-z]+$")
 _LINES = re.compile(r"^(?P<path>.+?):(?P<a>\d+)(?:-(?P<b>\d+))?$")
 _PREFIX = re.compile(r"^(?P<kind>claim|test|code):(?!/)(?P<rest>.+)$", re.IGNORECASE)
 _TOKENS = re.compile(r"`([^`]+)`|([^\s,`]+)")
+PLACEHOLDERS = {"none", "tbd", "todo", "-", "n/a"}   # written for "nothing yet": no reference
 
 
 class SpecError(ValueError):
@@ -122,7 +130,7 @@ def split_refs(text: str) -> list[str]:
     out = []
     for m in _TOKENS.finditer(text):
         tok = (m.group(1) if m.group(1) is not None else m.group(2)).strip().rstrip(".;")
-        if tok:
+        if tok and tok.lower() not in PLACEHOLDERS:
             out.append(tok)
     return out
 
@@ -132,23 +140,27 @@ def ears(text: str) -> str | None:
     without a SHALL."""
     if not re.search(r"\bshall\b", text, re.IGNORECASE):
         return None
-    first = text.lstrip().split(None, 1)[0].upper() if text.strip() else ""
+    first = text.lstrip().split(None, 1)[0].strip("*_").upper() if text.strip() else ""
     return {"WHEN": "event", "WHILE": "state", "IF": "unwanted", "WHERE": "optional"}.get(first, "ubiquitous")
 
 
 def parse(text: str, rel: str) -> tuple[list[dict], list[str]]:
     """``(criteria, problems)`` of one spec file. A criterion: ``{"id", "at": "rel:line", "text", "refs":
-    [written reference], "ears"}``."""
+    [written reference], "ears"}``. Lines are split at LF only (a CR before it dropped), as editors count them."""
     crits: list[dict] = []
     problems: list[str] = []
     fence = None
     cur = None
-    for n, line in enumerate(text.splitlines(), 1):
+    wrapping = False
+    for n, line in enumerate(text.split("\n"), 1):
+        line = line.rstrip("\r")
         f = _FENCE.match(line)
         if f:
+            wrapping = False
+            mark = f.group(1)
             if fence is None:
-                fence = f.group(1)[0]
-            elif f.group(1)[0] == fence:
+                fence = mark
+            elif mark[0] == fence[0] and len(mark) >= len(fence) and not line.strip().strip(mark[0]):
                 fence = None
             continue
         if fence is not None:
@@ -158,7 +170,14 @@ def parse(text: str, rel: str) -> tuple[list[dict], list[str]]:
             cur = {"id": m.group("id"), "at": f"{rel}:{n}", "text": m.group("text"), "refs": [],
                    "ears": ears(m.group("text"))}
             crits.append(cur)
+            wrapping = True
             continue
+        if wrapping and line.strip() and not _LIST.match(line) and not _EVID.match(line) \
+                and not _HEADING.match(line):   # the criterion's sentence wrapped onto this line
+            cur["text"] = f"{cur['text']} {line.strip()}"
+            cur["ears"] = ears(cur["text"])
+            continue
+        wrapping = False
         e = _EVID.match(line)
         if e:
             if cur is None:
@@ -182,13 +201,14 @@ class _Files:
 
     def __init__(self, repo: Path):
         self.repo = repo
-        self._ls: dict[Path, set[str] | None] = {}
+        self._ls: dict[Path, dict[str, str] | None] = {}
         self._text: dict[str, tuple[dict | None, str | None]] = {}
 
-    def _names(self, d: Path) -> set[str] | None:
+    def _names(self, d: Path) -> dict[str, str] | None:
+        """A folder's entries by their NFC form (macOS may store a name decomposed)."""
         if d not in self._ls:
             try:
-                self._ls[d] = set(os.listdir(d))
+                self._ls[d] = {unicodedata.normalize("NFC", x): x for x in os.listdir(d)}
             except OSError:
                 self._ls[d] = None
         return self._ls[d]
@@ -204,12 +224,18 @@ class _Files:
         parts = [x for x in p.split("/") if x]
         for part in parts:
             names = self._names(d)
-            if names is None or part not in names:
+            if names is None or unicodedata.normalize("NFC", part) not in names:
                 return None, "no such file"
-            d = d / part
+            d = d / names[unicodedata.normalize("NFC", part)]
         if not d.is_file():
             return None, "not a file"
-        return "/".join(parts), None
+        try:
+            inside = self.repo in d.resolve().parents
+        except OSError:
+            inside = False
+        if not inside:
+            return None, "a link that leads outside the repository"
+        return d.relative_to(self.repo).as_posix(), None
 
     def facts(self, rel: str) -> tuple[dict | None, str | None]:
         if rel not in self._text:
@@ -334,9 +360,11 @@ def spec_files(folder: Path) -> list[Path]:
 def _open_store(repo: Path):
     from verinoda.store import NotInitialised, open_store
 
+    from verinoda.store import SchemaTooNew
+
     try:
         return open_store(repo, create=False)
-    except NotInitialised:
+    except (NotInitialised, SchemaTooNew):   # claims then unchecked, never broken
         return None
 
 
@@ -358,19 +386,23 @@ def check(repo: Path, specs_dir: str | None = None, *, store=None, use_store: bo
     fs = _Files(repo)
     st = store if store is not None else (_open_store(repo) if use_store else None)
     seen: dict[str, str] = {}
+    malformed = unread = 0
     try:
         for p in files:
             rel = p.relative_to(repo).as_posix()
             try:
                 if p.stat().st_size > MAX_FILE_BYTES:
                     res["problems"].append(f"{rel}: larger than {MAX_FILE_BYTES} bytes, not read")
+                    unread += 1
                     continue
                 text = _read(p)
             except OSError as exc:
                 res["problems"].append(f"{rel}: cannot be read ({type(exc).__name__})")
+                unread += 1
                 continue
             crits, problems = parse(text, rel)
             res["problems"].extend(problems)
+            malformed += len(problems)
             for c in crits:
                 key = c["id"].casefold()
                 if key in seen:
@@ -390,9 +422,9 @@ def check(repo: Path, specs_dir: str | None = None, *, store=None, use_store: bo
                 close()
     cnt = res["counts"]
     dup = any("duplicate_of" in c for c in res["criteria"])
-    if cnt["broken"] or cnt["unevidenced"] or dup:
+    if cnt["broken"] or cnt["unevidenced"] or dup or malformed:
         res.update(status="unevidenced", exit=1)
-    elif cnt["unchecked"]:
+    elif cnt["unchecked"] or unread:
         res.update(status="unchecked", exit=3)
     else:
         res.update(status="ok" if res["criteria"] else "no_criteria", exit=0)

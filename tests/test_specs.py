@@ -179,5 +179,32 @@ def test_a_test_named_by_its_title_and_a_code_prefix(repo):
     assert (make["kind"], make["state"]) == ("file", "ok")
 
 
+def test_wrapped_criteria_placeholders_and_long_fences(repo):
+    _spec(repo, "- [R1] WHEN the cart is empty\n"
+                "  THE SYSTEM SHALL refuse checkout\n"
+                "  - evidence: TBD, none\n"
+                "````md\n```\n- [R9] THE SYSTEM SHALL stay in the fence\n````\n"
+                "- [R2] THE SYSTEM SHALL x still one line\n  - evidence: src/cart.py:3\n")
+    res = specs.check(repo)
+    r1, r2 = res["criteria"]
+    assert r1["text"] == "WHEN the cart is empty THE SYSTEM SHALL refuse checkout" and r1["ears"] == "event"
+    assert r1["evidence"] == [] and r1["status"] == "unevidenced"
+    assert r2["at"] == ".verinoda/specs/cart.md:8" and r2["evidence"][0]["state"] == "ok"
+    assert res["problems"] == []
+
+
+def test_a_requirement_with_no_id_fails_the_check(repo):
+    _spec(repo, "# Cart\n\nThe system SHALL refuse an empty checkout.\n")
+    res = specs.check(repo)
+    assert (res["criteria"], res["exit"]) == ([], 1) and "no [ID]" in res["problems"][0]
+
+
+def test_an_unread_file_is_never_a_pass(repo):
+    _spec(repo, "- [R1] THE SYSTEM SHALL x\n  - evidence: tests/test_cart.py::test_empty_cart_disables_checkout\n")
+    _spec(repo, "x" * (specs.MAX_FILE_BYTES + 1), ".verinoda/specs/huge.md")
+    res = specs.check(repo)
+    assert res["exit"] == 3 and "not read" in res["problems"][0]
+
+
 def test_split_refs():
     assert specs.split_refs("a, b  `c d.py::x`;  clm_1.") == ["a", "b", "c d.py::x", "clm_1"]
