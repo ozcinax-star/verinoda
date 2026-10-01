@@ -1,18 +1,23 @@
-"""Distinct graph ids for two symbols of one file whose names differ only in case (applied during every
-index build, ``index.build``).
+"""Distinct graph ids for two symbols of one file whose names mint one id (applied during every index
+build, ``index.build``).
 
-The upstream pipeline (``project_index``, never hand-edited: docs/UPSTREAM.md) folds case when it mints
-an id (``make_id``: ``OrderService`` and ``orderService`` -> ``..._orderservice``) and keeps colliding ids
-apart only across files. ``class OrderService`` and ``export const orderService = new OrderService()`` in
-one TypeScript file were therefore ONE node: the graph merged their attributes (the class's kind, the
-const's label and line), and every edge to either landed on it - ``new OrderApi()`` read as a call of the
-instance ``orderApi`` (senior evaluation, web persona).
+The upstream pipeline (``project_index``, never hand-edited but for the marked patches: docs/UPSTREAM.md)
+folds case and drops leading and repeated underscores when it mints an id (``make_id``: ``OrderService``
+and ``orderService`` -> ``..._orderservice``, ``request`` and ``_request`` -> ``..._request``) and keeps
+colliding ids apart only across files. ``class OrderService`` and ``export const orderService = new
+OrderService()`` in one TypeScript file were therefore ONE node: the graph merged their attributes (the
+class's kind, the const's label and line), and every edge to either landed on it - ``new OrderApi()`` read
+as a call of the instance ``orderApi`` (senior evaluation, web persona). The extractor of the common
+languages now keeps two such definitions apart itself (``extractors.engine._distinct_def_id``: the one
+declared first keeps the id); this pass is the net for the nodes that still arrive with one id.
 
-Verinoda splits such a group before the graph is built, in case-sensitive languages only (in SQL,
-Pascal, Fortran, PHP function names ... the two spellings are one symbol, and one node is right):
+Verinoda splits such a group before the graph is built. Names that differ only in case are two symbols in
+case-sensitive languages only (in SQL, Pascal, Fortran, PHP function names ... the two spellings are one
+symbol, and one node is right); names that differ in their underscores are two symbols in every language:
 
-* the member whose name sorts first (by code point: ``OrderService`` before ``orderService``) keeps the
-  id, the one every earlier build gave the merged node; each other member gets
+* the member with the fewest leading underscores keeps the id, of those the one whose name sorts first (by
+  code point: ``OrderService`` before ``orderService``; ``request`` before ``_request``), the one every
+  earlier build gave the merged node in the common case; each other member gets
   ``<id>_<6 hex of sha1(its name)>``. Both stay while the names do (moving a definition changes
   nothing). No other id changes.
 * an edge that starts at the id belongs to the member whose definition is the last one at or before the
@@ -23,9 +28,10 @@ Pascal, Fortran, PHP function names ... the two spellings are one symbol, and on
   followed by ``(`` counts first); otherwise the edge stays on the member that kept the id.
 
 An update re-extracts only changed files and keeps the rest of the last graph: an importer's new edge
-then ends at the kept id with no collision in sight. So a split the kept nodes already show (a node
-``<id>_<hash>`` beside ``<id>`` in the same file, the hash that of its name, the names equal but for
-case) routes the edges that end at ``<id>`` by the same rules.
+then ends at the kept id with no collision in sight; and the extractor's own import edges name the plain
+id (``import { _helper }`` -> ``..._helper``'s plain id, the one ``helper`` holds). So a split the nodes
+already show (a node ``<id>_<hash>`` beside ``<id>`` in the same file, the hash that of its name, the two
+names different but minting one id) routes the edges that end at ``<id>`` by the same rules.
 """
 
 from __future__ import annotations
@@ -35,6 +41,8 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from verinoda.project_index.ids import normalize_id
 
 # languages in which two names that differ only in case are two symbols
 CASE_SENSITIVE_SUFFIXES = frozenset({
@@ -83,6 +91,33 @@ def _digest(name: str) -> str:
     return hashlib.sha1(name.encode("utf-8")).hexdigest()
 
 
+def _case_sensitive(source_file) -> bool:
+    return Path(str(source_file or "")).suffix.lower() in CASE_SENSITIVE_SUFFIXES
+
+
+def _symbol(name: str, case_sensitive: bool) -> str:
+    """What makes two names one symbol: the name itself, or its case-folded form where case is folded."""
+    return name if case_sensitive else name.casefold()
+
+
+def _keeps_id_first(name: str) -> tuple:
+    """Sort key of the members of a split: fewest leading underscores (the public name), then code point."""
+    return len(name) - len(name.lstrip("_")), name
+
+
+_IDENT = re.compile(r"[\w$]+")
+
+
+def _one_id(names) -> bool:
+    """Are these (different) names identifiers that mint one id (they differ in case or underscores), rather
+    than labels that share it by some other route (a heading ``Foo bar`` beside ``Foo-bar``, a quoted SQL
+    name beside the bare one)?"""
+    names = list(names)
+    if len({n.casefold() for n in names}) == 1:
+        return True   # case alone
+    return all(_IDENT.fullmatch(n) for n in names) and len({normalize_id(n) for n in names}) == 1
+
+
 def _new_id(nid: str, name: str, file: str, owner: dict[str, tuple[str, str]]) -> str:
     """``<nid>_<hash of name>``, longer when another symbol has that id (the same symbol may: an update
     keeps the last graph's node for it)."""
@@ -108,29 +143,35 @@ def _plans(nodes: list, root: Path | None) -> tuple[dict[str, _Plan], set[str]]:
         if len(group) < 2:
             continue
         files = {_file_key(n["source_file"], root) for n in group}
-        if len(files) != 1 or Path(str(group[0]["source_file"])).suffix.lower() not in CASE_SENSITIVE_SUFFIXES:
+        if len(files) != 1:
             continue   # across files the upstream pass keeps them apart by path
-        first_line: dict[str, int | None] = {}
+        cs = _case_sensitive(group[0]["source_file"])
+        first_line: dict[str, int | None] = {}   # symbol -> its first line
+        spelled: dict[str, str] = {}             # symbol -> the spelling it is known by (the first by code point)
         for n in group:
             name = _bare(n.get("label"))
+            sym = _symbol(name, cs)
+            spelled[sym] = min(spelled.get(sym, name), name)
             ln = _line(n)
-            if name not in first_line or (ln is not None and (first_line[name] is None or ln < first_line[name])):
-                first_line[name] = ln
-        if len(first_line) < 2 or len({k.casefold() for k in first_line}) != 1:
-            continue   # one name (the same symbol twice), or names that differ in more than case
+            if sym not in first_line or (ln is not None and (first_line[sym] is None or ln < first_line[sym])):
+                first_line[sym] = ln
+        if len(first_line) < 2 or not _one_id(spelled.values()):
+            continue   # one symbol (the same one twice, or one spelled two ways where case is folded), or
+            # names that share the id by some other route than how it is minted
         file = files.pop()
-        names = sorted(first_line)
-        owner[nid] = (file, names[0])
-        members = [_Member(names[0], first_line[names[0]], nid)]
-        for name in names[1:]:
-            new = _new_id(nid, name, file, owner)
-            owner[new] = (file, name)
-            members.append(_Member(name, first_line[name], new))
+        syms = sorted(first_line, key=lambda s: _keeps_id_first(spelled[s]))
+        owner[nid] = (file, spelled[syms[0]])
+        members = [_Member(spelled[syms[0]], first_line[syms[0]], nid)]
+        sym_nid = {syms[0]: nid}
+        for sym in syms[1:]:
+            new = _new_id(nid, spelled[sym], file, owner)
+            owner[new] = (file, spelled[sym])
+            members.append(_Member(spelled[sym], first_line[sym], new))
+            sym_nid[sym] = new
         plans[nid] = _Plan(file, members)
         split_now.add(nid)
-        by_name = {m.name: m.nid for m in members}
         for n in group:
-            n["id"] = by_name[_bare(n.get("label"))]
+            n["id"] = sym_nid[_symbol(_bare(n.get("label")), cs)]
     # splits the nodes already show (kept from the last graph by an update)
     for nid, group in groups.items():
         m = _SPLIT_ID.match(nid)
@@ -139,7 +180,8 @@ def _plans(nodes: list, root: Path | None) -> tuple[dict[str, _Plan], set[str]]:
             continue
         file, name = owner[nid]
         bfile, bname = owner[m.group(1)]
-        if (file != bfile or name == bname or name.casefold() != bname.casefold()
+        cs = _case_sensitive(group[0]["source_file"])
+        if (file != bfile or _symbol(name, cs) == _symbol(bname, cs) or not _one_id((name, bname))
                 or not _digest(name).startswith(m.group(2))):
             continue
         plan = plans.setdefault(m.group(1), _Plan(file, [_Member(bname, _line(base[0]), m.group(1))]))
