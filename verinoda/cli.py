@@ -3390,6 +3390,43 @@ def cmd_inventory(args) -> int:
     return 0 if res["units"] else 1
 
 
+def cmd_slice(args) -> int:
+    """A backward (default) or forward slice of a Python line, across callers for a backward one."""
+    from verinoda import slicing
+
+    repo = _repo(args)
+    path, _, line = args.site.rpartition(":")
+    if not path or not line.isdigit():
+        print("error: give the site as PATH:LINE", file=sys.stderr)
+        return 2
+    p = Path(path)
+    if p.is_absolute():
+        try:
+            path = p.resolve().relative_to(repo).as_posix()
+        except ValueError:
+            print(f"error: {path} is outside the project {repo}", file=sys.stderr)
+            return 2
+    path = path.replace("\\", "/")
+    if args.forward and (args.arg is not None or args.depth is not None):
+        print("error: --arg and --depth go with a backward slice", file=sys.stderr)
+        return 2
+    try:
+        if args.forward:
+            res = slicing.forward(repo, path, int(line), var=args.var)
+        else:
+            from verinoda import index
+            from verinoda.paths import graph_path
+
+            graph = index.load(repo) if graph_path(repo).exists() else None
+            res = slicing.backward(repo, path, int(line), var=args.var, arg=args.arg,
+                                   depth=2 if args.depth is None else args.depth, graph=graph)
+    except slicing.SliceError as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    _emit(args, res, lambda r: _write(slicing.render(r)))
+    return 0
+
+
 def cmd_search(args) -> int:
     """Exact and regular-expression search over the project's text files through the trigram index."""
     from verinoda import trigram
@@ -4821,6 +4858,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-groups", type=int, default=50, help="groups listed at most (default 50)")
     sp.add_argument("--timeout", type=float, default=60.0,
                     help="seconds each search may read files (default 60; loading the index for symbols is apart)")
+    sp = add("slice", cmd_slice, "where a Python line's values come from (backward slice: data and control "
+                                 "dependence inside the function, then the arguments its callers pass, from the "
+                                 "index) or what a definition there can affect (--forward)")
+    sp.add_argument("site", metavar="PATH:LINE", help="a line inside a Python function")
+    sp.add_argument("--var", metavar="NAME", help="one name the line reads or defines (default: all it reads)")
+    sp.add_argument("--arg", metavar="N|NAME", help="an argument of the call on the line: its position (0 first) "
+                                                     "or keyword")
+    sp.add_argument("--forward", action="store_true", help="what the line's definitions can reach and control")
+    sp.add_argument("--depth", type=int, help="calls up a backward slice follows (0-3, default 2)")
     sp = add("search", cmd_search, "exact or regular-expression search over the project's text files, narrowed by "
                                    "a local trigram index that the search keeps up to date (exit 1: no match; 3: no "
                                    "match, but files were left unread)")
