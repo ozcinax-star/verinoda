@@ -569,7 +569,7 @@ def _callers(b: _Batch, s: dict) -> dict:
     why = "a call through another name (callback, getattr, DI) is not counted" if n == 0 else None
     if row["status"] == "weak_inference":
         why = "an INFERRED calls edge is counted"
-    return _ans(n, weaker(row["status"], "strong_inference"), at[:CANDIDATES], bound="at_least", why=why)
+    return _ans(n, weaker(row["status"], "strong_inference"), sorted(at)[:CANDIDATES], bound="at_least", why=why)
 
 
 def _taint(b: _Batch, s: dict) -> dict:
@@ -601,7 +601,7 @@ def _taint(b: _Batch, s: dict) -> dict:
         return _ans(why=f"no Python file in {scope}", next="check in=PATH")
     deeper = f" --depth {taint.slicing.MAX_DEPTH}" if res.get("depth", 0) < taint.slicing.MAX_DEPTH else ""
     return _ans(False, "weak_inference", why=f"no {s['s']} -> {s['k']} path in {scope} at depth {res['depth']}; "
-                "data flow only, not a proof of safety", next=f"verinoda taint {' '.join(key)}{deeper}".strip())
+                "data flow only, not a proof of safety", next=" ".join(["verinoda taint", *key, *deeper.split()]))
 
 
 def _qual(g, n: str) -> str:

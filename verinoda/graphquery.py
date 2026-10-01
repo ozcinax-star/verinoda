@@ -32,6 +32,10 @@ It is parsed by hand into a tree and evaluated by walking the graph: there is no
 is ever run, and a regular expression is compiled by :mod:`re` (300 characters at most). Evaluation has budgets
 (rows, edge expansions, seconds); a result cut by one says so and its counts are lower bounds.
 
+A program that already holds node ids builds the same tree with :func:`build` (``path``, ``node``, ``edge``,
+``id_in``) and passes it as ``run(query=...)``: no query text is assembled and the rows are those of the text
+form. A batch of queries shares one :class:`Shared` (one freshness check, one route table, one lines cache).
+
 Status: graph edges are extractions, so a row is ``strong_inference`` at most when every
 edge it rests on is ``EXTRACTED`` and ``weak_inference`` when one is ``INFERRED``; a row citing a file changed
 since the index is ``unknown``. ``verify=True`` re-reads the cited lines (the call sites through

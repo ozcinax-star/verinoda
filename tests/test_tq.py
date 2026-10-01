@@ -140,6 +140,8 @@ def test_exists_and_which(ql):
     assert no["answer"] is False and no["status"] == "strong_inference" and no["why"] and no["next"]
     w = _one(ql, "which save_order in app/store.py|app/service.py")
     assert w["answer"] == ["app/store.py"] and w["status"] == "statically_verified"
+    lib = tq.ask(ql, ["exists json.dumps scope=lib", "exists json.no_such_thing scope=lib"])["answers"]
+    assert [(a["answer"], a["status"]) for a in lib] == [(True, "strong_inference"), (False, "strong_inference")]
     none = _one(ql, "which leaf in app/store.py|app/web.py")
     assert none["answer"] == [] and none["status"] == "strong_inference" and none["other"] == ["rec.py:31"]
 
