@@ -55,6 +55,19 @@ def test_inside_a_cycle_the_lighter_direction_points_back(tmp_path):
     assert "cycle of 2 groups: a, b" in text and "2*" in text
 
 
+def test_edges_between_a_copy_of_the_project_and_the_project_join_no_groups(tmp_path, monkeypatch):
+    from verinoda import architecture_map as am
+    from verinoda import copies
+
+    monkeypatch.setattr(am, "_aside_roots", lambda g: ("old/copy/",))
+    monkeypatch.setattr(copies, "load", lambda repo: [{"path": "old/copy"}])
+    g = _graph(tmp_path, [("old/copy/a.py", "src/b.py", 2), ("src/b.py", "old/copy/a.py", 1),
+                          ("src/b.py", "lib/c.py", 1)])
+    v = dsm.dsm(g, depth=1)
+    assert v["cycles"] == [] and [(c["from"], c["to"]) for c in v["cells"]] == [("src", "lib")]
+    assert any("3 reference(s) between a copy" in lim for lim in v["coverage"]["limits"])
+
+
 def test_the_exact_order_leaves_the_fewest_references_pointing_back():
     rng = random.Random(7)
     for _ in range(40):
