@@ -705,12 +705,17 @@ class Store:
         self.conn.close()
 
     @contextmanager
-    def tx(self) -> Iterator[sqlite3.Connection]:
+    def tx(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
         """One transaction. Nested ``tx()`` blocks join the outermost one, which alone commits (or rolls
-        everything back when an exception leaves it), so several store calls can be made atomic together."""
+        everything back when an exception leaves it), so several store calls can be made atomic together.
+
+        ``immediate`` (outermost block only): take the write lock at the start (``BEGIN IMMEDIATE``), so what the
+        block reads cannot be changed by another process before it writes (a check-then-write across processes)."""
         depth = getattr(self, "_tx_depth", 0)
         self._tx_depth = depth + 1
         try:
+            if depth == 0 and immediate and not self.conn.in_transaction:
+                self.conn.execute("BEGIN IMMEDIATE")
             yield self.conn
             if depth == 0:
                 self.conn.commit()

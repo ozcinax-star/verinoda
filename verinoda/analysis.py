@@ -3277,7 +3277,7 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
         from verinoda import facts
 
         try:  # named facts the question names: leads with their status now, never evidence for these claims
-            leads = facts.leads(store, question)
+            leads = facts.leads(store, question, repo=repo)
         except Exception as exc:  # noqa: BLE001 - the answer stands without them; said
             leads, result["facts_error"] = [], f"{type(exc).__name__}: {exc}"[:200]
         if leads:

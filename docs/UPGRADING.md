@@ -91,7 +91,8 @@ Schema v10 (after v9, the test-to-code map): `atlas.db` gains `facts` and the ap
 (migrated on first open; an older Verinoda then refuses the database as written by a newer one, so copy
 `.verinoda/atlas.db` first if you may go back). New command `verinoda fact add|list|show|refresh|retire`. `scan`
 and `update` results gain a `facts` key (and a `facts:` line) only in a project that has facts; `update` then
-re-runs stale search facts within 10 s, which `facts.refresh_on_update: false` in `.verinoda/config.json` turns
+re-runs stale search facts within 20 facts and 10 s (an `update --fast` that defers the graph only lowers
+them), which `facts.refresh_on_update: false` in `.verinoda/config.json` turns
 off. `query --json`, MCP `project_query` and `analyze` gain a `facts` list when the question names a fact (a
 `facts_error` when they could not be read). No MCP tool added; the tool count is unchanged.
 

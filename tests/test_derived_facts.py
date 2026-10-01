@@ -88,7 +88,7 @@ def test_a_fact_goes_stale_with_the_code_it_rests_on(proj):
     row = facts.get(st, "a-returns-one")
     assert row["status"] == "stale" and c["id"] in row["reason"]
     assert [x["fact"] for x in res["facts"]["lowered"]] == ["a-returns-one"]
-    assert res["facts"]["still_stale"] == ["a-returns-one"]    # update reads the claim, it never runs verify
+    assert res["facts"]["waiting"] == ["a-returns-one"]        # update never runs verify: it waits for refresh
     hist = facts.history(st, row["id"])
     assert [h["to_status"] for h in hist] == [status, "stale"] and hist[-1]["actor"] == "update"
 
@@ -145,7 +145,8 @@ def test_update_recomputes_and_reports_a_changed_result(proj):
     ch = {x["fact"]: x for x in fx["changes"]}
     assert ch["returns"]["old"]["total"] == 3 and ch["returns"]["new"]["total"] == 4
     assert ch["returns"]["added"] == ["d.py: return 4"] and ch["returns"]["removed"] == []
-    assert "3 line(s)" in ch["on-returns"]["old"]["statement"] and "4 line(s)" in ch["on-returns"]["new"]["statement"]
+    old, new = ch["on-returns"]["old"]["statement"], ch["on-returns"]["new"]["statement"]
+    assert "3 match(es)" in old and "4 match(es)" in new
     shown = facts.show(st, "returns")
     assert shown["status"] == "observed" and shown["history"][-1]["payload"]["added"] == ["d.py: return 4"]
     _write(repo, "a.py", "\n\ndef a():\n    return 1\n")          # a line that only moved is not a change
@@ -250,7 +251,7 @@ def test_a_changed_result_reaches_the_facts_resting_on_it(proj):
     res = facts.refresh(st, repo, ["returns"])
     assert [r["fact"] for r in res["refreshed"]] == ["returns", "on-returns"]
     assert res["changed"] == ["returns", "on-returns"]
-    assert "4 line(s)" in facts.get(st, "on-returns")["result"]["statement"]
+    assert "4 match(es)" in facts.get(st, "on-returns")["result"]["statement"]
     hist = facts.history(st, facts.get(st, "on-returns")["id"])
     assert [h["to_status"] for h in hist][-2:] == ["stale", "observed"]
 
@@ -260,6 +261,143 @@ def test_leads_need_the_fact_named_not_template_words(proj):
     facts.add_search(st, repo, "storage-writes", "write(", fixed=True, cwd=repo)
     assert facts.leads(st, "which file matches the pattern in the project lines") == []
     assert [x["fact"] for x in facts.leads(st, "where are the storage writes?")] == ["storage-writes"]
+
+
+# -- review round ------------------------------------------------------------------------------------------
+
+def test_an_unfinished_search_keeps_the_old_result_stale_and_a_short_budget_stops_the_queue(proj, monkeypatch):
+    from verinoda import trigram
+
+    repo, st = proj
+    _config(repo, refresh_on_update=False)
+    facts.add_search(st, repo, "returns", r"return \d", cwd=repo)
+    facts.add_derived(st, repo, "on-returns", facts=["returns"])
+    _write(repo, "d.py", "def d():\n    return 4\n")
+    workflow.update(st, repo)
+    assert facts.get(st, "returns")["status"] == "stale"
+    real = trigram.search
+
+    def cut(*a, **k):
+        res = real(*a, **k)
+        return {**res, "status": "incomplete", "matches": res["matches"][:1], "total": 1, "files_matched": 1,
+                "not_read": {"total": 3, "files": ["a.py"], "why": "the time limit ran out"}}
+    monkeypatch.setattr(trigram, "search", cut)
+    out = facts.refresh(st, repo)
+    row = out["refreshed"][0]
+    assert row["fact"] == "returns" and row["now"] == "stale" and not row["changed"] and row["incomplete"]
+    assert out["restored"] == [] and out["changed"] == [] and out["incomplete"] == ["returns"]
+    kept = facts.get(st, "returns")
+    assert kept["status"] == "stale" and kept["result"]["total"] == 3          # the old, complete result
+    dep = facts.get(st, "on-returns")
+    assert "changed its result" not in dep["reason"] and "3 match(es)" in dep["result"]["statement"]
+    calls = []
+    monkeypatch.setattr(trigram, "search", lambda *a, **k: calls.append(a) or real(*a, **k))
+    out = facts.refresh(st, repo, budget=facts.MIN_SEARCH_S / 2)
+    assert calls == [] and out["stopped"] and "returns" in out["not_reached"] and out["refreshed"] == []
+
+
+def test_files_the_search_skips_make_it_weak_and_named(proj):
+    repo, st = proj
+    (repo / "dump.sql").write_bytes(b"MARKER_X here\0binary\n" + b"x" * 50)
+    f = facts.add_search(st, repo, "marker", "MARKER_X", fixed=True, cwd=repo)
+    shown = facts.show(st, "marker")
+    assert f["status"] == "weak_inference" and f["total"] == 0 and not f["complete"]
+    assert shown["result"]["skipped"]["files"] == ["dump.sql"] and "dump.sql" in shown["reason"]
+    facts.add_derived(st, repo, "on-marker", facts=["marker"])
+    assert facts.get(st, "on-marker")["status"] == "weak_inference"
+    (repo / "big.sql").write_bytes(b"-- MARKER_X\n" + b"insert into t values (1);\n" * 105_000)   # over 2 MB
+    (repo / "dump.sql").unlink()
+    res = workflow.update(st, repo)
+    big = facts.get(st, "marker")
+    assert big["status"] == "weak_inference" and big["result"]["total"] == 0
+    assert big["result"]["skipped"]["files"] == ["big.sql"]
+    (repo / "big.sql").unlink()
+    res = workflow.update(st, repo)                    # inputs recovered: both recomputed and raised
+    assert facts.get(st, "marker")["status"] == "observed"
+    assert facts.get(st, "on-marker")["status"] == "observed" and "on-marker" in res["facts"]["restored"]
+
+
+def test_facts_that_cannot_recover_stay_out_of_the_automatic_queue(proj):
+    repo, st = proj
+    c = _claim(repo, st, "a.py", "a() returns 1")
+    facts.add_derived(st, repo, "base", claims=[c["id"]])
+    for k in range(3):
+        facts.add_derived(st, repo, f"lost{k}", facts=["base"])
+    facts.add_search(st, repo, "defs", "def ", fixed=True, cwd=repo)
+    facts.retire(st, "base")
+    facts.invalidate(st, repo)
+    _write(repo, "b.py", "def b():\n    return 2\n# note\n")
+    facts.invalidate(st, repo)
+    assert facts.get(st, "defs")["status"] == "stale"
+    out = facts.refresh(st, repo, limit=1, verify_claims=False)
+    assert [r["fact"] for r in out["refreshed"]] == ["defs"] and out["restored"] == ["defs"]
+    assert sorted(x["fact"] for x in out["cannot_recover"]) == ["lost0", "lost1", "lost2"]
+    line = facts.update_line({"lowered": [], "cannot_recover": out["cannot_recover"], "not_reached": ["x"],
+                              "seconds": 0.1})
+    assert "3 cannot recover" in line and "re-verifies their claims" not in line and "(budget)" not in line
+    assert "limit of 20" in line
+
+
+def test_a_read_shows_a_search_fact_stale_once_a_matched_file_changed(proj):
+    repo, st = proj
+    facts.add_search(st, repo, "defs", "def ", fixed=True, cwd=repo)
+    facts.add_derived(st, repo, "on-defs", facts=["defs"])
+    _write(repo, "a.py", "def a():\n    return 9\n")      # no update ran
+    view = {x["name"]: x for x in facts.listing(st, repo=repo)["facts"]}
+    assert view["defs"]["status"] == "stale" and "a.py" in view["defs"]["reason"]
+    assert view["on-defs"]["status"] == "stale" and view["defs"]["recorded_status"] == "observed"
+    assert facts.get(st, "defs")["status"] == "observed"     # nothing written
+    assert facts.leads(st, "where is defs", repo=repo)[0]["status"] == "stale"
+
+
+def test_writes_hold_across_connections(proj, capsys):
+    repo, st = proj
+    c = _claim(repo, st, "a.py", "a() returns 1")
+    facts.add_derived(st, repo, "x", claims=[c["id"]])
+    row = facts.get(st, "x")
+    other = open_store(repo)
+    try:
+        facts.retire(other, "x")
+        facts._record(st, row, status="stale", reason="late", actor="t")    # read before the retire
+        assert facts._by_id(st, row["id"])["status"] != "stale"
+        assert [h["reason"] for h in facts.history(st, row["id"])][-1] == "retired"
+        with pytest.raises(facts.FactError):
+            facts.retire(st, "x")                          # the second retire: refused, not a traceback
+        with st.tx(immediate=True):                        # the write lock is taken at the start
+            other.conn.execute("PRAGMA busy_timeout = 0")
+            with pytest.raises(sqlite3.OperationalError):
+                other.conn.execute("BEGIN IMMEDIATE")
+    finally:
+        other.close()
+    facts.add_derived(st, repo, "y", claims=[c["id"]])
+    orig = facts._check_name
+    facts._check_name = lambda store, name: None           # as if another process took the name meanwhile
+    try:
+        with pytest.raises(facts.FactError):
+            facts.add_derived(st, repo, "y", claims=[c["id"]])
+    finally:
+        facts._check_name = orig
+    code, out = _run(capsys, "fact", "list", "--status", "bogus", "--repo", str(repo), "--json")
+    assert code == 2 and "unknown status" in out["error"]
+
+
+def test_a_fast_update_only_lowers_facts_and_the_facts_time_is_reported(proj):
+    repo, st = proj
+    facts.add_search(st, repo, "defs", "def ", fixed=True, cwd=repo)
+    _write(repo, "a.py", "def a():\n    return 9\n")
+    out = facts.after_update(st, repo, {"mode": "incremental", "index_mode": "deferred",
+                                        "snapshot": st.latest_snapshot()})
+    assert [x["fact"] for x in out["lowered"]] == ["defs"] and "restored" not in out and out["skipped"]
+    assert facts.get(st, "defs")["status"] == "stale" and out["seconds"] >= 0
+    res = workflow.update(st, repo)
+    assert res["facts"]["restored"] == ["defs"] and res["facts"]["seconds"] > 0
+
+
+def test_a_lead_needs_the_whole_name(proj):
+    repo, st = proj
+    facts.add_search(st, repo, "db", "def ", fixed=True, cwd=repo)
+    assert facts.leads(st, "how is feedback stored?") == []
+    assert [x["fact"] for x in facts.leads(st, "what does db say?")] == ["db"]
 
 
 def test_an_older_store_is_migrated(tmp_path):

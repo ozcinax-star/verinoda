@@ -3627,6 +3627,8 @@ def cmd_memory(args) -> int:
 
 def cmd_fact(args) -> int:
     """Named derived facts: add, list, show, refresh, retire (verinoda/facts.py)."""
+    import sqlite3
+
     from verinoda import facts
 
     repo = _repo(args)
@@ -3644,11 +3646,11 @@ def cmd_fact(args) -> int:
                                  paths=args.path or None)
             else:
                 facts.add_derived(st, repo, args.name, claims=args.from_claim, facts=args.from_fact)
-            res, render = facts.show(st, args.name), facts.render_show
+            res, render = facts.show(st, args.name, repo=repo), facts.render_show
         elif sub == "list":
-            res, render = facts.listing(st, status=args.status), facts.render_list
+            res, render = facts.listing(st, status=args.status, repo=repo), facts.render_list
         elif sub == "show":
-            res, render = facts.show(st, args.name), facts.render_show
+            res, render = facts.show(st, args.name, repo=repo), facts.render_show
         elif sub == "retire":
             res = facts.retire(st, args.name, reason=args.reason)
             render = (lambda r: print(f"retired {r['retired']}" + (f"; now stale: {', '.join(r['now_stale'])}"
@@ -3658,7 +3660,7 @@ def cmd_fact(args) -> int:
             res = facts.refresh(st, repo, args.name or None, limit=args.limit, budget=args.budget,
                                 verify_claims=not args.no_verify)
             render = facts.render_refresh
-    except facts.FactError as exc:
+    except (facts.FactError, sqlite3.IntegrityError) as exc:   # a constraint another process won: the same refusal
         _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
         return 2
     finally:

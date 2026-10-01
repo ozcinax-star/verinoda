@@ -181,7 +181,7 @@ def _facts_after(store: Store, repo: Path, res: dict) -> dict:
     if out.get("error"):
         res["facts"] = {"error": out["error"]}
     elif "result" not in out:   # None (no fact in the project) comes back as {"result": None}
-        res["facts"] = {k: v for k, v in out.items() if k != "seconds"}
+        res["facts"] = out      # with its own seconds: the update's index_seconds do not include them
     return res
 
 
