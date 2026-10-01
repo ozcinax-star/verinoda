@@ -11224,6 +11224,162 @@ and `decide baseline --record` then lets `decide check` pass; the pre-commit hoo
 check`, with `stages: [pre-commit]`, `minimum_pre_commit_version: "3.2.0"` and the trust note. All in a project
 folder whose name has a space and non-ASCII letters.
 
+## 113. Installers for more agents (D140, 2026-10-01)
+
+### 113.1 Why
+
+`verinoda setup` and `verinoda install` connected only Claude Code and Codex. People also work in Cursor,
+Gemini CLI, GitHub Copilot (VS Code), Kiro, Continue and Aider. Each of these reads an MCP server list
+and/or an instructions file from a documented place. This change registers Verinoda there, using the
+same installer, so the same safety rules hold. `verinoda setup --agents all` now registers every
+supported agent it finds.
+
+### 113.2 Decisions
+
+- **One installer.** The new agents go through `verinoda.agents.installer`: the same plan, the same
+  manifest (`.verinoda/install-manifest.json`), the same refusals, and the same exact uninstall. The
+  table of locations and the new pieces are in `verinoda/agents/more_agents.py`: the found rule, the
+  rules text, the marked Markdown block, and Continue's YAML file. `installer._plan_file` is the old
+  skill writer made generic (a file Verinoda owns whole). `_plan_json` / `_un_json` take the JSON
+  object's name (`mcpServers`, or VS Code's `servers`) and whether the entry carries `"type": "stdio"`.
+- **What each agent gets.** Every path is taken from the agent's own documentation, read on 2026-10-01:
+
+  | agent | MCP entry | instructions | source |
+  | --- | --- | --- | --- |
+  | Cursor | `.cursor/mcp.json`, `~/.cursor/mcp.json`, `mcpServers`, `type: stdio` | `.cursor/rules/verinoda.mdc` (`description`, `alwaysApply: true`), project only | cursor.com/docs/context/mcp; cursor.com/docs/context/rules ("User Rules aren't stored as files") |
+  | Gemini CLI | `.gemini/settings.json`, `~/.gemini/settings.json`, `mcpServers` (`command`, `args`) | marked block in `GEMINI.md` (project), `~/.gemini/GEMINI.md` (user) | geminicli.com/docs/reference/configuration |
+  | GitHub Copilot | `.vscode/mcp.json`, `servers`, `type: stdio`, project only | marked block in `.github/copilot-instructions.md` | code.visualstudio.com/docs/copilot/customization/mcp-servers; .../custom-instructions |
+  | Kiro | `.kiro/settings/mcp.json`, `~/.kiro/settings/mcp.json`, `mcpServers` | `.kiro/steering/verinoda.md` (`inclusion: always`), both scopes | kiro.dev/docs/mcp/configuration; kiro.dev/docs/steering |
+  | Continue | `.continue/mcpServers/verinoda.yaml` (`name`, `version`, `schema: v1`, `mcpServers` list), project only | `.continue/rules/verinoda.md` (`name`, `alwaysApply: true`), project only | docs.continue.dev/customize/deep-dives/mcp; .../rules |
+  | Aider | none: Aider has no MCP client | `.aider.verinoda.md`, named by `read: [...]` in a marked block of a new `.aider.conf.yml` | aider.chat/docs/usage/conventions.html; aider.chat/docs/config/aider_conf.html |
+
+- **Shared files vs. owned files.** Where the agent reads a folder of rule files (Cursor, Kiro, Continue)
+  or a file only Verinoda writes (Continue's server file, Aider's conventions file), the installer writes
+  a file of its own. That file carries the ownership marker and its sha256 is recorded in the manifest,
+  so the existing rule keeps it out of the project's index. Gemini CLI and Copilot read one shared file
+  (`GEMINI.md`, `.github/copilot-instructions.md`). There the installer appends a block between
+  `<!-- verinoda-managed v1 begin ... -->` and `<!-- verinoda-managed end -->`, records its hash and
+  any line end or blank line it added, and removes exactly that on uninstall. The file comes back byte
+  for byte. A file the installer created is deleted when nothing else is left in it.
+- **The block is Verinoda's text, not the project's.** A file the manifest lists as holding the block
+  (`kind: "md_block"`) is one of Verinoda's own files while it holds the block and nothing else (white
+  space aside), so a fresh install's `GEMINI.md` or `.github/copilot-instructions.md` is not indexed.
+  Once the user writes in it, it is indexed, block included. `agent-lint` reads every instruction file
+  with the block's lines blank (line numbers kept), so the block's `-m verinoda` command is never
+  reported as a missing module. Begin and end are found one after the other
+  (`selffiles.find_block`), in linear time.
+- **Aider.** Aider does not load `CONVENTIONS.md` unless it is told to (`--read`, or `read:` in
+  `.aider.conf.yml`). When no `.aider.conf.yml` exists, install creates one holding a marked block (the
+  begin and end lines are YAML comments) with the `read:` line. Users add their own keys to this file,
+  so it is not a file Verinoda owns whole: keys added around the block keep re-install safe, and
+  uninstall removes only the block (the file goes only when nothing else is left). The `read:` line
+  names the conventions file by absolute path, because the docs do not say what a relative `read:` path
+  is resolved against. An existing `.aider.conf.yml` without the block is never edited. It counts as
+  set up only when a top-level `read:` entry (its line, or the indented or `-` lines under it, comments
+  cut) names the file; otherwise the step is printed as a manual one (`manual` in `--json`): a
+  `read: [...]` line, or, when a `read:` key exists, "add ... to the `read:` list" (never a second key).
+- **Notes name only what was written.** The usage note and setup's next step are built from what this
+  install wrote: the server entry only when one was written (not with `--no-mcp`), the instructions
+  file only when the scope has one (not Cursor at user scope), with `~/` paths at user scope.
+- **"Found".** An agent is found when its folder (`.cursor`, `.gemini`, `.vscode`, `.kiro`, `.continue`;
+  Aider's `.aider.conf.yml`) exists in the project or the home folder, or when its program (`cursor`,
+  `gemini`, `code`, `kiro`, `aider`) is on PATH. Claude Code and Codex count as found when their CLI is
+  on PATH, as before. The setup report's `agents_found` gives the reason for each agent
+  (`".kiro exists"`, ``"`gemini` is on PATH"``). For Copilot, the rule finds VS Code; whether the
+  Copilot extension is enabled is not checked. Agents with no location for the chosen scope are left
+  out.
+- **`--agents all` changed meaning.** It used to install Claude Code and Codex whether or not they were
+  present. Now it installs every supported agent that is found. `auto` (the default) is unchanged:
+  Claude Code and Codex on PATH. Agents named explicitly (`--agents cursor,kiro`) are installed without
+  the found check.
+- **Server command.** The new agents get the same command as Codex: `mcp serve --repo <project>` at
+  project scope, and `mcp serve` at user scope.
+- **Scope coverage.** `install`/`setup` refuse user scope for Copilot and Continue (see Limits).
+  `setup` refuses before anything is written (no `.verinoda/`, no scan), as it does for an unknown name.
+  `status()` and `doctor` still report only Claude Code and Codex.
+- **Graph digest.** `selffiles.config_digest` now also leaves Verinoda's own entry out of a top-level
+  `servers` object (VS Code's shape). Adding the entry to `.vscode/mcp.json` therefore does not count as
+  a config change for the graph.
+
+### 113.3 Measured
+
+- `tests/test_more_agents.py`: 26 passed, 1 skipped. The skip is the PyYAML round trip, because
+  PyYAML is not installed here. The same scalars are also read back as JSON strings without it.
+- `tests/test_setup.py`, `tests/test_selffiles.py`, `tests/test_docs.py`, `tests/test_line_endings.py`:
+  48 passed, 1 failed. The failure is the known environment one
+  (`test_setup_next_steps_name_the_command_that_runs_this_build`: the launcher check on this machine).
+- `tests/test_agents.py`: 25 failed, 48 passed, the known environment failures. To check the refactored
+  JSON writer anyway, I ran it with a throw-away plugin that treats this venv's redirected
+  `sys.executable` as the launcher's interpreter. Result: 68 passed. The byte-for-byte `.mcp.json` and
+  Codex TOML tests were among them. Five failed. Two are the skill templates being 242/243 lines
+  against a limit of 240; the templates are not touched here. The other three are build-skew tests
+  that the plugin itself defeats.
+
+- **Review round.** Fixed: the marked block left in the corpus (a block-only shared file is now
+  Verinoda's own file; `agent-lint` skips the block), Aider's config owned whole (now a marked block),
+  the `read:` check that matched any bytes (now a `read:` entry), usage notes naming files that were not
+  written (`--no-mcp`, Cursor at user scope), the quadratic block search (20,000 begin lines with no end
+  now well under a second), setup refusing an agent's scope only after init and scan, and the
+  ARCHITECTURE row that said `status()` compares every server. After the round:
+  `tests/test_more_agents.py` 41 passed, 1 skipped; `tests/test_selffiles.py`, `tests/test_setup.py`,
+  `tests/test_agentlint.py`, `tests/test_docs.py`, `tests/test_line_endings.py` 66 passed, 1 failed (the
+  same known launcher failure); `tests/test_agents.py` 25 failed, 48 passed (the known ones, unchanged).
+
+### 113.4 Not done
+
+- **Unsure, so not written:**
+  - VS Code's user-level `mcp.json`: it lives in the profile folder, and the docs only say to open it
+    with a command.
+  - Continue's user-level server folder: not checked against the docs.
+  - Cursor's user rules: kept in its settings, not in a file.
+- **The global `~/.gemini/GEMINI.md` path was not confirmed.** The configuration page I read describes
+  upward discovery of `GEMINI.md` and `context.fileName`, but does not spell out this path. It comes from
+  Gemini CLI's memory docs as I remember them.
+- **Cursor `"type": "stdio"`.** The page summary called it required. The page's own Node example omits
+  it, so the field is written but its necessity is unconfirmed.
+- **Continue.** The `.continue/rules/` `alwaysApply: true` frontmatter follows the rules page. The YAML
+  server file follows the MCP page's example (no `type`).
+- **JSONC is refused.** A `.vscode/mcp.json` with comments (VS Code allows JSONC) is not valid JSON, so
+  install refuses to touch it (as for `.mcp.json`), and `--no-mcp` still writes the instructions.
+- **Where user-scope servers start is not verified.** At user scope the server finds its project from
+  the folder it starts in. Whether Cursor, Gemini CLI and Kiro start it in the workspace was not checked.
+- **Detection is a heuristic.** A `.vscode` folder or `code` on PATH does not prove that Copilot is in
+  use. A stale `~/.cursor` folder counts as found.
+- **Aider's absolute path.** The `read:` path is absolute, so moving the project means re-running setup.
+- **The block in a file the user also writes in stays indexed.** Search can return the block's own
+  example text from `GEMINI.md` or `.github/copilot-instructions.md` once the user's text is in the same
+  file; only `agent-lint` skips it.
+- **Aider's `read:` check reads lines, not YAML.** Flow or block lists under a top-level `read:` key are
+  read; anchors, multi-document files and other YAML forms are not.
+- **No status or doctor rows.** `doctor` and `status()` do not list the new agents.
+
+### 113.5 Tests
+
+`tests/test_more_agents.py`, which uses a temporary home and project, stubbed PATH and a fixed launcher,
+so it does not depend on this machine:
+
+- project install, idempotence and exact uninstall for each agent;
+- each agent's MCP entry shape;
+- rules frontmatter;
+- Continue YAML quoting;
+- shared JSON and Markdown files kept byte for byte (LF, CRLF, no final newline, empty file);
+- refusal to overwrite a foreign rules file;
+- an edited block kept on uninstall;
+- Aider with and without an existing config; keys the user adds to the config Verinoda created (re-install
+  unchanged, uninstall keeps them); an existing config counted as set up only by a `read:` entry, and the
+  manual step adding to an existing `read:` key;
+- a block-only shared file is an own file, one with the user's text is not, and `agent-lint` skips the
+  block's lines;
+- the block search on 20,000 begin lines with no end;
+- usage notes with `--no-mcp` and for Cursor at user scope;
+- `setup` refusing Copilot and Continue at user scope before writing anything;
+- user scope, and the refused user scopes;
+- the found rule, plus `setup --agents all` with some agents found and with none;
+- the own-file rule and the digest;
+- CLI choices matching `ALL_AGENTS`, and the rules text's statuses and examples.
+
+In `tests/test_setup.py`, the unknown-agent case now uses a name that is still unknown.
+
 ## Sources
 
 - **Retrieval:**

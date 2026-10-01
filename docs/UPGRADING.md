@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D139)
+## Upgrading from 0.4.0 (D137-D140)
 
 ### D137: Trigram regex index
 
@@ -51,6 +51,16 @@ guard is `unknown`, and MCP neither records nor accepts one. A script that raise
 check exit 3. `guards.check` has a new keyword `run_scripts` (default False); `decisions.record`, `add_guards`
 and `accept` have `allow_scripts` (default True). `.pre-commit-hooks.yaml` offers the `verinoda-decide-check`
 hook for the pre-commit framework (3.2.0 or later).
+
+### D140: Installers for more agents
+
+`verinoda install --agent` and `verinoda setup --agents` accept `cursor`, `gemini`, `copilot`, `kiro`,
+`continue` and `aider`. `setup --agents all` now means every supported agent found (its folder in the
+project or home folder, or its program on PATH); it no longer installs Claude Code and Codex when their
+CLI is missing. The report lists why each agent was found (`agents_found`). Install and uninstall keep the
+existing rules: files Verinoda did not write are never overwritten, and uninstall removes only what the
+manifest lists. A Claude Code `.mcp.json` manifest item now also records `created_dirs`, so the first
+install after upgrading rewrites the manifest once (no agent file changes).
 
 ## Upgrading from 0.3.2 (D60-D136)
 
