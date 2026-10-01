@@ -85,7 +85,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 8.5 | **Path-scoped review rules** | Rule files per directory (like BUGBOT.md), AGENTS.md and CLAUDE.md read as rules; off, warning and error modes | Cursor Bugbot, Greptile, CodeRabbit | a rule under `src/api/` applies only to changes there |
-| 8.7 | **SARIF in and out, CI check status** | Import linter and CodeQL SARIF as evidence; export `review` and `check` as SARIF | GitHub Copilot review, Code Pathfinder | GitHub code scanning shows Verinoda's findings |
 | 8.8 | **Pull request triage (opt-in)** | Open PRs with CI and review state, PR impact, a warning when two PRs touch the same code | Graphify MCP | needs authenticated GitHub access |
 
 ## 9 - Test map and coverage

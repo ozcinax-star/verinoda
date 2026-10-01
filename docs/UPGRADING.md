@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D115)
+## Upgrading from 0.3.2 (D60-D116)
 
 ### D63: Running a project's own tests safely
 
@@ -542,6 +542,13 @@ unchanged. The MCP tool count is unchanged.
 New: `verinoda context FILE` lists what the project says about a file (decision records whose guards name it,
 notes on it or on a matching glob, Cursor and Kiro rules); MCP `read_context` returns the same as a PostToolUse
 hook output, and the hooks template has a Read/Edit entry for it. The MCP server has one more tool: 40 tools.
+
+### D116: SARIF in and out, CI check status
+
+New: `verinoda sarif FILE...` reads a linter's or CodeQL's SARIF as evidence (the tool's statements, at most
+`strong_inference`), and `review`, `check` and `decide check` take `--sarif` to print their findings as a SARIF
+2.1.0 log for GitHub code scanning (`github/codeql-action/upload-sarif`); exit codes are unchanged. No MCP change:
+the tool count stays the same.
 
 ### D60-D62
 

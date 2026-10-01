@@ -9022,6 +9022,125 @@ absolute path, a path outside the project; the text cap; the MCP hook output and
 path with a space and non-ASCII. `tests/test_mcp.py`: the tool's parameters, the gateway's hidden tools and the
 hooks template's Read/Edit entry.
 
+## 89. SARIF in and out, CI check status (D116, 2026-10-01)
+
+### 89.1 Why
+
+GitHub code scanning, and most CI dashboards and editors, read SARIF. Verinoda's `review`, `check` and `decide
+check` findings were only text or Verinoda's own JSON, so they could not show up next to CodeQL's or a linter's
+results on a pull request; and a linter's or CodeQL's SARIF could not be read as evidence alongside Verinoda's own
+claims. Copilot review and Code Pathfinder both speak SARIF.
+
+### 89.2 Decisions
+
+- New module `verinoda/sarif.py`; no new MCP tool and no new MCP argument (the core menu and the tool count are
+  unchanged, so UPGRADING's tool count does not change).
+- **Out**: `--sarif` on `review`, `check` and `decide check` prints one SARIF 2.1.0 log (one run) instead of the
+  text or `--json`; the exit code is the command's own, so a CI step fails or passes as before, and the log is
+  uploaded with `github/codeql-action/upload-sarif`. `automationDetails.id` is `verinoda/<command>/` so the three
+  uploads stay separate categories in code scanning.
+  - Rule ids: `review/<concern>/<rule>` (plus `review/tests/uncovered-changed-lines`), `decide/<decision>/<guard>`,
+    `check/<verdict>/<site kind>`; `ruleIndex` set on every result.
+  - Location: the finding's `file:line`, `file:line-end` or `file:line:col` as a relative `uri` (percent-encoded)
+    under `%SRCROOT%`; a bare file path has no region. A finding cited at a symbol (`file::Name`) or at nothing is
+    not written and is counted in the run's `properties.not_exported`, never silently dropped.
+  - Level from the claim status: verified statuses `error`, `strong_inference` `warning`, `weak_inference` and
+    `unknown` `note`. A review finding is something to read, not a defect, so it is a `warning` at most. `check`
+    sites: `absent` is `statically_verified` (the closed-world rule plus the resolver) when the container is the
+    standard library or the project's own code, else `strong_inference` (an installed package, a stub, a
+    classpath or the environment's `sys.path`: what was installed or built here, which CI's may not match);
+    `not_installed` `strong_inference` (CI's environment may differ), `unknown` `unknown`; `guarded` and
+    `exists` are not written.
+  - `review`: an `introduced` finding is `baselineState: new`, a `preexisting` one `unchanged`; findings past the
+    review's per-concern cap are counted in `properties.not_listed`, the review's unknowns in
+    `properties.unknowns`.
+  - `properties` carry `status` and, when present, `evidence_at`, `basis`, `derived_by`, `delta`, `verdict`,
+    `since`, `rank`.
+  - `decide check`: with a base, a violation, possible violation or review is `baselineState: new` or
+    `unchanged` as its own `since` says (new/touched or pre-existing); a
+    violation the baseline lists or a waiver covers is written with an `external` suppression and its reason
+    (still there, not failing). Governed symbols to review are notes when they have a file location; triggers
+    have none and are counted as not exported.
+- **In**: `verinoda sarif FILE... [--path P] [--limit N] [--json]` reads SARIF 2.1 files the way
+  `coverage_import` reads coverage reports. Each result becomes a claim `<tool> reports <rule> (<level>): <message>`
+  at its first physical location, with `stated_by`, `rule`, `level`, the innermost definition around the line
+  (`coverage_import.facts_of`/`symbol_of`), and `evidence_at` = the location and the SARIF file. It is the named
+  tool's statement, not checked here: `strong_inference` while the SARIF file is newer than the file it names,
+  `weak_inference` when the file changed after it. Errors first, then warnings, notes.
+  - Paths: a relative uri, one under a `uriBaseId` from `originalUriBaseIds`, an `artifacts[index]` entry, a
+    `file://` uri under the repository or under one of the run's `originalUriBaseIds`; else, only for an absolute
+    path that exists nowhere on this machine and has no third-party folder in it (`site-packages`,
+    `node_modules`, `vendor`...), the longest suffix of the path that is a repository file (a CI runner's path).
+    A suffix tie is a guess: the claim is `weak_inference` and names the original uri. A relative uri that is
+    not a repository file, and a file that exists here outside the repository, are not in the repository. `..`
+    never leaves the repository. Each distinct location is resolved once per run.
+  - Rules: `ruleIndex` / `rule.index` in the driver, or in `tool.extensions[rule.toolComponent.index]` (CodeQL),
+    else by id; the level is the result's when it is one of the four SARIF levels, else the rule's
+    `defaultConfiguration.level`, else `warning`.
+  - Messages: `message.text`, else the rule's `messageStrings[id]` with `{0}`... arguments filled in one pass
+    (`{{` and `}}` are literal braces), else the rule's description; clipped to 300 characters.
+  - Counted, not listed: suppressed results (a suppression with no status or `accepted`; `rejected` and
+    `underReview` do not hide a result), `pass` / `notApplicable`, `baselineState: absent` (fixed), results
+    without a physical location, results outside the repository (the first 20 uris listed), outside `--path`,
+    and results that cannot be read (`unreadable`, with one example): a malformed result does not stop its run.
+  - A file that is not SARIF 2.1, not JSON, missing or over 100 MB is an error entry, never a crash; exit 4 when
+    no file was read.
+
+### 89.3 Measured
+
+- The review fixture (one changed function that gained a `subprocess.run`): `review --sarif` exits like
+  `review --json`, every concern finding is either a result at `cart.py` or counted in `not_exported`, all levels
+  `warning` or `note`.
+- The logs pass a SARIF 2.1.0 schema subset written in the test (types, required keys, level, suppression kind
+  and baseline state enums, region minimums, rule ids unique and `ruleIndex` consistent, relative posix uris).
+- An exported log read back with `verinoda sarif` gives Verinoda's own findings as `stated_by: Verinoda` claims.
+- A real `check --sarif` on `os.pathh` gives `source: stdlib`, `statically_verified`, `error`.
+
+Review round: CodeQL's rules in `tool.extensions` are now found through `rule.toolComponent`, so their default
+level and `messageStrings` apply (before, every such result was a `warning`). The suffix tie is limited to
+absolute paths that exist nowhere here and lie under no third-party folder, and is `weak_inference` (before, a
+relative uri or a sibling project's file could be tied to a repository file by its bare name, as
+`strong_inference`). `decide check` takes `baselineState` from each finding's `since` (a pre-existing possible
+violation was `new`); `review` sets it from `delta` and counts findings past its per-concern cap and its
+unknowns. An `absent` check site is verified only against the standard library or the project's own code.
+Rejected and under-review suppressions no longer hide a result. A non-string level, a boolean `startLine` and a
+malformed result no longer crash or cut the run short (one malformed result among three: two claims and
+`unreadable: 1`, where the rest of the run used to be lost). Message arguments are filled in one pass. Each
+location is resolved and stat'ed once per run (50 results on one file: one lookup).
+
+### 89.4 Not done
+
+- Not uploaded or validated against GitHub here (no network): the shape follows the SARIF 2.1.0 schema and the
+  fields GitHub documents; a file-level location (no line) is valid SARIF but code scanning shows it at the file.
+- No `partialFingerprints`: `upload-sarif` computes them from the file contents.
+- Import reads the first physical location of a result; related locations, code flows and logical locations are
+  not read; `review` does not yet take imported SARIF results on its changed lines (a next step: a `--sarif-in`
+  like `--coverage`).
+- Levels follow how sure a statement is, not how severe it is; no `security-severity` is set.
+- A path from another machine that matches two repository files by suffix takes the longest suffix that exists;
+  with equal suffixes the first one found wins. The suffix can be the bare file name (a file at the repository
+  root), which is why such a claim is `weak_inference`.
+- The test of a real `review --sarif` checks that at least one result is written and that the log passes the
+  schema subset; it is not checked against GitHub's own SARIF validator (no network).
+
+### 89.5 Tests
+
+`tests/test_sarif.py`: a schema subset validator (and that it rejects a broken log); review findings at their
+lines, a warning at most, a symbol-cited finding counted in `not_exported`; `decide check` violations as errors,
+possible ones as notes, `baselineState`, baselined and waived ones suppressed; `check` verdicts to levels with
+columns, guarded sites left out; a path with spaces and non-ASCII as a valid uri; `check --sarif` through the CLI
+with its exit code; ruff-like and CodeQL-like SARIF read as claims (rule by index, `messageStrings`, artifacts,
+`originalUriBaseIds`, suppressed, pass, absent, no location, outside the repository); a file changed after the
+SARIF is weak; an absolute CI path tied by suffix and `--path`; an exported log read back; broken files as errors;
+`verinoda sarif` CLI (`--json`, text, exit 4); a real `review --sarif` in a git worktree with at least one
+result. Review round: the review cap and unknowns counted and `delta` as `baselineState`; a pre-existing possible
+violation `unchanged`; an installed-package `absent` site `strong_inference`; CodeQL extension rules (level and
+message); suffix ties limited (a file here, a `site-packages` path, a relative uri: not tied; a CI path: weak);
+rejected and under-review suppressions; an invalid level, a boolean line and a malformed result in one run;
+one-pass message arguments with escapes; one path lookup per location. Also run:
+`tests/test_cli.py`, `tests/test_docs.py`, `tests/test_line_endings.py`, `tests/test_decide.py`,
+`tests/test_codecheck.py`.
+
 ## Sources
 
 - **Retrieval:**
