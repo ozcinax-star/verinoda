@@ -472,7 +472,7 @@ MCP tool count is unchanged.
 ### D105: Ask before writing a dependency
 
 - New: `verinoda decide ask SOURCE TARGET` and the MCP tool `dependency_ask` (core, behind `run_tool` in a
-  project with decision records; listed in the full profile). The MCP server now has 39 tools.
+  project with decision records; listed in the full profile). The MCP server now has a 39th tool.
 - The core instructions of a project with decision records now name `dependency_ask`.
 
 ### D106: What-if refactoring

@@ -113,6 +113,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "debug_status",
     "debug_strategy",
     "grep_context",
+    "read_context",
     "change_probe",
 )
 
@@ -879,6 +880,21 @@ class AtlasTools:
             if (a, b) not in spans:
                 spans.append((a, b))
             self._session_seen[rel] = (stamp, spans)
+
+    def read_context(self, file_path: str) -> dict:
+        """What the project says about one file (decision records, notes, glob-scoped rules: :mod:`verinoda.scoped`)
+        as a Claude Code PostToolUse hook output; ``{}`` when nothing does, or anything is wrong (a Read is never
+        held up)."""
+        from verinoda import scoped
+
+        # no server lock: it reads files only (its own cache has its own lock), so a Read never waits for an analyze
+        try:
+            text = scoped.text(scoped.for_file(self.repo, str(file_path or ""))) if file_path else ""
+        except Exception:  # noqa: BLE001 - a hook never breaks the agent's Read
+            return {}
+        if not text:
+            return {}
+        return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
 
     def grep_context(self, pattern: str, path: str | None = None) -> dict:
         """What the static graph says about the symbols a Grep searched for, as a Claude Code PostToolUse hook
@@ -2000,9 +2016,9 @@ GATEWAY_CATALOG: dict[str, str] = {
                   "their evidence re-checked",
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {since_last?} after: "
                      "what it touches",
-    "decision_check": "decision_check {changed_only?: true}: tree vs accepted decisions",
+    "decision_check": "decision_check {changed_only?}: tree vs accepted decisions",
     "dependency_ask": "dependency_ask {source, target}: may source import it",
-    "history_search": "history_search {text, regex?, path?}: when text appeared/disappeared; {symbol}: its "
+    "history_search": "history_search {text, regex?, path?}: when text came/went; {symbol}: its "
                       "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: "
                       "compare",
 }
@@ -2040,6 +2056,7 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - debug_start before the first edit of a bug fix, debug_attempt after every edit; on stop=true stop editing, run
   strategies[0] with debug_strategy and show debug_status. Never say "fixed": the repro passed at tree T in run R.
 - grep_context: what the Grep hook adds (definition, callers, callees of a searched symbol).
+- read_context: what the Read/Edit hook adds (decision records, notes and rules about the file).
 - change_probe: after editing a Python function, its base and working-tree versions on generated inputs. A
   difference is a behaviour change, not a bug; say "no difference found in N inputs", never "verified"; a refusal,
   inconclusive or incomplete is not a pass."""
@@ -2094,7 +2111,8 @@ def served_tools(repo: Path, profile: str) -> tuple[str, ...]:
     if profile == "core" and not _has_decision_records(Path(repo)):
         names = tuple(n for n in names if n not in ("decision_check", "dependency_ask"))
     if profile == "core":
-        names = (*names, "grep_context")  # the Grep hook's call (D62), reached through run_tool, never listed
+        # the Grep hook's call (D62) and the Read/Edit hook's: reached through run_tool, never listed
+        names = (*names, "grep_context", "read_context")
     return names
 
 
@@ -2238,6 +2256,10 @@ DESCRIPTIONS: dict[str, str] = {
     "grep_context": (
         "The Grep hook's call (install --hooks): what the static call graph says about the symbols a Grep pattern "
         "names - definition, callers, callees - as a PostToolUse hook output; {} when it knows none."),
+    "read_context": (
+        "The Read/Edit hook's call: what the project says about one file - decision records whose guards name it, "
+        "the user's notes on it or on a glob matching it, Cursor/Kiro rules for it - as a PostToolUse hook "
+        "output; {} when nothing does."),
     "index_update": (
         "Re-index after editing files (on a folder never scanned: the first scan); claims whose files changed "
         "become stale. mode: noop | incremental | full | first_scan."),
@@ -2310,7 +2332,7 @@ DESCRIPTIONS: dict[str, str] = {
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
               "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask"}
+              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -2979,6 +3001,12 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     ) -> dict[str, Any]:
         return emit(t.grep_context(pattern, path))
 
+    @register("read_context")
+    def read_context(
+        file_path: Annotated[str, Field(description="The file the agent read or edited.")],
+    ) -> dict[str, Any]:
+        return emit(t.read_context(file_path))
+
     if slim:
         # the core menu's analyze and code_check: the arguments a question or an edit needs (the full profile, and
         # the CLI, keep the rest: plans, test runs, tracing, budgets, environments)
@@ -3002,7 +3030,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
         add("analyze", analyze_core, DESCRIPTIONS["analyze"])
         add("code_check", code_check_core, DESCRIPTIONS["code_check"])
-    behind = [n for n in (*CORE_TOOLS, "grep_context") if n in impl and n not in listed] if GATEWAY in listed else []
+    behind = [n for n in (*CORE_TOOLS, "grep_context", "read_context") if n in impl and n not in listed] \
+        if GATEWAY in listed else []
     if behind:
         import inspect
 
