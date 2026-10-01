@@ -644,8 +644,7 @@ the compact `affected_tests` key. No MCP tool added; the tool count is unchanged
 `--template`, `--emit-test` writes a property test file (never over an existing one) instead of printing pinning
 tests, and the result has a `property_test` entry (`status`, `observed`, `evaluated`, `counterexamples`,
 `claim_status`, `path`, `written`, and `hash_order_dropped` when inputs were left out). The probe plugin's spec
-accepts `property_refs`; `experiments.run` accepts `PYTHONHASHSEED` in `env_extra`. No MCP tool or argument changes; the tool count in
-UPGRADING stays as it is.
+accepts `property_refs`; `experiments.run` accepts `PYTHONHASHSEED` in `env_extra`. No MCP tool or argument changes.
 
 ### D60-D62
 
