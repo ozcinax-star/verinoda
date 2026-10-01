@@ -894,6 +894,9 @@ def test_analyze_takes_a_host_intent_in_the_full_profile_only(repo, tools):
     assert res["intent_check"]["read_as"] == ["callers"] and res["subquestions"][0]["intent"] == "callers"
     bad = tools.analyze("Who calls place_order?", intent="callers_of")
     assert bad["error"] == "invalid_argument" and bad["valid"] == list(INTENTS)
+    for blank in ("", "   "):  # a blank intent is refused, not read as no intent
+        got = tools.analyze("Who calls place_order?", intent=blank)
+        assert got["error"] == "invalid_argument" and "blank" in got["message"] and got["valid"] == list(INTENTS)
     with_plan = tools.analyze(plan_json=json.dumps(tools.question_plan_draft("Who calls place_order?")["plan"]),
                               intent="callers")
     assert with_plan["error"] == "invalid_argument" and "plan" in with_plan["message"]

@@ -1,8 +1,11 @@
+"""The tables of docs/drafts/13.8.md from a run's result: python summarize.py [RESULT.json] (default: the
+result.json next to this script)."""
 import json
 import sys
 from collections import Counter
+from pathlib import Path
 
-d = json.load(open(sys.argv[1], encoding="utf-8"))
+d = json.load(open(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).with_name("result.json"), encoding="utf-8"))
 CONDS = ("none", "right", "wrong")
 
 if "audit" in d:

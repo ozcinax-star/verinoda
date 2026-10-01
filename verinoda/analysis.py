@@ -3176,14 +3176,18 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
             if with_intent is not None:
                 res_ = qp.check(with_intent, g, repo, lex, source="host")
                 # only a sub-question the host's intent retyped counts: one the rules left at their default
-                # differs from their own reading already
-                differs = [d for d in res_["intent_divergence"] if d["sub_question"] in intent_check.get("retyped", [])]
+                # differs from their own reading already. host_intent weighs the intent against the same rule
+                # reading, so this is a guard should the two ever read the message differently.
+                retyped = intent_check.get("retyped", [])
+                differs = [d for d in res_["intent_divergence"] if d["sub_question"] in retyped]
                 if res_["status"] == "invalid" or differs:
-                    intent_check.update(applied=False, sub_questions=[], agrees=not differs,
-                                        why="the plan with this intent fails its own checks: "
-                                            + "; ".join(p.get("msg", "") for p in res_["errors"][:2])
-                                        if res_["status"] == "invalid" else "the plan check found the intent "
-                                        "differs from the rule reading")
+                    errs = "; ".join(p.get("msg", "") for p in res_["errors"][:2])
+                    # an intent that only reordered the plan changed no sub-question: what fails is the rules'
+                    # own draft, which then goes the usual way (answered without it)
+                    why = ("the plan check found the intent differs from the rule reading" if differs
+                           else f"the plan with this intent fails its own checks: {errs}" if retyped
+                           else f"the plan drafted by the rules fails its own checks: {errs}")
+                    intent_check.update(applied=False, sub_questions=[], agrees=not differs, why=why)
                     intent_check.pop("retyped", None)
                 else:
                     the_plan, check_res = with_intent, res_

@@ -2655,29 +2655,42 @@ def host_intent(plan: dict, intent: str, lexicon=None) -> tuple[dict | None, dic
 
     The host's intent is a hint, never an override. It is weighed against the rule reading of the message
     (:func:`intents_for`): when the rules read intents and the host's is not among them, the two disagree, the
-    rule reading is kept (``None``) and ``intent_check`` holds both. A question asking for a choice in so many
-    words is the user's (:func:`asks_for_choice`): ``decide`` is the only intent that agrees with it, and
-    ``decide`` agrees with no other question. When they agree, the sub-questions the intent names come first;
-    one carrying it only as a secondary intent (else, when none carries it, those the rules gave no intent, read
-    as ``locate`` by default) takes it as its intent, with that intent's ``done_when`` kind and minimum status.
-    The returned plan is a copy (``derived_by`` says what changed) that :func:`check` must still pass with
-    ``source="host"``; it never touches a claim's status, only which handlers a sub-question runs and the
-    verdict's yardstick."""
+    rule reading is kept (``None``) and ``intent_check`` holds both. A choice is the user's, and it is judged
+    per sub-question: one the rules read as ``decide``, or whose own text asks for a choice in so many words
+    (:func:`asks_for_choice`), is never retyped or moved from its place by another intent, and a question made only of such
+    sub-questions agrees with ``decide`` alone. ``decide`` agrees when the rules read it anywhere in the message
+    (a weak cue too) or a sub-question is a choice, and with no other question. When they agree, the
+    sub-questions the intent names come first; one carrying it only as a secondary intent (else, when none
+    carries it, those the rules gave no intent, read as ``locate`` by default) takes it as its intent, with that
+    intent's ``done_when`` kind and minimum status. The returned plan is a copy (``derived_by`` says what
+    changed) that :func:`check` must still pass with ``source="host"``; it never touches a claim's status, only
+    which handlers a sub-question runs and the verdict's yardstick."""
     msg = plan.get("user_message") or ""
     rules = intents_for(msg, lexicon)
     out = {"given": intent, "read_as": rules, "agrees": True, "applied": False, "sub_questions": []}
-    choice = asks_for_choice(msg)
-    if choice != (intent == "decide"):
-        out.update(agrees=False, why="the question asks for a choice: only 'decide' fits it" if choice else
-                   "'decide' is kept for a question that asks for a choice in so many words")
+    sqs = [dict(sq) for sq in plan.get("sub_questions") or []]
+    choice = {sq.get("id") for sq in sqs if sq.get("intent") == "decide" or asks_for_choice(sq.get("text") or "")}
+    if intent == "decide" and not choice and "decide" not in rules:
+        out.update(agrees=False, why="'decide' is kept for a question that asks for a choice; the rules read none")
+        return None, out
+    if intent != "decide" and sqs and len(choice) == len(sqs):
+        out.update(agrees=False, why="the question asks for a choice: only 'decide' fits it")
         return None, out
     if rules and intent not in rules:
         out.update(agrees=False, why=f"the rules read the question as {', '.join(rules)}; their reading is used")
         return None, out
-    sqs = [dict(sq) for sq in plan.get("sub_questions") or []]
-    primary = [sq for sq in sqs if sq.get("intent") == intent]
-    secondary = [sq for sq in sqs if intent in (sq.get("secondary_intents") or [])]
-    default = [sq for sq in sqs if str(sq.get("derived_by") or "").endswith(":default_locate")]
+    # another intent never retypes or moves a choice: such a sub-question is left out of what it may touch
+    pool = sqs if intent == "decide" else [sq for sq in sqs if sq.get("id") not in choice]
+    primary = [sq for sq in pool if sq.get("intent") == intent]
+    secondary = [sq for sq in pool if intent in (sq.get("secondary_intents") or [])]
+    default = [sq for sq in pool if str(sq.get("derived_by") or "").endswith(":default_locate")
+               and (intent != "decide" or sq.get("id") in choice)]
+    if not primary and not secondary and any(
+            sq.get("intent") == intent or intent in (sq.get("secondary_intents") or [])
+            for sq in sqs if sq.get("id") in choice and intent != "decide"):
+        # the rules read it only on a sub-question that asks for a choice, which this intent may not take
+        out.update(agrees=False, why="only a sub-question asking for a choice carries it: only 'decide' fits that")
+        return None, out
     touched = [] if primary else secondary or default
     for sq in touched:
         old = sq.get("intent")
@@ -2699,7 +2712,13 @@ def host_intent(plan: dict, intent: str, lexicon=None) -> tuple[dict | None, dic
     if not ids:  # nothing carries it and nothing was left to the default: the plan stays the rules' own
         out["why"] = "no sub-question carries this intent or was read by default; the rule reading is used"
         return None, out
-    sqs.sort(key=lambda sq: sq["id"] not in ids)  # stable: the order among the rest is kept, check's topo keeps deps
+    # stable: the order among the rest is kept, check's topo keeps deps; a choice another intent may not move
+    # stays in its slot and only the other sub-questions are reordered around it
+    fixed = choice if intent != "decide" else set()
+    slots = [i for i, sq in enumerate(sqs) if sq.get("id") not in fixed]
+    moved = sorted((sqs[i] for i in slots), key=lambda sq: sq["id"] not in ids)
+    for i, sq in zip(slots, moved):
+        sqs[i] = sq
     out.update(applied=True, sub_questions=sorted(ids, key=[sq["id"] for sq in sqs].index))
     if touched:  # the sub-questions whose intent the host's replaced (the others already had it)
         out["retyped"] = [sq["id"] for sq in touched]

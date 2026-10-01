@@ -1330,6 +1330,9 @@ class AtlasTools:
                 raise ToolFailure("invalid_argument", "question must be a non-empty string (or pass plan_json)",
                                   "pass the user's question, or a checked plan as plan_json")
             want = _opt_text(intent)
+            if intent is not None and want is None:  # a blank intent is a mistake, not "no intent"
+                raise ToolFailure("invalid_argument", "intent must not be blank",
+                                  "choose one of: " + ", ".join(INTENTS) + ", or leave it out", valid=list(INTENTS))
             if want is not None and want not in INTENTS:
                 raise ToolFailure("invalid_argument", f"unknown intent {want!r}",
                                   "choose one of: " + ", ".join(INTENTS) + ", or leave it out", valid=list(INTENTS))

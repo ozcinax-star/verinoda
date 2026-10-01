@@ -86,6 +86,51 @@ def test_a_choice_stays_the_users():
     assert got is not None and ic["agrees"]
 
 
+@pytest.mark.parametrize("question", ["Pros and cons of using asyncio here", "Redis'in avantajları neler?"])
+def test_decide_agrees_where_the_rules_read_a_weak_decide_cue(question):
+    # the rules read decide here though the message does not ask for a choice in so many words: a host that
+    # reads decide too agrees with them, and every other intent is the one that disagrees
+    assert not qp.asks_for_choice(question) and qp.intents_for(question) == ["decide"]
+    plan = qp.draft(question, None)
+    assert [s["intent"] for s in plan["sub_questions"]] == ["decide"]
+    got, ic = qp.host_intent(plan, "decide")
+    assert ic["agrees"] is True and ic["applied"] is True and ic["sub_questions"] == ["q1"] and "retyped" not in ic
+    assert got["sub_questions"] == plan["sub_questions"]
+    got, ic = qp.host_intent(plan, "callers")
+    assert got is None and ic["agrees"] is False
+
+
+@pytest.mark.parametrize("question", ["Should we switch to Postgres? Who calls place_order?",
+                                      "Who calls place_order? Should we switch to Postgres?"])
+def test_a_choice_is_judged_per_sub_question_whatever_the_clause_order(question):
+    plan = qp.draft(question, None)
+    by_id = {s["id"]: s["intent"] for s in plan["sub_questions"]}
+    assert sorted(by_id.values()) == ["callers", "decide"]
+    choice_id = next(i for i, x in by_id.items() if x == "decide")
+    order = [s["id"] for s in plan["sub_questions"]]
+    # decide agrees with the clause that asks for the choice, in either order, and that clause comes first
+    got, ic = qp.host_intent(plan, "decide")
+    assert ic["agrees"] and ic["applied"] and ic["sub_questions"] == [choice_id] and "retyped" not in ic
+    assert got["sub_questions"][0]["id"] == choice_id
+    # callers applies to the clause that carries it; the choice is neither retyped nor moved from its place
+    got, ic = qp.host_intent(plan, "callers")
+    assert ic["agrees"] and ic["applied"] and ic["sub_questions"] != [choice_id] and "retyped" not in ic
+    assert [s["id"] for s in got["sub_questions"]] == order
+    assert {s["id"]: s["intent"] for s in got["sub_questions"]} == by_id
+
+
+def test_an_intent_the_rules_read_only_on_a_choice_does_not_take_it():
+    # q1 asks for a choice and carries behaviour as a secondary intent; q2 is locate
+    plan = qp.draft("Should we switch to Postgres? Where is compute_total?", None)
+    assert [(s["intent"], s.get("secondary_intents")) for s in plan["sub_questions"]] == \
+        [("decide", ["behaviour"]), ("locate", None)]
+    got, ic = qp.host_intent(plan, "behaviour")
+    assert got is None and ic["agrees"] is False and "choice" in ic["why"]
+    got, ic = qp.host_intent(plan, "locate")
+    assert ic["agrees"] and ic["sub_questions"] == ["q2"]
+    assert [(s["id"], s["intent"]) for s in got["sub_questions"]] == [("q1", "decide"), ("q2", "locate")]
+
+
 # -- analyze on a scanned copy of examples/orders_app ------------------------------------------------
 
 def _git(cwd: Path, *args: str) -> None:
@@ -180,6 +225,49 @@ def test_a_sub_question_left_at_the_default_does_not_make_the_rules_plan_disagre
     # q2's "it" is q1's subject: the sub-question it depends on still runs first
     assert plan["sub_questions"][1].get("subject_from") == "q1"
     assert [s["id"] for s in res["subquestions"]] == ["q1", "q2"]
+
+
+def test_decide_on_a_weak_decide_question_is_used_by_analyze(copies):
+    _a, b = copies
+    res = _run(b, "Pros and cons of using sqlite in place_order", "decide")
+    assert res["intent_check"]["read_as"] == ["decide"]
+    assert res["intent_check"]["agrees"] is True and res["intent_check"]["applied"] is True
+    assert res["subquestions"][0]["intent"] == "decide"
+    text = analysis_view.render_text(res)
+    assert "host intent decide: used for q1" in text and "not used" not in text
+
+
+@pytest.mark.parametrize("question,intent,used", [
+    ("Should we switch to Postgres? Who calls place_order?", "callers", "q2"),
+    ("Who calls place_order? Should we switch to Postgres?", "decide", "q2"),
+    ("Who calls place_order? Should we switch to Postgres?", "callers", "q1")])
+def test_analyze_applies_an_intent_to_its_clause_beside_a_choice(copies, question, intent, used):
+    _a, b = copies
+    res = _run(b, question, intent)
+    ic = res["intent_check"]
+    assert ic["agrees"] is True and ic["applied"] is True and ic["sub_questions"] == [used]
+    assert "retyped" not in ic
+    assert sorted(s["intent"] for s in res["subquestions"]) == ["callers", "decide"]
+
+
+def test_a_failing_plan_that_the_intent_only_reordered_is_blamed_on_the_draft(copies, monkeypatch):
+    # the host's plan only reorders the rules' one: when it fails its checks, the why names the draft
+    real = qp.check
+
+    def failing_host(plan, *args, **kwargs):
+        res = real(plan, *args, **kwargs)
+        if kwargs.get("source") == "host":
+            res = {**res, "status": "invalid", "errors": [qp._problem("/", "schema", "made to fail")]}
+        return res
+
+    monkeypatch.setattr(qp, "check", failing_host)
+    _a, b = copies
+    res = _run(b, CALLERS, "callers")
+    ic = res["intent_check"]
+    assert ic["applied"] is False and ic["agrees"] is True
+    assert ic["why"] == "the plan drafted by the rules fails its own checks: made to fail"
+    res = _run(b, WRITTEN, "dataflow")  # this one retypes q1: the why names the intent
+    assert res["intent_check"]["why"] == "the plan with this intent fails its own checks: made to fail"
 
 
 def test_an_intent_is_for_a_question_not_a_plan(copies):
