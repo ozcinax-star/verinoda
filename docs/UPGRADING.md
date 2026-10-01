@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D146)
+## Upgrading from 0.4.0 (D137-D147)
 
 ### D137: Trigram regex index
 
@@ -111,6 +111,18 @@ before are unchanged, and `--mode any` can report `reachability: "cross_service"
 recomputed on the first load, nothing to migrate. The graph gains edges with three new relations; tools that
 list every relation (`export`, the UI) show them, and `map --view dead` counts a handler reached through one as
 reached. `analyze` flow claims still state calls only: they do not cross these edges.
+
+### D147: Runtime flaws from traces
+
+- `verinoda observe` also records SQL statements (sqlite3, and other drivers through SQLAlchemy) and samples the
+  stack, and reports `runtime_flaws`: N+1 queries with the call path from the test to the statement and the loop,
+  repeated identical SQL and slow paths, each `observed` for that run with its `file:line`, the "this is an N+1"
+  reading `strong_inference` at most. Thresholds: `--n-plus-one N` (5), `--repeated N` (3), `--slow-ms MS` (100),
+  `--slow-share F` (0.2); `--no-flaws` leaves the recording out. It adds a second plugin to the run
+  (`verinoda_flaws`) and its file `artifacts/flaws.jsonl`; on the measured runs it cost 2-8% of the observe
+  time. With it on, sqlite3 connections and cursors in the tests are subclasses of the ones asked for (exact-type
+  checks on them fail; `isinstance` holds). The MCP tools and their output are unchanged; `trace.observe` records
+  flaws only with `flaws=True`.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

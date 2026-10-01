@@ -12158,6 +12158,221 @@ taken for a query string (with the note), a segment of text and a value matching
 and a Java nested class with their own prefixes; four inputs that took minutes, each under one second; bracket
 pairing past strings, templates and regular expressions; a damaged sidecar block.
 
+## 120. Runtime flaws from traces (D147, 2026-10-01)
+
+### 120.1 Why
+
+`verinoda observe` recorded which call site started which function while the tests ran, and nothing about what
+the calls cost. An N+1 query (one `SELECT` per item of a loop), the same rows read again and again, and the
+function a test spends its time in are visible only at runtime, and the test suite already drives that code.
+AppMap and Digma find them in recorded runs. This change records the SQL statements and a sampled stack during
+the same isolated observe run and reports them: `verinoda observe` now lists an N+1 with its call path from the
+test to the statement and the loop it runs in.
+
+### 120.2 Decisions
+
+- **A second plugin beside the call tracer.** `verinoda/runtime/flaws_plugin.py` is standalone like
+  `calltrace_plugin.py` (standard library and pytest only), copied next to the throw-away copy as
+  `verinoda_flaws.py` and loaded with `-p verinoda_flaws` after `-p verinoda_calltrace`. It writes
+  `artifacts/flaws.jsonl` (schema `verinoda.flaws/1`); nothing leaves the machine. It runs only when
+  `trace.observe(..., flaws=True)`: the CLI `observe` turns it on (off with `--no-flaws`); MCP `runtime_observe`,
+  `analyze --observe`, `review --observe`, the debug ledger and the test map keep the old run, so their cost and
+  the MCP surface do not change.
+- **SQL by wrapping the driver, not by tracing C calls.** `sqlite3.connect` and `sqlite3.dbapi2.connect` are
+  replaced at plugin load by a function that passes a `factory`: the recorder's `sqlite3.Connection` subclass
+  when none is given, or, for a user's own factory, a class with the user's class first and the recorder after it
+  (`type(name, (MyConn, recorder), {})`, same name and module), so the user's overrides run first with their own
+  signatures and reach the timing through `super()`. The recorder's `cursor()` hands out a cursor class built the
+  same way (`sqlite3.Cursor` subclass, or the user's cursor class first). A connection's `execute`,
+  `executemany` and `executescript` make a new cursor as sqlite3's own do (since Python 3.11 in C, never through
+  an overridden `cursor()`; 3.10 called `self.cursor()`, and the recorder does the same there), run the statement
+  on it once and return it, so a statement is counted once and a cursor returned by `Connection.execute` keeps
+  recording. A `factory` that is not a sqlite3 class (or `None`) is passed through unchanged, so sqlite3 accepts
+  or refuses it as it would; warnings raised by `sqlite3.connect` are re-emitted at the caller's line. A
+  `sys.setprofile` C-call hook would cost every C call of the run and would not see the time the call took. When
+  SQLAlchemy has been imported by the end of collection (or by a test's setup), its `before_cursor_execute` /
+  `after_cursor_execute` engine events record statements of other drivers; a statement on a sqlite3 cursor of
+  the recorder is left to the recorder.
+- **What is kept per statement.** The text normalised in one tokenising pass, leftmost token first, so a quote
+  inside a comment and a comment marker inside a string are each seen for what they are: string literals (also
+  `E'..'`, `X'..'`, `B'..'`, `N'..'`) become `?`, comments a space, double-quoted names a hash keyed with a salt
+  of the run (stable within the run only), and an opened string, quoted name or comment that never closes ends
+  the statement (`?` for the rest). Numbers and placeholders (`?`, `?1`, `:name`, `%s`, `%(name)s`, `$1`,
+  `@name`) are replaced only between those tokens; `IN (?, ?, ?)` -> `IN (?)`, repeated `VALUES` tuples -> one.
+  The raw text and the parameter values are never written: identical executions are told apart by a hash of text
+  and parameters (64 per key at most). A normalised statement over 2,000 characters is cut with a marker naming
+  its length and a hash of all of it, so two long statements with the same start stay apart. Per (test phase,
+  normalised statement, stack): executions, `executemany` / `executescript` calls, total and longest duration,
+  the repeated hashes, the thread flag; per (test phase, statement), the repeated hashes over all its stacks. The
+  stack is the project frames only (repository files outside `.venv`, `site-packages` and the like), innermost
+  first, 40 at most, each as code and instruction offset; the file holds each frame's line and, on Python 3.11+,
+  the column range of the call.
+- **Code objects by `id`.** The first version keyed frames by the code object; hashing a code object hashes its
+  constants and names on every lookup, and a recorded execute cost about 11 µs over the plain call. Keyed by
+  `id(code)` it costs about 5-6 µs. Project code objects are kept (the file names their frames at the end, and
+  their ids are never reused within the run); any other code object is held by a weak reference and its entry
+  dropped when it dies, so library and generated code is not kept alive.
+- **Slow paths by sampling, not by tracing returns.** A daemon thread reads the main thread's stack every 5 ms
+  (`time.sleep`, the high-resolution timer on Windows; `Event.wait` ticks at about 15.6 ms there) and weighs each
+  sample with the wall time since the previous one, at most a second. PY_RETURN events on every project function
+  would cost every call; the sampler costs about the same whatever the code does. Its effective interval is
+  reported (`effective_sample_ms`), longer than asked when the main thread holds the GIL.
+- **N+1.** One normalised read (`SELECT`, `WITH`) executed at least `--n-plus-one` times (default 5) in one test
+  phase from one stack, with at least two different parameter sets, where a project frame of that stack makes
+  the call inside a loop. The loop is read from the frame's file at the recorded position
+  (`flaws.enclosing_loop`): a `for` repeats its body (not its iterable or `else`), a `while` its test and body, a
+  comprehension its element, conditions and every `for` after the first (not the first iterable), and only
+  inside the frame's own function. The innermost such frame is the loop; the call path runs from the test to the
+  statement. Findings are grouped by (statement, call line in the loop) over the tests; `n_tests` counts tests,
+  not their phases or stacks.
+- **Repeated SQL.** The same text with the same parameters at least `--repeated` times (default 3) in one test
+  phase (reads and writes; transaction statements, DDL and `PRAGMA` are left out), summed over all the stacks of
+  that statement (three functions each running it once are three repeats), cited at the stack that ran it most,
+  with the number of call sites and up to five of them. A repetition of a statement that is also an N+1 carries
+  `also_n_plus_one`.
+- **Slow paths.** A project function that is not test code, whose sampled time in one test phase is at least
+  `--slow-ms` (default 100) and at least `--slow-share` (default 0.2) of that test phase: by self time (the
+  function innermost among the project frames, so the library calls it makes are its own) or by total time. A
+  function whose total time is at least 80% explained by a reported callee on its heaviest path is not reported
+  again. The cited line is the hottest line for self time, the call line on the heaviest path otherwise.
+- **What a finding claims.** Each finding is `status: observed`: run R, test T, statement or function, count,
+  call path, and a `cite` (`file:line` of the call inside the loop, of the repeated call, of the hottest line),
+  with experiment evidence anchored on that line (`meta.kind: runtime_flaw`, run id, test, "existential:
+  observed in this run at this commit; never evidence for 'always'"). The reading is separate: "an N+1 query" and
+  "the same rows were read again" are `interpretation.status: strong_inference` with a fix hint; an N+1 whose
+  loop is in test code, and a repeated write, are `weak_inference`. A slow path has no interpretation.
+- **Where it shows.** `observe(..., flaws=True)` returns a `runtime_flaws` block (findings with evidence) and keeps
+  it, without the evidence records, in the run's header (`runtime_runs.header.runtime_flaws`, with the file's
+  sha256); the run id is chosen before ingest so findings name it (`trace.ingest(run_id=...)`). `verinoda observe
+  --json` carries the block (10 findings per kind, 3 tests per finding); the text output prints each N+1 with its
+  loop, the call path and the inference, then repeated SQL (with its other call sites) and slow paths. The block
+  is `complete: false` when the recording hit a budget or the run stopped early or ran fewer tests than asked;
+  counts are then lower bounds. Exit codes are unchanged (findings are not an error).
+- **Boundary names unchanged.** The call tracer names a library callee by its module and qualified name; the
+  recorder's methods carry sqlite3's (`sqlite3.connect`, `sqlite3.Connection.execute`) and, for the `setprofile`
+  tracer, the plugin exports `VERINODA_EXT_NAMES` (code -> public name), which `calltrace_plugin._CodeName` reads.
+  Because a user's subclass stays first in the class built for it, the call tracer sees the same in-repo edges
+  (`via_subclass -> MyConn.execute`) with and without the flaws plugin.
+- **Budgets.** `VERINODA_FLAWS_MAX_KEYS` (50,000 statement keys) and `VERINODA_FLAWS_MAX_BYTES` (10 MB) make the
+  recording incomplete; the byte budget bounds the whole file: the header (reserved at its widest), the frame
+  table and the context names are counted, and a frame enters the table only with a record that was kept. Each
+  test phase's sampled time is written first, then statements by execution count, then the repeat records, then
+  samples heaviest first; `VERINODA_FLAWS_MAX_SAMPLE_KEYS` (50,000) and the byte budget drop the lightest sampled
+  stacks and say so (`samples_complete: false`). The trace deadline writes a partial file before the runner's
+  hard kill, as the call tracer does.
+- **Review round.** A review of the first version found eight defects, each fixed with a regression test in
+  `tests/test_runtime_flaws.py`: (1) the recorder class sat in front of a user's `Connection` / `Cursor`
+  subclass, so overrides with other signatures (`params=`, `cursor(self)`) raised `TypeError` and a user
+  `execute` that called `self.cursor().execute` recorded one statement twice - the recorder now sits after the
+  user's class; (2) for the same reason the in-repo edge `via_subclass -> MyConn.execute` disappeared with flaws
+  on - a test compares edges and boundary calls of the same test with and without flaws; (3) strings were
+  replaced before comments in two passes, so an apostrophe in a comment dropped SQL (two different statements
+  merged into a false N+1) and leaked a raw literal into the file - one tokenising pass, and a test that no
+  literal of eight tricky statements is ever written; (4) repeated SQL counted repeats per stack only, so three
+  functions running the same statement once each were missed - summed per (test phase, statement); (5)
+  `VERINODA_FLAWS_MAX_BYTES` left the header and frame table outside the budget (300 bytes asked, 963 written)
+  - counted; (6) a cursor returned by `Connection.execute` was a plain `sqlite3.Cursor` and its later
+  statements were lost - the connection's methods run on a recorder cursor and return it; (7) exact-type checks
+  (`type(conn) is sqlite3.Connection`) are false with the plugin on - kept, as a limit below; (8) deprecation
+  warnings from `sqlite3.connect` pointed at the plugin - re-emitted at the caller. Minor fixes from the same
+  review: `factory=None` / `cursor(None)` pass through unchanged, long statements keep a marker and a hash of the
+  full text, context times survive a budget cut, double-quoted literals and quoted numeric names are hashed
+  rather than kept, `n_tests` counts tests, and library code objects are held weakly.
+
+### 120.3 Measured
+
+Windows 11, Python 3.13.14, this machine, `observe` of the whole suite with `graph=False`, median of 5 runs each,
+after the review fixes; `cpu_s` / `wall_s` are the call tracer's own figures (from its load to the end of the
+session), `run` the experiment's duration (copy, process start and ingest included).
+
+| project | configuration | cpu_s | wall_s | run (s) |
+|---|---|---|---|---|
+| `examples/orders_app` (5 tests) | tracer off | 0.297 | 0.331 | 1.637 |
+| | tracer auto (sys.monitoring) | 0.344 | 0.375 | 1.742 |
+| | tracer auto + flaws | 0.422 | 0.447 | 1.773 |
+| SQL fixture (2 tests: 6,024 sqlite3 statements from an N+1 run 20 times; a 2,000,000-step loop) | tracer off | 0.859 | 0.887 | 2.184 |
+| | tracer auto | 0.891 | 0.920 | 2.234 |
+| | tracer auto + flaws | 1.062 | 1.096 | 2.415 |
+
+- The flaws plugin adds 23% CPU and 19% wall time to the traced part of the orders_app run (2% of the whole
+  observe), and 19% CPU and 19% wall time to the SQL fixture (8% of the whole observe). Before the review fixes
+  the same benchmark gave 9% / 19% (orders_app) and 18% / 24% (SQL fixture); orders_app's traced part is a third
+  of a second, so a few tens of milliseconds move its percentages.
+- Per statement, in-process (an in-memory `SELECT` by key through `Connection.execute`, 6,000 times; three runs,
+  each within 0.4 µs): 2.2 µs plain; 3.6-3.7 µs through the recorder with recording off; 8.4-8.7 µs recorded
+  from 2 project frames; 25.5-25.7 µs from 50 project frames (40 kept). Before the review fixes: 3.1, 7.1 and
+  23.9 µs; the difference is the cursor the connection's `execute` now makes in Python (`cursor()` and the
+  cursor's `execute`, two calls instead of one) so that it keeps recording.
+- Before the review fixes (not re-measured): on the SQL fixture the run reported the N+1 (`SELECT title FROM b
+  WHERE a_id = ?`, 6,000 executions from the `for` loop at `app/db.py:15`, call at line 16, path `test_titles ->
+  titles`), the outer `SELECT id, name FROM a` repeated 20 times, and both test functions' callees as slow paths
+  (`titles` about 700 ms, `busy` about 250 ms); the effective sample interval was 6.9 ms with the `setprofile`
+  tracer (5 ms asked); with `Event.wait` it had been about 15.6 ms.
+- `tests/test_runtime_flaws.py`: 50 tests in 26 s (9 real observe runs).
+- Not measured: a large real project's suite, a real SQLAlchemy install (none in this environment; a stand-in
+  package with the same event contract is tested), Python 3.10, Linux or macOS.
+
+### 120.4 Not done
+
+- Run-scoped: a finding says what these tests executed in this run, never that the code always does it; how many
+  queries an N+1 costs in production depends on the data, and the tests' data may be small.
+- Counted per test phase, not per call of the function that holds the loop: two separate calls of a function
+  that each run 3 queries from the same loop count as 6.
+- SQL is seen for sqlite3 connections made through `sqlite3.connect` after the plugin loaded (not
+  `sqlite3.Connection(...)` built directly, not a connection or cursor `factory` that is not a sqlite3 class)
+  and for other drivers only through SQLAlchemy engine events. psycopg, mysqlclient, an ORM's raw connection
+  used without SQLAlchemy, Django's ORM (it does not go through SQLAlchemy) and async drivers are not recorded.
+- With the plugin on, a connection and its cursors are instances of the recorder's subclasses: `isinstance`
+  checks hold, exact-type checks (`type(conn) is sqlite3.Connection`, `type(cur) is MyCursor`) do not, and a
+  user's subclass whose metaclass or layout cannot be combined with the recorder is passed through unrecorded.
+  A connection's `execute` makes its cursor in Python, so on Python 3.10 a `cursor()` override runs as it did
+  under sqlite3 there, and since 3.11 it does not, as under sqlite3.
+- A loop is found only in project frames and only as a Python loop: a loop in library code (an ORM's lazy
+  loading inside a template engine), `map()` / `sorted(key=...)` from C, recursion and callbacks are not loops;
+  such repeated reads are counted in a limit line, not reported. On Python 3.10 (no column positions) a
+  one-line comprehension whose first iterable makes the call is taken as a loop.
+- Statements on other threads are recorded with the main thread's test and the `thread` flag; their stacks hold
+  no test frame. Samples are taken of the main thread only. Child processes and `pytest-xdist` workers are not
+  recorded correctly (each worker would write the same file).
+- Slow-path times are sampled estimates (one sample is the time since the previous one); the self time of a
+  function includes the library and C calls it makes; time spent in collection or between tests is not
+  attributed.
+- `analyze --observe`, `review --observe`, MCP `runtime_observe` and the debug ledger do not record flaws; the
+  findings are not claims in the store (they are kept in the run's header).
+- The normalisation is textual: a statement built with different white space is the same statement only when the
+  normalised text matches; a double-quoted name is a hash, so `"t"` and `t` differ; a `-` before a number stays;
+  a statement whose string or comment never closes keeps only the text before it.
+
+### 120.5 Tests
+
+`tests/test_runtime_flaws.py` (50): a sqlite3 project observed once with the flaws plugin. The N+1 in a loop is
+found with its loop (`app/store.py:20`, `for`), its call line, the innermost statement site and the call path
+`test_n_plus_one (tests/test_app.py:8) -> titles_n_plus_one (app/store.py:21) -> books_of (app/store.py:15)`,
+`observed` with the run id, `strong_inference` with the fix and experiment evidence on the cited line; the
+JOIN version and the one outer query are clean; a loop in the test itself is `weak_inference`; a query repeated
+through a cursor with the same parameters is repeated SQL and not an N+1; the same statement run once by each of
+three functions is repeated SQL from three call sites; five statements that differ only after a line comment
+holding an apostrophe stay apart and no literal reaches the file or the header; a cursor returned by `Connection.execute` keeps
+recording; a user `Connection` subclass with its own `execute` records each statement once and the test's call
+edges and boundary calls are the same with and without flaws; a 0.4 s function is a slow path by self time at its
+hottest line, a quick one and test functions are not; a stand-in SQLAlchemy engine (under a `site-packages`
+folder) driving a non-sqlite3 cursor gives an N+1 in a comprehension; the block is kept in the run's header
+without evidence; thresholds move what is reported; without `flaws` nothing is recorded and the boundary names
+stay sqlite3's (also under `setprofile`, with the same N+1); a run cut short is `complete: false`; the CLI's
+`--json` block, the text output with the N+1's call path, `--no-flaws` and a bad threshold. Units on the plugin
+in-process: user subclasses with other signatures (`params=`, `cursor(self)`, `parameters=None`) run first; a
+cursor from `Connection.execute`, `executescript` and `executemany` record; a bad `factory` and `cursor(None)`
+behave as under sqlite3; `connect` warnings point at the caller; the byte budget bounds the whole file at three
+sizes with no frame of a dropped record; long statements keep a marker and their own hash; library code objects
+are not kept alive. Units: no literal written for eight statements (comments with quotes, unclosed strings and
+comments, double quotes, `E'..'`, `X'..'`), statement normalisation (twelve forms), double-quoted names hashed
+apart, the loop rules (body vs iterable, `else`, `while` test, comprehension element vs first iterable, a nested
+function), threshold checks, slow-path pruning (a callee that explains the time, a function with its own time,
+under the share), repeats summed over stacks with tests counted once, the file parser, the plugin standalone and
+inert when imported inside Verinoda. `tests/test_runtime_trace.py`, `tests/test_trace_import.py`,
+`tests/test_trace_log.py`, `tests/test_mcp.py`, `tests/test_docs.py` and the observe tests of `tests/test_cli.py`
+pass unchanged.
+
 ## Sources
 
 - **Retrieval:**
