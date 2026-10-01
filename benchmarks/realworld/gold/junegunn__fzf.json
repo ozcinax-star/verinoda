@@ -1,0 +1,72 @@
+{
+  "repo": "junegunn/fzf",
+  "tag": "v0.74.4",
+  "sha": "a140afeb4d733cad3c96a56bf6db7e26853b6757",
+  "written": "2026-10-01",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based.",
+  "facts": [
+    {
+      "id": "def-run",
+      "fact": "func Run (the program's main loop) is defined at src/core.go:55",
+      "source": "src/core.go:55",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"Run\" and f.file = \"src/core.go\" return f", "cites": ["src/core.go:55"]}
+    },
+    {
+      "id": "main-calls-run",
+      "fact": "main (main.go:57) calls fzf.Run at main.go:113",
+      "source": "main.go:113",
+      "check": {"kind": "trace", "source": "main.go", "target": "src/core.go", "via_files": ["src/core.go"]}
+    },
+    {
+      "id": "parse-calls-parse",
+      "fact": "ParseOptions (src/options.go:3905) calls parseOptions at src/options.go:3922 and 3934",
+      "source": "src/options.go:3922",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"ParseOptions\" and b.name = \"parseOptions\" return a, b", "cites": ["src/options.go:3922"]}
+    },
+    {
+      "id": "run-calls-postprocess",
+      "fact": "Run calls postProcessOptions at src/core.go:69 (defined src/options.go:3708)",
+      "source": "src/core.go:69, src/options.go:3708",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"Run\" and a.file = \"src/core.go\" and b.name = \"postProcessOptions\" return a, b", "cites": ["src/core.go:69"]}
+    },
+    {
+      "id": "run-calls-newmatcher",
+      "fact": "Run creates the matcher: NewMatcher at src/core.go:258 (defined src/matcher.go:59)",
+      "source": "src/core.go:258, src/matcher.go:59",
+      "check": {"kind": "trace", "source": "Run", "target": "NewMatcher", "via_files": ["src/matcher.go"]}
+    },
+    {
+      "id": "matcher-loop-scan",
+      "fact": "Matcher.Loop (src/matcher.go:81) calls m.scan at src/matcher.go:138 (scan defined src/matcher.go:157)",
+      "source": "src/matcher.go:138",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"Loop\" and a.file = \"src/matcher.go\" and b.name = \"scan\" return a, b", "cites": ["src/matcher.go:138"]}
+    },
+    {
+      "id": "def-fuzzymatchv2",
+      "fact": "FuzzyMatchV2 is defined at src/algo/algo.go:722",
+      "source": "src/algo/algo.go:722",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"FuzzyMatchV2\" return f", "cites": ["src/algo/algo.go:722"]}
+    },
+    {
+      "id": "pattern-matchitem",
+      "fact": "Pattern (struct at src/pattern.go:48) has the method MatchItem at src/pattern.go:388, which calls extendedMatch or basicMatch",
+      "source": "src/pattern.go:388",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"MatchItem\" and a.file = \"src/pattern.go\" and b.name = \"basicMatch\" return a, b", "cites": ["src/pattern.go:388"]}
+    },
+    {
+      "id": "query-fuzzy-algo",
+      "fact": "The fuzzy matching and scoring algorithm lives in src/algo/algo.go",
+      "source": "src/algo/algo.go:722, src/algo/algo.go:962",
+      "check": {"kind": "query", "question": "fuzzy matching algorithm score calculation", "top_k": 8, "expect_file": "src/algo/algo.go"}
+    },
+    {
+      "id": "query-options",
+      "fact": "Command-line options are parsed in src/options.go",
+      "source": "src/options.go:3905",
+      "check": {"kind": "query", "question": "where are the command line options parsed", "top_k": 8, "expect_file": "src/options.go"}
+    },
+    {"id": "main-calls-run@v2", "v": 2, "replaces": "main-calls-run", "added": "2026-10-01", "why": "v1 traced between two files (main.go -> src/core.go), which is not the fact (a function calls a function), and its via_files named the target file, which the call edge does not carry (the call is in main.go). v2 traces main.go::main to src/core.go::Run and requires the call edge at main.go:113.", "fact": "main (main.go:57) calls fzf.Run at main.go:113; Run is defined at src/core.go:55", "source": "main.go:57, main.go:113, src/core.go:55", "check": {"kind": "trace", "source": "main.go::main", "target": "src/core.go::Run", "source_at": "main.go:57", "target_at": "src/core.go:55", "via_at": ["main.go:113"]}},
+    {"id": "run-calls-newmatcher@v2", "v": 2, "replaces": "run-calls-newmatcher", "added": "2026-10-01", "why": "v1 hit only because via_files ['src/matcher.go'] was met by the resolved target; the single path edge is at src/core.go:258. v2 requires that edge and both ends at their definitions.", "fact": "Run (src/core.go:55) creates the matcher: NewMatcher at src/core.go:258 (defined src/matcher.go:59)", "source": "src/core.go:55, src/core.go:258, src/matcher.go:59", "check": {"kind": "trace", "source": "src/core.go::Run", "target": "NewMatcher", "source_at": "src/core.go:55", "target_at": "src/matcher.go:59", "via_at": ["src/core.go:258"]}},
+    {"id": "pattern-matchitem@v2", "v": 2, "replaces": "pattern-matchitem", "added": "2026-10-01", "why": "v1 cited src/pattern.go:388, MatchItem's own definition line, which any returned row names; the call to basicMatch is at src/pattern.go:395 (re-read at the pinned sha).", "fact": "Pattern.MatchItem (src/pattern.go:388) calls p.basicMatch at src/pattern.go:395 (basicMatch defined src/pattern.go:403)", "source": "src/pattern.go:395", "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"MatchItem\" and a.file = \"src/pattern.go\" and b.name = \"basicMatch\" return a, b", "cites": ["src/pattern.go:395"]}}
+  ]
+}
