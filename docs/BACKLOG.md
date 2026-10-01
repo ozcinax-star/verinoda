@@ -49,7 +49,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 3.2 | **Code query language** | A small declarative query language over the graph (nodes, edges, paths) that answers with evidence | CodeQL, Glean Angle, jQAssistant Cypher, NDepend CQLinq, Joern | a query such as "functions that write storage and are reachable from an HTTP handler" returns its sites |
-| 3.3 | **Derived facts** | A verified claim or query result stored as a fact other queries use, recomputed when its evidence goes stale | Glean derived predicates, jQAssistant concepts | a derived fact goes stale with the code it rests on |
 
 ## 4 - Git history mining
 

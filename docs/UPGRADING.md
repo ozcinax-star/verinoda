@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D147)
+## Upgrading from 0.4.0 (D137-D148)
 
 ### D137: Trigram regex index
 
@@ -123,6 +123,17 @@ reached. `analyze` flow claims still state calls only: they do not cross these e
   time. With it on, sqlite3 connections and cursors in the tests are subclasses of the ones asked for (exact-type
   checks on them fail; `isinstance` holds). The MCP tools and their output are unchanged; `trace.observe` records
   flaws only with `flaws=True`.
+
+### D148: Derived facts
+
+Schema v10 (after v9, the test-to-code map): `atlas.db` gains `facts` and the append-only `fact_history`
+(migrated on first open; an older Verinoda then refuses the database as written by a newer one, so copy
+`.verinoda/atlas.db` first if you may go back). New command `verinoda fact add|list|show|refresh|retire`. `scan`
+and `update` results gain a `facts` key (and a `facts:` line) only in a project that has facts; `update` then
+re-runs stale search facts within 20 facts and 10 s (an `update --fast` that defers the graph only lowers
+them), which `facts.refresh_on_update: false` in `.verinoda/config.json` turns off. `query --json`, MCP
+`project_query` and `analyze` gain a `facts` list when the question names a fact (a `facts_error` when they
+could not be read). No MCP tool added; the tool count is unchanged.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
