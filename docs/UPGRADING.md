@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D135)
+## Upgrading from 0.3.2 (D60-D136)
 
 ### D63: Running a project's own tests safely
 
@@ -675,6 +675,15 @@ file: each frame is mapped onto the repository or reported as stale, ambiguous o
 mapped frame is recorded as a claim scoped to its event. A file named `.json` / `.jsonl` / `.ndjson` is read as
 JSON and refused if it does not parse; any other file is read as an export only when it parses and holds an event
 or span, and as a log otherwise, as before.
+
+### D136: Specs traced to code and tests
+
+New command `verinoda spec check [--specs-dir DIR] [--json]`: requirement criteria (`- [ID] WHEN ... THE
+SYSTEM SHALL ...`) in Markdown files under `.verinoda/specs/` (or `[specs] dir` in `verinoda.toml`) with
+`evidence:` lines naming claim ids, test ids, `path::Name` or `path:lines`; each criterion is verified,
+tested, tested_inferred, broken, unchecked or unevidenced. Exit 1 while one is broken or unevidenced, 3 when
+something was not checked, 2 when the folder setting cannot be read. Nothing changes for projects without
+specs.
 
 ### D60-D62
 
