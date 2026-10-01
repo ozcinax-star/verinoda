@@ -1055,6 +1055,17 @@ def cmd_backlog(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_rationale(args) -> int:
+    from verinoda import freshness, index, rationale
+
+    repo = _repo(args)
+    indexed = (repo / ".verinoda").is_dir()
+    res = rationale.lookup(repo, args.target, graph=(lambda: index.load(repo)) if indexed else None,
+                           stale=lambda: freshness.check(repo)["files"], limit=args.limit)
+    _emit(args, res, lambda r: print(rationale.render(r)))
+    return 0 if res["status"] == "found" else 2
+
+
 def cmd_agent_lint(args) -> int:
     from verinoda import agentlint
 
@@ -3316,6 +3327,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("backlog", cmd_backlog, "a backlog item and the code comments that cite it, or the items that explain "
                                      "a line or symbol (docs/BACKLOG.md rows and headings)")
     sp.add_argument("target", help="an item id (69.3), path/File.java:LINE[-LINE], or a symbol")
+    sp = add("rationale", cmd_rationale, "WHY/NOTE/NB/HACK/IMPORTANT/RATIONALE comments and comments citing a "
+                                         "decision record, each attached to the definition it is above or in")
+    sp.add_argument("target", nargs="?", help="a symbol, a file or a folder (default: the project)")
+    sp.add_argument("--limit", type=int, default=50, help="list at most N comments (default 50)")
     sp = add("agent-lint", cmd_agent_lint, "AGENTS.md, CLAUDE.md, Copilot/Cursor/Windsurf rules and Claude Code "
                                            "memory checked against the tree: paths, scripts and targets, modules, "
                                            "declared packages, and whether the files agree (exit 3 = something "
