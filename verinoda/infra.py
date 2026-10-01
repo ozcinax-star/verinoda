@@ -15,15 +15,17 @@ each linked to the project file its command runs.
 
 A command is read for the program it runs: ``python -m pkg.mod`` and ``python file.py``, ``uvicorn``/
 ``gunicorn`` ``pkg.mod:app``, ``celery -A pkg``, ``node``/``deno``/``bun``/``ts-node`` ``file.js``, ``java -jar
-x.jar`` and ``java pkg.Main``, ``go run``, ``sh -c "..."`` (each part of a ``&&`` chain) and scripts named by path.
+x.jar`` and ``java pkg.Main``, ``go run``, ``poetry``/``uv``/``pipenv run CMD``, ``sh -c "..."`` (each part of a
+``&&`` chain) and scripts named by path (with the command they are given, or the one after ``--``).
 The container path is mapped back to the project through the ``COPY`` lines (and the build context), so a link
 cites the manifest line that names the command and the ``COPY`` line that put the file there.
 
 Statuses: a node's command is ``statically_verified`` (the manifest line says it). A link to a file reached
-through ``COPY`` lines, or named by path in a Terraform attribute, is ``strong_inference``: the image could
-still run something else (a package installed under the same name, a volume over the folder). A file found only
-by its path's ending, an image matched to a Dockerfile by its name, or a jar linked to the build file that makes it
-is ``weak_inference``. A command whose program is not a project file (``nginx``, a registry image) is listed
+through ``COPY`` lines, or named by a code attribute (``source_dir``, ``filename``, ...) of a Terraform function,
+archive or container resource, is ``strong_inference``: the image could still run something else (a package
+installed under the same name, a volume over the folder). A file found only by its path's ending, a link through a
+Dockerfile matched to a compose or Kubernetes image by its name, a path any other Terraform attribute names
+(``"relation": "names"``), or a jar linked to the build file that makes it is ``weak_inference``. A command whose program is not a project file (``nginx``, a registry image) is listed
 without a link, with the reason. Read-only: no index, claim or file is written.
 """
 from __future__ import annotations
@@ -79,6 +81,40 @@ def _unquote(s: str) -> str:
     if len(s) >= 2 and s[0] == s[-1] == "'":
         return s[1:-1].replace("''", "'")
     return s
+
+
+def _flow_depth(s: str) -> int:
+    """How many ``[``/``{`` are still open in ``s`` (brackets inside quotes not counted)."""
+    q, depth = None, 0
+    for ch in s:
+        if q:
+            if ch == q:
+                q = None
+        elif ch in "\"'":
+            q = ch
+        elif ch in "[{":
+            depth += 1
+        elif ch in "]}":
+            depth -= 1
+    return depth
+
+
+def _flow(text: str, no: int) -> Y:
+    """A flow value (``[a, b]``, ``{k: v}`` or a scalar) as :class:`Y`, every part cited at line ``no``."""
+    text = text.strip()
+    if text[:1] in "[{" and text[-1:] == ("]" if text[0] == "[" else "}"):
+        items = _split_flow(text[1:-1])
+        if text[0] == "[":
+            return Y([_flow(x, no) for x in items], no)
+        out = {}
+        for x in items:
+            m = _KEY.match(x)
+            if m:
+                out[_unquote(m.group(1))] = _flow(m.group(2) or "", no) if m.group(2) else Y(None, no)
+            else:
+                out[_unquote(x)] = Y(None, no)
+        return Y(out, no)
+    return Y(_unquote(text), no)
 
 
 def _split_flow(s: str) -> list[str]:
@@ -170,19 +206,15 @@ class _YamlReader:
             return Y(("\n" if rest[0] == "|" else " ").join(parts), no)
         if rest[0] in "[{":
             text = rest
-            while text.count(rest[0]) > text.count("]" if rest[0] == "[" else "}") and self.i < len(self.lines):
+            while _flow_depth(text) > 0 and self.i < len(self.lines):
                 text += " " + self.lines[self.i][2].strip()
                 self.i += 1
-            if rest[0] == "[":
-                inner = text.strip()[1:].rstrip()
-                inner = inner[:-1] if inner.endswith("]") else inner
-                return Y([Y(_unquote(x), no) for x in _split_flow(inner)], no)
-            return Y(text, no)
+            return _flow(text, no)
         return Y(_unquote(rest), no)
 
 
 def yaml_docs(text: str) -> list[Y]:
-    """Each YAML document of ``text`` as :class:`Y` values with their line numbers (block and flow sequences,
+    """Each YAML document of ``text`` as :class:`Y` values with their line numbers (block and flow sequences and
     mappings, quoted and block scalars; anchors, tags and multi-line plain scalars are read as text). Helm
     template lines (``{{ ... }}`` alone on a line) are skipped."""
     docs, cur = [], []
@@ -346,21 +378,24 @@ def parse_dockerfile(rel: str, text: str) -> Dockerfile:
     return Dockerfile(rel, stages)
 
 
-def _copy_source(cp: Copy, cpath: str) -> str | None:
-    """The source path (as ``COPY`` names it) that put ``cpath`` into the image through ``cp``, if it did."""
+def _copy_source(cp: Copy, cpath: str, kind_of=None) -> tuple[str, bool] | None:
+    """``(source path as COPY names it, through a folder)`` that put ``cpath`` into the image through ``cp``, if
+    it did. ``kind_of(src)`` says whether a source is a ``"file"`` or a ``"dir"`` of the project (None when not
+    known: a trailing ``/`` or a name without a dot is then taken for a folder)."""
     dest = cp.dest
     is_dir = dest.endswith("/") or len(cp.srcs) > 1
     d = dest.rstrip("/") or "/"
     for src in cp.srcs:
         s = src.rstrip("/")
         base = posixpath.basename(s)
-        src_is_file = "." in base.strip(".")
         if any(ch in s for ch in "*?["):
             if is_dir and posixpath.dirname(cpath) == d and fnmatch.fnmatch(posixpath.basename(cpath), base):
-                return posixpath.join(posixpath.dirname(s), posixpath.basename(cpath))
+                return posixpath.join(posixpath.dirname(s), posixpath.basename(cpath)), False
             continue
+        known = kind_of(s) if kind_of else None
+        src_is_file = known == "file" if known else not src.endswith("/") and "." in base.strip(".")
         if cpath == d and not is_dir:
-            return s or "."
+            return s or ".", False
         if cpath == d or cpath.startswith(d.rstrip("/") + "/"):
             rest = cpath[len(d):].lstrip("/")
             if not rest:
@@ -368,35 +403,55 @@ def _copy_source(cp: Copy, cpath: str) -> str | None:
             # a folder's contents go under dest; a file copied into a folder keeps its name
             if src_is_file:
                 if is_dir and rest == base:
-                    return s
+                    return s, False
                 continue
-            return posixpath.join(s, rest) if s not in ("", ".") else rest
+            return (posixpath.join(s, rest) if s not in ("", ".") else rest), True
     return None
 
 
-def to_project(df: Dockerfile, stage: int, cpath: str, context: str, depth: int = 0):
-    """``(project path or None, evidence [at, text], note)`` for an image path, through the ``COPY`` lines."""
+def _in_context(context: str, src: str) -> str:
+    return posixpath.normpath(posixpath.join(context, src)) if context not in ("", ".") else posixpath.normpath(src)
+
+
+def to_project(df: Dockerfile, stage: int, cpath: str, context: str, depth: int = 0, kind_of=None):
+    """``(project path or None, evidence [at, text], note)`` for an image path, through the ``COPY`` lines.
+
+    With ``kind_of`` (project path -> ``"file"``, ``"dir"`` or None), a folder ``COPY`` that would bring a file
+    the folder does not hold is passed over for an older one, as Docker overwrites only the files a folder
+    contains; when no ``COPY`` brings it, the first such miss is returned."""
     if depth > 8 or stage is None or stage >= len(df.stages):
         return None, [], ""
     st = df.stages[stage]
+    miss = None
     for cp in reversed(st.copies):
-        src = _copy_source(cp, cpath)
-        if src is None:
+        src_kind = None
+        if kind_of is not None and cp.from_stage is None:
+            def src_kind(src, _c=context):
+                return kind_of(_in_context(_c, src))
+        hit = _copy_source(cp, cpath, src_kind)
+        if hit is None:
             continue
+        src, via_folder = hit
         if cp.from_stage is not None:
             j = df.stage_index(cp.from_stage)
             if j is None:
                 return None, [(cp.at, cp.text)], f"copied from the image {cp.from_stage}"
-            rel, ev, note = to_project(df, j, _abs(src, "/"), context, depth + 1)
-            return rel, [(cp.at, cp.text), *ev], note
-        rel = posixpath.normpath(posixpath.join(context, src)) if context not in ("", ".") else \
-            posixpath.normpath(src)
-        if rel.startswith("../") or rel == "..":
-            return None, [(cp.at, cp.text)], "copied from outside the project"
-        return rel, [(cp.at, cp.text)], ""
+            rel, ev, note = to_project(df, j, _abs(src, "/"), context, depth + 1, kind_of)
+            res = rel, [(cp.at, cp.text), *ev], note
+        else:
+            rel = _in_context(context, src)
+            if rel.startswith("../") or rel == "..":
+                return None, [(cp.at, cp.text)], "copied from outside the project"
+            res = rel, [(cp.at, cp.text)], ""
+        if kind_of is not None and via_folder and res[0] and kind_of(res[0]) is None:
+            miss = miss or res
+            continue
+        return res
     if st.parent is not None:
-        return to_project(df, st.parent, cpath, context, depth + 1)
-    return None, [], ""
+        res = to_project(df, st.parent, cpath, context, depth + 1, kind_of)
+        if miss is None or (res[0] and kind_of(res[0]) is not None):
+            return res
+    return miss or (None, [], "")
 
 
 # --------------------------------------------------------------------------- what a command runs
@@ -406,6 +461,7 @@ _NODE = {"node", "nodejs", "bun", "ts-node", "tsx", "nodemon", "deno"}
 _SERVERS = {"uvicorn", "gunicorn", "hypercorn", "daphne", "granian"}
 _WRAPPERS = {"exec", "env", "tini", "dumb-init", "--", "gosu", "su-exec", "nohup"}
 _SHELLS = {"sh", "bash", "ash", "dash", "zsh"}
+_RUNNERS = {"poetry", "uv", "pipenv", "pdm", "hatch", "rye"}     # "X run CMD" runs CMD in the project's env
 _APP = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*(\(.*\))?$")
 
 
@@ -492,6 +548,11 @@ def runs(argv: list[str]) -> list[tuple[str, str]]:
                     out.append(("class", a))
                     break
                 k += 1
+        elif prog in _RUNNERS and args and args[0] == "run":
+            rest = args[1:]
+            while rest and rest[0].startswith("-"):
+                rest = rest[1:]
+            out.extend(runs(rest) if rest else [("program", prog)])
         elif prog == "go" and len(args) >= 2 and args[0] == "run":
             out.append(("path", next((a for a in args[1:] if not a.startswith("-")), ".")))
         elif prog in _SHELLS and args and not args[0].startswith("-"):
@@ -500,8 +561,9 @@ def runs(argv: list[str]) -> list[tuple[str, str]]:
             out.append(("path", args[0]))
         elif "/" in seg[0] or seg[0].endswith((".sh", ".py", ".js")):
             out.append(("path", seg[0]))
-            if len(seg) > 1:      # an entrypoint script that execs its arguments ("$@")
-                out.extend(r for r in runs(seg[1:]) if r[0] != "program")
+            if len(seg) > 1:      # an entrypoint script that execs its arguments ("$@"), or those after "--"
+                rest = seg[seg.index("--") + 1:] if "--" in seg[1:] else seg[1:]
+                out.extend(r for r in runs(rest) if r[0] != "program")
         else:
             out.append(("program", prog))
     return out
@@ -543,12 +605,21 @@ def _suffixes(kind: str, ref: str) -> list[str]:
 _DOCKERFILE = re.compile(r"(^|/)(Dockerfile|Containerfile)(\.[^/]+)?$|\.(Dockerfile|dockerfile)$")
 _COMPOSE = re.compile(r"(^|/)(docker-)?compose[^/]*\.ya?ml$")
 _ENTRY_DEF = r"^(?:async\s+def|def|class)\s+{0}\b|^{0}\s*(?::[^=]*)?="
+_ENTRY_IMPORT = r"^(?:from\s+\S+\s+)?import\s+(?:.*[\s,(])?{0}\b"
 
 
 class _Reader:
     def __init__(self, repo: Path, files: list[str]):
         self.repo, self.files = repo, files
         self.fileset = set(files)
+        self.dirs = {"", "."}
+        self.by_name: dict[str, list[str]] = {}
+        for f in files:
+            self.by_name.setdefault(posixpath.basename(f), []).append(f)
+            d = posixpath.dirname(f)
+            while d not in self.dirs:
+                self.dirs.add(d)
+                d = posixpath.dirname(d)
         self.dockerfiles: dict[str, Dockerfile] = {}
         self.not_read: list[str] = []
 
@@ -558,7 +629,7 @@ class _Reader:
             if p.stat().st_size > MAX_BYTES:
                 self.not_read.append(rel)
                 return None
-            return p.read_text(encoding="utf-8", errors="replace")
+            return p.read_text(encoding="utf-8-sig", errors="replace")     # a byte order mark dropped
         except OSError:
             self.not_read.append(rel)
             return None
@@ -572,11 +643,13 @@ class _Reader:
         return self.dockerfiles[rel]
 
     def entry_line(self, rel: str, attr: str | None) -> int:
-        """The line a run starts at: the app object's or function's definition, else the ``__main__`` guard."""
+        """The line a run starts at: the app object's or function's definition, else the import that brings it;
+        with no object named, the ``__main__`` guard (a server or a handler never runs that guard)."""
         if not rel.endswith(".py"):
             return 1
         t = self.text(rel) or ""
-        pats = ([_ENTRY_DEF.format(re.escape(attr))] if attr else []) + [r"^if\s+__name__\s*==\s*['\"]__main__"]
+        pats = [_ENTRY_DEF.format(re.escape(attr)), _ENTRY_IMPORT.format(re.escape(attr))] if attr else \
+            [r"^if\s+__name__\s*==\s*['\"]__main__"]
         for pat in pats:
             for no, ln in enumerate(t.splitlines(), 1):
                 if re.match(pat, ln):
@@ -586,7 +659,7 @@ class _Reader:
     def by_suffix(self, ends: list[str], near: str) -> list[str]:
         hits: list[str] = []
         for end in ends:
-            hits = [f for f in self.files if f == end or f.endswith("/" + end)]
+            hits = [f for f in self.by_name.get(posixpath.basename(end), ()) if f == end or f.endswith("/" + end)]
             if hits:
                 break
         near = near.strip("/")
@@ -600,8 +673,11 @@ class _Reader:
         st = df.stages[stage] if stage is not None else None
         wd = workdir or (st.workdir if st else "/")
         pyp = st.pythonpath if st else []
-        out = []
+        out, seen = [], set()
         for kind, ref in runs(argv):
+            if (kind, ref) in seen:
+                continue
+            seen.add((kind, ref))
             entry: dict = {"kind": kind, "ref": ref}
             out.append(entry)
             if kind == "program":
@@ -615,7 +691,7 @@ class _Reader:
             mapped_missing = None
             if df is not None and kind in ("path", "module"):
                 for cpath in _candidates(kind, ref, wd, pyp):
-                    rel, ev, note = to_project(df, stage, cpath, context)
+                    rel, ev, note = to_project(df, stage, cpath, context, kind_of=self.kind)
                     if rel and (rel in self.fileset or kind == "path" and self.is_dir(rel)):
                         isdir = rel not in self.fileset
                         entry["link"] = {"file": rel + ("/" if isdir else ""),
@@ -653,7 +729,11 @@ class _Reader:
         return out
 
     def is_dir(self, rel: str) -> bool:
-        return any(f.startswith(rel.rstrip("/") + "/") for f in self.files)
+        return rel not in ("", ".") and rel.rstrip("/") in self.dirs
+
+    def kind(self, rel: str) -> str | None:
+        """``"file"`` or ``"dir"`` for a project path, else None."""
+        return "file" if rel in self.fileset else "dir" if rel in self.dirs else None
 
     def build_file(self, rel: str) -> str | None:
         d = posixpath.dirname(rel)
@@ -687,6 +767,17 @@ def _image_key(image: str) -> str:
 
 def _cmd_text(argv: list[str]) -> str:
     return " ".join(shlex.quote(a) if (" " in a or not a) else a for a in argv)
+
+
+_BY_NAME = {"status": "weak_inference", "note": "matched by the image's name"}
+
+
+def _by_name(node: dict) -> None:
+    """Lower the node's links to weak_inference: they go through a Dockerfile its image was matched to by name."""
+    for r in node["runs"]:
+        if r.get("link") and r["link"]["status"] == "strong_inference":
+            r["link"]["status"] = "weak_inference"
+            r["link"]["note"] = "through the Dockerfile matched by the image's name"
 
 
 def _docker_node(rd: _Reader, df: Dockerfile) -> dict:
@@ -741,10 +832,13 @@ def _compose_nodes(rd: _Reader, rel: str, doc: Y, images: dict) -> list[dict]:
             if df is None:
                 node["build"]["why"] = "the Dockerfile is not in the project"
         image = svc.get("image")
+        named = False
         if image is not None and image.v:
             node["image"] = str(image.v)
             if df is None and _image_key(str(image.v)) in images:
                 df, ctx, df_ev = images[_image_key(str(image.v))]
+                node["image_built_by"] = {"dockerfile": df.rel, **_BY_NAME}
+                named = True
         ent, cmd = svc.get("entrypoint"), svc.get("command")
         st = df.stages[-1] if df and df.stages else None
         argv, cmd_at = [], []
@@ -768,6 +862,8 @@ def _compose_nodes(rd: _Reader, rel: str, doc: Y, images: dict) -> list[dict]:
             node["command_at"] = [c["at"] for c in cmd_at if "image" not in c]
             node["runs"] = rd.resolve(argv, cmd_at, df=df, context=ctx, near=ctx or base,
                                       workdir=_abs(str(wd.v), "/") if wd is not None and wd.v else None)
+            if named:
+                _by_name(node)
         else:
             node["why"] = "no command in the service or a Dockerfile of the project"
         out.append(node)
@@ -809,8 +905,7 @@ def _k8s_nodes(rd: _Reader, rel: str, doc: Y, images: dict) -> list[dict]:
             hit = images.get(_image_key(str(image.v)))
             if hit:
                 df, ctx, df_ev = hit
-                node["image_built_by"] = {"dockerfile": df.rel, "status": "weak_inference",
-                                          "note": "matched by the image's name"}
+                node["image_built_by"] = {"dockerfile": df.rel, **_BY_NAME}
         cmd, args = c.get("command"), c.get("args")
         st = df.stages[-1] if df and df.stages else None
         argv, cmd_at = [], []
@@ -834,10 +929,7 @@ def _k8s_nodes(rd: _Reader, rel: str, doc: Y, images: dict) -> list[dict]:
             node["runs"] = rd.resolve(argv, cmd_at, df=df, context=ctx, near=ctx,
                                       workdir=_abs(str(wd.v), "/") if wd is not None and wd.v else None)
             if df is not None:
-                for r in node["runs"]:
-                    if r.get("link") and r["link"]["status"] == "strong_inference":
-                        r["link"]["status"] = "weak_inference"    # the image was matched by name only
-                        r["link"]["note"] = "through the Dockerfile matched by the image's name"
+                _by_name(node)
         else:
             node["why"] = "no command, and no Dockerfile of the project builds its image"
         out.append(node)
@@ -849,13 +941,52 @@ _TF_BLOCK = re.compile(r'^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{')
 _TF_STR = re.compile(r'^\s*([A-Za-z_][\w-]*)\s*=\s*"([^"]*)"')
 _TF_LIST = re.compile(r'^\s*(command|args|entrypoint|entry_point)\s*=\s*\[(.*)\]\s*$')
 _TF_PATHMOD = re.compile(r"\$\{path\.(module|root|cwd)\}/?")
+# the attributes through which a resource of a code-running type packages or runs project code
+_TF_CODE_ATTRS = {"source_dir", "source_file", "source_path", "filename", "source", "context", "build_context",
+                  "dockerfile", "working_dir", "code_path", "path"}
+_TF_CODE_TYPES = re.compile(r"lambda|function|archive_file|docker_image|container|job|cloud_run|app_engine|task")
+_TF_NAME_ATTRS = {"name", "description", "title", "function_name"}
+
+
+def _tf_code(raw: str, in_block: bool) -> tuple[str, bool]:
+    """A Terraform line without its comments (``#``, ``//`` and ``/* */``, not inside strings), and whether a
+    ``/* */`` comment is still open at its end."""
+    out, i, q = [], 0, False
+    while i < len(raw):
+        two = raw[i:i + 2]
+        if in_block:
+            if two == "*/":
+                in_block, i = False, i + 2
+            else:
+                i += 1
+            continue
+        ch = raw[i]
+        if q:
+            out.append(ch)
+            if ch == "\\" and i + 1 < len(raw):
+                out.append(raw[i + 1])
+                i += 1
+            elif ch == '"':
+                q = False
+        elif ch == '"':
+            q = True
+            out.append(ch)
+        elif ch == "#" or two == "//":
+            break
+        elif two == "/*":
+            in_block, i = True, i + 2
+            continue
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out), in_block
 
 
 def _tf_nodes(rd: _Reader, rel: str, text: str) -> list[dict]:
-    out, cur, depth = [], None, 0
+    out, cur, depth, in_comment = [], None, 0, False
     base = posixpath.dirname(rel)
     for no, raw in enumerate(text.splitlines(), 1):
-        line = raw.split("#")[0] if "#" in raw and '"' not in raw.split("#")[0] else raw
+        line, in_comment = _tf_code(raw, in_comment)
         if cur is None:
             m = _TF_BLOCK.match(line)
             if not m:
@@ -873,7 +1004,7 @@ def _tf_nodes(rd: _Reader, rel: str, text: str) -> list[dict]:
             argv = [_unquote(x) for x in _split_flow(ml.group(2))]
             cur.setdefault("command", argv)
             cur.setdefault("command_at", [f"{rel}:{no}"])
-            cur["runs"] += rd.resolve(argv, [{"at": f"{rel}:{no}", "text": raw.strip()}], df=None, context=base,
+            cur["runs"] += rd.resolve(argv, [{"at": f"{rel}:{no}", "text": line.strip()}], df=None, context=base,
                                       workdir=None, near=base)
         if depth <= 0:
             _tf_links(rd, cur, base, rel)
@@ -886,24 +1017,38 @@ def _tf_nodes(rd: _Reader, rel: str, text: str) -> list[dict]:
 
 
 def _tf_links(rd: _Reader, node: dict, base: str, rel: str) -> None:
+    """The project paths the resource's string attributes name. A code attribute (``source_dir``,
+    ``filename``, ...) of a code-running type (a function, an archive, a container, a job) is a run, at
+    strong_inference; any other attribute whose value is a path (it has a ``/`` or a file extension, not a bare
+    name such as ``"api"``) only names the path (``"relation": "names"``), at weak_inference: a resource may
+    write, upload or template a file rather than run it."""
     attrs = node.pop("_attrs")
     dirs = []
+    code_type = bool(_TF_CODE_TYPES.search(node["type"]))
     for key, val, no in attrs:
         v = _TF_PATHMOD.sub("", val)
-        if not v or "${" in v or "://" in v or v.startswith("/"):
+        if not v or "${" in v or "://" in v or v.startswith("/") or key in _TF_NAME_ATTRS or key.endswith("_name"):
+            continue
+        runs_code = code_type and key in _TF_CODE_ATTRS
+        if not runs_code and "/" not in v.rstrip("/") and "." not in posixpath.basename(v).strip("."):
             continue
         p = posixpath.normpath(posixpath.join(base, v)) if base else posixpath.normpath(v)
         if p.startswith(".."):
             continue
-        is_file = p in rd.fileset
-        is_dir = not is_file and any(f.startswith(p + "/") for f in rd.files)
-        if is_file or is_dir:
-            if is_dir:
-                dirs.append(p)
-            node["runs"].append({"kind": "path", "ref": val, "attribute": key,
-                                 "link": {"file": p + ("/" if is_dir else ""), "line": 1 if is_file else None,
-                                          "status": "strong_inference",
-                                          "evidence": [{"at": f"{rel}:{no}", "text": f'{key} = "{val}"'}]}})
+        kind = rd.kind(p)
+        if kind is None or p in ("", "."):
+            continue
+        is_dir = kind == "dir"
+        if is_dir and runs_code:
+            dirs.append(p)
+        entry = {"kind": "path", "ref": val, "attribute": key,
+                 "link": {"file": p + ("/" if is_dir else ""), "line": None if is_dir else 1,
+                          "status": "strong_inference" if runs_code else "weak_inference",
+                          "evidence": [{"at": f"{rel}:{no}", "text": f'{key} = "{val}"'}]}}
+        if not runs_code:
+            entry["relation"] = "names"
+            entry["link"]["note"] = "a path the resource names; it may write or upload it rather than run it"
+        node["runs"].append(entry)
     for key, val, no in attrs:     # a function handler ("app.handler") inside the folder the resource packages
         if key != "handler" or "." not in val or "${" in val:
             continue
@@ -930,7 +1075,7 @@ def run(repo: Path, files: list[str] | None = None) -> dict:
     repo = Path(repo)
     files = files if files is not None else listed_files(repo)
     rd = _Reader(repo, files)
-    df_rels = [f for f in files if _DOCKERFILE.search(f)]
+    df_rels = [f for f in files if _DOCKERFILE.search(f) and not f.endswith(".dockerignore")]
     compose = [f for f in files if _COMPOSE.search(f)]
     yamls = [f for f in files if f.endswith((".yaml", ".yml")) and f not in compose]
     tfs = [f for f in files if f.endswith(".tf")]
@@ -1001,8 +1146,8 @@ def run(repo: Path, files: list[str] | None = None) -> dict:
 
 def links_for(res: dict, rel: str) -> list[dict]:
     """The nodes whose command runs the project file ``rel`` (for a reader asking "what runs this file?")."""
-    return [n for n in res["nodes"] for r in n.get("runs", ())
-            if r.get("link") and r["link"]["file"].rstrip("/") == rel]
+    return [n for n in res["nodes"]
+            if any(r.get("link") and r["link"]["file"].rstrip("/") == rel for r in n.get("runs", ()))]
 
 
 def render(res: dict) -> str:
@@ -1022,7 +1167,8 @@ def render(res: dict) -> str:
             if link:
                 at = f"{link['file']}:{link['line']}" if link.get("line") else link["file"]
                 via = [e["at"] for e in link["evidence"]]
-                out.append(f"    -> {at}  [{link['status']}]  {r['kind']} {r['ref']}  via {', '.join(via)}")
+                rel_ = "names " if r.get("relation") == "names" else ""
+                out.append(f"    -> {at}  [{link['status']}]  {rel_}{r['kind']} {r['ref']}  via {', '.join(via)}")
                 if link.get("note"):
                     out.append(f"       {link['note']}")
             else:
@@ -1031,7 +1177,9 @@ def render(res: dict) -> str:
             out.append(f"    {n['why']}")
     if res["not_read"]:
         out.append(f"not read (over 1 MB or unreadable): {', '.join(res['not_read'][:10])}")
-    if not res["nodes"]:
+    if not res["nodes"] and res.get("file"):
+        out.append(f"no node runs or names {res['file']}")
+    elif not res["nodes"]:
         out.append("no Dockerfile, compose file, Kubernetes manifest or Terraform file in the project")
     out.append("Commands are statically_verified (the manifest line says them); links are strong_inference "
                "through COPY lines or a path the manifest names, weak_inference when found by name.")

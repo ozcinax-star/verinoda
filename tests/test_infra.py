@@ -247,3 +247,133 @@ def test_in_a_path_with_a_space_and_non_ascii(tmp_path):
                                      encoding="utf-8")
     link = _link(infra.run(root)["nodes"][0])
     assert (link["file"], link["status"]) == ("app/main.py", "strong_inference")
+
+
+def _project(root: Path, files: dict[str, str], bom: bool = False) -> Path:
+    for rel, text in files.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(("﻿" if bom else "").encode("utf-8") + text.encode("utf-8"))
+    return root
+
+
+def test_a_compose_image_matched_by_name_is_weak(tmp_path):
+    _project(tmp_path, {"api/main.py": "app = 1\n",
+                        "api/Dockerfile": 'FROM python\nWORKDIR /srv\nCOPY . .\nCMD ["uvicorn", "main:app"]\n',
+                        "deploy/docker-compose.yml": "services:\n  api:\n    image: registry.example.com/team/api:2.0\n"})
+    node = _node(infra.run(tmp_path), "compose_service", "api")
+    assert node["image_built_by"] == {"dockerfile": "api/Dockerfile", "status": "weak_inference",
+                                      "note": "matched by the image's name"}
+    link = _link(node)
+    assert (link["file"], link["status"]) == ("api/main.py", "weak_inference")
+    assert "matched by the image's name" in link["note"]
+
+
+def test_terraform_names_and_non_code_paths_are_not_runs(tmp_path):
+    _project(tmp_path, {"api/main.py": "x = 1\n", "web/index.js": "1\n", "README.md": "# r\n",
+                        "main.tf": 'resource "aws_ecr_repository" "api" {\n  name = "api"\n  tags = {\n'
+                                   '    Name = "web"\n  }\n}\n'
+                                   'resource "local_file" "notes" {\n  filename = "README.md"\n}\n'})
+    res = infra.run(tmp_path)
+    assert _node(res, "terraform_resource", "aws_ecr_repository.api")["runs"] == []
+    notes = _node(res, "terraform_resource", "local_file.notes")["runs"][0]
+    assert notes["relation"] == "names" and notes["link"]["status"] == "weak_inference"
+    assert notes["link"]["file"] == "README.md"
+
+
+def test_terraform_comments_do_not_open_a_block(tmp_path):
+    _project(tmp_path, {"src/a.py": "x = 1\n", "main.tf": (
+        'resource "local_file" "notes" {\n  content = "x"\n}\n'
+        'resource "aws_s3_object" "o" { // see {docs\n  source = "src/a.py" /* { */\n}\n'
+        '/* resource "null_resource" "hidden" {\n*/\n'
+        'resource "null_resource" "after" {\n  triggers = { a = "b" }\n}\n')})
+    names = [n["name"] for n in infra.run(tmp_path)["nodes"]]
+    assert names == ["local_file.notes", "aws_s3_object.o", "null_resource.after"]
+
+
+def test_an_overlay_folder_copy_does_not_hide_the_copy_that_brought_the_file(tmp_path):
+    _project(tmp_path, {"app.py": "x = 1\n", "config/settings.py": "y = 1\n", "tools/app.py": "z = 1\n",
+                        "Dockerfile": 'FROM python\nWORKDIR /app\nCOPY . .\nCOPY config/ ./\nCMD ["python", "app.py"]\n'})
+    link = _link(infra.run(tmp_path)["nodes"][0])
+    assert (link["file"], link["status"]) == ("app.py", "strong_inference")
+    assert [e["at"] for e in link["evidence"]] == ["Dockerfile:5", "Dockerfile:3"]
+
+
+@pytest.mark.parametrize("copy, cmd, want", [
+    ("COPY Procfile app.py ./", '["python", "app.py"]', "app.py"),           # a file with no extension first
+    ("COPY my.pkg/ /srv/", '["python", "/srv/main.py"]', "my.pkg/main.py"),  # a folder with a dot
+    ("COPY scripts/start /usr/local/bin/", '["/usr/local/bin/start"]', "scripts/start"),
+])
+def test_copy_sources_are_files_or_folders_as_the_project_has_them(tmp_path, copy, cmd, want):
+    _project(tmp_path, {"app.py": "x = 1\n", "Procfile": "web: x\n", "my.pkg/main.py": "x = 1\n",
+                        "scripts/start": "#!/bin/sh\n",
+                        "Dockerfile": f"FROM python\nWORKDIR /app\n{copy}\nCMD {cmd}\n"})
+    link = _link(infra.run(tmp_path)["nodes"][0])
+    assert (link["file"], link["status"]) == (want, "strong_inference")
+    assert link["evidence"][1]["at"] == "Dockerfile:3"
+
+
+def test_a_compose_build_written_as_a_flow_mapping(tmp_path):
+    _project(tmp_path, {"app/main.py": "x = 1\n",
+                        "Dockerfile": 'FROM python\nCOPY . .\nCMD ["python", "app/main.py"]\n',
+                        "docker-compose.yml": "services:\n  api:\n    build: {context: ., dockerfile: Dockerfile}\n"})
+    node = _node(infra.run(tmp_path), "compose_service", "api")
+    assert node["build"]["context"] == "." and "why" not in node["build"]
+    assert (_link(node)["file"], _link(node)["status"]) == ("app/main.py", "strong_inference")
+
+
+def test_a_quoted_bracket_does_not_swallow_the_rest_of_the_document():
+    doc = infra.yaml_docs('spec:\n  containers:\n  - name: c\n    args: ["[", "a"]\n  - name: d\n'
+                          '    command: ["python", "m.py"]\n')[0]
+    assert [c.get("name").v for c, _ in infra._containers(doc, [])] == ["c", "d"]
+
+
+def test_a_server_app_is_not_cited_at_the_main_guard(tmp_path):
+    _project(tmp_path, {"app/main.py": "from app.factory import make\nfrom app.web import app\n\n"
+                                       "if __name__ == '__main__':\n    import uvicorn\n",
+                        "Dockerfile": 'FROM python\nCOPY . .\nCMD ["uvicorn", "app.main:app"]\n'})
+    assert _link(infra.run(tmp_path)["nodes"][0])["line"] == 2      # the import that brings app
+
+
+@pytest.mark.parametrize("argv, want", [
+    (["./wait-for-it.sh", "db:5432", "--", "python", "app.py"], [("path", "./wait-for-it.sh"), ("path", "app.py")]),
+    (["poetry", "run", "python", "-m", "app.main"], [("module", "app.main")]),
+    (["uv", "run", "--frozen", "app.py"], [("path", "app.py")]),
+])
+def test_launchers_and_wait_scripts(argv, want):
+    assert infra.runs(argv) == want
+
+
+def test_byte_order_marks_and_dockerignore_files(tmp_path):
+    _project(tmp_path, {"app/__init__.py": "", "app/main.py": "x = 1\n",
+                        "Dockerfile": 'FROM python\nWORKDIR /app\nCOPY app/ app/\nCMD ["python", "-m", "app.main"]\n',
+                        "pod.yaml": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: p\nspec:\n  containers:\n"
+                                    "  - name: c\n    command: [\"python\", \"app/main.py\"]\n",
+                        "compose.yml": "services:\n  web:\n    command: python app/main.py\n",
+                        "main.tf": 'resource "null_resource" "r" {\n}\n'}, bom=True)
+    _project(tmp_path, {"Dockerfile.dockerignore": "node_modules\n"})
+    res = infra.run(tmp_path)
+    assert {n["kind"] for n in res["nodes"]} == {"dockerfile", "k8s_container", "compose_service",
+                                                 "terraform_resource"}
+    assert res["linked"] == 3 and res["files_read"]["dockerfile"] == 1
+
+
+def test_a_file_run_twice_is_one_node_and_one_link(tmp_path):
+    _project(tmp_path, {"app/main.py": "x = 1\n",
+                        "Dockerfile": 'FROM python\nCOPY app/ app/\nCMD ["sh", "-c", "python app/main.py && '
+                                      'python app/main.py"]\n'})
+    res = infra.run(tmp_path)
+    assert len(res["nodes"][0]["runs"]) == 1 and len(infra.links_for(res, "app/main.py")) == 1
+
+
+def test_cli_file_is_repository_relative_first_and_a_missing_one_is_an_error(tmp_path, capsys, monkeypatch):
+    e = _project(tmp_path / "e", {"app/main.py": "x = 1\n", "other.py": "y = 1\n",
+                                  "Dockerfile": 'FROM python\nCOPY . .\nCMD ["python", "app/main.py"]\n'})
+    other = _project(tmp_path / "other", {"app/main.py": "z = 1\n"})
+    monkeypatch.chdir(other)
+    assert cli.main(["infra", "--repo", str(e), "--file", "app/main.py", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["count"] == 1
+    assert cli.main(["infra", "--repo", str(e), "--file", "nope.py"]) == 2
+    capsys.readouterr()
+    assert cli.main(["infra", "--repo", str(e), "--file", "other.py"]) == 1
+    assert "no node runs or names other.py" in capsys.readouterr().out

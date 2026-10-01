@@ -1497,9 +1497,10 @@ def cmd_infra(args) -> int:
         return 2
     res = infra.run(repo)
     if args.file:
-        p = Path(args.file)
-        q = (p if p.is_absolute() else (Path.cwd() / p if (Path.cwd() / p).exists() else repo / p)).resolve()
-        if not q.is_relative_to(repo.resolve()):
+        p = Path(args.file)     # repository-relative first, then relative to the working folder (as _rel_in_repo)
+        q = (p if p.is_absolute() else (Path.cwd() / p if not (repo / p).exists() and (Path.cwd() / p).exists()
+                                        else repo / p)).resolve()
+        if not q.is_relative_to(repo.resolve()) or not q.exists():
             print(f"error: not a file of the project: {args.file}", file=sys.stderr)
             return 2
         rel = q.relative_to(repo.resolve()).as_posix()
