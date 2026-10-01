@@ -1,6 +1,6 @@
 # tq audit, 2026-10-02
 
-Commit ea71c3791617; gold sha256 4962f768961f (tq_gold/held_out.json, tq_gold2/held_out.json); engine sha256 3df4f010e317.
+Commit cdffa4723550; gold sha256 4962f768961f (tq_gold/held_out.json, tq_gold2/held_out.json); engine sha256 f2e11df382d8.
 
 Held-out: 357 cases, 0 skipped, 350 decided (347 right, 3 wrong), 7 unknown; wrong at a verified status: 2. Dev: 75 cases.
 
