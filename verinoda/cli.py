@@ -370,6 +370,13 @@ def _r_update(r: dict) -> None:
               f"  decisions: {dec['violations']} violated, {dec['possible']} possible, {dec['reviews']} review, "
               f"{dec['triggers']} trigger" + (f", {dec['not_checked']} not checked" if dec.get("not_checked") else "")
               + (" - `verinoda decide check` for the sites" if any(dec.values()) else ""))
+    con = r.get("consolidated")
+    if con:
+        print(f"  consolidate: could not run ({con['error']})" if con.get("error") else
+              f"  consolidate: {con['restored']} stale claim(s) restored, {con['still_stale']} still stale"
+              + (f", {con['not_reached']} not reached" if con["not_reached"] else "")
+              + (f"; {con['duplicate_groups']} group(s) of duplicates (`verinoda consolidate --merge`)"
+                 if con["duplicate_groups"] else ""))
     _r_derived(r)
     if r.get("error"):
         print(f"error: {r['error']}", file=sys.stderr)
@@ -668,8 +675,43 @@ def cmd_update(args) -> int:
         summary = _decision_summary(repo, noop=res.get("mode") == "noop")
         if summary:
             res["decisions"] = summary
+        if getattr(args, "consolidate", False) or _consolidate_on_update(repo):
+            from verinoda import consolidate
+
+            try:
+                res["consolidated"] = consolidate.summary(consolidate.run(
+                    st, repo, limit=consolidate.ON_UPDATE_LIMIT, budget=consolidate.ON_UPDATE_BUDGET_S))
+            except Exception as exc:     # the update itself succeeded
+                res["consolidated"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
     _emit(args, res, _r_update)
     return 1 if res.get("error") else 0
+
+
+def _consolidate_on_update(repo: Path) -> bool:
+    from verinoda.paths import load_config
+
+    try:
+        v = (load_config(repo).get("claims") or {}).get("consolidate_on_update")
+    except (OSError, ValueError, AttributeError):
+        return False
+    return v is True
+
+
+def cmd_consolidate(args) -> int:
+    from verinoda import consolidate
+
+    repo = _repo(args)
+    if args.limit < 0:
+        print("error: --limit must be 0 or more", file=sys.stderr)
+        return 2
+    st = _store(repo)
+    try:
+        res = consolidate.run(st, repo, limit=args.limit, budget=args.budget, merge=args.merge,
+                              dry_run=args.dry_run)
+    finally:
+        st.close()
+    _emit(args, res, lambda r: print(consolidate.render(r)))
+    return 1 if res["errors"] else 0
 
 
 def _decision_summary(repo: Path, *, noop: bool = False) -> dict | None:
@@ -3642,12 +3684,23 @@ def build_parser() -> argparse.ArgumentParser:
                          "(jedi, cached; needs the precise extra)")
     sp.add_argument("--scip", metavar="FILE",
                     help="use this SCIP index (copied to .verinoda/index/index.scip; freshness reported)")
+    sp = add("consolidate", cmd_consolidate, "between sessions: re-verify stale claims (verify, static, on the "
+                                             "current tree) and find duplicate claims (`--merge` folds each into "
+                                             "the one kept); nothing is deleted")
+    sp.add_argument("--limit", type=int, default=50, help="stale claims to re-verify, newest first (default 50)")
+    sp.add_argument("--budget", type=float, default=60.0, help="seconds to spend re-verifying (default 60)")
+    sp.add_argument("--merge", action="store_true", help="fold each duplicate into the claim kept (its evidence "
+                                                         "linked there, the duplicate marked, never deleted)")
+    sp.add_argument("--dry-run", action="store_true", help="list what would be re-verified and merged")
     sp = add("update", cmd_update, "re-index changed files, record a snapshot, mark affected claims stale", repo=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--fast", action="store_true",
                     help="take the changed files in now (search, lexicon, stale claims: seconds) and rebuild the "
                          "graph in the background; until it ends, reading commands say which files it is behind on")
+    sp.add_argument("--consolidate", action="store_true",
+                    help="then re-verify up to 20 stale claims (20 s) and count duplicate claims, as `consolidate` "
+                         "does (always, with claims.consolidate_on_update in .verinoda/config.json)")
     sp = add("ui", cmd_ui, "notes and graph of the project in the browser (local)", repo=False, js=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
