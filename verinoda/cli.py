@@ -3215,13 +3215,18 @@ def cmd_mutate(args) -> int:
         raise SystemExit(f"error: --max-mutants must be 0..{mutate.MAX_MUTANTS_CAP}")
     if args.timeout is not None and args.timeout <= 0:
         raise SystemExit("error: --timeout must be positive")
+    if not args.tests:
+        _auto_index(repo)   # the change review selects the tests: it reads the graph (indexed once, as review does)
     st = _store(repo, create=True)
     try:
         res = mutate.run(st, repo, base=args.base or "HEAD", tests=args.tests or None,
                          max_mutants=mutate.MAX_MUTANTS if args.max_mutants is None else args.max_mutants,
                          timeout=args.timeout, files=args.file or None)
-    except (ValueError, treestate.NotAGitTree) as exc:
-        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}"))
+    except (ValueError, treestate.NotAGitTree, FileNotFoundError) as exc:
+        out = {"status": "error", "error": str(exc)}
+        if isinstance(exc, FileNotFoundError):
+            out["next_step"] = "run `verinoda scan .`, or name the tests with --tests"
+        _emit(args, out, lambda r: print(f"error: {r['error']}", file=sys.stderr))
         return 2
     finally:
         st.close()
