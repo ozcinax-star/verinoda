@@ -1,0 +1,69 @@
+{
+  "repo": "sharkdp/bat",
+  "tag": "v0.26.1",
+  "sha": "979ba22628bc9d8171f2cffca2bd5c90c9fc0a9e",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based. `main` names nine functions here (src/bin/bat/main.rs, build/main.rs, examples/*.rs), so checks name the file.",
+  "facts": [
+    {
+      "id": "def-run-controller",
+      "fact": "fn run_controller is defined at src/bin/bat/main.rs:277",
+      "source": "src/bin/bat/main.rs:277",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"run_controller\" return f", "cites": ["src/bin/bat/main.rs:277"]}
+    },
+    {
+      "id": "run-controller-new",
+      "fact": "run_controller calls Controller::new at src/bin/bat/main.rs:279 (Controller::new defined src/controller.rs:30)",
+      "source": "src/bin/bat/main.rs:279, src/controller.rs:30",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"run_controller\" and b.name = \"new\" and b.file = \"src/controller.rs\" return a, b", "cites": ["src/bin/bat/main.rs:279"]}
+    },
+    {
+      "id": "controller-run-delegates",
+      "fact": "Controller::run (src/controller.rs:39) calls self.run_with_error_handler at src/controller.rs:44 (defined src/controller.rs:47)",
+      "source": "src/controller.rs:39, src/controller.rs:44, src/controller.rs:47",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"run\" and a.file = \"src/controller.rs\" and b.name = \"run_with_error_handler\" return a, b", "cites": ["src/controller.rs:44"]}
+    },
+    {
+      "id": "main-reaches-run-controller",
+      "fact": "main (src/bin/bat/main.rs:428) calls run() at src/bin/bat/main.rs:429 (run defined main.rs:345), which calls run_controller at main.rs:387 (also 402, 422); run_controller is defined at main.rs:277",
+      "source": "src/bin/bat/main.rs:428, src/bin/bat/main.rs:429, src/bin/bat/main.rs:387, src/bin/bat/main.rs:277",
+      "check": {"kind": "trace", "source": "src/bin/bat/main.rs::main", "target": "run_controller", "source_at": "src/bin/bat/main.rs:428", "target_at": "src/bin/bat/main.rs:277", "via_at": ["src/bin/bat/main.rs:429"]}
+    },
+    {
+      "id": "run-reaches-print-file-ranges",
+      "fact": "Controller::run (src/controller.rs:39) -> run_with_error_handler (controller.rs:44) -> print_input (controller.rs:116 and 119, defined 141) -> print_file (controller.rs:203, defined 213) -> print_file_ranges (controller.rs:244, defined 251)",
+      "source": "src/controller.rs:44, src/controller.rs:116, src/controller.rs:203, src/controller.rs:244, src/controller.rs:251",
+      "check": {"kind": "trace", "source": "src/controller.rs::run", "target": "print_file_ranges", "source_at": "src/controller.rs:39", "target_at": "src/controller.rs:251", "via_at": ["src/controller.rs:44", "src/controller.rs:203", "src/controller.rs:244"]}
+    },
+    {
+      "id": "def-interactive-print-line",
+      "fact": "print_line is declared in the Printer trait (src/printer.rs:82) and implemented by SimplePrinter (src/printer.rs:124) and InteractivePrinter (src/printer.rs:588)",
+      "source": "src/printer.rs:82, src/printer.rs:124, src/printer.rs:588",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"print_line\" and f.file = \"src/printer.rs\" return f", "cites": ["src/printer.rs:588"]}
+    },
+    {
+      "id": "struct-controller",
+      "fact": "pub struct Controller is defined at src/controller.rs:22 (impl at src/controller.rs:29)",
+      "source": "src/controller.rs:22",
+      "check": {"kind": "q", "query": "match (c:class) where c.name = \"Controller\" return c", "cites": ["src/controller.rs:22"]}
+    },
+    {
+      "id": "print-file-calls-header",
+      "fact": "print_file (src/controller.rs:213) calls printer.print_header at src/controller.rs:222 (a trait method of Printer, src/printer.rs:72)",
+      "source": "src/controller.rs:222, src/printer.rs:72",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"print_file\" and a.file = \"src/controller.rs\" and b.name = \"print_header\" return a, b", "cites": ["src/controller.rs:222"]}
+    },
+    {
+      "id": "query-pager",
+      "fact": "Finding the pager command and its arguments is in src/pager.rs (get_pager at line 100, struct Pager at line 74)",
+      "source": "src/pager.rs:100",
+      "check": {"kind": "query", "question": "how is the pager command found and its arguments parsed", "top_k": 8, "expect_file": "src/pager.rs"}
+    },
+    {
+      "id": "query-highlight",
+      "fact": "Syntax highlighting of each line with the theme happens in src/printer.rs (InteractivePrinter::print_line at 588, highlight_regions_for_line at 409)",
+      "source": "src/printer.rs:409, src/printer.rs:588",
+      "check": {"kind": "query", "question": "how is each line syntax highlighted with the theme before printing", "top_k": 8, "expect_file": "src/printer.rs"}
+    }
+  ]
+}

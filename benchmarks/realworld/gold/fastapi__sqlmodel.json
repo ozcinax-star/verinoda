@@ -1,0 +1,69 @@
+{
+  "repo": "fastapi/sqlmodel",
+  "tag": "0.0.47",
+  "sha": "1c46f0decb64762b4beb085e3181428921166349",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based.",
+  "facts": [
+    {
+      "id": "def-get-column-from-field",
+      "fact": "get_column_from_field (a pydantic field to a SQLAlchemy Column) is defined at sqlmodel/main.py:779",
+      "source": "sqlmodel/main.py:779",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"get_column_from_field\" and f.file = \"sqlmodel/main.py\" return f", "cites": ["sqlmodel/main.py:779"]}
+    },
+    {
+      "id": "metaclass-new-calls-column",
+      "fact": "SQLModelMetaclass.__new__ (sqlmodel/main.py:577) calls get_column_from_field at sqlmodel/main.py:641 for each field of a table model",
+      "source": "sqlmodel/main.py:577, sqlmodel/main.py:641",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"__new__\" and a.file = \"sqlmodel/main.py\" and b.name = \"get_column_from_field\" return a, b", "cites": ["sqlmodel/main.py:641"]}
+    },
+    {
+      "id": "column-calls-satype",
+      "fact": "get_column_from_field (sqlmodel/main.py:779) calls get_sqlalchemy_type at sqlmodel/main.py:784 (defined sqlmodel/main.py:723)",
+      "source": "sqlmodel/main.py:779, sqlmodel/main.py:784, sqlmodel/main.py:723",
+      "check": {"kind": "trace", "source": "get_column_from_field", "target": "get_sqlalchemy_type", "source_at": "sqlmodel/main.py:779", "target_at": "sqlmodel/main.py:723", "via_at": ["sqlmodel/main.py:784"]}
+    },
+    {
+      "id": "model-validate-calls-compat",
+      "fact": "SQLModel.model_validate (sqlmodel/main.py:911) calls sqlmodel_validate at sqlmodel/main.py:920 (imported at main.py:75, defined sqlmodel/_compat.py:285)",
+      "source": "sqlmodel/main.py:920, sqlmodel/_compat.py:285",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"model_validate\" and a.file = \"sqlmodel/main.py\" and b.name = \"sqlmodel_validate\" return a, b", "cites": ["sqlmodel/main.py:920"]}
+    },
+    {
+      "id": "model-validate-reaches-compat",
+      "fact": "SQLModel.model_validate (sqlmodel/main.py:911) reaches sqlmodel_validate (sqlmodel/_compat.py:285) through the call at sqlmodel/main.py:920",
+      "source": "sqlmodel/main.py:911, sqlmodel/main.py:920, sqlmodel/_compat.py:285",
+      "check": {"kind": "trace", "source": "sqlmodel/main.py::model_validate", "target": "sqlmodel_validate", "source_at": "sqlmodel/main.py:911", "target_at": "sqlmodel/_compat.py:285", "via_at": ["sqlmodel/main.py:920"]}
+    },
+    {
+      "id": "def-field-impl",
+      "fact": "Field has three @overload stubs (sqlmodel/main.py:242, 291, 349) and its implementation at sqlmodel/main.py:388",
+      "source": "sqlmodel/main.py:388",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"Field\" and f.file = \"sqlmodel/main.py\" return f", "cites": ["sqlmodel/main.py:388"]}
+    },
+    {
+      "id": "class-sqlmodel",
+      "fact": "class SQLModel (the base model, metaclass SQLModelMetaclass) is defined at sqlmodel/main.py:843",
+      "source": "sqlmodel/main.py:843",
+      "check": {"kind": "q", "query": "match (c:class) where c.name = \"SQLModel\" and c.file = \"sqlmodel/main.py\" return c", "cites": ["sqlmodel/main.py:843"]}
+    },
+    {
+      "id": "schema-hero-table",
+      "fact": "The tutorial declares the table hero: class Hero(SQLModel, table=True) at docs_src/tutorial/create_db_and_table/tutorial001_py310.py:4 (table name from __tablename__, sqlmodel/main.py:907-908: the class name lowered)",
+      "source": "docs_src/tutorial/create_db_and_table/tutorial001_py310.py:4, sqlmodel/main.py:907",
+      "check": {"kind": "schema", "table": "hero"}
+    },
+    {
+      "id": "query-field-to-column",
+      "fact": "A model field is turned into a SQLAlchemy column in sqlmodel/main.py (get_sqlalchemy_type at 723, get_column_from_field at 779)",
+      "source": "sqlmodel/main.py:723, sqlmodel/main.py:779",
+      "check": {"kind": "query", "question": "how is a model field converted to a SQLAlchemy column type", "top_k": 8, "expect_file": "sqlmodel/main.py"}
+    },
+    {
+      "id": "query-session-exec",
+      "fact": "Session.exec, which returns scalars for a select of one entity, is in sqlmodel/orm/session.py (implementation at line 62, `results.scalars()` at line 84)",
+      "source": "sqlmodel/orm/session.py:62, sqlmodel/orm/session.py:84",
+      "check": {"kind": "query", "question": "how does session exec return scalars for a select statement", "top_k": 8, "expect_file": "sqlmodel/orm/session.py"}
+    }
+  ]
+}
