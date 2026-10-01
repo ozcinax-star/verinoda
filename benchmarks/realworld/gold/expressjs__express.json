@@ -1,0 +1,69 @@
+{
+  "repo": "expressjs/express",
+  "tag": "v5.2.1",
+  "sha": "dbac741a49a5a64336b70c06e85c2e2706e36336",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based. Express defines its methods as named function expressions assigned to a prototype object (`res.json = function json(obj)`): the function's name is the name after `function`. A route fact's method is in the fact text only, because the runner's routes judge reads a `method` key the route table does not have (it has `methods`); the handler is an anonymous `exports.x = function(req, res)` in another file, so the check names that file.",
+  "facts": [
+    {
+      "id": "def-stringify",
+      "fact": "function stringify (JSON.stringify with the escape option) is defined at lib/response.js:1029",
+      "source": "lib/response.js:1029",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"stringify\" and f.file = \"lib/response.js\" return f", "cites": ["lib/response.js:1029"]}
+    },
+    {
+      "id": "json-calls-stringify",
+      "fact": "res.json (`res.json = function json(obj)`, lib/response.js:239) calls stringify at lib/response.js:245",
+      "source": "lib/response.js:239, lib/response.js:245",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"json\" and a.file = \"lib/response.js\" and b.name = \"stringify\" return a, b", "cites": ["lib/response.js:245"]}
+    },
+    {
+      "id": "json-calls-send",
+      "fact": "res.json returns this.send(body) at lib/response.js:252 (res.send defined lib/response.js:125)",
+      "source": "lib/response.js:252, lib/response.js:125",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"json\" and a.file = \"lib/response.js\" and b.name = \"send\" return a, b", "cites": ["lib/response.js:252"]}
+    },
+    {
+      "id": "sendfile-calls-helper",
+      "fact": "res.sendFile (lib/response.js:378) calls the module function sendfile at lib/response.js:411 (defined lib/response.js:927)",
+      "source": "lib/response.js:378, lib/response.js:411, lib/response.js:927",
+      "check": {"kind": "trace", "source": "lib/response.js::sendFile", "target": "lib/response.js::sendfile", "source_at": "lib/response.js:378", "target_at": "lib/response.js:927", "via_at": ["lib/response.js:411"]}
+    },
+    {
+      "id": "render-reaches-tryrender",
+      "fact": "res.render (lib/response.js:900) calls app.render at lib/response.js:923 (app = this.req.app; app.render defined lib/application.js:522), which calls tryRender at lib/application.js:574 (defined lib/application.js:625)",
+      "source": "lib/response.js:900, lib/response.js:923, lib/application.js:522, lib/application.js:574, lib/application.js:625",
+      "check": {"kind": "trace", "source": "lib/response.js::render", "target": "tryRender", "source_at": "lib/response.js:900", "target_at": "lib/application.js:625", "via_at": ["lib/response.js:923", "lib/application.js:574"]}
+    },
+    {
+      "id": "def-create-application",
+      "fact": "createApplication (the express() factory) is defined at lib/express.js:36",
+      "source": "lib/express.js:36",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"createApplication\" return f", "cites": ["lib/express.js:36"]}
+    },
+    {
+      "id": "route-posts",
+      "fact": "The route-separation example registers GET /posts with post.list (examples/route-separation/index.js:49; the handler is `exports.list = function(req, res)` at examples/route-separation/post.js:11)",
+      "source": "examples/route-separation/index.js:49, examples/route-separation/post.js:11",
+      "check": {"kind": "routes", "path": "/posts", "handler": "route-separation/post.js"}
+    },
+    {
+      "id": "route-user-edit-put",
+      "fact": "The route-separation example registers PUT /user/:id/edit with user.update (examples/route-separation/index.js:45; handler `exports.update = function(req, res)` at examples/route-separation/user.js:40)",
+      "source": "examples/route-separation/index.js:45, examples/route-separation/user.js:40",
+      "check": {"kind": "routes", "path": "/user/:id/edit", "handler": "route-separation/user.js"}
+    },
+    {
+      "id": "query-json-response",
+      "fact": "Serializing and sending a JSON response is in lib/response.js (res.json at 239, stringify at 1029)",
+      "source": "lib/response.js:239, lib/response.js:1029",
+      "check": {"kind": "query", "question": "how is a JSON response body serialized and sent", "top_k": 8, "expect_file": "lib/response.js"}
+    },
+    {
+      "id": "query-accepts",
+      "fact": "Content negotiation on the request (req.accepts and friends) is in lib/request.js (req.accepts at line 131)",
+      "source": "lib/request.js:131",
+      "check": {"kind": "query", "question": "how does the request check which content types the client accepts", "top_k": 8, "expect_file": "lib/request.js"}
+    }
+  ]
+}

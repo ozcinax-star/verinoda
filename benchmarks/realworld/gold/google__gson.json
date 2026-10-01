@@ -1,0 +1,69 @@
+{
+  "repo": "google/gson",
+  "tag": "gson-parent-2.14.0",
+  "sha": "3ff35d6269894901ab8006258395aafc4b9765cd",
+  "written": "2026-10-02",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based. G = gson/src/main/java/com/google/gson. toJson, fromJson and getAdapter are overloaded; a check names the call line, which only one overload holds.",
+  "facts": [
+    {
+      "id": "def-dopeek",
+      "fact": "JsonReader.doPeek is defined at G/stream/JsonReader.java:582",
+      "source": "gson/src/main/java/com/google/gson/stream/JsonReader.java:582",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"doPeek\" and f.file = \"gson/src/main/java/com/google/gson/stream/JsonReader.java\" return f", "cites": ["gson/src/main/java/com/google/gson/stream/JsonReader.java:582"]}
+    },
+    {
+      "id": "peek-calls-dopeek",
+      "fact": "JsonReader.peek (G/stream/JsonReader.java:542) calls doPeek() at G/stream/JsonReader.java:545",
+      "source": "gson/src/main/java/com/google/gson/stream/JsonReader.java:545",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"peek\" and a.file = \"gson/src/main/java/com/google/gson/stream/JsonReader.java\" and b.name = \"doPeek\" return a, b", "cites": ["gson/src/main/java/com/google/gson/stream/JsonReader.java:545"]}
+    },
+    {
+      "id": "tojson-calls-getadapter",
+      "fact": "Gson.toJson(Object, Type, JsonWriter) (G/Gson.java:647) calls getAdapter(TypeToken.get(typeOfSrc)) at G/Gson.java:649",
+      "source": "gson/src/main/java/com/google/gson/Gson.java:647, gson/src/main/java/com/google/gson/Gson.java:649",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"toJson\" and a.file = \"gson/src/main/java/com/google/gson/Gson.java\" and b.name = \"getAdapter\" return a, b", "cites": ["gson/src/main/java/com/google/gson/Gson.java:649"]}
+    },
+    {
+      "id": "getadapter-calls-factory-create",
+      "fact": "Gson.getAdapter(TypeToken) (G/Gson.java:319) asks each factory: `candidate = factory.create(this, type)` at G/Gson.java:349 (TypeAdapterFactory.create)",
+      "source": "gson/src/main/java/com/google/gson/Gson.java:349",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"getAdapter\" and a.file = \"gson/src/main/java/com/google/gson/Gson.java\" and b.name = \"create\" return a, b", "cites": ["gson/src/main/java/com/google/gson/Gson.java:349"]}
+    },
+    {
+      "id": "fromjson-calls-getadapter",
+      "fact": "Gson.fromJson(JsonReader, TypeToken) (G/Gson.java:1064) calls getAdapter(typeOfT) at G/Gson.java:1079 and then typeAdapter.read at 1080",
+      "source": "gson/src/main/java/com/google/gson/Gson.java:1079",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"fromJson\" and a.file = \"gson/src/main/java/com/google/gson/Gson.java\" and b.name = \"getAdapter\" return a, b", "cites": ["gson/src/main/java/com/google/gson/Gson.java:1079"]}
+    },
+    {
+      "id": "parsestring-reaches-streams",
+      "fact": "JsonParser.parseString (G/JsonParser.java:91) calls parseReader at G/JsonParser.java:92; parseReader(Reader) (line 107) calls parseReader(JsonReader) at line 110; parseReader(JsonReader) (line 136) calls Streams.parse at G/JsonParser.java:144 (defined G/internal/Streams.java:43)",
+      "source": "gson/src/main/java/com/google/gson/JsonParser.java:92, gson/src/main/java/com/google/gson/JsonParser.java:110, gson/src/main/java/com/google/gson/JsonParser.java:144, gson/src/main/java/com/google/gson/internal/Streams.java:43",
+      "check": {"kind": "trace", "source": "parseString", "target": "gson/src/main/java/com/google/gson/internal/Streams.java::parse", "source_at": "gson/src/main/java/com/google/gson/JsonParser.java:91", "target_at": "gson/src/main/java/com/google/gson/internal/Streams.java:43", "via_at": ["gson/src/main/java/com/google/gson/JsonParser.java:92", "gson/src/main/java/com/google/gson/JsonParser.java:144"]}
+    },
+    {
+      "id": "boundfields-calls-create",
+      "fact": "ReflectiveTypeAdapterFactory.getBoundFields (G/internal/bind/ReflectiveTypeAdapterFactory.java:317) calls createBoundField at line 396 (defined line 181)",
+      "source": "gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java:396, gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java:181",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"getBoundFields\" and b.name = \"createBoundField\" return a, b", "cites": ["gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java:396"]}
+    },
+    {
+      "id": "class-reflective-factory",
+      "fact": "public final class ReflectiveTypeAdapterFactory is defined at G/internal/bind/ReflectiveTypeAdapterFactory.java:60",
+      "source": "gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java:60",
+      "check": {"kind": "q", "query": "match (c:class) where c.name = \"ReflectiveTypeAdapterFactory\" return c", "cites": ["gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java:60"]}
+    },
+    {
+      "id": "query-reflective",
+      "fact": "Reading an object's fields by reflection into a type adapter is in G/internal/bind/ReflectiveTypeAdapterFactory.java (create at 110, getBoundFields at 317)",
+      "source": "gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java:110",
+      "check": {"kind": "query", "question": "how are an object's fields read by reflection to build a type adapter", "top_k": 8, "expect_file": "gson/src/main/java/com/google/gson/internal/bind/ReflectiveTypeAdapterFactory.java"}
+    },
+    {
+      "id": "query-json-reader",
+      "fact": "The streaming tokenizer (peek, doPeek) is G/stream/JsonReader.java",
+      "source": "gson/src/main/java/com/google/gson/stream/JsonReader.java:542",
+      "check": {"kind": "query", "question": "how does the streaming reader tokenize the JSON input", "top_k": 8, "expect_file": "gson/src/main/java/com/google/gson/stream/JsonReader.java"}
+    }
+  ]
+}
