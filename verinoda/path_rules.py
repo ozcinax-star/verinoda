@@ -20,9 +20,16 @@ Verinoda reads two kinds of rule from these files:
 - **prose rules**: everything else in those files. Verinoda does not judge prose; it lists, per changed file, the
   rule files that cover it, nearest first, for the reviewer to read.
 
+Rule files are never checked by the rules (they name the patterns they forbid). The rules in force at the base
+are compared with the change's: a rule the change removes, turns down (error to warning or off, with a nearer
+file too) or rewrites, for a file it changes, is reported as weakened (exit 3), since a change that edits its
+own gate needs a reader. At most :data:`MAX_RULES` rules run, within a time budget; regex back-references are
+refused (git's matcher backtracks on them).
+
 A match on an added line is ``statically_verified`` at its ``file:line`` (the pattern is there; whether the rule's
 intent is broken is the reader's call). Exit 1 on an ``error`` match, 3 when a search did not finish (a cut
-list, a timeout, a git error, an AST rule on a staged file whose working copy differs), else 0.
+list, a timeout, a git error, an AST rule on a staged file whose working copy differs, the rule cap or the time
+budget) or a rule was weakened, else 0.
 """
 from __future__ import annotations
 
@@ -33,6 +40,10 @@ RULE_FILES = ("AGENTS.md", "CLAUDE.md", "BUGBOT.md", "REVIEW.md")
 # in one folder, a rule id defined in two files: the first file in this order applies
 PRIORITY = ("REVIEW.md", "BUGBOT.md", ".cursor/BUGBOT.md", "AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md")
 MAX_READ = 20
+MAX_RULES = 50
+BUDGET_S = 300.0
+_MODE_RANK = {"off": 0, "warning": 1, "error": 2}
+_BACKREF = re.compile(r"\\[1-9]")
 # rule files kept in a tool folder cover the folder that holds it
 NESTED = {".cursor": ("BUGBOT.md",), ".github": ("copilot-instructions.md",)}
 MODES = ("error", "warning", "off")
@@ -99,11 +110,6 @@ def _scan(text: str):
         yield n, s, state == "rules", False
 
 
-def block_lines(text: str) -> set[int]:
-    """The lines of a rule file's ``verinoda-rules`` blocks, fences included (a rule never matches itself)."""
-    return {n for n, _, inside, _ in _scan(text) if inside}
-
-
 def parse(text: str, src: str) -> tuple[list[dict], list[dict]]:
     """The checked rules of one rule file and the lines that look like rules but do not parse."""
     rules, bad = [], []
@@ -114,6 +120,10 @@ def parse(text: str, src: str) -> tuple[list[dict], list[dict]]:
         if not r:
             bad.append({"at": f"{src}:{n}", "line": s[:200],
                         "why": "not `MODE ID: regex|ast PATTERN [-- MESSAGE]` (MODE error, warning or off)"})
+            continue
+        if r.group(3) == "regex" and _BACKREF.search(r.group(4)):
+            bad.append({"at": f"{src}:{n}", "line": s[:200],
+                        "why": "a back-reference (\\1-\\9): git's matcher backtracks on them; write the rule without"})
             continue
         rules.append({"mode": r.group(1), "id": r.group(2), "kind": r.group(3), "pattern": r.group(4).strip(),
                       "message": (r.group(5) or "").strip(), "source": f"{src}:{n}"})
@@ -201,7 +211,11 @@ def _read_rule_file(repo: Path, rel: str, staged: bool) -> str | None:
         return None
 
 
-def _regex_hits(repo: Path, pattern: str, files: list[str], staged: bool) -> tuple[list[dict], str | None]:
+def _regex_hits(repo: Path, pattern: str, files: list[str], staged: bool,
+                timeout: float = 120.0) -> tuple[list[dict], str | None]:
+    import time
+
+    t_end = time.monotonic() + timeout
     from verinoda.monitors import _git_grep_rows
 
     rows, why = [], None
@@ -209,7 +223,8 @@ def _regex_hits(repo: Path, pattern: str, files: list[str], staged: bool) -> tup
         chunk = files[i:i + 200]
         rc, got, err = _git_grep_rows(repo, ["-n", "-z", "-I", "--no-color", "--no-column",
                                              *(["--cached"] if staged else ["--untracked"]), "-E", "-e", pattern,
-                                             "--", *[f":(literal){f}" for f in chunk]])
+                                             "--", *[f":(literal){f}" for f in chunk]],
+                                   timeout=max(1.0, t_end - time.monotonic()))
         if rc == 1:
             continue
         if rc == -1:
@@ -247,7 +262,8 @@ def _differs_from_index(repo: Path, files: list[str]) -> list[str] | None:
     return [f for f in files if staged.get(f) != now.get(f)]
 
 
-def _ast_hits(repo: Path, pattern: str, files: list[str], staged: bool) -> tuple[list[dict], str | None]:
+def _ast_hits(repo: Path, pattern: str, files: list[str], staged: bool,
+              timeout: float = 120.0) -> tuple[list[dict], str | None]:
     from verinoda import grep_ast
     from verinoda.snapshot import git
 
@@ -258,7 +274,7 @@ def _ast_hits(repo: Path, pattern: str, files: list[str], staged: bool) -> tuple
                         "the staged files could not be compared with their working copies") + \
                 " (an AST rule reads the working copy)"
     try:
-        res = grep_ast.run(repo, pattern, files=files, max_results=2000)
+        res = grep_ast.run(repo, pattern, files=files, max_results=2000, total_seconds=min(60.0, timeout))
     except grep_ast.PatternError as exc:
         return [], f"the pattern cannot be searched: {exc}"
     ns = res.get("not_searched") or {}
@@ -274,51 +290,89 @@ def _ast_hits(repo: Path, pattern: str, files: list[str], staged: bool) -> tuple
     return rows, "; ".join(why) or None
 
 
-def check(repo: Path, *, base: str | None = None, staged: bool = False) -> dict:
-    """Apply the rules that cover each changed file to the lines the change added."""
-    from verinoda.snapshot import list_files
+def _effective(sources: list[tuple[str, str]], by_file: dict[str, list[dict]], rel: str) -> tuple[dict, list]:
+    """The rule in force per id for ``rel`` (``off`` included) and the rule files covering it, nearest first."""
+    covering = sorted((s for s, f in sources if _covers(f, rel)), key=lambda s: _rank(s, dict(sources)[s]))
+    eff: dict[str, dict] = {}
+    for s in covering:
+        for r in by_file.get(s, []):
+            eff.setdefault(r["id"], r)
+    return eff, covering
 
+
+def _weaker(was: dict, now: dict | None) -> str | None:
+    """How a rule in force at the base is weaker in the change for one file, or None."""
+    if now is None:
+        return "removed"
+    if _MODE_RANK[now["mode"]] < _MODE_RANK[was["mode"]]:
+        return f"{was['mode']} -> {now['mode']}"
+    if now["mode"] != "off" and (now["kind"], now["pattern"]) != (was["kind"], was["pattern"]):
+        return "pattern changed"
+    return None
+
+
+def check(repo: Path, *, base: str | None = None, staged: bool = False, budget: float = BUDGET_S) -> dict:
+    """Apply the rules that cover each changed file to the lines the change added; report the rules the change
+    weakens against the base's rule files."""
+    import time
+
+    from verinoda.snapshot import git, list_files
+    from verinoda.treestate import _GIT_SAFE
+
+    t_end = time.monotonic() + budget
     repo = Path(repo).resolve()
-    files = _index_files(repo) if staged else list_files(repo)
-    sources = rule_files(files)
-    if not sources:     # no rule file: nothing to read the diff for
-        sha = _commit(repo, base)
-        return _result(sha, staged, 0, [], {}, [], [], [], {})
-    added, sha = _diff(repo, base, staged)
+    sha = _commit(repo, base)
+    sources = rule_files(_index_files(repo) if staged else list_files(repo))
+    base_sources = rule_files([f for f in (git(repo, *_GIT_SAFE, "ls-tree", "-r", "-z", "--name-only", sha) or
+                                           "").split("\0") if f])
+    if not sources and not base_sources:     # no rule file: nothing to read the diff for
+        return _result(sha, staged, 0, [], {}, [], [], [], {}, [])
+    added, _ = _diff(repo, base, staged)
+    for src in {s for s, _ in sources} | {s for s, _ in base_sources}:
+        added.pop(src, None)       # a rule file names the patterns it forbids: it is never checked by them
     by_file: dict[str, list[dict]] = {}
     malformed: list[dict] = []
-    for src, folder in sources:
+    for src, _ in sources:
         text = _read_rule_file(repo, src, staged)
-        if text is None:
-            continue
-        rules, bad = parse(text, src)
-        malformed += bad
-        by_file[src] = [{**r, "folder": folder} for r in rules]
-        if src in added:       # a rule's own definition is not a change it checks
-            own = block_lines(text)
-            added[src] = (set(range(1, len(_lines(text)) + 1)) if added[src] is ALL else added[src]) - own
-            if not added[src]:
-                del added[src]
-    # per changed file: the rule files covering it, nearest first; the rule in force per id is the first seen
-    rank = {src: _rank(src, folder) for src, folder in sources}
+        if text is not None:
+            rules, bad = parse(text, src)
+            malformed += bad
+            by_file[src] = rules
+    by_base: dict[str, list[dict]] = {}
+    for src, _ in base_sources:
+        text = git(repo, "show", f"{sha}:./{src}")
+        if text is not None:
+            by_base[src] = parse(text, src)[0]
     prose: dict[str, list[str]] = {}
     in_force: dict[tuple, list[str]] = {}       # (id, kind, pattern, mode, message, source) -> files
+    weak: dict[tuple, list[str]] = {}           # (id, how, was source, now source) -> files
     for rel in sorted(added):
-        covering = sorted((s for s, f in sources if _covers(f, rel)), key=lambda s: rank[s])
+        eff, covering = _effective(sources, by_file, rel)
         if covering:
             prose[rel] = covering
-        seen: set[str] = set()
-        for s in covering:
-            for r in by_file.get(s, []):
-                if r["id"] in seen:
-                    continue
-                seen.add(r["id"])
-                if r["mode"] != "off":
-                    key = (r["id"], r["kind"], r["pattern"], r["mode"], r["message"], r["source"])
-                    in_force.setdefault(key, []).append(rel)
+        for r in eff.values():
+            if r["mode"] != "off":
+                in_force.setdefault((r["id"], r["kind"], r["pattern"], r["mode"], r["message"], r["source"]),
+                                    []).append(rel)
+        was, _ = _effective(base_sources, by_base, rel)
+        for rid, r0 in was.items():
+            if r0["mode"] == "off":
+                continue
+            how = _weaker(r0, eff.get(rid))
+            if how:
+                weak.setdefault((rid, how, r0["source"], (eff.get(rid) or {}).get("source")), []).append(rel)
+    weakened = [{"rule": rid, "how": how, "was": was_src, "now": now_src, "files": len(rels), "first": rels[0]}
+                for (rid, how, was_src, now_src), rels in sorted(weak.items())]
     findings, incomplete = [], []
-    for (rid, kind, pattern, mode, message, source), rels in sorted(in_force.items(), key=lambda x: x[0][5]):
-        hits, why = (_regex_hits if kind == "regex" else _ast_hits)(repo, pattern, rels, staged)
+    for k, ((rid, kind, pattern, mode, message, source), rels) in enumerate(
+            sorted(in_force.items(), key=lambda x: (x[0][3] != "error", x[0][5]))):
+        left = t_end - time.monotonic()
+        if k >= MAX_RULES or left <= 1:
+            incomplete.append({"rule": rid, "source": source,
+                               "why": f"more than {MAX_RULES} rules in force" if k >= MAX_RULES else
+                               f"the time budget ({budget:.0f} s) was spent"})
+            continue
+        hits, why = (_regex_hits if kind == "regex" else _ast_hits)(repo, pattern, rels, staged, min(120.0, left))
         if why:
             incomplete.append({"rule": rid, "source": source, "why": why})
         for h in hits:
@@ -332,7 +386,7 @@ def check(repo: Path, *, base: str | None = None, staged: bool = False) -> dict:
                              "source": source, "status": "statically_verified"})
     findings.sort(key=lambda f: (f["mode"] != "error", f["at"]))
     return _result(sha, staged, len(added), [s for s, _ in sources], in_force, findings, incomplete, malformed,
-                   prose)
+                   prose, weakened)
 
 
 def _commit(repo: Path, base: str | None) -> str:
@@ -352,14 +406,14 @@ def _index_files(repo: Path) -> list[str]:
     return [f for f in (git(repo, *_GIT_SAFE, "ls-files", "-z", "--cached") or "").split("\0") if f]
 
 
-def _result(sha, staged, changed, rule_files_, in_force, findings, incomplete, malformed, prose) -> dict:
+def _result(sha, staged, changed, rule_files_, in_force, findings, incomplete, malformed, prose, weakened) -> dict:
     n_err = sum(1 for f in findings if f["mode"] == "error")
     return {"base": sha[:12], "mode": "staged" if staged else "worktree", "changed_files": changed,
             "rule_files": rule_files_, "rules_in_force": len(in_force),
             "findings": findings[:MAX_FINDINGS], "findings_total": len(findings), "errors": n_err,
-            "incomplete": incomplete, "malformed": malformed,
+            "incomplete": incomplete, "malformed": malformed, "weakened": weakened,
             "prose": [{"file": rel, "read": cov} for rel, cov in sorted(prose.items())],
-            "exit": 1 if n_err else 3 if incomplete else 0,
+            "exit": 1 if n_err else 3 if incomplete or weakened else 0,
             "method": "rule files (AGENTS.md, CLAUDE.md, BUGBOT.md, REVIEW.md, .cursor/BUGBOT.md, "
                       ".github/copilot-instructions.md) cover their folder; `verinoda-rules` blocks checked on the "
                       "added lines (git grep -E / grep-ast); prose listed, not judged"}
@@ -370,6 +424,7 @@ def summary(res: dict) -> dict:
     return {"errors": res["errors"], "warnings": res["findings_total"] - res["errors"],
             "findings": [{k: f[k] for k in ("mode", "rule", "at", "message")} for f in res["findings"][:10]],
             "incomplete": len(res["incomplete"]), "malformed": len(res["malformed"]),
+            "weakened": res["weakened"][:10],
             "read": sorted({s for p in res["prose"] for s in p["read"]})[:MAX_READ],
             "next_step": "`verinoda rules` (exit 1 on an error rule) for every match and the files each rule file "
                          "covers"}
@@ -381,6 +436,9 @@ def render_lines(s: dict) -> list[str]:
     out = ["", f"Path rules: {s['errors']} error(s), {s['warnings']} warning(s)"
            + (f", {s['incomplete']} rule(s) not checked to the end" if s["incomplete"] else "")
            + (f", {s['malformed']} line(s) not rules" if s["malformed"] else "")]
+    for w in s.get("weakened") or []:
+        out.append(f"  WEAKENED [{w['rule']}] {w['how']} for {w['first']}" + (f" and {w['files'] - 1} more"
+                                                                             if w["files"] > 1 else ""))
     for f in s["findings"]:
         out.append(f"  {f['mode'].upper()} [{f['rule']}] {f['at']}" + (f": {f['message']}" if f["message"] else ""))
     if s["read"]:
@@ -392,7 +450,8 @@ def render_lines(s: dict) -> list[str]:
 def render(res: dict) -> str:
     out = [f"rules: {res['changed_files']} changed file(s) against {res['base']} ({res['mode']}), "
            f"{len(res['rule_files'])} rule file(s), {res['rules_in_force']} checked rule(s) in force: "
-           f"{res['errors']} error(s), {res['findings_total'] - res['errors']} warning(s)"]
+           f"{res['errors']} error(s), {res['findings_total'] - res['errors']} warning(s)"
+           + (f", {len(res['weakened'])} rule(s) weakened" if res["weakened"] else "")]
     for f in res["findings"][:50]:
         out.append(f"  {f['mode'].upper()} [{f['rule']}] {f['at']}: {f['text']}"
                    + (f"  ({f['message']})" if f["message"] else "") + f"  - {f['source']}")
@@ -400,6 +459,9 @@ def render(res: dict) -> str:
         out.append(f"  ... {res['findings_total'] - 50} more (--json)")
     for x in res["incomplete"]:
         out.append(f"  unknown [{x['rule']}] ({x['source']}): {x['why']}")
+    for w in res["weakened"][:20]:
+        out.append(f"  WEAKENED [{w['rule']}] {w['how']} (was {w['was']}" + (f", now {w['now']}" if w["now"] else "")
+                   + f") for {w['first']}" + (f" and {w['files'] - 1} more file(s)" if w["files"] > 1 else ""))
     for b in res["malformed"][:20]:
         out.append(f"  not a rule {b['at']}: {b['line']}")
     if res["prose"]:

@@ -1511,10 +1511,9 @@ def cmd_rules(args) -> int:
     from verinoda import path_rules as pr
 
     repo = _repo(args)
-    if args.base and args.staged:
-        print("error: give --base or --staged, not both", file=sys.stderr)
-        return 2
     try:
+        if args.base and args.staged:
+            raise pr.RulesError("give --base or --staged, not both")
         res = pr.check(repo, base=args.base, staged=args.staged)
     except pr.RulesError as exc:
         if getattr(args, "json", False):

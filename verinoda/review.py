@@ -4984,8 +4984,8 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         from verinoda import path_rules
 
         try:
-            pr = path_rules.check(repo, base=base_sha, staged=staged)
-            rules = path_rules.summary(pr) if pr["rule_files"] and pr["changed_files"] else None
+            pr = path_rules.check(repo, base=base_sha, staged=staged, budget=20.0)
+            rules = path_rules.summary(pr) if (pr["rule_files"] or pr["weakened"]) and pr["changed_files"] else None
         except Exception as exc:   # an optional block never stops the review
             unknown.append({"kind": "path_rules", "at": None, "what": "which path-scoped review rules the change "
                             "breaks", "why": f"{type(exc).__name__}: {exc}"[:300], "next_step": "run `verinoda rules`"})

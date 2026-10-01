@@ -94,7 +94,10 @@ def test_off_turns_a_rule_off_below_and_untracked_files_count(repo):
     _write(repo, "src/other/n.py", "print('y')\n")
     res = path_rules.check(repo)
     assert [(f["rule"], f["at"]) for f in res["findings"]] == [("no-print", "src/other/n.py:1")]
-    assert res["exit"] == 0                                   # a warning only
+    # a warning only, but the new CLAUDE.md turns the root's rule off for src/core: the change weakens its gate
+    assert res["exit"] == 3 and res["errors"] == 0
+    assert [(w["rule"], w["how"], w["first"]) for w in res["weakened"]] == [("no-print", "warning -> off",
+                                                                             "src/core/new.py")]
 
 
 def test_ast_rule_and_staged(repo):
@@ -170,7 +173,7 @@ def test_a_new_rule_does_not_match_itself(repo):
     _write(repo, "AGENTS.md", ROOT_RULES.replace("```\n", "error no-todo: regex TODO -- no TODO left\n```\n", 1)
            + "\nA TODO in the prose of the file.\n")
     res = path_rules.check(repo)
-    assert [(f["rule"], f["at"]) for f in res["findings"]] == [("no-todo", "AGENTS.md:11")]
+    assert res["findings"] == [] and res["changed_files"] == 0    # a rule file is never checked by the rules
 
 
 def test_names_and_hunks_git_prints_oddly(repo):
@@ -205,10 +208,42 @@ def test_staged_in_a_project_below_the_git_top(tmp_path):
 def test_same_folder_order_and_no_rule_files(repo):
     _write(repo, "src/api/REVIEW.md", "```verinoda-rules\noff no-print: regex print\\(\n```\n")
     _write(repo, "src/api/h.py", "print('x')\n")
-    assert path_rules.check(repo)["findings"] == []          # REVIEW.md comes before .cursor/BUGBOT.md
+    res = path_rules.check(repo)
+    assert res["findings"] == []                              # REVIEW.md comes before .cursor/BUGBOT.md
+    assert [(w["rule"], w["how"]) for w in res["weakened"]] == [("no-print", "error -> off")]
     for f in ("AGENTS.md", "src/api/.cursor/BUGBOT.md", "src/api/REVIEW.md"):
         (repo / f).unlink()
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "no rules")
     res = path_rules.check(repo)
-    assert res["rule_files"] == [] and res["exit"] == 0
+    assert res["rule_files"] == [] and res["exit"] == 0 and res["changed_files"] == 0
+
+
+def test_a_change_that_removes_or_rewrites_a_rule_is_reported(repo):
+    _write(repo, "src/api/.cursor/BUGBOT.md", API_RULES.replace('execute\\(f"', "nothing_like_it"))
+    (repo / "AGENTS.md").unlink()
+    _write(repo, "src/api/h.py", "def h():\n    print('old')\n    return 2\n")
+    _write(repo, "src/core/c.py", "def c():\n    return 3\n")
+    res = path_rules.check(repo)
+    got = {(w["rule"], w["how"], w["first"]) for w in res["weakened"]}
+    assert got == {("no-sql-format", "pattern changed", "src/api/h.py"), ("no-eval", "removed", "src/api/h.py"),
+                   ("no-print", "removed", "src/core/c.py")}
+    assert next(w["files"] for w in res["weakened"] if w["rule"] == "no-eval") == 2
+    assert res["exit"] == 3 and "WEAKENED [no-eval] removed" in path_rules.render(res)
+
+
+def test_backreferences_caps_and_budget(repo, monkeypatch):
+    rules, bad = path_rules.parse("```verinoda-rules\nerror br: regex (a)\\1\n```\n", "R.md")
+    assert rules == [] and "back-reference" in bad[0]["why"]
+    _write(repo, "src/api/h.py", "print('x')\n")
+    monkeypatch.setattr(path_rules, "MAX_RULES", 1)
+    res = path_rules.check(repo)
+    assert res["exit"] == 3 and [x["why"] for x in res["incomplete"]] == ["more than 1 rules in force"] * 2
+    monkeypatch.setattr(path_rules, "MAX_RULES", 50)
+    res = path_rules.check(repo, budget=0)
+    assert res["exit"] == 3 and all("time budget" in x["why"] for x in res["incomplete"])
+
+
+def test_cli_errors_as_json(repo, capsys):
+    assert cli.main(["rules", "--repo", str(repo), "--base", "HEAD", "--staged", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "error"
