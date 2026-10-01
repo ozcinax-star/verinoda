@@ -3310,7 +3310,8 @@ def serve(repo: Path, profile: str | None = None, *, watch: bool = False) -> Non
         watcher = Watcher(repo, purpose="mcp serve --watch", fast=True)
         watcher.start()
     elif watch:
-        print("verinoda mcp: --watch waits for an index: run index_update once", file=sys.stderr, flush=True)
+        print("verinoda mcp: --watch needs an index: run index_update, then restart the server to watch",
+              file=sys.stderr, flush=True)
     try:
         srv.run("stdio")
     except KeyboardInterrupt:  # pragma: no cover - interactive stop

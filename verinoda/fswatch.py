@@ -99,7 +99,8 @@ class Source:
         self.q: queue.Queue = queue.Queue()
         self.error: str | None = None
         self.note: str | None = None
-        self.closed = threading.Event()
+        self.closed = threading.Event()     # the reader has ended (stopped, or failed: then ``error``)
+        self.stopping = threading.Event()   # :meth:`close` was called
 
     def _push(self, rel: str) -> None:
         if relevant(rel):
@@ -124,12 +125,21 @@ class Source:
         return not self.closed.is_set()
 
     def close(self) -> None:
+        self.stopping.set()
         self.closed.set()
+
+    def _fail(self, why: str) -> None:
+        """The reader cannot go on: say why and wake the watcher, which falls back to polling."""
+        self.error = why
+        self.closed.set()
+        self.q.put(OVERFLOW)
 
 
 class WinSource(Source):
-    """``ReadDirectoryChangesW`` on the root, recursive, read by a daemon thread (synchronous calls;
-    :meth:`close` cancels the pending one with ``CancelIoEx``)."""
+    """``ReadDirectoryChangesW`` on the root, recursive, read by a daemon thread with synchronous calls.
+    The thread owns the handle and closes it when it ends; :meth:`close` cancels the pending read with
+    ``CancelIoEx`` until the thread has ended (a read started just after one cancel is cancelled by the next).
+    While watched, the root's parent folder cannot be renamed (the open handle)."""
 
     backend = "ReadDirectoryChangesW"
     FILTER = 0x1 | 0x2 | 0x8 | 0x10  # file name, dir name, size, last write
@@ -162,25 +172,28 @@ class WinSource(Source):
         ct, wt = self._ctypes, self._wt
         buf = ct.create_string_buffer(BUF_SIZE)
         got = wt.DWORD(0)
-        while not self.closed.is_set():
-            ok = self._k.ReadDirectoryChangesW(self._h, buf, BUF_SIZE, True, self.FILTER, ct.byref(got), None, None)
-            if self.closed.is_set():
-                break
-            if not ok:
-                self.error = f"ReadDirectoryChangesW failed (error {ct.get_last_error()})"
-                self.closed.set()
-                self.q.put(OVERFLOW)  # wake the watcher: it falls back to polling
-                break
-            for rel in parse_win(buf.raw, got.value):
-                self._push(rel)
+        try:
+            while not self.stopping.is_set():
+                ok = self._k.ReadDirectoryChangesW(self._h, buf, BUF_SIZE, True, self.FILTER, ct.byref(got), None,
+                                                   None)
+                if self.stopping.is_set():
+                    break
+                if not ok:
+                    self._fail(f"ReadDirectoryChangesW failed (error {ct.get_last_error()})")
+                    break
+                for rel in parse_win(buf.raw, got.value):
+                    self._push(rel)
+        finally:
+            self._k.CloseHandle(self._h)
+            self.closed.set()
 
     def close(self) -> None:
-        if self.closed.is_set():
-            return
+        self.stopping.set()
+        end = time.monotonic() + 5
+        while self._t.is_alive() and time.monotonic() < end:
+            self._k.CancelIoEx(self._h, None)  # fails harmlessly when no read is pending
+            self._t.join(0.05)
         self.closed.set()
-        self._k.CancelIoEx(self._h, None)
-        self._t.join(2)
-        self._k.CloseHandle(self._h)
 
 
 class InotifySource(Source):
@@ -231,46 +244,56 @@ class InotifySource(Source):
     def _read(self) -> None:
         import select
 
-        while not self.closed.is_set():
+        try:
+            while not self.stopping.is_set():
+                try:
+                    ready, _, _ = select.select([self._fd], [], [], 0.5)
+                except (OSError, ValueError) as exc:
+                    self._fail(f"inotify select failed: {exc}")
+                    break
+                if not ready:
+                    continue
+                try:
+                    buf = os.read(self._fd, BUF_SIZE)
+                except BlockingIOError:
+                    continue
+                except OSError as exc:
+                    self._fail(f"inotify read failed: {exc}")
+                    break
+                if self._handle(buf):
+                    break
+        finally:
+            # the reader owns the descriptor: closed here, never while a read may still use it
             try:
-                ready, _, _ = select.select([self._fd], [], [], 0.5)
-            except (OSError, ValueError):
-                break
-            if not ready:
-                continue
-            try:
-                buf = os.read(self._fd, BUF_SIZE)
-            except BlockingIOError:
-                continue
-            except OSError as exc:
-                self.error = f"inotify read failed: {exc}"
-                self.closed.set()
+                os.close(self._fd)
+            except OSError:
+                pass
+            self.closed.set()
+
+    def _handle(self, buf: bytes) -> bool:
+        """Push the events of ``buf``; True when the root itself went away (stop: the watcher polls)."""
+        for wd, mask, name in parse_inotify(buf):
+            if mask & IN_Q_OVERFLOW:
                 self.q.put(OVERFLOW)
-                break
-            for wd, mask, name in parse_inotify(buf):
-                if mask & IN_Q_OVERFLOW:
-                    self.q.put(OVERFLOW)
-                    continue
-                if mask & IN_IGNORED:
-                    self._dirs.pop(wd, None)
-                    continue
-                base = self._dirs.get(wd)
-                if base is None:
-                    continue
-                rel = f"{base}/{name}" if base and name else (name or base)
-                if mask & IN_ISDIR and mask & (IN_CREATE | IN_MOVED_TO) and relevant(rel):
-                    self._add_tree(rel)
-                self._push(rel or ".")
+                continue
+            if self._dirs.get(wd) == "" and mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED):
+                self._fail("the project folder was deleted or moved")
+                return True
+            if mask & IN_IGNORED:
+                self._dirs.pop(wd, None)
+                continue
+            base = self._dirs.get(wd)
+            if base is None:
+                continue
+            rel = f"{base}/{name}" if base and name else (name or base)
+            if mask & IN_ISDIR and mask & (IN_CREATE | IN_MOVED_TO) and relevant(rel):
+                self._add_tree(rel)
+            self._push(rel or ".")
+        return False
 
     def close(self) -> None:
-        if self.closed.is_set():
-            return
-        self.closed.set()
-        self._t.join(2)
-        try:
-            os.close(self._fd)
-        except OSError:
-            pass
+        self.stopping.set()
+        self._t.join(2)  # the select wakes every 0.5 s; a long folder walk ends on its own and closes the fd
 
 
 class WatchdogSource(Source):
@@ -299,9 +322,12 @@ class WatchdogSource(Source):
         self._obs.start()
         self.backend = f"watchdog ({type(self._obs).__name__})"
 
+    @property
+    def alive(self) -> bool:
+        return not self.closed.is_set() and self._obs.is_alive()
+
     def close(self) -> None:
-        if self.closed.is_set():
-            return
+        self.stopping.set()
         self.closed.set()
         self._obs.stop()
         self._obs.join(2)
@@ -378,7 +404,13 @@ class Watcher(threading.Thread):
             st.close()
 
     def _do_update(self, now: tuple) -> tuple | None:
-        """Run one update; the signature to compare with next (None: look again next time)."""
+        """Run one update for the tree whose signature is ``now``; the signature to compare with next (None:
+        look again next time). It is ``now``, not a look after the update: a file saved while the update ran
+        then differs from it, and the next look updates again."""
+        if not self.repo.is_dir():  # deleted or moved: an update would create the folder again
+            self.error = f"the project folder {self.repo} is gone: watching stopped"
+            self.stop.set()
+            return now
         self.running = True
         try:
             res = self.run_update()
@@ -386,16 +418,16 @@ class Watcher(threading.Thread):
                 # another build is running: nothing was done; the change is picked up next time
                 self.error = res.get("error")
                 return None
+            if isinstance(res, dict) and res.get("mode") == "index_refused":
+                self.error = str(res.get("error") or "the index build was refused")[:300]
+                return now
             self.updates += 1
             self.error = None
         except Exception as exc:  # noqa: BLE001 - reported; the next change tries again
             self.error = f"{type(exc).__name__}: {exc}"[:300]
         finally:
             self.running = False
-        try:
-            return self.signature()
-        except Exception:  # noqa: BLE001
-            return now
+        return now
 
     def _wait(self, src: Source, timeout: float) -> list[str]:
         """Events within ``timeout``, in short slices so :attr:`stop` is seen."""
@@ -422,6 +454,7 @@ class Watcher(threading.Thread):
         try:
             if self.source is not None:
                 last = self._run_events(self.source, last)
+                self.source.close()  # a failed reader has ended; stop a live one before polling
             if not self.stop.is_set():
                 self._run_poll(last)
         finally:

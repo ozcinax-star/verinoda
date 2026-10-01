@@ -7,6 +7,7 @@ import struct
 import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -327,3 +328,120 @@ def test_an_edit_reaches_the_graph_through_the_watcher(tmp_path, monkeypatch):
         from verinoda import buildlock
 
         _wait_for(lambda: not buildlock.is_locked(repo), 120)  # let the background build end before cleanup
+
+
+# -- review round ---------------------------------------------------------------------------------
+
+def test_a_save_during_an_update_starts_another_update(tmp_path, monkeypatch):
+    (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    src = FakeSource(tmp_path)
+    monkeypatch.setattr(fswatch, "open_source", lambda root: (src, ""))
+    calls = []
+
+    def run():
+        calls.append(1)
+        if len(calls) == 1:  # the user saves again while the first update runs
+            (tmp_path / "a.py").write_text("x = 2  # saved during the update\n", encoding="utf-8")
+            src.q.put("a.py")
+
+    w = Watcher(tmp_path, run_update=run, interval=30, settle=0.05, rescan=30)
+    w.start()
+    try:
+        assert w.ready.wait(3)
+        (tmp_path / "a.py").write_text("x = 3\n", encoding="utf-8")
+        src.q.put("a.py")
+        assert _wait_for(lambda: len(calls) == 2, 5), calls
+    finally:
+        w.stop.set()
+        w.join(3)
+
+
+def test_a_deleted_project_folder_stops_the_watcher_and_is_not_created_again(tmp_path, monkeypatch):
+    import shutil
+
+    repo = tmp_path / "proj"
+    repo.mkdir()
+    (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+    src = FakeSource(repo)
+    monkeypatch.setattr(fswatch, "open_source", lambda root: (src, ""))
+    calls = []
+    w = Watcher(repo, run_update=lambda: calls.append(1) or repo.mkdir(exist_ok=True), interval=30, settle=0.05,
+                rescan=30)
+    w.start()
+    try:
+        assert w.ready.wait(3)
+        shutil.rmtree(repo)
+        src.q.put(OVERFLOW)
+        assert _wait_for(lambda: not w.is_alive(), 5)
+        assert calls == [] and not repo.exists() and "is gone" in w.error
+    finally:
+        w.stop.set()
+        w.join(3)
+
+
+def test_a_refused_index_build_is_an_error_not_an_update(tmp_path, monkeypatch):
+    src = FakeSource(tmp_path)
+    monkeypatch.setattr(fswatch, "open_source", lambda root: (src, ""))
+    w = Watcher(tmp_path, run_update=lambda: {"mode": "index_refused", "error": "the graph would shrink"},
+                interval=30, settle=0.05, rescan=30)
+    w.start()
+    try:
+        assert w.ready.wait(3)
+        (tmp_path / "b.py").write_text("y = 1\n", encoding="utf-8")
+        src.q.put("b.py")
+        assert _wait_for(lambda: w.error, 3)
+        assert w.updates == 0 and "shrink" in w.error
+    finally:
+        w.stop.set()
+        w.join(3)
+
+
+def test_inotify_stops_when_the_root_goes():
+    src = object.__new__(fswatch.InotifySource)
+    Source.__init__(src, Path("."))
+    src._dirs = {1: "", 2: "sub"}
+    sub = struct.pack("iIII", 2, fswatch.IN_DELETE_SELF, 0, 0) + struct.pack("iIII", 2, fswatch.IN_IGNORED, 0, 0)
+    assert src._handle(sub) is False and 2 not in src._dirs and src.alive  # a sub-folder going is an event
+    root = struct.pack("iIII", 1, fswatch.IN_DELETE_SELF, 0, 0)
+    assert src._handle(root) is True and not src.alive and "deleted or moved" in src.error
+    assert OVERFLOW in src.wait(0)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="ReadDirectoryChangesW")
+def test_windows_source_closes_its_handle_and_never_hangs(tmp_path):
+    import ctypes
+    from ctypes import wintypes
+
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.GetHandleInformation.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+
+    def is_open(h):
+        return bool(k.GetHandleInformation(h, ctypes.byref(wintypes.DWORD())))
+
+    stop = threading.Event()
+
+    def churn():  # events all the time: close() races a read being started
+        i = 0
+        while not stop.is_set():
+            (tmp_path / f"c{i % 5}.txt").write_text(str(i), encoding="utf-8")
+            i += 1
+
+    t = threading.Thread(target=churn, daemon=True)
+    t.start()
+    try:
+        for _ in range(15):
+            src = fswatch.WinSource(tmp_path)
+            time.sleep(0.02)
+            t0 = time.monotonic()
+            src.close()
+            assert time.monotonic() - t0 < 3 and not src._t.is_alive() and not is_open(src._h)
+    finally:
+        stop.set()
+        t.join(3)
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    src = fswatch.WinSource(gone)
+    gone.rmdir()  # the reader fails: it closes its handle itself
+    assert _wait_for(lambda: not src.alive, 5) and src.error
+    assert not is_open(src._h)
+    src.close()
