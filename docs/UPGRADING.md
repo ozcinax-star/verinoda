@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D110)
+## Upgrading from 0.3.2 (D60-D111)
 
 ### D63: Running a project's own tests safely
 
@@ -508,6 +508,15 @@ changes), and each class, function and method definition line at `file:line`, un
 reach N (default 1024). `--json` has the ranks (`strong_inference`) and the counts. The MCP `map_view`
 takes `view: "repo"`, with `targets` as the files in play. The MCP tool count is unchanged, so UPGRADING's
 tool count needs no change.
+
+### D111: Undocumented decisions
+
+`verinoda decide undocumented` lists structural choices no decision record covers - storage that goes through
+one file, a Python library imported by one product file, the environment read in one file - each a
+`weak_inference` candidate over a verified fact with `path:line` evidence, with the guard that would keep it and
+the `decide record` command. `verinoda decide dismiss CANDIDATE --reason "..."` records the user's dismissal in
+`.verinoda/dismissed_decisions.json` (local; `--undo` lists it again). No MCP tool was added: UPGRADING's tool
+count does not change.
 
 ### D60-D62
 
