@@ -364,6 +364,114 @@ def class_code(b: bytes) -> dict | None:
         return None
 
 
+_ANNOTATION_ATTRS = ("RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations")
+
+
+def class_annotations(b: bytes) -> dict | None:
+    """``{"name", "annotations": [...], "methods": [[name, descriptor, [...]]]}``: the annotations a class file
+    keeps on the class and on each method (visible and invisible ones: a Mixin's ``@Mixin`` has class retention),
+    each ``{"type": "Lpkg/Ann;", "values": {name: value}}``. A value is a string, a number or a boolean, an enum
+    constant's name, a class descriptor as ``{"class": "Lpkg/Cls;"}``, a nested annotation or a list of values.
+    None when ``b`` is not a class file this reader knows."""
+    try:
+        if b[:4] != b"\xca\xfe\xba\xbe":
+            return None
+        u2 = lambda o: (b[o] << 8) | b[o + 1]
+        u4 = lambda o: struct.unpack(">I", b[o:o + 4])[0]
+        n = u2(8)
+        cp: list = [None] * n
+        i, k = 10, 1
+        while k < n:
+            tag = b[i]
+            if tag == 1:
+                ln = u2(i + 1)
+                cp[k] = b[i + 3:i + 3 + ln].decode("utf-8", "replace")
+                i += 3 + ln
+            elif tag == 3:
+                cp[k] = struct.unpack(">i", b[i + 1:i + 5])[0]
+                i += 5
+            elif tag == 4:
+                cp[k] = struct.unpack(">f", b[i + 1:i + 5])[0]
+                i += 5
+            elif tag in (5, 6):
+                cp[k] = struct.unpack(">q" if tag == 5 else ">d", b[i + 1:i + 9])[0]
+                i += 9
+                k += 1
+            elif tag == 7:
+                cp[k] = ("class", u2(i + 1))
+                i += 3
+            elif tag in (8, 16, 19, 20):
+                i += 3
+            elif tag in (9, 10, 11, 12, 17, 18):
+                i += 5
+            elif tag == 15:
+                i += 4
+            else:
+                return None
+            k += 1
+
+        def value(o: int):
+            tag = chr(b[o])
+            if tag in "BCDFIJSZ":
+                v = cp[u2(o + 1)]
+                return (bool(v) if tag == "Z" else chr(v) if tag == "C" else v), o + 3
+            if tag == "s":
+                return cp[u2(o + 1)], o + 3
+            if tag == "e":
+                return cp[u2(o + 3)], o + 5
+            if tag == "c":
+                return {"class": cp[u2(o + 1)]}, o + 3
+            if tag == "@":
+                return annotation(o + 1)
+            if tag == "[":
+                out, o2 = [], o + 3
+                for _ in range(u2(o + 1)):
+                    v, o2 = value(o2)
+                    out.append(v)
+                return out, o2
+            raise ValueError(tag)
+
+        def annotation(o: int):
+            ann = {"type": cp[u2(o)], "values": {}}
+            o += 4
+            for _ in range(u2(o - 2)):
+                name = cp[u2(o)]
+                ann["values"][name], o = value(o + 2)
+            return ann, o
+
+        def attrs(o: int) -> tuple[list, int]:
+            """The annotations of the attribute table at ``o`` (its count) and the offset after it."""
+            anns = []
+            count = u2(o)
+            o += 2
+            for _ in range(count):
+                ln = u4(o + 2)
+                if cp[u2(o)] in _ANNOTATION_ATTRS:
+                    p = o + 8
+                    for _ in range(u2(o + 6)):
+                        a, p = annotation(p)
+                        anns.append(a)
+                o += 6 + ln
+            return anns, o
+
+        this = cp[u2(i + 2)]
+        out: dict = {"name": cp[this[1]] if isinstance(this, tuple) else None, "methods": []}
+        i += 6
+        i += 2 + 2 * u2(i)   # the interfaces
+        for group in ("fields", "methods"):
+            count = u2(i)
+            i += 2
+            for _ in range(count):
+                nm, desc = u2(i + 2), u2(i + 4)
+                anns, i = attrs(i + 6)
+                if group == "methods":
+                    out["methods"].append([cp[nm], cp[desc], anns])
+        out["annotations"], _ = attrs(i)
+        return out
+    except (IndexError, struct.error, TypeError, ValueError, KeyError):
+        return None
+
+
 def _kotlin_metadata_names(b: bytes, o: int, cp: list, u2) -> list[str]:
     """The ``d2`` strings of a ``@kotlin.Metadata`` of a file facade (kind 2, 4 or 5): the Kotlin names of
     the functions and properties it declares, among other strings (an over-approximation, used only to say

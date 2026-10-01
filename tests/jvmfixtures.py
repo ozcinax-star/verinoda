@@ -1,6 +1,7 @@
 """Class files and jars written from scratch for the Java check tests (verinoda/codecheck_java.py): no JDK
 and no compiler needed. Methods are abstract or native, so no bytecode is written - unless a method is given
-the instructions its ``Code`` attribute holds (the Mixin check reads what they reference)."""
+the instructions its ``Code`` attribute holds (the Mixin check reads what they reference). The class and its
+methods may carry annotations (a compiled Mixin's ``@Mixin``, ``@Inject``...)."""
 from __future__ import annotations
 
 import struct
@@ -12,8 +13,12 @@ PUBLIC, STATIC, NATIVE, ABSTRACT, VARARGS, INTERFACE = 0x0001, 0x0008, 0x0100, 0
 
 def class_bytes(name: str, *, super_: str | None = "java/lang/Object", ifaces: tuple[str, ...] = (),
                 methods: tuple[tuple[str, str, int], ...] = (), fields: tuple[tuple[str, str, int], ...] = (),
-                flags: int = PUBLIC | 0x0020) -> bytes:
-    """A class file: ``methods`` and ``fields`` are ``(name, descriptor, access flags)``."""
+                flags: int = PUBLIC | 0x0020, annotations: tuple = (),
+                method_annotations: dict | None = None) -> bytes:
+    """A class file: ``methods`` and ``fields`` are ``(name, descriptor, access flags)``. ``annotations`` (on the
+    class, invisible at run time as ``@Mixin``) and ``method_annotations`` (method name -> annotations) are
+    ``(type descriptor, {name: value})``; a value is a str, bool, int, float, ``("enum", type, constant)``,
+    ``("class", descriptor)``, a nested ``(type descriptor, {...})`` or a list of values."""
     pool: list[bytes] = []
     index: dict[tuple, int] = {}
 
@@ -45,6 +50,39 @@ def class_bytes(name: str, *, super_: str | None = "java/lang/Object", ifaces: t
             pool.append(bytes([tag]) + struct.pack(">HH", c, index[nat_key]))
             index[key] = len(pool)
         return index[key]
+
+    def const(tag: int, fmt: str, v) -> int:
+        key = ("k", tag, v)
+        if key not in index:
+            pool.append(bytes([tag]) + struct.pack(fmt, v))
+            index[key] = len(pool)
+        return index[key]
+
+    def element(v) -> bytes:
+        if isinstance(v, bool):
+            return b"Z" + struct.pack(">H", const(3, ">i", int(v)))
+        if isinstance(v, int):
+            return b"I" + struct.pack(">H", const(3, ">i", v))
+        if isinstance(v, float):
+            return b"F" + struct.pack(">H", const(4, ">f", v))
+        if isinstance(v, str):
+            return b"s" + struct.pack(">H", utf8(v))
+        if isinstance(v, list):
+            return b"[" + struct.pack(">H", len(v)) + b"".join(element(x) for x in v)
+        if v[0] == "enum":
+            return b"e" + struct.pack(">HH", utf8(v[1]), utf8(v[2]))
+        if v[0] == "class":
+            return b"c" + struct.pack(">H", utf8(v[1]))
+        return b"@" + annotation(v)
+
+    def annotation(a) -> bytes:
+        typ, values = a
+        return struct.pack(">HH", utf8(typ), len(values)) + b"".join(
+            struct.pack(">H", utf8(k)) + element(v) for k, v in values.items())
+
+    def ann_attr(name: str, anns) -> bytes:
+        data = struct.pack(">H", len(anns)) + b"".join(annotation(a) for a in anns)
+        return struct.pack(">HI", utf8(name), len(data)) + data
 
     def code(items) -> bytes:
         """Bytecode for ``items``: ``(op, owner, name, desc)`` with op one of getfield, putstatic, invokevirtual,
@@ -84,21 +122,24 @@ def class_bytes(name: str, *, super_: str | None = "java/lang/Object", ifaces: t
         out = []
         for row in group:
             mname, desc, acc = row[:3]
+            attrs = []
             if len(row) > 3:
                 body = code(row[3])
                 attr = struct.pack(">HHI", 4, 4, len(body)) + body + struct.pack(">HH", 0, 0)
-                out.append(struct.pack(">HHHH", acc, utf8(mname), utf8(desc), 1)
-                           + struct.pack(">HI", code_name, len(attr)) + attr)
-                continue
-            if group is methods and not acc & (ABSTRACT | NATIVE):
+                attrs.append(struct.pack(">HI", code_name, len(attr)) + attr)
+            elif group is methods and not acc & (ABSTRACT | NATIVE):
                 acc |= NATIVE  # no Code attribute to write
-            out.append(struct.pack(">HHHH", acc, utf8(mname), utf8(desc), 0))
+            anns = (method_annotations or {}).get(mname) if group is methods else None
+            if anns:
+                attrs.append(ann_attr("RuntimeVisibleAnnotations", anns))
+            out.append(struct.pack(">HHHH", acc, utf8(mname), utf8(desc), len(attrs)) + b"".join(attrs))
         members.append(out)
     body = struct.pack(">HHH", flags, this, sup) + struct.pack(">H", len(iface_ix))
     body += b"".join(struct.pack(">H", i) for i in iface_ix)
     for out in members:
         body += struct.pack(">H", len(out)) + b"".join(out)
-    body += struct.pack(">H", 0)  # class attributes
+    body += struct.pack(">H", 1) + ann_attr("RuntimeInvisibleAnnotations", annotations) if annotations else \
+        struct.pack(">H", 0)  # class attributes
     return b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 52) + struct.pack(">H", len(pool) + 1) + b"".join(pool) + body
 
 
