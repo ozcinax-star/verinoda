@@ -9,17 +9,25 @@ artifacts.
 What it records:
 
 * **SQL** - every ``execute`` / ``executemany`` / ``executescript`` on a
-  ``sqlite3`` connection or cursor: ``sqlite3.connect`` (and
-  ``sqlite3.dbapi2.connect``) is wrapped at plugin load so connections get a
-  subclass of their factory whose methods time the call. When SQLAlchemy has
-  been imported by the end of collection, its ``before/after_cursor_execute``
-  engine events record statements of other drivers (a statement on a sqlite3
-  cursor is left to the wrapper, so nothing is counted twice). Per statement:
-  the text with literals and placeholders replaced by ``?`` (the raw text and
-  the parameter values are never written, only a hash of them, to tell
-  identical executions apart), the stack of project frames that made it
-  (code object and instruction offset, innermost first, at most
-  ``MAX_DEPTH``) and the duration.
+  ``sqlite3`` connection or cursor. ``sqlite3.connect`` (and
+  ``sqlite3.dbapi2.connect``) is wrapped at plugin load: a connection is made
+  from ``_Conn`` (a ``sqlite3.Connection`` subclass whose cursors are ``_Cur``,
+  a ``sqlite3.Cursor`` subclass that times each execution), or, for a user's
+  own ``factory``, from a class placed *after* the user's class (``(MyConn,
+  _Conn)``), so the user's overrides run first, with their own signatures, and
+  reach the timing through ``super()``. A connection's ``execute`` makes a
+  new cursor as sqlite3's own does (``_Conn.cursor``, never an overridden
+  ``cursor()``, since Python 3.11; ``self.cursor()`` on 3.10), runs the
+  statement on it once and returns it, so a cursor returned by
+  ``Connection.execute`` keeps recording.
+  When SQLAlchemy has been imported by the end of collection, its
+  ``before/after_cursor_execute`` engine events record statements of other
+  drivers (a statement on a ``_Cur`` is left to the wrapper, so nothing is
+  counted twice). Per statement: the text with literals, placeholders and
+  comments replaced (one tokenising pass; a literal is never written), a hash
+  of the raw text and parameters (only to tell identical executions apart),
+  the stack of project frames that made it (code and instruction offset,
+  innermost first, at most ``MAX_DEPTH``) and the duration.
 * **Samples** - a daemon thread reads the main thread's stack every
   ``VERINODA_FLAWS_SAMPLE_MS`` (default 5) milliseconds; each sample weighs the
   wall time since the previous one (at most a second), on the project frames
@@ -30,29 +38,40 @@ test runs, ``<collection>`` before the first test, ``<session>`` between tests.
 Statements on threads other than the main one carry ``thread``.
 
 Budgets: ``VERINODA_FLAWS_MAX_KEYS`` distinct (context, statement, stack) keys
-and ``VERINODA_FLAWS_MAX_BYTES`` of output (past either the header says
-``complete: false``); ``VERINODA_FLAWS_MAX_SAMPLE_KEYS`` distinct (context,
-stack) sample keys (past it, or when the byte budget leaves out samples, the
-lightest stacks are dropped, each context's time still counted, and the header
-says ``samples_complete: false``). ``VERINODA_TRACE_DEADLINE_S`` writes a partial
-file before the runner's hard kill.
+and ``VERINODA_FLAWS_MAX_BYTES`` of output, header and frame table included
+(past either the header says ``complete: false``; a budget smaller than the
+header alone still gets the header); ``VERINODA_FLAWS_MAX_SAMPLE_KEYS`` distinct
+(context, stack) sample keys (past it, or when the byte budget leaves out
+samples, the lightest stacks are dropped, each context's time still counted,
+and the header says ``samples_complete: false``). ``VERINODA_TRACE_DEADLINE_S``
+writes a partial file before the runner's hard kill.
 
 Output: ``$VERINODA_ARTIFACTS/flaws.jsonl``: one ``header`` (schema
 ``verinoda.flaws/1``), one ``frames`` table (``[path, line, qual, def line,
-col, end line, end col]``, paths relative to the copy root), ``sql``,
-``sample`` and ``ctx`` (sampled time per context) records.
+col, end line, end col]``, paths relative to the copy root), then ``ctx``
+(sampled time per context), ``sql`` (per context, statement and stack),
+``same`` (per context and statement: the repeated identical executions over
+all its stacks) and ``sample`` records.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import sys
 import threading
 import time
+import warnings
+import weakref
 
 import pytest
+
+try:
+    import sqlite3 as _sqlite3
+except ImportError:  # an interpreter built without _sqlite3
+    _sqlite3 = None
 
 SCHEMA = "verinoda.flaws/1"
 _perf = time.perf_counter
@@ -84,10 +103,16 @@ MAX_BYTES = _int_env("VERINODA_FLAWS_MAX_BYTES", 10 * 1024 * 1024)
 DEADLINE_S = float(os.environ.get("VERINODA_TRACE_DEADLINE_S") or 0) or None
 MAX_DEPTH = 40       # project frames kept per stack (the innermost ones)
 MAX_SAME = 64        # distinct (statement text, parameters) hashes kept per key
+MAX_STMT = 2000      # characters of a normalised statement written (longer ones end in a marker and hash)
 MAX_WEIGHT_S = 1.0   # one sample never weighs more than this (a stalled sampler thread)
+_SALT = os.urandom(16)   # quoted identifiers are written as a keyed hash: stable in this run only
 
-_in_repo: dict = {}   # id(code) -> (code, is repository code)
+# id(code) -> (code, True) for project code (kept: the file names its frames at the end), or
+# (weak reference, False) for any other code, dropped when the code object dies, so library and
+# generated code is not kept alive and a reused id is classified afresh.
+_in_repo: dict = {}
 _sql: dict = {}       # (ctx, statement, stack) -> [n, many, total_s, max_s, {hash: n}, overflow, thread]
+_same: dict = {}      # (ctx, statement) -> [{hash: n}, overflow]: identical executions over all stacks
 _samples: dict = {}   # (ctx, stack) -> [weight_s, n]
 _ctx_time: dict = {}  # ctx -> [weight_s, n]
 _lock = threading.Lock()
@@ -106,23 +131,33 @@ def _is_repo_file(filename: str) -> bool:
         and (os.sep + "site-packages" + os.sep) not in f
 
 
+def _classify(code, cid: int) -> bool:
+    if _is_repo_file(code.co_filename):
+        _in_repo[cid] = (code, True)
+        return True
+    try:
+        ref = weakref.ref(code, lambda _r, cid=cid: _in_repo.pop(cid, None))
+    except TypeError:   # no weak references to this object: keep it (rare)
+        ref = code
+    _in_repo[cid] = (ref, False)
+    return False
+
+
 def _stack(fr, lines: bool = False) -> tuple:
     """The project frames from ``fr`` outwards, innermost first: (id of the code, instruction offset),
-    or with ``lines`` (id of the code, line) - samples, where offsets would split one line's time.
+    or with ``lines`` (id of the code, -(line + 1)) - samples, where offsets would split one line's time.
 
     Keyed by ``id(code)``: hashing a code object hashes its constants and names on every lookup (it
-    made a recorded execute five times slower). ``_in_repo`` keeps every code object it has seen, so
-    an id is never reused within the run."""
+    made a recorded execute five times slower). Project code objects are kept, so their ids are never
+    reused within the run."""
     out = []
     in_repo = _in_repo
     while fr is not None:
         code = fr.f_code
         cid = id(code)
         e = in_repo.get(cid)
-        if e is None:
-            e = in_repo[cid] = (code, _is_repo_file(code.co_filename))
-        if e[1]:
-            # a line is stored as -(line + 1): offsets are never negative
+        r = e[1] if e is not None else _classify(code, cid)
+        if r:
             out.append((cid, -(fr.f_lineno or 0) - 1) if lines else (cid, fr.f_lasti))
             if len(out) >= MAX_DEPTH:
                 break
@@ -136,9 +171,21 @@ def _breach(reason: str) -> None:
 
 
 # -- SQL text ----------------------------------------------------------------------------
+#
+# One pass over the tokens that hide others, leftmost first: a quote inside a comment and a comment
+# marker inside a string are both seen for what they are. Strings (also E'..' with backslash escapes
+# and X'..' / B'..' / N'..') become ?, comments a space, double-quoted names a keyed hash; an opened
+# string, quoted name or comment that never closes ends the statement with ? (nothing after it is
+# kept). Numbers and placeholders are replaced in the text between those tokens only.
 
-_STR = re.compile(r"'(?:[^']|'')*'")
-_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.S)
+_TOKEN = re.compile(
+    r"(?P<estr>(?<![\w$])[eE]'(?:[^'\\]|\\.|'')*')"
+    r"|(?P<str>(?:(?<![\w$])[xXbBnN])?'(?:[^']|'')*')"
+    r"|(?P<dq>\"(?:[^\"]|\"\")*\")"
+    r"|(?P<lc>--[^\n]*)"
+    r"|(?P<bc>/\*.*?\*/)"
+    r"|(?P<open>(?:(?<![\w$])[eExXbBnN])?'|\"|/\*)",
+    re.S)
 _NUM = re.compile(r"(?<![\w$])(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)(?![\w$])")
 _PARAM = re.compile(r"%\(\w+\)s|%s|\$\d+|(?<![:\w]):\w+|\?\d*|@\w+")
 _IN_LIST = re.compile(r"\bIN\s*\(\s*\?(?:\s*,\s*\?)*\s*\)", re.I)
@@ -147,8 +194,17 @@ _WS = re.compile(r"\s+")
 _norm_cache: dict = {}
 
 
+def _plain(seg: str) -> str:
+    return _PARAM.sub("?", _NUM.sub("?", seg))
+
+
+def _quoted_name(tok: str) -> str:
+    return '"~' + hashlib.blake2s(tok.encode("utf-8", "replace"), key=_SALT, digest_size=4).hexdigest() + '"'
+
+
 def normalise(sql) -> str:
-    """Statement text with literals and placeholders as ``?``, ``IN (?, ?)`` as ``IN (?)``, one space."""
+    """Statement text with literals and placeholders as ``?``, comments dropped, ``IN (?, ?)`` as ``IN (?)``,
+    double-quoted names as a keyed hash, one space. Never holds a literal of the input."""
     if not isinstance(sql, str):
         try:
             sql = sql.decode("utf-8", "replace") if isinstance(sql, (bytes, bytearray)) else str(sql)
@@ -157,10 +213,23 @@ def normalise(sql) -> str:
     hit = _norm_cache.get(sql)
     if hit is not None:
         return hit
-    s = _STR.sub("?", sql)
-    s = _COMMENT.sub(" ", s)
-    s = _NUM.sub("?", s)
-    s = _PARAM.sub("?", s)
+    out, pos = [], 0
+    for m in _TOKEN.finditer(sql):
+        out.append(_plain(sql[pos:m.start()]))
+        kind = m.lastgroup
+        if kind in ("estr", "str"):
+            out.append("?")
+        elif kind == "dq":
+            out.append(_quoted_name(m.group()))
+        elif kind in ("lc", "bc"):
+            out.append(" ")
+        else:   # opened and never closed: whatever follows is not kept
+            out.append(" " if m.group() == "/*" else "?")
+            pos = len(sql)
+            break
+        pos = m.end()
+    out.append(_plain(sql[pos:]))
+    s = "".join(out)
     s = _IN_LIST.sub("IN (?)", s)
     s = _VALUES.sub(r"\1", s)
     s = _WS.sub(" ", s).strip().rstrip(";").strip()
@@ -168,6 +237,14 @@ def normalise(sql) -> str:
         _norm_cache.clear()
     _norm_cache[sql] = s
     return s
+
+
+def _stmt_out(stmt: str) -> str:
+    """The statement as written: a long one cut with a marker naming its length and a hash of all of it."""
+    if len(stmt) <= MAX_STMT:
+        return stmt
+    h = hashlib.blake2s(stmt.encode("utf-8", "replace"), digest_size=6).hexdigest()
+    return f"{stmt[:MAX_STMT]} ...[{len(stmt)} chars #{h}]"
 
 
 def _same_hash(sql, params) -> int | None:
@@ -187,6 +264,17 @@ def _same_hash(sql, params) -> int | None:
             return None
 
 
+def _count(ids: dict, h: int) -> bool:
+    """Count ``h`` in ``ids``; False when it is new and ``ids`` is full."""
+    if h in ids:
+        ids[h] += 1
+    elif len(ids) < MAX_SAME:
+        ids[h] = 1
+    else:
+        return False
+    return True
+
+
 def _record(sql, params, many: bool, t0: float, t1: float, fr) -> None:
     if not _state["active"]:
         return
@@ -195,7 +283,8 @@ def _record(sql, params, many: bool, t0: float, t1: float, fr) -> None:
         stack = _stack(fr)
         same = None if many else _same_hash(sql, params)
         thread = threading.get_ident() != _main_ident
-        key = (ctx, stmt, stack)
+        c = ctx
+        key = (c, stmt, stack)
         d = t1 - t0
         with _lock:
             ent = _sql.get(key)
@@ -213,13 +302,14 @@ def _record(sql, params, many: bool, t0: float, t1: float, fr) -> None:
             if d > ent[3]:
                 ent[3] = d
             if same is not None:
-                ids = ent[4]
-                if same in ids:
-                    ids[same] += 1
-                elif len(ids) < MAX_SAME:
-                    ids[same] = 1
-                else:
+                if not _count(ent[4], same):
                     ent[5] = True
+                sk = (c, stmt)
+                se = _same.get(sk)
+                if se is None:
+                    se = _same[sk] = [{}, False]
+                if not _count(se[0], same):
+                    se[1] = True
             if thread:
                 ent[6] = True
     except Exception:  # noqa: BLE001 - recording must never break the test run
@@ -228,112 +318,158 @@ def _record(sql, params, many: bool, t0: float, t1: float, fr) -> None:
 
 # -- sqlite3 ------------------------------------------------------------------------------
 
-class _CursorMixin:
-    def execute(self, sql, parameters=(), /):
-        fr = _getframe(1)
-        t0 = _perf()
-        try:
-            return super().execute(sql, parameters)
-        finally:
-            _record(sql, parameters, False, t0, _perf(), fr)
-
-    def executemany(self, sql, seq_of_parameters, /):
-        fr = _getframe(1)
-        t0 = _perf()
-        try:
-            return super().executemany(sql, seq_of_parameters)
-        finally:
-            _record(sql, None, True, t0, _perf(), fr)
-
-    def executescript(self, sql_script, /):
-        fr = _getframe(1)
-        t0 = _perf()
-        try:
-            return super().executescript(sql_script)
-        finally:
-            _record(sql_script, None, True, t0, _perf(), fr)
-
-
-class _ConnectionMixin:
-    def cursor(self, factory=None):
-        import sqlite3
-
-        return super().cursor(_subclass(factory or sqlite3.Cursor, _CursorMixin, sqlite3.Cursor))
-
-    def execute(self, sql, parameters=(), /):
-        fr = _getframe(1)
-        t0 = _perf()
-        try:
-            return super().execute(sql, parameters)
-        finally:
-            _record(sql, parameters, False, t0, _perf(), fr)
-
-    def executemany(self, sql, seq_of_parameters, /):
-        fr = _getframe(1)
-        t0 = _perf()
-        try:
-            return super().executemany(sql, seq_of_parameters)
-        finally:
-            _record(sql, None, True, t0, _perf(), fr)
-
-    def executescript(self, sql_script, /):
-        fr = _getframe(1)
-        t0 = _perf()
-        try:
-            return super().executescript(sql_script)
-        finally:
-            _record(sql_script, None, True, t0, _perf(), fr)
-
-
-# The call tracer names a boundary call by the callee's module and qualified name: keep the names of the
-# sqlite3 methods these wrappers stand for (``sqlite3.Connection.execute``, not this plugin's).
+_Cur = _Conn = None
+# The call tracer names a boundary call by the callee's module and qualified name: the recorder's
+# methods carry the names of the sqlite3 methods they stand for (``sqlite3.Connection.execute``), and
+# this table gives them to the ``setprofile`` tracer, which sees code objects.
 VERINODA_EXT_NAMES: dict = {}
-for _cls, _public in ((_CursorMixin, "Cursor"), (_ConnectionMixin, "Connection")):
-    for _name, _fn in list(vars(_cls).items()):
-        if callable(_fn):
-            _fn.__module__ = "sqlite3"
-            _fn.__qualname__ = f"{_public}.{_name}"
-            VERINODA_EXT_NAMES[_fn.__code__] = f"sqlite3.{_public}.{_name}"
 
-_subclasses: dict = {}
+if _sqlite3 is not None:
+    class _Cur(_sqlite3.Cursor):
+        def execute(self, sql, parameters=(), /):
+            fr = _getframe(1)
+            t0 = _perf()
+            try:
+                return super().execute(sql, parameters)
+            finally:
+                _record(sql, parameters, False, t0, _perf(), fr)
+
+        def executemany(self, sql, seq_of_parameters, /):
+            fr = _getframe(1)
+            t0 = _perf()
+            try:
+                return super().executemany(sql, seq_of_parameters)
+            finally:
+                _record(sql, None, True, t0, _perf(), fr)
+
+        def executescript(self, sql_script, /):
+            fr = _getframe(1)
+            t0 = _perf()
+            try:
+                return super().executescript(sql_script)
+            finally:
+                _record(sql_script, None, True, t0, _perf(), fr)
+
+    class _Conn(_sqlite3.Connection):
+        def cursor(self, *args, **kwargs):
+            if not args and not kwargs:
+                return super().cursor(_Cur)
+            if args:
+                return super().cursor(_cursor_class(args[0]), *args[1:], **kwargs)
+            if "factory" in kwargs:
+                kwargs["factory"] = _cursor_class(kwargs["factory"])
+            return super().cursor(**kwargs)
+
+        # As sqlite3's own: a new cursor, the statement run on it once, the cursor returned - recorded by
+        # the cursor, so it keeps recording afterwards. Since Python 3.11 sqlite3 makes that cursor in C,
+        # never through an overridden ``cursor()``; 3.10 called ``self.cursor()``.
+        def execute(self, sql, parameters=(), /):
+            return _new_cursor(self).execute(sql, parameters)
+
+        def executemany(self, sql, seq_of_parameters, /):
+            return _new_cursor(self).executemany(sql, seq_of_parameters)
+
+        def executescript(self, sql_script, /):
+            return _new_cursor(self).executescript(sql_script)
+
+    if sys.version_info >= (3, 11):
+        _new_cursor = _Conn.cursor
+    else:
+        def _new_cursor(conn):
+            return conn.cursor()
+
+    for _cls, _public in ((_Cur, "Cursor"), (_Conn, "Connection")):
+        for _name, _fn in list(vars(_cls).items()):
+            if callable(_fn) and hasattr(_fn, "__code__"):
+                _fn.__module__ = "sqlite3"
+                _fn.__qualname__ = f"{_public}.{_name}"
+                VERINODA_EXT_NAMES[_fn.__code__] = f"sqlite3.{_public}.{_name}"
+        _cls.__module__, _cls.__qualname__, _cls.__name__ = "sqlite3", _public, _public
+
+_classes: dict = {}
 
 
-def _subclass(base, mixin, root):
-    """``base`` with ``mixin`` in front (cached); ``base`` itself when it is not a ``root`` class."""
+def _behind(base, recorder, root):
+    """A class with the user's ``base`` first and ``recorder`` after it (cached): the user's methods run
+    first and reach the recorder through ``super()``. ``recorder`` for ``root`` itself; ``base`` unchanged
+    when it is not a ``root`` subclass (sqlite3 then reports it as it would) or the two cannot be
+    combined."""
+    if base is root:
+        return recorder
     try:
-        if not isinstance(base, type) or not issubclass(base, root) or issubclass(base, mixin):
+        if not isinstance(base, type) or not issubclass(base, root) or issubclass(base, recorder):
             return base
     except TypeError:
         return base
-    cls = _subclasses.get(base)
+    cls = _classes.get(base)
     if cls is None:
-        cls = _subclasses[base] = type(base.__name__, (mixin, base),
-                                       {"__module__": base.__module__, "__qualname__": base.__qualname__})
+        try:
+            cls = type(base.__name__, (base, recorder),
+                       {"__module__": base.__module__, "__qualname__": base.__qualname__})
+        except TypeError:   # a metaclass or layout conflict: not recorded, never broken
+            cls = base
+        _classes[base] = cls
     return cls
 
 
-def _wrap_sqlite() -> None:
-    try:
-        import sqlite3
-        import sqlite3.dbapi2 as dbapi2
-    except ImportError:
-        return
-    orig = sqlite3.connect
+def _cursor_class(factory):
+    return _behind(factory, _Cur, _sqlite3.Cursor)
 
+
+def _conn_class(factory):
+    return _behind(factory, _Conn, _sqlite3.Connection)
+
+
+def _reemit(caught: list, caller) -> None:
+    """Warnings sqlite3 raised inside the wrapper, again, at the caller's line (as without the wrapper)."""
+    registry = caller.f_globals.setdefault("__warningregistry__", {})
+    for w in caught:
+        warnings.warn_explicit(w.message, w.category, caller.f_code.co_filename, caller.f_lineno,
+                               registry=registry)
+
+
+def _make_connect(orig):
     def connect(*args, **kwargs):
         if len(args) > 5:   # factory is the sixth positional parameter
-            args = (*args[:5], _subclass(args[5], _ConnectionMixin, sqlite3.Connection), *args[6:])
+            args = (*args[:5], _conn_class(args[5]), *args[6:])
+        elif "factory" in kwargs:
+            kwargs["factory"] = _conn_class(kwargs["factory"])
         else:
-            kwargs["factory"] = _subclass(kwargs.get("factory") or sqlite3.Connection, _ConnectionMixin,
-                                          sqlite3.Connection)
-        return orig(*args, **kwargs)
+            kwargs["factory"] = _Conn
+        caller = _getframe(1)
+        err = None
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                conn = orig(*args, **kwargs)
+            except BaseException as exc:  # noqa: BLE001 - raised again below, after its warnings
+                err = exc
+        _reemit(caught, caller)
+        if err is not None:
+            try:
+                raise err
+            finally:
+                err = None
+        return conn
 
     connect.__module__ = "sqlite3"
     connect.__qualname__ = connect.__name__ = "connect"
     connect.__doc__ = orig.__doc__
+    return connect
+
+
+def _wrap_sqlite() -> None:
+    if _sqlite3 is None:
+        return
+    try:
+        import sqlite3.dbapi2 as dbapi2
+    except ImportError:
+        dbapi2 = None
+    orig = _sqlite3.connect
+    connect = _make_connect(orig)
     VERINODA_EXT_NAMES[connect.__code__] = "sqlite3.connect"
-    sqlite3.connect = connect
-    if getattr(dbapi2, "connect", None) is orig:
+    _sqlite3.connect = connect
+    if dbapi2 is not None and getattr(dbapi2, "connect", None) is orig:
         dbapi2.connect = connect
     _state["hooks"].append("sqlite3")
 
@@ -351,8 +487,8 @@ def _hook_sqlalchemy() -> None:
         return
 
     def before(conn, cursor, statement, parameters, context, executemany):
-        if isinstance(cursor, _CursorMixin):
-            return   # the sqlite3 wrapper records it
+        if _Cur is not None and isinstance(cursor, _Cur):
+            return   # the sqlite3 recorder records it
         starts = getattr(_local, "sa", None)
         if starts is None or len(starts) > 256:
             starts = _local.sa = {}
@@ -469,71 +605,116 @@ def _qual(code) -> str:
     return getattr(code, "co_qualname", None) or code.co_name
 
 
+def _frame_row(fr) -> list:
+    cid, lasti = fr
+    code = _in_repo[cid][0]
+    if lasti < 0:
+        line, col, end_line, end_col = (-lasti - 1) or code.co_firstlineno, None, None, None
+    else:
+        line, col, end_line, end_col = _position(code, lasti)
+    return [_rel(code.co_filename), line, _qual(code), code.co_firstlineno, col, end_line, end_col]
+
+
+def _dumps(obj) -> str:
+    return json.dumps(obj, separators=(",", ":"))
+
+
+class _Out:
+    """The records written, within ``MAX_BYTES`` counting the header, the frame table and the context
+    names: a frame or a context enters the tables only with a record that was kept."""
+
+    def __init__(self, reserve: int):
+        self.size = reserve
+        self.lines: list[str] = []
+        self.frames: list = []
+        self.frame_ids: dict = {}
+        self.ctxs: list[str] = []
+        self.ctx_ids: dict = {}
+
+    def add(self, c: str, stack: tuple, make) -> bool:
+        new = [f for f in dict.fromkeys(stack) if f not in self.frame_ids]
+        rows = [_frame_row(f) for f in new]
+        extra = sum(len(_dumps(r)) + 1 for r in rows)
+        ci = self.ctx_ids.get(c)
+        if ci is None:
+            extra += len(_dumps(c)) + 1
+            ci = len(self.ctxs)
+        ids = {f: len(self.frames) + i for i, f in enumerate(new)}
+        rec = make(ci, [self.frame_ids.get(f, ids.get(f)) for f in stack])
+        text = _dumps(rec)
+        if self.size + extra + len(text) + 1 > MAX_BYTES:
+            return False
+        self.size += extra + len(text) + 1
+        if c not in self.ctx_ids:
+            self.ctx_ids[c] = ci
+            self.ctxs.append(c)
+        self.frame_ids.update(ids)
+        self.frames.extend(rows)
+        self.lines.append(text)
+        return True
+
+
+def _header(final: bool, sql: list, samples: list, size: int, ctxs: list) -> dict:
+    return {"k": "header", "schema": SCHEMA, "final": final, "complete": bool(_state["complete"]) and final,
+            "breach": _state["breach"], "stopped_early": _state["stopped_early"], "hooks": _state["hooks"],
+            "sample_ms": round(SAMPLE_S * 1000, 3), "python": sys.version.split()[0], "root": ROOT_RAW,
+            "samples_complete": bool(_state["samples_complete"]) and final,
+            "limits": {"max_keys": MAX_KEYS, "max_sample_keys": MAX_SAMPLE_KEYS, "max_bytes": MAX_BYTES,
+                       "max_depth": MAX_DEPTH},
+            "stats": {"sql_executions": _state["n_sql"], "sql_keys": len(sql), "samples": _state["n_samples"],
+                      "sample_keys": len(samples), "dropped": _state["dropped"],
+                      "samples_dropped": _state["samples_dropped"], "bytes": size},
+            "contexts": ctxs}
+
+
 def _write(final: bool) -> None:
     with _lock:
         sql = list(_sql.items())
+        same = [(k, (dict(v[0]), v[1])) for k, v in _same.items()]
         samples = list(_samples.items())
         ctx_time = list(_ctx_time.items())
-    frame_ids: dict = {}
-    frames: list = []
-
-    def fid(fr) -> int:
-        i = frame_ids.get(fr)
-        if i is None:
-            cid, lasti = fr
-            code = _in_repo[cid][0]
-            i = frame_ids[fr] = len(frames)
-            if lasti < 0:
-                line, col, end_line, end_col = (-lasti - 1) or code.co_firstlineno, None, None, None
-            else:
-                line, col, end_line, end_col = _position(code, lasti)
-            frames.append([_rel(code.co_filename), line, _qual(code), code.co_firstlineno, col, end_line, end_col])
-        return i
-
-    ctxs = sorted({k[0] for k, _ in sql} | {k[0] for k, _ in samples} | {c for c, _ in ctx_time})
-    cid = {c: i for i, c in enumerate(ctxs)}
-    records = []
-    for (c, stmt, stack), (n, many, total, mx, same, more, thread) in sql:
-        repeated = sorted(((h, k) for h, k in same.items() if k > 1), key=lambda kv: -kv[1])
-        rec = {"k": "sql", "ctx": cid[c], "stmt": stmt[:2000], "stack": [fid(f) for f in stack], "n": n,
-               "many": many, "ms": round(total * 1000, 3), "max_ms": round(mx * 1000, 3),
-               "same": [[f"{h:012x}", k] for h, k in repeated], "distinct": len(same)}
-        if more:
-            rec["distinct_more"] = True
-        if thread:
-            rec["thread"] = True
-        records.append(rec)
-    for c, (w, k) in ctx_time:
-        records.append({"k": "ctx", "ctx": cid[c], "ms": round(w * 1000, 3), "n": k})
-    lines, size = [], 0
-    for rec in records:
-        text = json.dumps(rec, separators=(",", ":"))
-        if size + len(text) + 1 > MAX_BYTES:
-            _breach("max_bytes")
-            break
-        lines.append(text)
-        size += len(text) + 1
+    # the header with the widest numbers it can hold, the breach and an empty frame table: reserved first
+    probe = _header(final, sql, samples, 10 ** 12, [])
+    probe["breach"] = "max_bytes"
+    probe["complete"] = probe["samples_complete"] = False
+    reserve = len(_dumps(probe)) + 1 + len(_dumps({"k": "frames", "frames": []})) + 1 + 32
+    out = _Out(reserve)
+    cut = False
+    for c, (w, k) in ctx_time:   # first: each context's sampled time
+        cut |= not out.add(c, (), lambda ci, _s, w=w, k=k: {"k": "ctx", "ctx": ci, "ms": round(w * 1000, 3),
+                                                             "n": k})
+    for (c, stmt, stack), (n, many, total, mx, ids, more, thread) in sorted(sql, key=lambda kv: -kv[1][0]):
+        def make(ci, st, stmt=stmt, n=n, many=many, total=total, mx=mx, ids=ids, more=more, thread=thread):
+            rec = {"k": "sql", "ctx": ci, "stmt": _stmt_out(stmt), "stack": st, "n": n, "many": many,
+                   "ms": round(total * 1000, 3), "max_ms": round(mx * 1000, 3), "distinct": len(ids)}
+            if more:
+                rec["distinct_more"] = True
+            if thread:
+                rec["thread"] = True
+            return rec
+        cut |= not out.add(c, stack, make)
+    for (c, stmt), (ids, more) in same:
+        rep = sorted(((h, k) for h, k in ids.items() if k > 1), key=lambda kv: -kv[1])
+        if not rep:
+            continue
+        cut |= not out.add(c, (), lambda ci, _s, stmt=stmt, rep=rep, more=more: {
+            "k": "same", "ctx": ci, "stmt": _stmt_out(stmt), "same": [[f"{h:012x}", k] for h, k in rep],
+            **({"more": True} if more else {})})
+    if cut:
+        _breach("max_bytes")
     # samples last and the heaviest stacks first, so a byte budget drops the lightest ones
     for (c, stack), (w, k) in sorted(samples, key=lambda kv: -kv[1][0]):
-        text = json.dumps({"k": "sample", "ctx": cid[c], "stack": [fid(f) for f in stack],
-                           "ms": round(w * 1000, 3), "n": k}, separators=(",", ":"))
-        if size + len(text) + 1 > MAX_BYTES:
+        if not out.add(c, stack, lambda ci, st, w=w, k=k: {"k": "sample", "ctx": ci, "stack": st,
+                                                            "ms": round(w * 1000, 3), "n": k}):
             _state["samples_complete"] = False
-            break
-        lines.append(text)
-        size += len(text) + 1
-    header = {"k": "header", "schema": SCHEMA, "final": final, "complete": bool(_state["complete"]) and final,
-              "breach": _state["breach"], "stopped_early": _state["stopped_early"], "hooks": _state["hooks"],
-              "sample_ms": round(SAMPLE_S * 1000, 3), "python": sys.version.split()[0], "root": ROOT_RAW,
-              "samples_complete": bool(_state["samples_complete"]) and final,
-              "limits": {"max_keys": MAX_KEYS, "max_sample_keys": MAX_SAMPLE_KEYS, "max_bytes": MAX_BYTES,
-                         "max_depth": MAX_DEPTH},
-              "stats": {"sql_executions": _state["n_sql"], "sql_keys": len(sql), "samples": _state["n_samples"],
-                        "sample_keys": len(samples), "dropped": _state["dropped"],
-                        "samples_dropped": _state["samples_dropped"], "bytes": size},
-              "contexts": ctxs}
-    data = "\n".join([json.dumps(header, separators=(",", ":")),
-                      json.dumps({"k": "frames", "frames": frames}, separators=(",", ":")), *lines]) + "\n"
+    header = _header(final, sql, samples, 0, out.ctxs)
+    frames_text = _dumps({"k": "frames", "frames": out.frames})
+    body = len(frames_text) + 2 + sum(len(x) + 1 for x in out.lines)
+    head_text = _dumps(header)
+    for _ in range(3):   # the size of the file, the header's own digits included
+        header["stats"]["bytes"] = len(head_text) + body
+        head_text = _dumps(header)
+    data = "\n".join([head_text, frames_text, *out.lines]) + "\n"
     os.makedirs(OUT_DIR, exist_ok=True)
     tmp = OUT_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="") as fh:

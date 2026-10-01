@@ -76,10 +76,11 @@ def thresholds(given: dict | None = None) -> dict:
 # -- the plugin's file ------------------------------------------------------------------------
 
 def parse(data: bytes) -> dict:
-    """``header``, ``sql`` and ``samples`` (stacks as frame dicts, innermost first), ``ctx_ms``."""
+    """``header``, ``sql`` and ``samples`` (stacks as frame dicts, innermost first), ``same`` (the
+    repeated identical executions per test phase and statement, over all its stacks), ``ctx_ms``."""
     header: dict = {}
     frames: list = []
-    sql, samples, ctx_ms = [], [], {}
+    sql, samples, same, ctx_ms = [], [], [], {}
     raw_recs = []
     for raw in data.decode("utf-8", "replace").splitlines():
         if not raw.strip():
@@ -116,12 +117,15 @@ def parse(data: bytes) -> dict:
         if rec.get("k") == "ctx":
             ctx_ms[name] = float(rec.get("ms") or 0)
             continue
+        if rec.get("k") == "same":
+            same.append({**rec, "ctx": name})
+            continue
         stack = [f for f in (frame(i) for i in rec.get("stack") or []) if f]
         if rec.get("k") == "sql":
             sql.append({**rec, "ctx": name, "stack": stack})
         elif rec.get("k") == "sample":
             samples.append({**rec, "ctx": name, "stack": stack})
-    return {"header": header, "sql": sql, "samples": samples, "ctx_ms": ctx_ms}
+    return {"header": header, "sql": sql, "samples": samples, "same": same, "ctx_ms": ctx_ms}
 
 
 def verb(stmt: str) -> str:
@@ -269,7 +273,7 @@ def n_plus_one(parsed: dict, src, run_id: str, th: dict) -> tuple[list[dict], in
     out = []
     for g in groups.values():
         g["tests"].sort(key=lambda x: (-x["executions"], x["test"]))
-        g["n_tests"] = len(g["tests"])
+        g["n_tests"] = len({x["test"] for x in g["tests"]})
         g["tests"] = g["tests"][:10]
         top = g["tests"][0]
         loop = g["loop"]
@@ -294,20 +298,29 @@ def n_plus_one(parsed: dict, src, run_id: str, th: dict) -> tuple[list[dict], in
 
 
 def repeated_sql(parsed: dict, run_id: str, th: dict) -> list[dict]:
-    """The same statement with the same parameters executed ``repeated``+ times in one test phase."""
+    """The same statement with the same parameters executed ``repeated``+ times in one test phase, counted
+    over all the stacks that ran it (three functions each running it once are three repeats)."""
     per: dict[tuple, dict] = {}
     for rec in parsed["sql"]:
         t = _test_of(rec["ctx"])
         stmt = rec.get("stmt") or ""
         if t is None or verb(stmt) not in READS + WRITES:
             continue
-        g = per.setdefault((rec["ctx"], stmt), {"same": defaultdict(int), "best": None, "n": 0})
-        for h, k in rec.get("same") or []:
+        g = per.setdefault((rec["ctx"], stmt), {"same": defaultdict(int), "best": None, "n": 0, "sites": {}})
+        for h, k in rec.get("same") or []:   # files of an earlier plugin: per stack
             g["same"][h] += int(k)
         n = int(rec.get("n") or 0)
         g["n"] += n
+        if rec["stack"]:
+            site = f"{rec['stack'][0]['path']}:{rec['stack'][0]['line']}"
+            g["sites"][site] = g["sites"].get(site, 0) + n
         if g["best"] is None or n > g["best"]["n"]:
             g["best"] = rec
+    for rec in parsed.get("same") or []:
+        g = per.get((rec["ctx"], rec.get("stmt") or ""))
+        if g is not None:
+            for h, k in rec.get("same") or []:
+                g["same"][h] += int(k)
     groups: dict[tuple, dict] = {}
     for (ctx, stmt), g in per.items():
         reps = sorted((k for k in g["same"].values() if k >= th["repeated"]), reverse=True)
@@ -318,25 +331,27 @@ def repeated_sql(parsed: dict, run_id: str, th: dict) -> list[dict]:
         site = rec["stack"][0]
         key = (stmt, site["path"], site["line"])
         per_test = {"test": t[0], "phase": t[1], "max_repeats": reps[0], "repeated_parameter_sets": len(reps),
-                    "executions": g["n"]}
+                    "executions": g["n"], "n_sites": len(g["sites"])}
+        sites = [k for k, _ in sorted(g["sites"].items(), key=lambda kv: (-kv[1], kv[0]))][:5]
         cur = groups.get(key)
         if cur is None or reps[0] > cur["max_repeats"]:
             path, cut = _call_path(rec["stack"])
             cur = groups[key] = {
                 **(cur or {}), "kind": "repeated_sql", "status": "observed", "run_id": run_id, "statement": stmt,
                 "max_repeats": reps[0], "repeated_parameter_sets": len(reps), "test": t[0], "phase": t[1],
-                "site": _site(site), "call_path": path, "call_path_cut": cut,
-                "cite": f"{site['path']}:{site['line']}", "tests": (cur or {}).get("tests", [])}
+                "site": _site(site), "sites": sites, "n_sites": len(g["sites"]), "call_path": path,
+                "call_path_cut": cut, "cite": f"{site['path']}:{site['line']}", "tests": (cur or {}).get("tests", [])}
         cur["tests"].append(per_test)
     out = []
     for g in groups.values():
         g["tests"].sort(key=lambda x: (-x["max_repeats"], x["test"]))
-        g["n_tests"] = len(g["tests"])
+        g["n_tests"] = len({x["test"] for x in g["tests"]})
         g["tests"] = g["tests"][:10]
         sets = g["repeated_parameter_sets"]
         g["observation"] = (f"run {run_id}: {g['test']} executed `{_short(g['statement'])}` with the same parameters "
                             f"{g['max_repeats']} times" + (f" ({sets} parameter sets repeated)" if sets > 1 else "")
-                            + f" (call at {g['cite']})")
+                            + (f" from {g['n_sites']} call sites (most at {g['cite']})" if g["n_sites"] > 1
+                               else f" (call at {g['cite']})"))
         if verb(g["statement"]) in READS:
             g["interpretation"] = {
                 "status": "strong_inference",

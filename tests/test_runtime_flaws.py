@@ -140,7 +140,88 @@ PROJECT = {
         "    assert len(people.names(Engine(), range(6))) == 6\n"                       # 32
     ),
 }
+# Appended, so the line numbers above stay: a user's Connection subclass whose execute has its own
+# signature and opens its own cursor, one statement run from three functions, five statements whose
+# comments hold an apostrophe, a literal next to such a comment, a cursor reused after Connection.execute.
+PROJECT["app/store.py"] += r'''
+
+class MyConn(sqlite3.Connection):
+    def execute(self, sql, params=()):
+        cur = self.cursor()
+        cur.execute(sql, params)
+        return cur
+
+
+def via_subclass():
+    c = sqlite3.connect(':memory:', factory=MyConn)
+    return c.execute('SELECT ?', params=(1,)).fetchall()
+
+
+def title_a(c):
+    return c.execute('SELECT title FROM book WHERE id = ?', (1,)).fetchone()
+
+
+def title_b(c):
+    return c.execute('SELECT title FROM book WHERE id = ?', (1,)).fetchone()
+
+
+def title_c(c):
+    return c.execute('SELECT title FROM book WHERE id = ?', (1,)).fetchone()
+
+
+CHECKS = [
+    "SELECT count(*) FROM book -- the user's filter\nWHERE title = 'b1'",
+    "SELECT count(*) FROM book -- the user's filter\nWHERE author_id = 2",
+    "SELECT count(*) FROM book -- the user's filter\nWHERE id > 'a'",
+    "SELECT count(*) FROM book -- the user's filter\nWHERE title IS NOT 'q'",
+    "SELECT count(*) FROM book -- the user's filter\nWHERE id < 3",
+]
+
+
+def dashboard(c):
+    out = []
+    for q in CHECKS:
+        out.append(c.execute(q).fetchone())
+    return out
+
+
+def secret(c, name):
+    return c.execute("SELECT name /* it's */ FROM author WHERE name = '" + name + "'").fetchall()
+
+
+def reuse(c):
+    cur = c.execute('SELECT 1')
+    cur.execute('SELECT name FROM author WHERE id = ?', (2,))
+    cur.execute('SELECT name FROM author WHERE id = ?', (3,))
+    return cur.fetchone()
+'''
+PROJECT["tests/test_app.py"] += r'''
+
+def test_three_callers():
+    c = store.make()
+    assert store.title_a(c) == store.title_b(c) == store.title_c(c)
+
+
+def test_dashboard():
+    assert len(store.dashboard(store.make())) == 5
+
+
+def test_subclass():
+    assert store.via_subclass() == [(1,)]
+
+
+def test_secret():
+    assert store.secret(store.make(), 'hunter2') == []
+
+
+def test_reuse():
+    assert store.reuse(store.make()) == ('a3',)
+'''
 N1 = "SELECT title FROM book WHERE author_id = ?"
+
+
+def _line(rel: str, text: str) -> int:
+    return next(i for i, ln in enumerate(PROJECT[rel].splitlines(), 1) if text in ln)
 
 pytestmark = [pytest.mark.experiment,
               pytest.mark.skipif(shutil.which("git") is None, reason="git not available")]
@@ -331,7 +412,213 @@ def test_cli_json_has_the_block_and_the_text_lists_the_call_path(shop, capsys):
         cli.main(["observe", "--n-plus-one", "1", "--repo", str(repo)])
 
 
+def _flaws_file(res: dict) -> bytes:
+    return (Path(res["trace_path"]).parent / flawmod.FLAWS_FILE).read_bytes()
+
+
+def test_a_statement_repeated_from_three_functions_is_repeated_sql(shop):
+    _, _, res = shop
+    f = next(f for f in res["runtime_flaws"]["repeated_sql"] if f["statement"] == "SELECT title FROM book WHERE id = ?")
+    assert f["max_repeats"] == 3 and f["n_sites"] == 3 and f["test"].endswith("::test_three_callers")
+    lines = [_line("app/store.py", f"def title_{x}(c):") + 1 for x in "abc"]
+    assert sorted(f["sites"]) == sorted(f"app/store.py:{n}" for n in lines) and f["n_tests"] == 1
+    assert "from 3 call sites" in f["observation"]
+
+
+def test_comments_with_quotes_neither_merge_statements_nor_leak_literals(shop):
+    _, st, res = shop
+    fl = res["runtime_flaws"]
+    assert not any(f["test"].endswith("::test_dashboard") for f in fl["n_plus_one"] + fl["repeated_sql"]), fl
+    data = _flaws_file(res)
+    assert b"hunter2" not in data and "hunter2" not in json.dumps(trace.load_run(st, res["run_id"])["header"])
+    stmts = {r["stmt"] for r in flawmod.parse(data)["sql"]}
+    assert "SELECT name FROM author WHERE name = ?" in stmts
+    assert len({s for s in stmts if s.startswith("SELECT count(*) FROM book WHERE")}) == 5
+
+
+def test_a_cursor_from_connection_execute_keeps_recording(shop):
+    _, _, res = shop
+    rows = [r for r in flawmod.parse(_flaws_file(res))["sql"] if r["ctx"] == "tests/test_app.py::test_reuse|call"]
+    by: dict[str, int] = {}
+    for r in rows:
+        by[r["stmt"]] = by.get(r["stmt"], 0) + r["n"]
+    assert by["SELECT ?"] == 1 and by["SELECT name FROM author WHERE id = ?"] == 2
+
+
+def test_a_user_connection_subclass_runs_first_and_keeps_its_edges(shop):
+    repo, st, _ = shop
+    tid = "tests/test_app.py::test_subclass"
+    runs = {fl: trace.observe(st, repo, [tid], graph=False, flaws=fl, timeout=120) for fl in (False, True)}
+    assert all(r["tests"] == {tid: "passed"} for r in runs.values()), [r.get("logs") for r in runs.values()]
+
+    def edges(r):
+        return sorted((e["caller"]["path"], e["caller"]["line"], e["callee"]["path"], e["callee"]["qual"])
+                      for e in r["edges"])
+
+    def bounds(r):
+        return sorted((b["site"], b["callee"]) for b in r["boundary"])
+
+    assert edges(runs[True]) == edges(runs[False]) and bounds(runs[True]) == bounds(runs[False])
+    assert any(e[3] == "MyConn.execute" for e in edges(runs[True]))
+    got = {s["statement"]: s["executions"] for s in runs[True]["runtime_flaws"]["sql"]["statements"]}
+    assert got == {"SELECT ?": 1}   # the user's execute opened its own cursor: one statement, once
+
+
 # -- units --------------------------------------------------------------------------------------------
+
+@pytest.fixture
+def recorder(monkeypatch, tmp_path):
+    """The plugin module recording in this process, on fresh tables, this folder as the project."""
+    from verinoda.runtime import flaws_plugin as plugin
+
+    here = Path(__file__).resolve().parent
+    monkeypatch.setattr(plugin, "_state", {**plugin._state, "active": True, "complete": True, "breach": None,
+                                           "n_sql": 0, "dropped": 0, "samples_complete": True,
+                                           "written": False})
+    for name in ("_sql", "_same", "_samples", "_ctx_time", "_in_repo"):
+        monkeypatch.setattr(plugin, name, {})
+    monkeypatch.setattr(plugin, "_ROOT_PREFIX", os.path.normcase(str(here)) + os.sep)
+    monkeypatch.setattr(plugin, "ROOT_RAW", str(here))
+    monkeypatch.setattr(plugin, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(plugin, "OUT_FILE", str(tmp_path / "flaws.jsonl"))
+    monkeypatch.setattr(plugin, "ctx", "tests/t.py::x|call")
+    import sqlite3
+
+    yield plugin, plugin._make_connect(sqlite3.connect)
+
+
+def test_user_subclasses_run_first_with_their_own_signatures(recorder):
+    import sqlite3
+
+    plugin, connect = recorder
+
+    class MyConn(sqlite3.Connection):
+        def execute(self, sql, params=()):
+            cur = self.cursor()
+            cur.execute(sql, params)
+            return cur
+
+    class NoFactory(sqlite3.Connection):
+        def cursor(self):
+            return super().cursor()
+
+    class MyCur(sqlite3.Cursor):
+        def execute(self, sql, parameters=None):
+            return super().execute(sql, parameters or ())
+
+    c = connect(":memory:", factory=MyConn)
+    assert isinstance(c, MyConn) and type(c).__mro__[1] is MyConn and type(c).__name__ == "MyConn"
+    assert c.execute("SELECT ?", params=(1,)).fetchall() == [(1,)]
+    assert plugin._state["n_sql"] == 1                      # once, not by the connection and the cursor
+    c2 = connect(":memory:", factory=NoFactory)
+    assert c2.execute("SELECT 2").fetchall() == [(2,)] and isinstance(c2.cursor(), sqlite3.Cursor)
+    cur = connect(":memory:").cursor(MyCur)
+    assert isinstance(cur, MyCur) and cur.execute("SELECT ?", parameters=(3,)).fetchall() == [(3,)]
+    assert plugin._state["n_sql"] == 3
+
+
+def test_a_cursor_returned_by_connection_execute_is_recorded(recorder):
+    plugin, connect = recorder
+    c = connect(":memory:")
+    cur = c.execute("SELECT 1")
+    cur.execute("SELECT 2")
+    cur.execute("SELECT 3")
+    c.executescript("CREATE TABLE t (x); CREATE TABLE u (y);")
+    c.executemany("INSERT INTO t VALUES (?)", [(1,), (2,)])
+    assert plugin._state["n_sql"] == 5 and cur.fetchone() == (3,)
+
+
+def test_what_sqlite3_refuses_it_still_refuses(recorder):
+    import sqlite3
+
+    _, connect = recorder
+
+    def outcome(fn):
+        try:
+            return "ok", type(fn()).__mro__[-2].__name__
+        except Exception as exc:  # noqa: BLE001
+            return "error", type(exc).__name__
+
+    for bad in (None, 5, str):
+        assert outcome(lambda: connect(":memory:", factory=bad)) == \
+            outcome(lambda: sqlite3.connect(":memory:", factory=bad)), bad
+    assert outcome(lambda: connect(":memory:").cursor(None)) == \
+        outcome(lambda: sqlite3.connect(":memory:").cursor(None))
+
+
+def test_connect_warnings_point_at_the_caller(recorder):
+    import sqlite3
+    import warnings
+
+    _, connect = recorder
+    with warnings.catch_warnings(record=True) as plain:
+        warnings.simplefilter("always")
+        sqlite3.connect(":memory:", 5.0)
+    with warnings.catch_warnings(record=True) as wrapped:
+        warnings.simplefilter("always")
+        connect(":memory:", 5.0)
+    assert [str(w.message) for w in wrapped] == [str(w.message) for w in plain]
+    assert all(w.filename == __file__ for w in wrapped), [w.filename for w in wrapped]
+
+
+def test_the_byte_budget_bounds_the_whole_file(recorder, monkeypatch):
+    plugin, connect = recorder
+    c = connect(":memory:")
+    for i in range(200):
+        c.execute(f"SELECT {i} AS col_{i}")
+    plugin._ctx_time["tests/t.py::x|call"] = [0.5, 100]
+    plugin._write(final=True)
+    full = Path(plugin.OUT_FILE).read_bytes()
+    assert json.loads(full.splitlines()[0])["complete"] is True
+    for budget in (3000, 6000, len(full) - 1):
+        monkeypatch.setattr(plugin, "MAX_BYTES", budget)
+        plugin._state.update(complete=True, breach=None)
+        plugin._write(final=True)
+        data = Path(plugin.OUT_FILE).read_bytes()
+        assert len(data) <= budget, (budget, len(data))
+        head = json.loads(data.splitlines()[0])
+        assert head["complete"] is False and head["breach"] == "max_bytes" and head["stats"]["bytes"] == len(data)
+        p = flawmod.parse(data)
+        assert p["ctx_ms"] == {"tests/t.py::x|call": 500.0}            # the contexts' time comes first
+        frames = json.loads(data.splitlines()[1])["frames"]
+        used = {i for line in data.splitlines()[2:] for i in json.loads(line).get("stack", [])}
+        assert used == set(range(len(frames)))                         # no frame of a dropped record
+
+
+def test_long_statements_keep_a_marker_and_their_own_hash(recorder):
+    plugin, _ = recorder
+    a, b = "SELECT a" + ", a" * 1500 + " FROM t", "SELECT a" + ", a" * 1500 + " FROM u"
+    out_a, out_b = plugin._stmt_out(plugin.normalise(a)), plugin._stmt_out(plugin.normalise(b))
+    assert out_a != out_b and "chars #" in out_a and len(out_a) < 2100
+
+
+def test_library_code_is_not_kept_alive(recorder):
+    import gc
+
+    plugin, _ = recorder
+    code = compile("x = 1", os.path.join(os.sep, "elsewhere", "gen.py"), "exec")
+    cid = id(code)
+    assert plugin._classify(code, cid) is False and cid in plugin._in_repo
+    del code
+    gc.collect()
+    assert cid not in plugin._in_repo
+
+
+SECRET = "s3cr3t"
+
+
+@pytest.mark.parametrize("raw", [
+    f"SELECT a -- don't\nFROM t WHERE x = '{SECRET}' AND z = 5",
+    f"SELECT v /* it's */ FROM t WHERE v = '{SECRET}'",
+    f"SELECT v FROM t WHERE v = '{SECRET}",
+    f"SELECT v FROM t WHERE v = \"{SECRET}\"",
+    f"SELECT v FROM t WHERE v = \"{SECRET}",
+    f"SELECT v FROM t WHERE v = E'it\\'s {SECRET}'",
+    f"SELECT v FROM t WHERE v = X'{SECRET}'",
+    f"SELECT '-- {SECRET}' FROM t /* '{SECRET}",
+])
+def test_a_literal_is_never_written(raw):
+    assert SECRET not in normalise(raw)
 
 @pytest.mark.parametrize("raw, norm", [
     ("SELECT * FROM t WHERE id = 42", "SELECT * FROM t WHERE id = ?"),
@@ -341,9 +628,21 @@ def test_cli_json_has_the_block_and_the_text_lists_the_call_path(shop, capsys):
      "SELECT a FROM t WHERE id IN (?) AND b = ? AND c = ? AND d = ? AND e = ?"),
     ("INSERT INTO t VALUES (?, ?), (?, ?), (?, ?);", "INSERT INTO t VALUES (?, ?)"),
     ("SELECT t1.a::int\n  FROM t1 -- comment\n /* c */ WHERE x = 0x1F", "SELECT t1.a::int FROM t1 WHERE x = ?"),
+    ("SELECT a -- don't\nFROM t WHERE x = 'y' AND z = 5", "SELECT a FROM t WHERE x = ? AND z = ?"),
+    ("SELECT v /* it's */ FROM t WHERE v = 'bob'", "SELECT v FROM t WHERE v = ?"),
+    ("SELECT 'a -- b', '/* c' FROM t -- 'd", "SELECT ?, ? FROM t"),
+    ("SELECT * FROM t WHERE a = 'never closed", "SELECT * FROM t WHERE a = ?"),
+    ("SELECT * FROM t /* never closed 'x'", "SELECT * FROM t"),
+    ("SELECT * FROM t WHERE a = E'it\\'s' AND b = X'AB' AND c = N'n'", "SELECT * FROM t WHERE a = ? AND b = ? AND c = ?"),
 ])
 def test_statement_normalisation(raw, norm):
     assert normalise(raw) == norm
+
+
+def test_double_quoted_names_are_hashed_apart():
+    a, b = normalise('SELECT * FROM "2023"'), normalise('SELECT * FROM "2024"')
+    assert a != b and "2023" not in a and a == normalise('SELECT  *  FROM "2023"')
+    assert "bob" not in normalise('SELECT * FROM t WHERE name = "bob"')
 
 
 def _loop(src: str, line: int, col: int | None = None, end_col: int | None = None):
@@ -408,6 +707,20 @@ def test_slow_paths_keep_the_function_that_explains_the_time():
     # under the share of the test phase: nothing
     p = _parsed([([inner, outer, test], 150.0)], 1000.0)
     assert flawmod.slow_paths(p, "rtr_1", flawmod.thresholds()) == []
+
+
+def test_repeats_are_summed_over_stacks_and_tests_counted_once():
+    stmt = "SELECT x FROM t WHERE id = ?"
+    f = {"path": "a.py", "line": 3, "qual": "f", "def_line": 1, "col": None, "end_line": None, "end_col": None}
+    g = {**f, "line": 7, "qual": "g", "def_line": 6}
+    ctxs = ("t.py::a|setup", "t.py::a|call")
+    parsed = {"header": {}, "samples": [], "ctx_ms": {},
+              "sql": [{"ctx": c, "stmt": stmt, "stack": [s], "n": 1, "many": 0, "distinct": 1}
+                      for c in ctxs for s in (f, g)],
+              "same": [{"ctx": c, "stmt": stmt, "same": [["00000000abcd", 2]]} for c in ctxs]}
+    got = flawmod.repeated_sql(parsed, "rtr_1", flawmod.thresholds({"repeated": 2}))
+    assert len(got) == 1 and got[0]["max_repeats"] == 2 and got[0]["n_sites"] == 2
+    assert len(got[0]["tests"]) == 2 and got[0]["n_tests"] == 1
 
 
 def test_parse_skips_noise_and_refuses_another_schema():

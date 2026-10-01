@@ -2931,8 +2931,9 @@ def _r_flaws(fl: dict) -> None:
         print(f"    {it['status']}: {it['text']}" + (f"; fix: {it['fix']}" if it.get("fix") else ""))
     for f in rep:
         also = " (the N+1 above)" if f.get("also_n_plus_one") else ""
+        sites = f.get("n_sites") or 1
         print(f"  repeated SQL{also}: `{f['statement']}` with the same parameters {f['max_repeats']} times in "
-              f"{f['test']}, at {f['cite']}")
+              f"{f['test']}, at {f['cite']}" + (f" and {sites - 1} other call site(s)" if sites > 1 else ""))
         print(f"    call path: {path(f)}")
     for f in slow:
         fn = f["function"]
