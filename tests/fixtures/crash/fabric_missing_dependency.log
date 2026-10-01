@@ -1,0 +1,11 @@
+[11:03:27] [main/INFO] (FabricLoader/GameProvider) Loading Minecraft 1.21.1 with Fabric Loader 0.16.5
+[11:03:27] [main/ERROR] (FabricLoader) Incompatible mods found!
+net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!
+A potential solution has been determined, this may resolve your problem:
+	 - Install fabric-api, any version.
+More details:
+	 - Mod 'Guard Mod' (guardmod) 1.2.0 requires any version of fabric-api, which is missing!
+	at net.fabricmc.loader.impl.FormattedException.ofLocalized(FormattedException.java:51)
+	at net.fabricmc.loader.impl.FabricLoaderImpl.load(FabricLoaderImpl.java:195)
+	at net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:146)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)

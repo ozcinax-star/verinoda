@@ -1,0 +1,36 @@
+---- Minecraft Crash Report ----
+// Shall we play a game?
+
+Time: 2026-09-29 18:40:11
+Description: Watching Server
+
+java.lang.Error: ServerHangWatchdog detected that a single server tick took 60.00 seconds (should be max 0.05)
+	at dev.lagfix.chunk.ChunkScanner.scanAll(ChunkScanner.java:88)
+	at dev.lagfix.chunk.ChunkScanner.onWorldTick(ChunkScanner.java:41)
+	at net.minecraft.class_3218.handler$bfk000$lagfix$afterTick(class_3218.java:2410)
+	at net.minecraft.class_3218.method_18765(class_3218.java:412)
+	at net.minecraft.server.MinecraftServer.method_3813(MinecraftServer.java:1004)
+	at net.minecraft.class_3176.method_3813(class_3176.java:283)
+	at net.minecraft.server.MinecraftServer.method_3748(MinecraftServer.java:902)
+	at net.minecraft.server.MinecraftServer.method_29741(MinecraftServer.java:747)
+	at net.minecraft.server.MinecraftServer.method_29739(MinecraftServer.java:283)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Server Watchdog
+Stacktrace:
+	at dev.lagfix.chunk.ChunkScanner.scanAll(ChunkScanner.java:88)
+	at dev.lagfix.chunk.ChunkScanner.onWorldTick(ChunkScanner.java:41)
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1
+	Java Version: 21.0.4, Eclipse Adoptium
+	Fabric Mods:
+		fabric-api: Fabric API 0.102.0+1.21.1
+		lagfix: Lag Fix 0.3.0
+		minecraft: Minecraft 1.21.1

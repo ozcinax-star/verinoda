@@ -1,0 +1,12 @@
+[14:55:02] [main/INFO] (FabricLoader/GameProvider) Loading Minecraft 1.20.1 with Fabric Loader 0.15.11
+[14:55:03] [main/INFO] (FabricLoader) Loading 3 mods:
+	- guardmod 1.2.0
+	- java 17
+	- minecraft 1.20.1
+Exception in thread "main" java.lang.UnsupportedClassVersionError: com/example/guard/GuardMod has been compiled by a more recent version of the Java Runtime (class file version 65.0), this version of the Java Runtime only recognizes class file versions up to 61.0
+	at java.base/java.lang.ClassLoader.defineClass1(Native Method)
+	at java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1017)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.defineClassFwd(KnotClassLoader.java:160)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:355)
+	at com.example.guard.GuardBootstrap.load(GuardBootstrap.java:14)
+	at net.fabricmc.loader.impl.entrypoint.EntrypointUtils.invoke0(EntrypointUtils.java:47)
