@@ -5886,7 +5886,7 @@ def render_text(res: dict) -> str:
     from verinoda import affected as aff
 
     out += aff.render(res.get("affected") or {})
-    sl =res.get("since_last")
+    sl = res.get("since_last")
     if sl:
         out.append("")
         if sl.get("review_id") is None:

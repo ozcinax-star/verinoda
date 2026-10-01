@@ -19,13 +19,16 @@ Packages come from the manifests, read as text (nothing is run or installed):
 
 Python and Go declare no workspace list, so their manifests under test folders and the folders the guards take
 for samples, fixtures and vendored code (``examples/``, ``fixtures/``, ``vendor/`` ...) are left out. A changed
-file belongs to the innermost package folder that holds it; the affected packages are those changed and, walking the declared dependencies backwards, every package that depends on one of them, each
-with the manifest line that declares the dependency. A dependency on a workspace package's name is
+file belongs to the innermost package folder that holds it (a root package does not own dot folders, root lock
+files or a folder with its own manifest that is not a member: those are outside); the affected packages are those
+changed and, walking the declared dependencies backwards, every package that depends on one of them, each with
+the manifest line that declares the dependency. A dependency on a workspace package's name is
 ``statically_verified`` when the manifest says it is the local one (``workspace:`` or ``file:`` specs, a Cargo
-``path`` or ``workspace = true``, a Gradle ``project(...)``, a Go ``replace`` or ``go.work``, a Poetry ``path``
-or uv ``workspace = true`` source, a Maven module of the same group); otherwise the package manager may take the
-published one, and it is ``strong_inference``. "Affected" means "declares a dependency on a changed package", as
-``nx affected`` reads it, not that the changed code is used.
+``path`` or ``workspace = true`` inheriting a root entry with a ``path``, a Gradle ``project(...)``, a Go
+``replace`` or ``go.work``, a Poetry ``path`` or uv ``workspace = true`` source, a Maven module of the same group
+and version); otherwise the package manager may take the published one, and it is ``strong_inference`` (as when
+two packages share the name). "Affected" means "declares a dependency on a changed package", as ``nx affected``
+reads it, not that the changed code is used.
 """
 from __future__ import annotations
 
@@ -51,6 +54,7 @@ LIMITS = [
     "listed under outside, not followed",
     "Gradle projectDir overrides, Maven profiles and version-catalog bundles of projects are not read",
     "build targets: npm scripts only",
+    f"dependents walked back at most {MAX_DEPTH} levels",
 ]
 
 
@@ -91,6 +95,59 @@ def _undeclared_skipped(rel: str) -> bool:
     return _skipped(rel, _UNDECLARED_SKIP | _NOT_PRODUCT_DIRS)
 
 
+def _never(rel: str) -> bool:
+    """A manifest a workspace list declares is read whatever its folder is called (packages/build, crates/target):
+    only node_modules and the like are never a package, as the guards read the same lists."""
+    from verinoda.guards import _WS_NEVER
+
+    return bool(set(PurePosixPath(rel).parent.parts) & _WS_NEVER)
+
+
+def _json_key_lines(raw: str) -> dict[tuple[str, ...], int]:
+    """The line of each key of a JSON object at depth one and two (``("name",)``, ``("dependencies", "x")``), so a
+    nested ``"name"`` or a dependency listed in two sections is cited at its own line (the last one of a repeated
+    key, as ``json.loads`` keeps it)."""
+    out: dict[tuple[str, ...], int] = {}
+    stack: list[tuple[str, ...] | None] = []   # the key path of each open object (None: an array or deeper)
+    pending: tuple[str, ...] | None = None
+    i, n, line = 0, len(raw), 1
+    while i < n:
+        c = raw[i]
+        if c == "\n":
+            line += 1
+        elif c == '"':
+            j = i + 1
+            while j < n and raw[j] != '"':
+                j += 2 if raw[j] == "\\" else 1
+            k = j + 1
+            while k < n and raw[k] in " \t\r\n":
+                k += 1
+            if k < n and raw[k] == ":" and stack and stack[-1] is not None:
+                try:
+                    key = json.loads(raw[i:j + 1])
+                except ValueError:
+                    key = raw[i + 1:j]
+                pending = (*stack[-1], key)
+                if len(pending) <= 2:
+                    out[pending] = line
+            line += raw.count("\n", i, j)
+            i = j
+        elif c == "{":
+            stack.append(() if not stack else (pending if pending is not None and len(pending) < 2 else None))
+            pending = None
+        elif c == "[":
+            stack.append(None)
+            pending = None
+        elif c in "}]":
+            if stack:
+                stack.pop()
+            pending = None
+        elif c == ",":
+            pending = None
+        i += 1
+    return out
+
+
 # -- npm / yarn / pnpm ---------------------------------------------------------------------------------------
 def _npm(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
     from verinoda.guards import ws_match
@@ -121,7 +178,7 @@ def _npm(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
                     if x.strip():
                         globs.append((x.strip().strip("'\""), f"pnpm-workspace.yaml:{i}"))
                 continue
-            if block and re.match(r"^\S", s):
+            if block and re.match(r"^[^\s-]", s):   # a sequence item may start at column 0
                 block = False
             m = re.match(r"^\s*-\s*['\"]?([^'\"]+?)['\"]?\s*$", s) if block else None
             if m:
@@ -134,7 +191,7 @@ def _npm(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
     for rel in sorted(f for f in files if PurePosixPath(f).name == "package.json" and f != "package.json"):
         d = PurePosixPath(rel).parent.as_posix()
         hit = next((w for g, w in pos if ws_match(d, g)), None)
-        if hit is None or _skipped(rel) or any(ws_match(d, g) for g in neg):
+        if hit is None or _never(rel) or any(ws_match(d, g) for g in neg):
             continue
         raw = read(rel)
         try:
@@ -144,8 +201,9 @@ def _npm(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
         if not isinstance(pj, dict):
             continue
         lines = (raw or "").split("\n")
+        at = _json_key_lines(raw or "")
         name = pj.get("name") if isinstance(pj.get("name"), str) else d
-        ln = next((i for i, t in enumerate(lines, 1) if re.search(r'"name"\s*:', t)), 1)
+        ln = at.get(("name",), 1)
         p = _pkg(name, d, "npm", rel, ln, lines[ln - 1] if lines else "")
         p["declared_at"] = hit
         for sect in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
@@ -153,7 +211,7 @@ def _npm(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
             if not isinstance(deps, dict):
                 continue
             for dn, spec in deps.items():
-                i = next((i for i, t in enumerate(lines, 1) if re.search(rf'"{re.escape(str(dn))}"\s*:', t)), 1)
+                i = at.get((sect, str(dn)), 1)
                 local = isinstance(spec, str) and spec.startswith(("workspace:", "file:", "link:", "portal:"))
                 _dep(p, str(dn), i, lines[i - 1], local)
         scripts = pj.get("scripts")
@@ -165,14 +223,19 @@ def _npm(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
 
 # -- Cargo ---------------------------------------------------------------------------------------------------
 def _toml_strings(lines: list[str], start: int) -> list[tuple[str, int]]:
-    """The quoted strings of the array that starts on line index ``start`` (``key = [`` ... ``]``)."""
+    """The quoted strings of the array that starts on line index ``start`` (``key = [`` ... ``]``): it ends at the
+    first ``]`` outside a string, so a PEP 508 extra (``"fastapi[standard]"``) does not end it."""
     out: list[tuple[str, int]] = []
     seg = lines[start].split("=", 1)[1] if "=" in lines[start] else lines[start]
     i = start
     while True:
-        code = seg.split("#")[0]
-        out += [(m.group(1), i + 1) for m in re.finditer(r"['\"]([^'\"]*)['\"]", code)]
-        if "]" in code or i + 1 >= len(lines):
+        for m in re.finditer(r"\"([^\"]*)\"|'([^']*)'|(#)|(\])", seg):
+            if m.group(3):
+                break
+            if m.group(4):
+                return out
+            out.append((m.group(1) if m.group(1) is not None else m.group(2), i + 1))
+        if i + 1 >= len(lines):
             return out
         i += 1
         seg = lines[i]
@@ -182,13 +245,43 @@ def _sections(text: str):
     """(line number, section name or "", line) for each line of a TOML file."""
     sect = ""
     for i, ln in enumerate(text.split("\n"), 1):
-        m = re.match(r"\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(?:#.*)?$", ln)
-        if m:
-            sect = m.group(1).replace('"', "").replace("'", "")
+        # one way to match each character (no nested quantifiers): a long line cannot make the match slow
+        m = re.match(r"\s*\[\[?([^\]]*)\]", ln)
+        if m and m.group(1).strip() and re.match(r"\]?\s*(?:#.*)?$", ln[m.end():]):
+            sect = m.group(1).strip().replace('"', "").replace("'", "")
         yield i, sect, ln
 
 
-def _cargo_member(rel: str, text: str, declared: str | None) -> dict | None:
+def _cargo_ws_deps(root: str) -> dict[str, tuple[bool, str | None]]:
+    """The root ``[workspace.dependencies]`` entries: key -> (has a ``path``, the ``package`` it renames). A member's
+    ``x.workspace = true`` inherits that entry, so it is the local crate only when the entry has a path."""
+    out: dict[str, tuple[bool, str | None]] = {}
+    for _i, sect, ln in _sections(root):
+        code = ln.split("#")[0]
+        if sect == "workspace.dependencies":
+            m = re.match(r"\s*['\"]?([\w\-]+)['\"]?\s*(?:\.\s*(\w+)\s*)?=(.*)$", code)
+            if not m:
+                continue
+            path, ren = out.get(m.group(1), (False, None))
+            if m.group(2):   # key.path = "..." / key.package = "..."
+                path = path or m.group(2) == "path"
+                r = re.match(r"\s*['\"]([^'\"]+)['\"]", m.group(3)) if m.group(2) == "package" else None
+                ren = r.group(1) if r else ren
+            else:
+                path = path or bool(re.search(r"\bpath\s*=", m.group(3)))
+                r = re.search(r"\bpackage\s*=\s*['\"]([^'\"]+)['\"]", m.group(3))
+                ren = r.group(1) if r else ren
+            out[m.group(1)] = (path, ren)
+        elif sect.startswith("workspace.dependencies."):
+            key = sect[len("workspace.dependencies."):]
+            path, ren = out.get(key, (False, None))
+            r = re.match(r"\s*package\s*=\s*['\"]([^'\"]+)['\"]", code)
+            out[key] = (path or bool(re.match(r"\s*path\s*=", code)), r.group(1) if r else ren)
+    return out
+
+
+def _cargo_member(rel: str, text: str, declared: str | None,
+                  ws: dict[str, tuple[bool, str | None]]) -> dict | None:
     name = None
     for i, sect, ln in _sections(text):
         m = re.match(r"\s*name\s*=\s*['\"]([^'\"]+)['\"]", ln)
@@ -201,10 +294,12 @@ def _cargo_member(rel: str, text: str, declared: str | None) -> dict | None:
     p = _pkg(name[0], "" if d == "." else d, "cargo", rel, name[1], name[2])
     if declared:
         p["declared_at"] = declared
+    keys: dict[int, str] = {}   # dependency index -> its key (a [dependencies.foo] table's foo)
     for i, sect, ln in _sections(text):
         code = ln.split("#")[0]
         head = re.match(r"\s*\[\s*(.*?dependencies)\.([\w\-]+)\s*\]", code)
         if head and not head.group(1).startswith("workspace"):   # [dependencies.foo]
+            keys[len(p["deps"])] = head.group(2)
             _dep(p, head.group(2), i, ln, False)
             continue
         if not sect.endswith("dependencies") or sect.startswith("workspace") or "." in sect.split("dependencies")[-1]:
@@ -213,21 +308,30 @@ def _cargo_member(rel: str, text: str, declared: str | None) -> dict | None:
         if not m:
             continue
         ren = re.search(r"\bpackage\s*=\s*['\"]([^'\"]+)['\"]", code)
-        local = bool(re.search(r"\bpath\s*=|\bworkspace\s*=\s*true|\.\s*workspace\s*=\s*true", code))
-        _dep(p, ren.group(1) if ren else m.group(1), i, ln, local)
-    # [dependencies.foo] tables: their path / workspace keys follow the header
+        local = bool(re.search(r"\bpath\s*=", code))
+        raw = ren.group(1) if ren else m.group(1)
+        if not local and re.search(r"\bworkspace\s*=\s*true|\.\s*workspace\s*=\s*true", code):
+            local, wren = ws.get(m.group(1), (False, None))
+            raw = ren.group(1) if ren else (wren or m.group(1))
+        _dep(p, raw, i, ln, local)
+    # [dependencies.foo] tables: their path / workspace / package keys follow the header
     cur = None
     for i, sect, ln in _sections(text):
         if re.match(r"\s*\[", ln):
-            cur = next((dp for dp in p["deps"] if dp["at"] == f"{rel}:{i}"), None)
+            cur = next((k for k, dp in enumerate(p["deps"]) if dp["at"] == f"{rel}:{i}" and k in keys), None)
             continue
         if cur is not None:
-            code = ln.split("#")[0]
-            if re.search(r"^\s*(path|workspace)\s*=", code):
-                cur["local"] = True
+            dp, code = p["deps"][cur], ln.split("#")[0]
+            if re.search(r"^\s*path\s*=", code):
+                dp["local"] = True
+            if re.search(r"^\s*workspace\s*=\s*true", code):
+                wl, wren = ws.get(keys[cur], (False, None))
+                dp["local"] = dp["local"] or wl
+                if wren and dp["raw"] == keys[cur]:
+                    dp["raw"] = wren
             ren = re.match(r"\s*package\s*=\s*['\"]([^'\"]+)['\"]", code)
             if ren:
-                cur["raw"] = ren.group(1)
+                dp["raw"] = ren.group(1)
     return p
 
 
@@ -248,15 +352,16 @@ def _cargo(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
     if not members:
         return []
     out: list[dict] = []
-    own = _cargo_member("Cargo.toml", root, None)
+    ws = _cargo_ws_deps(root)
+    own = _cargo_member("Cargo.toml", root, None, ws)
     if own is not None:
         out.append(own)
     for rel in sorted(f for f in files if PurePosixPath(f).name == "Cargo.toml" and f != "Cargo.toml"):
         d = PurePosixPath(rel).parent.as_posix()
         hit = next((ln for g, ln in members if ws_match(d, g)), None)
-        if hit is None or _skipped(rel) or any(ws_match(d, g) for g in exclude):
+        if hit is None or _never(rel) or any(ws_match(d, g) for g in exclude):
             continue
-        p = _cargo_member(rel, read(rel) or "", f"Cargo.toml:{hit}")
+        p = _cargo_member(rel, read(rel) or "", f"Cargo.toml:{hit}", ws)
         if p is not None:
             out.append(p)
     return out
@@ -281,29 +386,43 @@ def _gradle(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
     raw_lines = (read(settings) or "").split("\n")
     out: list[dict] = []
     dirs = {str(PurePosixPath(f).parent) for f in files}
-    for i, ln in enumerate(text.split("\n"), 1):
-        if not re.match(r"\s*include\b", ln):
+    code_lines = text.split("\n")
+    found: list[tuple[str, int]] = []   # (project path, line)
+    i = 0
+    while i < len(code_lines):
+        if not re.match(r"\s*include\b", code_lines[i]):
+            i += 1
             continue
-        for proj in re.findall(r"['\"](:?[\w.\-:]+)['\"]", ln):
-            path = ":" + proj.strip(":")
-            d = path.strip(":").replace(":", "/")
-            if d not in dirs and not any(x.startswith(d + "/") for x in dirs):
-                continue
-            build = next((f"{d}/{b}" for b in ("build.gradle.kts", "build.gradle") if f"{d}/{b}" in files), None)
-            p = _pkg(path, d, "gradle", build or settings, 1 if build else i,
-                     (read(build) or "").split("\n")[0] if build else raw_lines[i - 1])
-            p["at"] = f"{settings}:{i}"
-            p["line_text"] = raw_lines[i - 1].strip()[:200]
-            p["declared_at"] = f"{settings}:{i}"
-            if build:
-                btext = read(build) or ""
-                blines = btext.split("\n")
-                for j, code in enumerate(build_code(btext, build).split("\n"), 1):
-                    for m in re.finditer(r"project\s*\(\s*(?:path\s*[:=]\s*)?['\"](:[\w.\-:]+)['\"]", code):
-                        _dep(p, m.group(1), j, blines[j - 1], True)
-                    for m in re.finditer(r"\bprojects\.([\w.]+)", code):
-                        _dep(p, "accessor:" + m.group(1), j, blines[j - 1], False)
-            out.append(p)
+        # one include statement: up to its closing parenthesis, or on while a line ends with a comma
+        # (include(\n ":core",\n ":app"\n) and include ':a',\n ':b')
+        depth = 0
+        while i < len(code_lines):
+            ln = code_lines[i]
+            found += [(x, i + 1) for x in re.findall(r"['\"](:?[\w.\-:]+)['\"]", ln)]
+            depth += ln.count("(") - ln.count(")")
+            i += 1
+            if depth <= 0 and not ln.rstrip().endswith(","):
+                break
+    for proj, i in found:
+        path = ":" + proj.strip(":")
+        d = path.strip(":").replace(":", "/")
+        if d not in dirs and not any(x.startswith(d + "/") for x in dirs):
+            continue
+        build = next((f"{d}/{b}" for b in ("build.gradle.kts", "build.gradle") if f"{d}/{b}" in files), None)
+        p = _pkg(path, d, "gradle", build or settings, 1 if build else i,
+                 (read(build) or "").split("\n")[0] if build else raw_lines[i - 1])
+        p["at"] = f"{settings}:{i}"
+        p["line_text"] = raw_lines[i - 1].strip()[:200]
+        p["declared_at"] = f"{settings}:{i}"
+        if build:
+            btext = read(build) or ""
+            blines = btext.split("\n")
+            for j, code in enumerate(build_code(btext, build).split("\n"), 1):
+                for m in re.finditer(r"project\s*\(\s*(?:path\s*[:=]\s*)?['\"](:[\w.\-:]+)['\"]", code):
+                    _dep(p, m.group(1), j, blines[j - 1], True)
+                for m in re.finditer(r"\bprojects\.([\w.]+)", code):
+                    _dep(p, "accessor:" + m.group(1), j, blines[j - 1], False)
+        out.append(p)
     acc = {_accessor(p["name"]): p["name"] for p in out}
     for p in out:
         for dp in p["deps"]:
@@ -325,7 +444,7 @@ def _maven(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
     out: list[dict] = []
     todo, seen = ["pom.xml"], {"pom.xml"}
     seen_at: dict[str, str] = {}
-    root_group = None
+    root_group = root_version = None
     while todo:
         pom = todo.pop(0)
         raw = read(pom) or ""
@@ -333,31 +452,37 @@ def _maven(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
         lines = raw.split("\n")
         base = pom.rpartition("/")[0]
         own = _xml_block(_xml_block(_xml_block(_xml_block(text, "parent"), "dependencies"), "build"), "profiles")
-        own = _xml_block(_xml_block(own, "dependencyManagement"), "modules")
+        own = _xml_block(_xml_block(_xml_block(own, "dependencyManagement"), "modules"), "reporting")
         parent = re.search(r"<parent\b.*?</parent>", text, re.S)
         pgroup = re.search(r"<groupId>\s*([^<]+?)\s*</groupId>", parent.group(0)) if parent else None
         group = re.search(r"<groupId>\s*([^<]+?)\s*</groupId>", own)
         group_id = group.group(1) if group else (pgroup.group(1) if pgroup else root_group)
+        pver = re.search(r"<version>\s*([^<]+?)\s*</version>", parent.group(0)) if parent else None
+        ver = re.search(r"<version>\s*([^<]+?)\s*</version>", own)
+        version = ver.group(1) if ver else (pver.group(1) if pver else root_version)
         if pom == "pom.xml":
-            root_group = group_id
+            root_group, root_version = group_id, version
         if pom != "pom.xml":
             art = re.search(r"<artifactId>\s*([^<]+?)\s*</artifactId>", own)
             if art:
                 ln = _line_of(text, art.start())
                 p = _pkg(art.group(1), base, "maven", pom, ln, lines[ln - 1])
-                p["group"] = group_id
+                p["group"], p["version"] = group_id, version
                 p["declared_at"] = seen_at.get(pom)
                 deps_text = _xml_block(_xml_block(text, "dependencyManagement"), "parent")
                 for m in re.finditer(r"<dependency>(.*?)</dependency>", deps_text, re.S):
                     a = re.search(r"<artifactId>\s*([^<]+?)\s*</artifactId>", m.group(1))
                     g = re.search(r"<groupId>\s*([^<]+?)\s*</groupId>", m.group(1))
+                    v = re.search(r"<version>\s*([^<]+?)\s*</version>", m.group(1))
                     if a:
                         j = _line_of(deps_text, m.start(1) + a.start())
                         gid = g.group(1) if g else None
                         if gid in ("${project.groupId}", "${project.parent.groupId}"):
                             gid = group_id
                         _dep(p, a.group(1), j, lines[j - 1], False)
-                        p["deps"][-1]["group"] = gid
+                        vid = {"${project.version}": version, "${project.parent.version}": pver.group(1) if pver
+                               else None}.get(v.group(1), v.group(1)) if v else None
+                        p["deps"][-1]["group"], p["deps"][-1]["version"] = gid, vid
                 out.append(p)
         mods = re.search(r"<modules>(.*?)</modules>", text, re.S)
         for m in re.finditer(r"<module>\s*([^<]+?)\s*</module>", mods.group(0) if mods else ""):
@@ -369,9 +494,13 @@ def _maven(files: set[str], read: Callable[[str], str | None]) -> list[dict]:
     by_art = {p["name"]: p for p in out}
     for p in out:
         for dp in p["deps"]:
+            # the reactor builds the module only for its groupId:artifactId:version; any other version is the
+            # published artifact (no version: managed, taken as the reactor's)
             tgt = by_art.get(dp["raw"])
-            dp["local"] = tgt is not None and dp.pop("group", None) in (tgt.get("group"), None)
+            dp["local"] = (tgt is not None and dp.pop("group", None) in (tgt.get("group"), None)
+                           and dp.get("version") in (tgt.get("version"), None))
             dp.pop("group", None)
+            dp.pop("version", None)
     return out
 
 
@@ -492,27 +621,42 @@ def workspace(files: list[str], read: Callable[[str], str | None]) -> dict:
     pkgs: list[dict] = []
     for find in (_npm, _cargo, _gradle, _maven, _python, _go):
         pkgs += find(fs, read)
-    keys: dict[tuple[str, str], dict] = {}
+    keys: dict[tuple[str, str], list[dict]] = {}
     for p in pkgs:
         norm = {"python": _norm_py, "cargo": _norm_cargo}.get(p["ecosystem"], lambda s: s)
-        keys.setdefault((p["ecosystem"], norm(p["name"])), p)
+        keys.setdefault((p["ecosystem"], norm(p["name"])), []).append(p)
     for p in pkgs:
         norm = {"python": _norm_py, "cargo": _norm_cargo}.get(p["ecosystem"], lambda s: s)
         internal = []
         for dp in p["deps"]:
-            tgt = keys.get((p["ecosystem"], norm(dp["raw"])))
-            if tgt is not None and tgt is not p:
-                internal.append({**dp, "on": tgt["name"], "on_dir": tgt["dir"]})
+            tgts = [t for t in keys.get((p["ecosystem"], norm(dp["raw"])), []) if t is not p]
+            for tgt in tgts:   # two packages of one name: an edge to each, neither certain
+                internal.append({**dp, "on": tgt["name"], "on_dir": tgt["dir"],
+                                 **({"ambiguous": True} if len(tgts) > 1 else {})})
         p["deps"] = internal
     return {"packages": pkgs}
 
 
-def _owner(rel: str, pkgs: list[dict]) -> dict | None:
+_MANIFEST = {"npm": "package.json", "cargo": "Cargo.toml", "python": "pyproject.toml", "go": "go.mod",
+             "maven": "pom.xml"}
+_ROOT_SHARED = {"Cargo.lock", "poetry.lock", "uv.lock", "pdm.lock"}
+
+
+def _owner(rel: str, pkgs: list[dict], files: set[str]) -> dict | None:
     best = None
     for p in pkgs:
         d = p["dir"]
         if (d == "" or rel == d or rel.startswith(d + "/")) and (best is None or len(d) > len(best["dir"])):
             best = p
+    if best is not None and best["dir"] == "":
+        # a root package (a Cargo root [package], a root pyproject) does not own what every package shares (a
+        # dot folder such as .github/, a root lock file) nor a folder with its own manifest that is not a member
+        # (a Cargo exclude): those are outside
+        parts = rel.split("/")
+        man = _MANIFEST.get(best["ecosystem"], "")
+        if (parts[0].startswith(".") or rel in _ROOT_SHARED
+                or any("/".join(parts[:k] + [man]) in files for k in range(1, len(parts)))):
+            return None
     return best
 
 
@@ -541,8 +685,9 @@ def affected(files: list[str], read: Callable[[str], str | None], changed: list[
     out["ecosystems"] = eco
     hit: dict[int, list[str]] = {}
     outside: list[str] = []
+    fset = set(files)
     for rel in sorted(set(changed)):
-        p = _owner(rel, pkgs)
+        p = _owner(rel, pkgs, fset)
         if p is None:
             outside.append(rel)
         else:
@@ -561,7 +706,7 @@ def affected(files: list[str], read: Callable[[str], str | None], changed: list[
                                "evidence": [_ev(p["at"], p["line_text"])]}})
         status_of[id(p)] = "statically_verified"
     # walk the declared dependencies back from the changed packages
-    by_name = {(p["ecosystem"], p["name"]): p for p in pkgs}
+    by_key = {(p["ecosystem"], p["name"], p["dir"]): p for p in pkgs}
     frontier = [p for p in pkgs if id(p) in hit]
     chains: dict[int, list[dict]] = {id(p): [] for p in frontier}
     depth = 0
@@ -572,12 +717,12 @@ def affected(files: list[str], read: Callable[[str], str | None], changed: list[
             if id(q) in chains:
                 continue
             for dp in q["deps"]:
-                tgt = by_name.get((q["ecosystem"], dp["on"]))
+                tgt = by_key.get((q["ecosystem"], dp["on"], dp["on_dir"]))
                 if tgt is None or id(tgt) not in {id(f) for f in frontier}:
                     continue
                 chain = [{**dp, "from": q["name"]}, *chains[id(tgt)]]
                 chains[id(q)] = chain
-                weak = any(not h["local"] for h in chain)
+                weak = any(not h["local"] or h.get("ambiguous") for h in chain)
                 st = "strong_inference" if weak or status_of.get(id(tgt)) == "strong_inference" \
                     else "statically_verified"
                 status_of[id(q)] = st
@@ -587,7 +732,9 @@ def affected(files: list[str], read: Callable[[str], str | None], changed: list[
                            if len(chain) > 1 else ", a changed package"))
                 unc = [] if st == "statically_verified" else [
                     "the dependency is declared by name: the package manager may take the published package "
-                    "instead of the workspace one"]
+                    "instead of the workspace one"] + (
+                    ["two workspace packages have that name: which one is used is not known"]
+                    if any(h.get("ambiguous") for h in chain) else [])
                 rows.append({"name": q["name"], "dir": q["dir"], "ecosystem": q["ecosystem"], "reason": "depends",
                              "via": via, "distance": len(chain), "at": dp["at"], "targets": q["targets"],
                              "claim": {"kind": "structure", "status": st, "text": text,
@@ -596,6 +743,12 @@ def affected(files: list[str], read: Callable[[str], str | None], changed: list[
                 nxt.append(q)
                 break
         frontier = nxt
+    if frontier:   # the depth cap: say whether packages further away were left out
+        far = {id(f) for f in frontier}
+        if any(id(q) not in chains and any(id(by_key.get((q["ecosystem"], dp["on"], dp["on_dir"]))) in far
+                                           for dp in q["deps"]) for q in pkgs):
+            out["truncated"] = True
+            out["not_checked"] = [f"dependents more than {MAX_DEPTH} levels from a changed package: not walked"]
     out["affected_total"] = len(rows)
     out["affected"] = rows[:MAX_LISTED]
     out["outside"] = outside[:MAX_OUTSIDE]
@@ -617,6 +770,8 @@ def compact(block: dict) -> dict:
                        for r in block["affected"][:15]]
     if block.get("outside"):
         out["outside"] = len(block.get("outside") or []) if "outside_total" not in block else block["outside_total"]
+    if block.get("truncated"):
+        out["truncated"] = True
     return out
 
 
@@ -644,6 +799,8 @@ def render(block: dict) -> list[str]:
                    f"{r['at']}{tg}")
     if block.get("affected_total", 0) > len(block["affected"]):
         out.append(f"  ... {block['affected_total'] - len(block['affected'])} more (--json)")
+    if block.get("truncated"):
+        out.append(f"  ... dependents more than {MAX_DEPTH} levels from a changed package not walked")
     if block.get("outside"):
         n = block.get("outside_total", len(block["outside"]))
         out.append(f"  outside every package ({n}, not followed): {', '.join(block['outside'][:5])}"
@@ -699,7 +856,7 @@ def render_run(res: dict) -> str:
              f"{res['base']['ref']} ({res['base']['commit'][:10]})")
     out = [f"Workspace packages for {where}: {res['changed_files']} changed file(s), "
            f"{res['packages_total']} package(s) declared."]
-    for why in res.get("not_checked") or []:
-        out.append(f"  not checked: {why}")
+    if "affected" not in res:
+        out += [f"  not checked: {why}" for why in res.get("not_checked") or []]
     out += render(res)[1:] if "affected" in res else []
     return "\n".join(out)

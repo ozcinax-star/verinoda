@@ -220,3 +220,129 @@ def test_mcp_and_cli_carry_the_affected_packages(mono, capsys):
     text = capsys.readouterr().out
     assert "[statically_verified] docs (npm, apps/docs/): 1 changed file(s)" in text
     assert cli.main(["affected", "--repo", str(mono), "--file", "x", "--staged"]) == 2
+
+
+# -- manifest shapes that were misread, and the walk's edges ----------------------------------------------------
+def test_an_extra_before_a_sibling_does_not_end_the_dependency_array():
+    tree = {"pyproject.toml": '[project]\nname = "root"\n',
+            "libs/core/pyproject.toml": '[project]\nname = "acme-core"\n',
+            "apps/api/pyproject.toml": ('[project]\nname = "api"\ndependencies = [\n  "fastapi[standard]>=0.1",\n'
+                                        '  "acme-core",\n]\n\n[tool.uv.sources]\nacme-core = { workspace = true }\n')}
+    rows = _rows(_run(tree, ["libs/core/x.py"]))
+    assert rows["api"]["at"] == "apps/api/pyproject.toml:5"
+    assert rows["api"]["claim"]["status"] == "statically_verified"
+
+
+def test_a_long_section_line_does_not_stall_the_toml_reader():
+    import time
+
+    t = time.perf_counter()
+    list(aff._sections("[" + " " * 20000 + "x\n[project]\n"))
+    tree = {"a/pyproject.toml": '[project]\nname = "a"\n[' + " " * 20000 + "x\n",
+            "b/pyproject.toml": '[project]\nname = "b"\n'}
+    assert _run(tree, ["a/x.py"])["packages_total"] == 2
+    assert time.perf_counter() - t < 2
+    assert [s for _, s, _ in aff._sections('[ a ]\n[[bin]] # x\n[ "x.y" ]\nk = [1]')] == ["a", "bin", "x.y", "x.y"]
+
+
+def test_a_maven_dependency_on_another_version_of_a_module_is_not_verified():
+    parent = "<parent><groupId>g</groupId><artifactId>root</artifactId><version>2.0-SNAPSHOT</version></parent>"
+    dep = "<dependency>\n<groupId>g</groupId>\n<artifactId>core</artifactId>\n<version>{v}</version>\n</dependency>"
+    tree = {"pom.xml": "<project>\n<groupId>g</groupId>\n<artifactId>root</artifactId>\n<version>2.0-SNAPSHOT"
+                       "</version>\n<modules>\n<module>core</module>\n<module>app</module>\n<module>web</module>\n"
+                       "</modules>\n</project>\n",
+            "core/pom.xml": f"<project>\n{parent}\n<artifactId>core</artifactId>\n</project>\n",
+            "app/pom.xml": (f"<project>\n{parent}\n<artifactId>app</artifactId>\n<dependencies>\n"
+                            f"{dep.format(v='1.0')}\n</dependencies>\n</project>\n"),
+            "web/pom.xml": (f"<project>\n{parent}\n<artifactId>web</artifactId>\n<dependencies>\n"
+                            f"{dep.format(v='${project.version}')}\n</dependencies>\n</project>\n")}
+    rows = _rows(_run(tree, ["core/A.java"]))
+    assert rows["app"]["claim"]["status"] == "strong_inference" and rows["app"]["claim"]["uncertainties"]
+    assert rows["web"]["claim"]["status"] == "statically_verified"
+
+
+def test_cargo_workspace_true_is_local_only_when_the_root_entry_has_a_path():
+    def tree(entry: str) -> dict:
+        return {"Cargo.toml": f'[workspace]\nmembers = ["crates/*"]\n\n[workspace.dependencies]\n{entry}\n',
+                "crates/core/Cargo.toml": '[package]\nname = "acme-core"\n',
+                "crates/app/Cargo.toml": '[package]\nname = "app"\n\n[dependencies]\nacme-core.workspace = true\n',
+                "crates/srv/Cargo.toml": '[package]\nname = "srv"\n\n[dependencies.acme-core]\nworkspace = true\n'}
+    rows = _rows(_run(tree('acme-core = "1.0"'), ["crates/core/src/lib.rs"]))
+    assert rows["app"]["claim"]["status"] == rows["srv"]["claim"]["status"] == "strong_inference"
+    rows = _rows(_run(tree('acme-core = { path = "crates/core", version = "1.0" }'), ["crates/core/src/lib.rs"]))
+    assert rows["app"]["claim"]["status"] == rows["srv"]["claim"]["status"] == "statically_verified"
+    renamed = {**tree('core = { path = "crates/core", package = "acme-core" }'),
+               "crates/app/Cargo.toml": '[package]\nname = "app"\n\n[dependencies]\ncore = { workspace = true }\n'}
+    rows = _rows(_run(renamed, ["crates/core/src/lib.rs"]))
+    assert rows["app"]["claim"]["status"] == "statically_verified"   # the root entry renames the crate
+
+
+def test_an_npm_dependency_is_cited_at_its_own_section_and_the_name_at_the_top_level():
+    tree = {"package.json": '{"workspaces": ["p/*"]}',
+            "p/core/package.json": '{\n "author": {"name": "Jane"},\n "name": "core"\n}',
+            "p/app/package.json": ('{\n "name": "app",\n "peerDependencies": {\n  "core": "^1.0.0"\n },\n'
+                                   ' "devDependencies": {\n  "core": "workspace:*"\n }\n}')}
+    rows = _rows(_run(tree, ["p/core/x.js"]))
+    assert rows["core"]["at"] == "p/core/package.json:3"
+    app = rows["app"]
+    # the devDependencies entry (workspace:) is the local one and is cited at its own line, not the peer range's
+    assert app["claim"]["evidence"][0]["excerpt"] == '"core": "workspace:*"' and app["at"] == "p/app/package.json:7"
+    assert app["claim"]["status"] == "statically_verified"
+
+
+def test_gradle_include_over_several_lines():
+    for settings in ('rootProject.name = "x"\ninclude(\n    ":core",\n    ":app"\n)\n',
+                     "include ':core',\n        ':app'\n"):
+        tree = {"settings.gradle.kts": settings, "core/build.gradle.kts": "",
+                "app/build.gradle.kts": 'dependencies {\n    implementation(project(":core"))\n}\n'}
+        rows = _rows(_run(tree, ["core/src/main/kotlin/A.kt"]))
+        assert set(rows) == {":core", ":app"} and rows[":app"]["claim"]["status"] == "statically_verified"
+    assert rows[":app"]["at"] == "app/build.gradle.kts:2" and rows[":core"]["at"] == "settings.gradle.kts:1"
+
+
+def test_pnpm_items_at_column_zero_and_declared_packages_in_build_folders():
+    tree = {"pnpm-workspace.yaml": "packages:\n- 'packages/*'\n",
+            "packages/a/package.json": '{"name": "a"}',
+            "packages/b/package.json": '{"name": "b", "dependencies": {"a": "workspace:*"}}'}
+    assert set(_rows(_run(tree, ["packages/a/x.ts"]))) == {"a", "b"}
+    tree = {"package.json": '{"workspaces": ["packages/*"]}', "packages/build/package.json": '{"name": "b"}',
+            "packages/core/package.json": '{"name": "c", "dependencies": {"b": "workspace:*"}}',
+            "packages/node_modules/package.json": '{"name": "nm"}'}
+    res = _run(tree, ["packages/build/index.js"])
+    assert res["packages_total"] == 2 and set(_rows(res)) == {"b", "c"}
+
+
+def test_a_root_package_does_not_own_shared_files_or_an_excluded_crate():
+    tree = {"Cargo.toml": '[package]\nname = "root"\n\n[workspace]\nmembers = ["crates/*"]\nexclude = ["crates/old"]\n',
+            "crates/a/Cargo.toml": '[package]\nname = "a"\n\n[dependencies]\nroot = { path = "../.." }\n',
+            "crates/old/Cargo.toml": '[package]\nname = "old"\n'}
+    res = _run(tree, [".github/workflows/ci.yml", "Cargo.lock", "crates/old/src/lib.rs"])
+    assert res["affected"] == []
+    assert res["outside"] == [".github/workflows/ci.yml", "Cargo.lock", "crates/old/src/lib.rs"]
+    assert [r["name"] for r in _run(tree, ["src/main.rs"])["affected"]] == ["root", "a"]
+
+
+def test_the_depth_cap_is_said():
+    tree = {"package.json": '{"workspaces": ["k/*"]}', "k/k0/package.json": '{"name": "k0"}'}
+    for i in range(1, 25):
+        tree[f"k/k{i}/package.json"] = f'{{"name": "k{i}", "dependencies": {{"k{i - 1}": "workspace:*"}}}}'
+    res = _run(tree, ["k/k0/x.js"])
+    assert res["affected_total"] == aff.MAX_DEPTH + 1 and res["truncated"] is True and res["not_checked"]
+    assert aff.compact(res)["truncated"] is True and "not walked" in "\n".join(aff.render(res))
+    short = _run({k: v for k, v in tree.items() if not k.startswith(("k/k2", "k/k1"))}, ["k/k0/x.js"])
+    assert "truncated" not in short
+
+
+def test_two_packages_of_one_name_resolve_the_same_way_from_either():
+    tree = {"package.json": '{"workspaces": ["p/*"]}', "p/a1/package.json": '{"name": "dup"}',
+            "p/a2/package.json": '{"name": "dup"}',
+            "p/app/package.json": '{"name": "app", "dependencies": {"dup": "workspace:*"}}'}
+    for changed in ("p/a1/x.js", "p/a2/x.js"):
+        app = _rows(_run(tree, [changed]))["app"]
+        assert app["claim"]["status"] == "strong_inference"
+        assert any("two workspace packages" in u for u in app["claim"]["uncertainties"])
+
+
+def test_cli_file_takes_an_absolute_path(mono, capsys):
+    assert cli.main(["affected", "--repo", str(mono), "--file", str(mono / "apps/docs/package.json")]) == 0
+    assert "[statically_verified] docs (npm, apps/docs/): 1 changed file(s)" in capsys.readouterr().out

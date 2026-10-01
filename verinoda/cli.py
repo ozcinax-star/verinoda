@@ -1041,8 +1041,10 @@ def cmd_affected(args) -> int:
     if args.file and (args.base or args.staged):
         print("error: --file names the changed files: give no --base / --staged", file=sys.stderr)
         return 2
+    repo = _repo(args)
+    changed = [_rel_in_repo(repo.resolve(), f, "file") for f in args.file] if args.file else None
     try:
-        res = aff.run(_repo(args), base=args.base, staged=args.staged, changed=args.file)
+        res = aff.run(repo, base=args.base, staged=args.staged, changed=changed)
     except (treestate.NotAGitTree, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
