@@ -27,9 +27,11 @@ What is read (nothing is run: the files are logs and reports the build already w
 A diagnostic's file is tied to the repository by path: an absolute path under the repository, a relative path from
 the repository root, else the longest path suffix the two share (a CI runner's checkout, a sub-project's relative
 path). A jdeps finding names a class: it is tied to the source file of its top-level class by its package path
-(``com.ex.Foo$1`` -> ``.../com/ex/Foo.java``, ``com.ex.UtilKt`` -> ``.../com/ex/Util.kt``), and its line is the
-first line of that file naming the internal API (its qualified name, an import of its package, else its simple
-name). A class with no source file in the repository (a dependency's jar) is counted and named, not listed.
+(``com.ex.Foo$1`` -> ``.../com/ex/Foo.java``, ``com.ex.UtilKt`` -> ``.../com/ex/Util.kt``) when that file declares
+the class's package, and its line is the first code line (outside comments) of that file naming the internal API
+by its qualified name or an import of its package; its simple name alone is a guess (``weak_inference``), and is
+not used when the file imports another class of that name. A class with no source file in the repository (a
+dependency's jar) is counted and named, not listed.
 
 What a log says is the named tool's statement about the tree it compiled, not checked here: ``strong_inference``
 while the log is newer than the file, ``weak_inference`` when the file changed after it (its lines may have moved)
@@ -62,17 +64,27 @@ LIMITS = [
     "a path from another machine (a CI runner's) is tied to the repository by its longest existing suffix, a guess "
     "(weak_inference) unless the quoted source line is still at that line",
     "a jdeps finding names a class: its file is found by the package path of its top-level class, which a Java "
-    "file need not follow for a non-public class, and its line is the first line naming the internal API (a "
-    "use through reflection with a computed name is not found)",
+    "file need not follow for a non-public class, and its line is the first code line naming the internal API; "
+    "a line naming only its simple name is a guess (weak_inference), and a use through reflection with a "
+    "computed name has no line",
     "javac's own -Xlint warnings and compile errors are counted, not listed; Error Prone's and NullAway's versions "
     "are known only when the log names their artifacts",
     "the claims are printed, not stored in the project's claim store",
 ]
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-_STAMP = re.compile(r"^\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(?:[.,]\d+)?(?:Z|[+-]\d\d:?\d\d)?\s+")
-_TAG = re.compile(r"^\[(?P<tag>INFO|WARNING|WARN|ERROR|javac)\]\s*", re.I)
-_SEV = r"(?:(?P<sev>error|warning|note|Error|Warning|Note|ERROR|WARNING|NOTE):\s*)"
+# a CI timestamp (GitHub Actions, GitLab) or Jenkins Timestamper's bracketed one, and the one space after it: the
+# rest of the line keeps its indentation (the caret's column depends on it)
+_STAMP = re.compile(r"^(?:\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(?:[.,]\d+)?(?:Z|[+-]\d\d:?\d\d)?"
+                    r"|\[\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(?:[.,]\d+)?(?:Z|[+-]\d\d:?\d\d)?\])[ \t]?")
+_TAG = re.compile(r"^\[(?P<tag>INFO|WARNING|WARN|ERROR|javac)\][ \t]?", re.I)
+# javac's severity word in any locale: English, German, French, Japanese, Chinese (simplified)
+_SEV_WORDS = {"error": "error", "warning": "warning", "note": "note",
+              "fehler": "error", "warnung": "warning", "hinweis": "note",
+              "erreur": "error", "avertissement": "warning", "remarque": "note",
+              "\u30a8\u30e9\u30fc": "error", "\u8b66\u544a": "warning", "\u6ce8\u610f": "note",
+              "\u9519\u8bef": "error", "\u6ce8": "note"}
+_SEV = r"(?:(?P<sev>[^\s:\uff1a\[\]]+)[:\uff1a]\s*)"
 # javac: PATH.java:LINE: [severity:] [Check] message
 _JAVAC = re.compile(r"^(?P<path>.+?\.java):(?P<line>\d+):\s*" + _SEV + r"?(?:\[(?P<check>[^\]\s]+)\]\s*)?"
                     r"(?P<msg>.*)$")
@@ -80,7 +92,7 @@ _JAVAC = re.compile(r"^(?P<path>.+?\.java):(?P<line>\d+):\s*" + _SEV + r"?(?:\[(
 _MAVEN = re.compile(r"^(?P<path>.+?\.java):\[(?P<line>\d+)(?:,(?P<col>\d+))?\]\s*" + _SEV +
                     r"?(?:\[(?P<check>[^\]\s]+)\]\s*)?(?P<msg>.*)$")
 # a line that looks like a diagnostic but did not parse (a broken line number, a cut path)
-_ALMOST = re.compile(r"\.java:\S*\s*(?:error|warning):\s*\[|\.java:\[[^\]]*\]\s*\[[A-Z]")
+_ALMOST = re.compile(r"\.java:\S*\s*[^\s:\uff1a\[\]]+[:\uff1a]\s*\[|\.java:\[[^\]]*\]\s*\[[A-Z]")
 _CHECK_EP = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
 _CARET = re.compile(r"^\s*\^\s*$")
 _SEE = re.compile(r"^\s*\(see\s+(?P<url>\S+)\s*\)\s*$")
@@ -110,9 +122,23 @@ def _clip(text: str) -> str:
 
 def _decode(data: bytes) -> str:
     """A log's text: UTF-16 when it starts with that byte-order mark (PowerShell 5.1's ``>`` writes it), else
-    UTF-8 with a BOM dropped; bytes that do not decode are replaced."""
+    UTF-8 with a BOM dropped, else this machine's ANSI code page or cp1252 (javac on a Windows console writes
+    that) when the whole file decodes in it; else UTF-8 with the bytes that do not decode replaced."""
     if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
         return data.decode("utf-16", "replace")
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
+    import locale
+
+    for enc in dict.fromkeys([locale.getpreferredencoding(False), "cp1252"]):
+        if enc.lower().replace("-", "").replace("_", "") in ("utf8", "utf8sig"):
+            continue
+        try:
+            return data.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
     return data.decode("utf-8-sig", "replace")
 
 
@@ -135,10 +161,23 @@ def _header(s: str) -> re.Match | None:
     return _MAVEN.match(s2) or _JAVAC.match(s2)
 
 
-def parse_javac(lines: list[str]) -> tuple[list[dict], dict]:
+def _ends_block(t: str) -> bool:
+    """A line that ends the lines following a diagnostic: the next one, a count, a Gradle marker."""
+    return bool(_header(t) or _COUNT.match(t) or _GRADLE.match(t.strip()) or _ALMOST.search(t))
+
+
+def _level(word: str | None, tag: str | None) -> str:
+    if word:   # a severity word javac printed in a language not listed is still a diagnostic's
+        return _SEV_WORDS.get(word, _SEV_WORDS.get(word.lower(), "warning"))
+    return {"ERROR": "error", "WARNING": "warning", "WARN": "warning", "INFO": "note"}.get(tag or "", "warning")
+
+
+def parse_javac(lines: list[str], cleaned: list[tuple[str | None, str]] | None = None) -> tuple[list[dict], dict]:
     """``(diagnostics, counts)`` of javac output: each diagnostic with its path, line, column, level, check,
-    message, the source line javac quoted, its "see" link, its "Did you mean" hint and its log line (1-based)."""
-    cleaned = [clean(x) for x in lines]
+    message, the source line javac quoted, its "see" link, its "Did you mean" hint and its log line (1-based).
+    ``cleaned`` is ``[clean(x) for x in lines]`` when the caller has it already."""
+    if cleaned is None:
+        cleaned = [clean(x) for x in lines]
     out: list[dict] = []
     counts = {"javac_other": 0, "unreadable": 0}
     i = 0
@@ -151,20 +190,30 @@ def parse_javac(lines: list[str]) -> tuple[list[dict], dict]:
             i += 1
             continue
         check = m.group("check")
-        sev = (m.group("sev") or "").lower() or {"ERROR": "error", "WARNING": "warning", "WARN": "warning",
-                                                   "INFO": "note"}.get(tag or "", "")
-        d = {"path": m.group("path"), "line": int(m.group("line")), "column": None, "level": sev or "warning",
+        d = {"path": m.group("path"), "line": int(m.group("line")), "column": None,
+             "level": _level(m.group("sev"), tag),
              "check": check, "message": (m.group("msg") or "").strip(), "quoted": None, "see": None, "hint": None,
              "log_line": i + 1}
         if m.groupdict().get("col"):
             d["column"] = int(m.group("col"))
-        # the lines after it, up to the next diagnostic: message lines, the quoted source and its caret, hints
+        # the lines after it, up to the next diagnostic: message lines, the quoted source and its caret, hints. A
+        # blank line ends them, unless the caret is still to come (Error Prone's long messages have blank lines)
         follow: list[str] = []
         j = i + 1
-        while j < len(cleaned) and j - i <= MAX_FOLLOW:
+        last = min(len(cleaned), i + MAX_FOLLOW + 1)
+        while j < last:
             t = cleaned[j][1]
-            if not t.strip() or _header(t) or _COUNT.match(t) or _GRADLE.match(t.strip()) or _ALMOST.search(t):
+            if _ends_block(t):
                 break
+            if not t.strip():
+                if any(_CARET.match(x) for x in follow):
+                    break
+                ahead = next((k for k in range(j + 1, last) if _ends_block(cleaned[k][1])
+                              or _CARET.match(cleaned[k][1])), None)
+                if ahead is None or not _CARET.match(cleaned[ahead][1]):
+                    break
+                j += 1
+                continue
             follow.append(t)
             j += 1
         caret = next((k for k, t in enumerate(follow) if _CARET.match(t)), None)
@@ -201,18 +250,21 @@ def parse_javac(lines: list[str]) -> tuple[list[dict], dict]:
 
 # -- jdeps output -------------------------------------------------------------------------------------------
 
-def parse_jdeps(lines: list[str]) -> tuple[list[dict], dict[str, str], dict]:
+def parse_jdeps(lines: list[str], cleaned: list[tuple[str | None, str]] | None = None
+                ) -> tuple[list[dict], dict[str, str], dict]:
     """``(internal API uses, suggested replacements, counts)`` of jdeps output; each use with its class, the
     internal API, where jdeps placed it (a module, ``JDK removed internal API``, ``rt.jar``), the archive the class
-    was read from and its log line."""
+    was read from and its log line. A dependence on no internal API is counted only under an archive header (an
+    indented ``a -> b c`` line elsewhere in a build log, a quoted lambda, is not jdeps')."""
+    if cleaned is None:
+        cleaned = [clean(x) for x in lines]
     uses: list[dict] = []
     repl: dict[str, str] = {}
     counts = {"not_internal": 0}
     archive = None
     cls_now: tuple[str, str | None] | None = None
     in_table = False
-    for n, raw in enumerate(lines, 1):
-        _tag, s = clean(raw)
+    for n, (_tag, s) in enumerate(cleaned, 1):
         if _REPL_HEAD.match(s):
             in_table = True
             continue
@@ -253,7 +305,8 @@ def parse_jdeps(lines: list[str]) -> tuple[list[dict], dict[str, str], dict]:
 def _record(uses: list[dict], counts: dict, cls: str, target: str, kind: str, arch: str | None, n: int) -> None:
     im = _INTERNAL.search(kind)
     if not im:
-        counts["not_internal"] += 1
+        if arch is not None:
+            counts["not_internal"] += 1
         return
     where = (im.group("where") or "").strip()
     uses.append({"class": cls, "target": target, "where": where, "archive": arch, "log_line": n,
@@ -275,6 +328,25 @@ def replacement_of(target: str, repl: dict[str, str]) -> str | None:
 
 
 # -- the repository -----------------------------------------------------------------------------------------
+
+def _remote(path: str) -> bool:
+    """A UNC path (``\\\\host\\share``) or a Windows device path (``\\\\?\\``, ``\\\\.\\``), in either slash."""
+    return path.strip().replace("\\", "/").startswith("//")
+
+
+def _package(lines: list[str] | None) -> str | None:
+    """The package a Java or Kotlin file declares (``""`` for none), ``None`` when it cannot be read."""
+    if lines is None:
+        return None
+    for code, _bare in _code_lines(lines[:400]):
+        m = re.match(r"^\s*package\s+([\w.]+)\s*;?\s*$", code)
+        if m:
+            return m.group(1)
+        if re.match(r"^\s*(?:import|(?:public\s+|abstract\s+|final\s+)*(?:class|interface|enum|record|object|fun)\b)",
+                    code):
+            break
+    return ""
+
 
 class _Repo:
     """Files of the repository, listed once and only when a suffix or a class has to be looked up."""
@@ -326,10 +398,12 @@ class _Repo:
             if len(hits) == 1:
                 return hits[0], "suffix"
             return None, "ambiguous" if hits else "elsewhere"
-        try:
-            here = Path(p).exists()
-        except (OSError, ValueError):
-            here = False
+        here = False
+        if not _remote(p):   # a UNC or device path from a log is never opened: on Windows that contacts its host
+            try:
+                here = Path(p).exists()
+            except (OSError, ValueError):
+                here = False
         if here or _FOREIGN.intersection(parts):
             return None, "elsewhere"   # a file on this machine outside the repository, or a dependency's
         for i in range(1, len(parts)):   # a CI runner's checkout: the longest suffix that is a repository file
@@ -349,6 +423,10 @@ class _Repo:
                 names.append(tail[:-2] + ".kt")   # Kotlin's file facade: UtilKt is Util.kt
             hits = sorted({r for nm in names for r in self.by_name().get(nm.rsplit("/", 1)[-1], [])
                            if r == nm or r.endswith("/" + nm)})
+            # the file must declare the class's package: a default-package class (a dependency's ``Foo``) is not
+            # the repository's com/ex/Foo.java
+            pkg = top.rpartition(".")[0]
+            hits = [r for r in hits if _package(self.lines(r)) == pkg]
             if len(hits) == 1:
                 self.classes[fqn] = (hits[0], "class")
             else:
@@ -391,25 +469,86 @@ def _where_quoted(lines: list[str] | None, line: int, quoted: str | None) -> tup
     return (hits[0], "moved") if len(hits) == 1 else (line, "gone")
 
 
-def _api_line(lines: list[str] | None, target: str) -> tuple[int | None, str]:
-    """The first line naming internal API ``target``: its qualified name, an import of its package, else its simple
-    name outside comments."""
+def _code_lines(lines: list[str]) -> list[tuple[str, str]]:
+    """Each line of Java or Kotlin source as ``(code, bare)``: ``code`` without its comments (``//``, ``/* */``
+    over several lines, javadoc), ``bare`` without its string and char literals (text blocks too) as well."""
+    out: list[tuple[str, str]] = []
+    in_block = in_text = False
+    for t in lines:
+        code: list[str] = []
+        bare: list[str] = []
+        i, n = 0, len(t)
+        while i < n:
+            if in_block:
+                e = t.find("*/", i)
+                if e < 0:
+                    break
+                in_block, i = False, e + 2
+                code.append(" ")
+                bare.append(" ")
+                continue
+            if in_text:
+                e = t.find('"""', i)
+                code.append(t[i:] if e < 0 else t[i:e + 3])
+                bare.append(" ")
+                if e < 0:
+                    break
+                in_text, i = False, e + 3
+                continue
+            if t.startswith("//", i):
+                break
+            if t.startswith("/*", i):
+                in_block, i = True, i + 2
+                continue
+            if t.startswith('"""', i):
+                in_text, i = True, i + 3
+                code.append('"""')
+                continue
+            c = t[i]
+            if c in "\"'":
+                j = i + 1
+                while j < n and t[j] != c:
+                    j += 2 if t[j] == "\\" else 1
+                code.append(t[i:j + 1])
+                bare.append(" ")
+                i = j + 1
+                continue
+            code.append(c)
+            bare.append(c)
+            i += 1
+        out.append(("".join(code), "".join(bare)))
+    return out
+
+
+def _api_line(lines: list[str] | None, target: str) -> tuple[int | None, str, bool]:
+    """``(line, how, named)``: the first code line (outside comments) naming internal API ``target`` by its
+    qualified name (an import, a qualified use, a ``Class.forName`` string) or by an import of its package
+    (``named``); else the first naming its simple name outside strings (a guess: not ``named``), unless the file
+    imports another class of that simple name."""
     if not lines:
-        return None, ""
+        return None, "", False
+    code = _code_lines(lines)
     top = target.split("$", 1)[0]
     pkg, _, simple = top.rpartition(".")
-    tests = [(re.compile(r"(?<![\w.])" + re.escape(top) + r"(?![\w])"), f"names {top}")]
+    qual = re.compile(r"(?<![\w.])" + re.escape(top) + r"(?![\w])")
+    for k, (c, _b) in enumerate(code):
+        if qual.search(c):
+            return k + 1, f"names {top}", True
     if pkg:
-        tests.append((re.compile(r"^\s*import\s+(?:static\s+)?" + re.escape(pkg) + r"\.\*\s*;?\s*$"),
-                      f"imports {pkg}.*"))
-    tests.append((re.compile(r"(?<![\w.])" + re.escape(simple) + r"(?![\w])"), f"names {simple}"))
-    for rx, how in tests:
-        for k, t in enumerate(lines):
-            if t.lstrip().startswith(("//", "*", "/*")):
-                continue
-            if rx.search(t):
-                return k + 1, how
-    return None, ""
+        star = re.compile(r"^\s*import\s+(?:static\s+)?" + re.escape(pkg) + r"\.\*\s*;?\s*$")
+        for k, (c, _b) in enumerate(code):
+            if star.match(c):
+                return k + 1, f"imports {pkg}.*", True
+    other = re.compile(r"^\s*import\s+([\w.]+)\." + re.escape(simple) + r"\s*;?\s*$")
+    for c, _b in code:
+        m = other.match(c)
+        if m and m.group(1) != pkg:
+            return None, f"imports another {simple} ({m.group(1)}.{simple})", False
+    plain = re.compile(r"(?<![\w.])" + re.escape(simple) + r"(?![\w])")
+    for k, (_c, b) in enumerate(code):
+        if plain.search(b):
+            return k + 1, f"names {simple} (its simple name only: a guess)", False
+    return None, "", False
 
 
 # -- the command --------------------------------------------------------------------------------------------
@@ -459,13 +598,18 @@ def report(root: Path, files: list[str], paths: list[str] | None = None, *, tool
         if text.lstrip().startswith("{"):
             inputs.append(_read_sarif(root, p, name, wanted, claims, counts))
             continue
-        lines = text.splitlines()
+        # lines end at "\n" only (as grep -n and _versions count them): a lone "\r" (progress output) or a form
+        # feed does not shift every line number after it
+        lines = text.split("\n")
         versions = _versions(text, name)
+        del data, text
+        cleaned = [clean(x) for x in lines]   # once, for both parsers
+        del lines
         entry: dict = {"file": name, "format": "log", "found": {}}
         if versions:
             entry["versions"] = {k: v["version"] for k, v in versions.items()}
         if tool in ("auto", "errorprone", "nullaway"):
-            diags, c = parse_javac(lines)
+            diags, c = parse_javac([], cleaned)
             for k, v in c.items():
                 counts[k] += v
             for d in diags:
@@ -477,7 +621,7 @@ def report(root: Path, files: list[str], paths: list[str] | None = None, *, tool
                 row = _javac_claim(repo, d, name, mtime, versions, counts, elsewhere)
                 _keep(row, wanted, counts, seen, claims)
         if tool in ("auto", "jdeps"):
-            uses, repl, c = parse_jdeps(lines)
+            uses, repl, c = parse_jdeps([], cleaned)
             for k, v in c.items():
                 counts[k] += v
             for u in uses:
@@ -490,7 +634,7 @@ def report(root: Path, files: list[str], paths: list[str] | None = None, *, tool
                                       "nullaway": "NullAway", "jdeps": "jdeps JDK-internal"}[tool]
                              + " finding in this file")
         inputs.append(entry)
-    claims.sort(key=lambda c: (LEVEL_ORDER.get(c["level"], 9), c["at"]))
+    claims.sort(key=_order)
     by_status: dict[str, int] = {}
     by_tool: dict[str, int] = {}
     for c in claims:
@@ -515,12 +659,21 @@ def report(root: Path, files: list[str], paths: list[str] | None = None, *, tool
     return res
 
 
+def _order(c: dict) -> tuple:
+    """Errors first, then by file and line as numbers (Foo.java:9 before Foo.java:10)."""
+    rel, _, ln = c["at"].rpartition(":")
+    if not ln.isdigit():
+        rel, ln = c["at"], "0"
+    return LEVEL_ORDER.get(c["level"], 9), rel, int(ln), c.get("column") or 0
+
+
 def _keep(row: dict | None, wanted: list[str], counts: dict, seen: set, claims: list[dict]) -> None:
     if row is None:
         return
     # a build that compiled a file twice prints its warnings twice; jdeps lists an anonymous or inner class's use
-    # of an API apart from its top-level class's, which is the same line of the same file
-    key = (row["stated_by"], row["rule"], row["at"], row.get("internal_api") or row["claim"])
+    # of an API apart from its top-level class's, which is the same line of the same file. Two findings at two
+    # columns of one line are two findings
+    key = (row["stated_by"], row["rule"], row["at"], row.get("column"), row.get("internal_api") or row["claim"])
     if key in seen:
         counts["duplicates"] += 1
         return
@@ -606,7 +759,7 @@ def _jdeps_claim(repo: _Repo, u: dict, repl: dict[str, str], name: str, mtime: f
         counts["ambiguous" if how == "ambiguous" else "unknown_class"] += 1
         unknown.add(u["class"])
         return None
-    line, found = _api_line(repo.lines(rel), u["target"])
+    line, found, named = _api_line(repo.lines(rel), u["target"])
     stale = repo.newer_than(rel, mtime)
     level = "error" if u["removed"] else "warning"
     where = f" ({u['where']})" if u["where"] else ""
@@ -615,13 +768,16 @@ def _jdeps_claim(repo: _Repo, u: dict, repl: dict[str, str], name: str, mtime: f
     if replacement:
         text += f"; suggested replacement: {_clip(replacement)}"
     notes = [f"the class is tied to {rel} by its package path"]
-    notes.append(f"line {line} {found}" if line else "no line of the file names it")
+    if line:
+        notes.append(f"line {line} {found}")
+    else:
+        notes.append("no line of the file names it" + (f": it {found}" if found else ""))
     if stale:
         notes.append("the file changed after the report was written")
     text += " (" + "; ".join(notes) + ")"
     at = f"{rel}:{line}" if line else rel
     row = {"subject": f"jdeps/{u['target']}", "at": at, "claim": text,
-           "status": "weak_inference" if stale or not line else "strong_inference", "stated_by": "jdeps",
+           "status": "strong_inference" if line and named and not stale else "weak_inference", "stated_by": "jdeps",
            "rule": "jdk-internal-api", "level": level, "class": u["class"], "internal_api": u["target"],
            "evidence_at": [at, f"{name}:{u['log_line']}"], "derived_by": DERIVED_BY}
     if u["where"]:

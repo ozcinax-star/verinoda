@@ -365,3 +365,203 @@ def test_cli_text_json_and_exit_codes(tmp_path, capsys):
     assert e.value.code == 2
     capsys.readouterr()
     assert cli.main(["import-findings", "--repo", str(r), "build.log", "--limit", "0"]) == 2
+
+
+# -- review round -------------------------------------------------------------------------------------------
+
+def _write(r: Path, rel: str, text: str) -> None:
+    (r / rel).parent.mkdir(parents=True, exist_ok=True)
+    (r / rel).write_text(text, encoding="utf-8", newline="\n")
+    old = time.time() - 1000
+    os.utime(r / rel, (old, old))
+
+
+def test_jdeps_line_is_strong_only_when_named_on_a_code_line(tmp_path):
+    r = _repo(tmp_path)
+    # the public java.lang.ref.Cleaner is not jdk.internal.ref.Cleaner; the internal DirectBuffer is named
+    _write(r, "src/main/java/com/ex/Cl.java", "\n".join([
+        "package com.ex;", "", "import java.lang.ref.Cleaner;", "import java.nio.ByteBuffer;", "",
+        "public class Cl {", "    private static final Cleaner CLEANER = Cleaner.create();",
+        "    void free(ByteBuffer bb) { ((sun.nio.ch.DirectBuffer) bb).cleaner().clean(); }", "}", ""]))
+    # a javadoc line with no leading "*", and a use by reflection with a computed name
+    _write(r, "src/main/java/com/ex/Sig.java", "\n".join([
+        "package com.ex;", "", "/**", " Handles the Signal from the OS. Uses sun.misc.Signal", " */",
+        "public class Sig {", '    Object h = load("sun.misc." + "Sig" + "nal");', "}", ""]))
+    # the simple name only, no import: a guess
+    _write(r, "src/main/java/com/ex/Un.java", "\n".join([
+        "package com.ex;", "", "class Un {", '    String s = "Unsafe";  /* Unsafe */',
+        "    Object u = Unsafe.getUnsafe();", "}", ""]))
+    # a default-package class in the repository, and one from a dependency with the name of com/ex/Foo.java
+    _write(r, "src/main/java/Top.java", "class Top {\n    long o = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;\n}\n")
+    _log(r, "jdeps.txt", "\n".join([
+        "app.jar -> java.base",
+        "   com.ex.Cl -> jdk.internal.ref.Cleaner   JDK internal API (java.base)",
+        "   com.ex.Cl -> sun.nio.ch.DirectBuffer   JDK internal API (java.base)",
+        "app.jar -> jdk.unsupported",
+        "   com.ex.Sig -> sun.misc.Signal   JDK internal API (jdk.unsupported)",
+        "   com.ex.Un -> sun.misc.Unsafe   JDK internal API (jdk.unsupported)",
+        "   Top -> sun.misc.Unsafe   JDK internal API (jdk.unsupported)",
+        "lib.jar -> jdk.unsupported",
+        "   Foo -> sun.misc.Unsafe   JDK internal API (jdk.unsupported)", ""]))
+    res = jf.report(r, ["jdeps.txt"])
+    by = {(c["class"], c["internal_api"]): c for c in res["claims"]}
+    cl = by[("com.ex.Cl", "jdk.internal.ref.Cleaner")]
+    assert cl["at"] == "src/main/java/com/ex/Cl.java" and cl["status"] == "weak_inference"
+    assert "imports another Cleaner (java.lang.ref.Cleaner)" in cl["claim"]
+    db = by[("com.ex.Cl", "sun.nio.ch.DirectBuffer")]
+    assert db["at"] == "src/main/java/com/ex/Cl.java:8" and db["status"] == "strong_inference"
+    sig = by[("com.ex.Sig", "sun.misc.Signal")]
+    assert sig["at"] == "src/main/java/com/ex/Sig.java" and sig["status"] == "weak_inference"
+    un = by[("com.ex.Un", "sun.misc.Unsafe")]   # not the string, not the comment: line 5, a guess
+    assert un["at"] == "src/main/java/com/ex/Un.java:5" and un["status"] == "weak_inference"
+    assert "simple name only" in un["claim"]
+    top = by[("Top", "sun.misc.Unsafe")]
+    assert top["at"] == "src/main/java/Top.java:2" and top["status"] == "strong_inference"
+    assert res["unknown_classes"] == ["Foo"] and ("Foo", "sun.misc.Unsafe") not in by
+
+
+def test_ant_and_stamped_lines_keep_the_source_indentation_for_the_column(tmp_path):
+    r = _repo(tmp_path)
+    foo = r / FOO_REL
+    _log(r, "ant.log", "\n".join([
+        "compile:",
+        f"    [javac] {foo}:7: warning: [NullAway] dereferenced expression name is @Nullable",
+        "    [javac]         return name.length();",
+        "    [javac]                    ^",
+        "    [javac]     (see http://t.uber.com/nullaway )", ""]))
+    c = jf.report(r, ["ant.log"])["claims"][0]
+    assert c["column"] == 20 and c["status"] == "strong_inference" and c["see"] == "http://t.uber.com/nullaway"
+    # GitHub Actions' timestamp and Jenkins Timestamper's bracketed one take one space, not the indentation
+    _log(r, "gh.log", "\n".join([
+        f"2026-09-30T10:00:00.1234567Z {foo}:7: warning: [NullAway] dereferenced expression name is @Nullable",
+        "2026-09-30T10:00:00.1234567Z         return name.length();",
+        "2026-09-30T10:00:00.1234567Z                    ^",
+        f"[2026-09-30T10:00:01.123Z] {foo}:12: error: [DeadException] Exception created but not thrown",
+        '[2026-09-30T10:00:01.123Z]             new IllegalArgumentException("negative");',
+        "[2026-09-30T10:00:01.123Z]             ^", ""]))
+    by = {c["rule"]: c for c in jf.report(r, ["gh.log"])["claims"]}
+    assert by["NullAway"]["column"] == 20 and by["DeadException"]["column"] == 13
+    assert by["DeadException"]["at"] == f"{FOO_REL}:12" and by["DeadException"]["status"] == "strong_inference"
+
+
+def test_localized_javac_severity_words_keep_the_findings(tmp_path):
+    r = _repo(tmp_path)
+    foo = r / FOO_REL
+    _log(r, "de.log", "\n".join([
+        f"{foo}:7: Warnung: [NullAway] dereferenced expression name is @Nullable",
+        f"{foo}:12: Fehler: [DeadException] Exception created but not thrown",
+        f"{foo}:4: Warnung: [rawtypes] raw type", ""]))
+    res = jf.report(r, ["de.log"])
+    assert [(c["rule"], c["level"]) for c in res["claims"]] == [("DeadException", "error"), ("NullAway", "warning")]
+    assert res["summary"]["javac_other"] == 1
+    _log(r, "ja.log", "\n".join([
+        f"{foo}:7: 警告: [NullAway] dereferenced expression name is @Nullable",
+        f"{foo}:12: エラー: [DeadException] Exception created but not thrown",
+        f"{foo}:12:  错误：[DeadException] zh, a full-width colon",
+        f"{foo}:6: Varoit: [MissingOverride] a word not in the list is a warning", ""]))
+    res = jf.report(r, ["ja.log"])
+    assert sorted((c["rule"], c["level"], c["at"]) for c in res["claims"]) == [
+        ("DeadException", "error", f"{FOO_REL}:12"), ("DeadException", "error", f"{FOO_REL}:12"),
+        ("MissingOverride", "warning", f"{FOO_REL}:6"), ("NullAway", "warning", f"{FOO_REL}:7")]
+
+
+TRIM = "package com.ex;\n" + "// pad\n" * 13 + 'class Trim { void f() {\n        "x".trim();\n} }\n'
+
+
+def test_a_blank_line_inside_a_message_keeps_the_quoted_line_caret_and_link(tmp_path):
+    r = _repo(tmp_path)
+    _write(r, "src/main/java/com/ex/Trim.java", TRIM)
+    assert TRIM.splitlines()[15] == '        "x".trim();'
+    _log(r, "ep.log", "\n".join([
+        "/home/runner/work/p/p/src/main/java/com/ex/Trim.java:16: error: [CheckReturnValue] The result of `trim()` "
+        "must be used",
+        "If you really don't want to use the result, then assign it to a variable: `var unused = ...`.",
+        "",
+        "If callers of `trim()` shouldn't be required to use its result, then annotate it with @CanIgnoreReturnValue.",
+        '        "x".trim();',
+        " " * 16 + "^",
+        "    (see https://errorprone.info/bugpattern/CheckReturnValue)",
+        "",
+        "1 error", ""]))
+    c = jf.report(r, ["ep.log"])["claims"][0]
+    assert c["at"] == "src/main/java/com/ex/Trim.java:16" and c["status"] == "strong_inference"
+    assert c["column"] == 17 and c["quoted"] == '"x".trim();'
+    assert c["see"] == "https://errorprone.info/bugpattern/CheckReturnValue"
+    assert "@CanIgnoreReturnValue" in c["message"] and "var unused" in c["message"]
+    # a blank line with no caret after it still ends the block: the next lines are not the finding's
+    diags, _ = jf.parse_javac(["a/B.java:3: warning: [X] m", "", "  y();"])
+    assert diags[0]["quoted"] is None
+
+
+def test_unc_and_device_paths_from_a_log_are_never_opened(tmp_path, monkeypatch):
+    r = _repo(tmp_path)
+    opened: list[str] = []
+    real = Path.exists
+
+    def spy(self, *a, **k):
+        opened.append(str(self))
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "exists", spy)
+    _log(r, "unc.log", "\n".join([
+        "\\\\evil.example.invalid\\share\\src\\main\\java\\com\\ex\\Foo.java:7: warning: [NullAway] m",
+        "//evil.example.invalid/share/com/ex/Foo.java:9: warning: [NullAway] n",
+        "\\\\?\\UNC\\evil.example.invalid\\s\\Foo.java:9: warning: [NullAway] o",
+        "\\\\.\\pipe\\x\\Foo.java:9: warning: [NullAway] p", ""]))
+    res = jf.report(r, ["unc.log"])
+    assert [c["at"] for c in res["claims"]] == [f"{FOO_REL}:7"]   # still tied by its suffix
+    assert res["summary"]["not_in_repository"] == 3
+    doc = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Error Prone"}}, "results": [
+        {"ruleId": "X", "message": {"text": "m"}, "locations": [{"physicalLocation": {
+            "artifactLocation": {"uri": "file://evil.example.invalid/share/src/main/java/com/ex/Foo.java"},
+            "region": {"startLine": 7}}}]}]}]}
+    (r / "unc.sarif").write_text(json.dumps(doc), encoding="utf-8")
+    assert jf.report(r, ["unc.sarif"])["claims"][0]["at"] == f"{FOO_REL}:7"
+    assert not [p for p in opened if p.replace("\\", "/").startswith("//") or "evil" in p]
+
+
+def test_two_findings_on_one_line_at_two_columns_are_both_kept(tmp_path):
+    r = _repo(tmp_path)
+    foo = r / FOO_REL
+    _log(r, "two.log", "\n".join([
+        f"{foo}:7: warning: [NullAway] dereferenced expression is @Nullable",
+        "        return name.length();", " " * 19 + "^",
+        f"{foo}:7: warning: [NullAway] dereferenced expression is @Nullable",
+        "        return name.length();", " " * 15 + "^",
+        f"{foo}:7: warning: [NullAway] dereferenced expression is @Nullable",   # a reprint: dropped
+        "        return name.length();", " " * 19 + "^", ""]))
+    res = jf.report(r, ["two.log"])
+    assert [c["column"] for c in res["claims"]] == [16, 20] and res["summary"]["duplicates"] == 1
+
+
+def test_log_lines_order_encodings_and_jdeps_noise(tmp_path):
+    r = _repo(tmp_path)
+    foo = r / FOO_REL
+    # a lone "\r" (progress output) and a form feed do not shift the log line numbers
+    _log(r, "cr.log", f"Downloading 10%\rDownloading 100%\n\x0c\n{foo}:10: warning: [NullAway] m\n"
+                      f"{foo}:9: warning: [NullAway] n\n")
+    cs = jf.report(r, ["cr.log"])["claims"]
+    assert [c["at"] for c in cs] == [f"{FOO_REL}:9", f"{FOO_REL}:10"]   # 9 before 10
+    assert cs[1]["evidence_at"][1] == "cr.log:3" and cs[0]["evidence_at"][1] == "cr.log:4"
+    # a log in a Windows ANSI code page with an accented folder under the repository: tied exactly
+    acc = tmp_path / "café"
+    _write(acc, FOO_REL, FOO)
+    line = f"{acc / FOO_REL}:7: warning: [NullAway] m\n"
+    try:
+        data = line.encode("cp1252")
+    except UnicodeEncodeError:
+        pytest.skip("the temporary folder is not cp1252")
+    (acc / "cp.log").write_bytes(data)
+    c = jf.report(acc, ["cp.log"])["claims"][0]
+    assert c["at"] == f"{FOO_REL}:7" and "tied to" not in c["claim"]
+    # a SARIF file PowerShell wrote as UTF-16
+    doc = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Error Prone"}}, "results": [
+        {"ruleId": "X", "message": {"text": "m"}, "locations": [{"physicalLocation": {
+            "artifactLocation": {"uri": FOO_REL}, "region": {"startLine": 7}}}]}]}]}
+    (r / "u16.sarif").write_bytes(json.dumps(doc).encode("utf-16"))
+    res = jf.report(r, ["u16.sarif"])
+    assert res["claims"][0]["at"] == f"{FOO_REL}:7" and res["inputs"][0]["found"] == {"Error Prone": 1}
+    # a quoted lambda in a javac log is not a jdeps dependence
+    _log(r, "lam.log", f"{foo}:7: warning: [NullAway] m\n    list.forEach(x -> y.z foo);\n"
+                       "    handler    -> some.Thing  other\n")
+    assert jf.report(r, ["lam.log"])["summary"]["not_internal"] == 0
