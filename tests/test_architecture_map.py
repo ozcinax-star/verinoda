@@ -89,9 +89,12 @@ def test_dataflow_handler_to_save_with_labelled_inferred_hop(g, full):
     entries = {e["symbol"]: e for e in df["entries"]}
     assert "create_order_handler()" in entries and entries["create_order_handler()"]["at"] == "orders/api.py:16"
     assert all(e["why"] for e in df["entries"])
-    path = next(p for p in df["paths"] if [h["to"] for h in p["hops"]] == ["place_order()", ".save()"])
+    path = next(p for p in df["paths"] if [h["to"] for h in p["hops"]] == ["place_order()", ".save()", "orders"])
     assert path["entry"] == "orders/api.py:16" and path["sink"] == "orders/repository.py:15"
-    first, save = path["hops"]
+    assert path["table"] == "orders" and path["table_at"].startswith("orders/repository.py:")
+    first, save, table = path["hops"]
+    assert (table["relation"], table["confidence"], table["derived_by"]) == \
+        ("writes_table", "INFERRED", "verinoda.dataschema")
     assert (first["from"], first["relation"], first["confidence"], first["at"]) == \
         ("create_order_handler()", "calls", "EXTRACTED", "orders/api.py:18")
     assert (save["relation"], save["confidence"], save["derived_by"], save["at"]) == \
@@ -103,7 +106,7 @@ def test_dataflow_handler_to_save_with_labelled_inferred_hop(g, full):
 def test_dataflow_never_steps_through_containment(full):
     for p in full["dataflow"]["paths"]:
         for h in p["hops"]:
-            assert h["relation"] in ("calls", "method"), h
+            assert h["relation"] in ("calls", "method", "writes_table", "reads_table", "injects"), h
             if h["relation"] == "method":  # the only allowed class->method step: construction runs __init__
                 assert h["to"] == ".__init__()", h
             assert h["relation"] != "contains"

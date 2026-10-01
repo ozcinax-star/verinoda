@@ -111,6 +111,8 @@ def _aside_roots(g, text: str) -> tuple[str, ...]:
 
 
 COPY, NOT_PRODUCT, LOCAL = "copy or reference tree", "test, example or fixture code", "local to a function"
+TABLE = "a database table"   # a table node (verinoda.dataschema) gives way to code of the same name
+REASONS = (TABLE, COPY, NOT_PRODUCT, LOCAL)   # a table first: any code of the name wins over it
 
 
 def not_product(f: str | None) -> bool:
@@ -154,7 +156,9 @@ def _local(g, n: str) -> bool:
 
 
 def _gives_way(g, text: str, n: str, why: str) -> bool:
-    """Does ``n`` give way for reason ``why`` (:data:`COPY`, :data:`NOT_PRODUCT`, :data:`LOCAL`)?"""
+    """Does ``n`` give way for reason ``why`` (:data:`COPY`, :data:`NOT_PRODUCT`, :data:`LOCAL`, :data:`TABLE`)?"""
+    if why == TABLE:
+        return g.G.nodes[n].get("file_type") == "schema" if n in g.G else False
     f = g.file(n) or ""
     if why == COPY:
         roots = _aside_roots(g, text)
@@ -166,7 +170,7 @@ def _gives_way(g, text: str, n: str, why: str) -> bool:
 
 def _aside_kind(g, text: str, n: str) -> str | None:
     """The first reason ``n`` gives way when another node has the same name (None: it does not)."""
-    return next((why for why in (COPY, NOT_PRODUCT, LOCAL) if _gives_way(g, text, n, why)), None)
+    return next((why for why in REASONS if _gives_way(g, text, n, why)), None)
 
 
 def _aside_summary(g, text: str, aside: list[str]) -> str:
@@ -177,7 +181,7 @@ def _aside_summary(g, text: str, aside: list[str]) -> str:
     parts = []
     for why, locs in by.items():
         where = ", ".join(locs[:2]) + (", ..." if len(locs) > 2 else "")
-        parts.append(f"{len(locs)} {why if why == LOCAL else 'in ' + why} ({where})")
+        parts.append(f"{len(locs)} {why if why in (LOCAL, TABLE) else 'in ' + why} ({where})")
     return "; ".join(parts)
 
 
@@ -318,7 +322,7 @@ def exact_nodes(g, text: str, *, fallback: bool = True) -> tuple[list[str], list
                 {g.label(n).strip(".()").rsplit(".", 1)[-1].lower() for n in pool} == {bare.lower()}:
             aside += [n for n in pool if n not in cased]
             pool = cased
-        for why in (COPY, NOT_PRODUCT, LOCAL):
+        for why in REASONS:
             gone = [n for n in pool if _gives_way(g, text, n, why)]
             if gone and len(gone) < len(pool):
                 pool = [n for n in pool if n not in gone]

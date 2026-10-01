@@ -415,6 +415,13 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
             # shrink, so rebuild with force rather than keep their nodes.
             stats = index.build(repo, force=True, prune_missing=True)
             forced = True
+    if stats is None and any(f.lower().endswith(".sql") for f in changed):
+        # a .sql file is no graph file, but its tables are in the receiver sidecar (verinoda.dataschema): the
+        # graph is kept, the sidecar is made again (every other file's facts reused by sha256)
+        try:
+            index.refresh_receiver_sidecar(repo)
+        except (OSError, ValueError):  # derived data: the next build makes it
+            pass
     t_index = time.monotonic() - t0
     if stats is not None and stats.get("ok", True):
         buildlock.record_build(repo, graph_seconds=t_index, files=stats.get("files"), configs=configs)
