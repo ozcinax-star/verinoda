@@ -2775,7 +2775,8 @@ def _draft_references(question: str) -> tuple[list[dict], list[tuple[int, int]],
         kind = {"sha": "commit", "pr": "pull_request", "issue": "issue"}.get(tok["kind"], "git_repo")
         text, locator = tok["text"], None
         before = question[:s]
-        nm = re.search(r"([A-Za-z][\w.-]*)(==|@|\s+)$", before)
+        # a whole word: never the tail of a word that starts with a letter outside A-Z ("önceki" is not "nceki")
+        nm = re.search(r"(?<![\w.-])([A-Za-z][\w.-]*)(==|@|\s+)$", before)
         if nm and tok["kind"] == "semver":
             name = nm.group(1)
             if not name.lower() in ("version", "v", "surum", "sürüm", "release", "tag") \

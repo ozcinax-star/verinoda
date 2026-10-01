@@ -887,6 +887,14 @@ def test_draft_carries_versions_into_references(orders):
     assert p["sub_questions"][1]["depends_on"] == ["q1"]
 
 
+def test_a_word_starting_with_a_turkish_letter_is_not_a_package_name(orders):
+    repo, g, lex = orders
+    p = qp.draft("önceki 3.0 sürümlerine kıyasla performans artışı ne kadar", g, lex)
+    assert all("nceki" not in (r.get("locator") or "") and not r["text"].startswith("nceki")
+               for r in p["references"])
+    assert any(r["version"].get("spec") == "3.0" for r in p["references"])   # the version is still carried
+
+
 def test_draft_relative_version_becomes_a_user_relative_reference(orders):
     repo, g, lex = orders
     p = qp.draft("Önceki sürümde indirim nerede uygulanıyordu?", g, lex)
