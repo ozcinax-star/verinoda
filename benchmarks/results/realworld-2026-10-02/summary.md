@@ -1,7 +1,6 @@
 # Real-world run 2026-10-02
 
-Verinoda 0.3.2 at 8d9ab97, Python 3.13.14, Windows-11-10.0.26200-SP0, 16 CPUs.
-Verinoda 0.3.2 at 1ab4a71, Python 3.13.14, Windows-11-10.0.26200-SP0, 16 CPUs.
+Verinoda 0.3.2 at 8d9ab97 and 1ab4a71, Python 3.13.14, Windows-11-10.0.26200-SP0, 16 CPUs (the same verinoda/ code: the commits differ only in files outside verinoda/).
 
 Times in seconds, wall clock, one process at a time. Gold v1: the frozen facts; v2: the corrected checks added after review.
 
