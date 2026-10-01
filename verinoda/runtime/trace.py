@@ -558,9 +558,11 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     scope = f"{len(ids)} selected test id(s)" if ids else "whole test suite"
     base = {"run_id": None, "complete": False, "scope": scope, "tests_requested": ids,
             "truncated_ids": truncated, "limits": list(LIMITS_TEXT)}
+    file_ids: dict[str, str] = {}   # content ids of the copy that ran: the test map's fingerprints
     try:
         exp = experiments.run(store, repo, argv, hypothesis=f"observe calls made by {scope}", commit=commit,
-                              timeout=timeout, plugins={f"{PLUGIN_MODULE}.py": plugin_source()}, env_extra=env)
+                              timeout=timeout, plugins={f"{PLUGIN_MODULE}.py": plugin_source()}, env_extra=env,
+                              file_ids=file_ids)
     except experiments.ExperimentRefused as exc:
         return {**base, "error": f"refused: {exc}",
                 "next_step": exc.next_step or "check the test ids (paths must stay inside the repository) or enable a "
@@ -595,11 +597,14 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     trace["header"] = {**h, "complete": complete}
     rid = ingest(store, trace, experiment_id=exp["id"], snapshot_id=snap_id, commit=commit, trace_sha256=sha,
                  extra_header=extra, flags=flags)
+    from verinoda import testmap
+
+    mapped = testmap.update(store, rid, file_ids)
     run = load_run(store, rid)
     g = (graph if graph is not None else _load_graph(repo)) or None  # graph=False: skip node mapping
     mapper = _Mapper(g, src)
     tset = _resolve_targets(g, targets) if targets else []
-    return _result(repo, run, trace, flags, mapper, src, tset, exp, base, max_evidence)
+    return {**_result(repo, run, trace, flags, mapper, src, tset, exp, base, max_evidence), "test_map": mapped}
 
 
 def _changed_since_snapshot(store: Store, repo: Path, snap: dict | None, edges: list[dict]) -> list[str]:

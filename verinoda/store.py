@@ -9,7 +9,7 @@ Design rules enforced here (and tested in tests/test_store.py):
 * The schema is versioned in ``meta.schema_version``; ``_MIGRATIONS`` is the
   upgrade path for existing databases.
 * A claim's ``text`` and ``created_at`` never change (v4 trigger); derived
-  caches (``file_facts``, ``resolutions``, ``file_stat``) may be recomputed.
+  caches (``file_facts``, ``resolutions``, ``file_stat``, ``test_map``) may be recomputed.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 class SchemaTooNew(RuntimeError):
@@ -549,8 +549,32 @@ CREATE TRIGGER IF NOT EXISTS no_update_test_quarantine BEFORE UPDATE ON test_qua
 BEGIN SELECT RAISE(ABORT, 'the quarantine log is append-only'); END;
 """
 
+# v8: the persistent test-to-code map (verinoda/testmap.py): per test the run that last mapped it, and the
+# in-repository functions it ran with each file's content id in that run. A derived cache of runtime_calls,
+# rewritten on every observed run (no append-only triggers).
+_SCHEMA_V8 = """
+CREATE TABLE IF NOT EXISTS test_map_tests (
+    test TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    commit_sha TEXT,
+    complete INTEGER NOT NULL,
+    outcome TEXT,
+    functions INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS test_map (
+    test TEXT NOT NULL,
+    path TEXT NOT NULL,
+    qual TEXT NOT NULL,
+    fingerprint TEXT,
+    run_id TEXT NOT NULL,
+    PRIMARY KEY (test, path, qual)
+);
+CREATE INDEX IF NOT EXISTS idx_test_map_path ON test_map(path, qual);
+"""
+
 _MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5,
-                               6: _SCHEMA_V6, 7: _SCHEMA_V7}
+                               6: _SCHEMA_V6, 7: _SCHEMA_V7, 8: _SCHEMA_V8}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",

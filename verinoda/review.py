@@ -20,7 +20,9 @@ the staged changes, or a planned change (``targets`` + ``change``):
    config (environment and config values read on changed lines, changed config keys) and entry points
    (entries that reach the change). Each public definition added, removed or with a changed signature
    gets an ``api_changes`` verdict - breaking (with the call sites it breaks), compatible or unknown.
-4. **Tests**: static reach, observed reach from the runtime tracer's latest run or ``observe``, a
+4. **Tests**: static reach, observed reach from the runtime tracer's latest run or ``observe``, the affected
+   tests (the persistent test map of :mod:`verinoda.testmap` first, static reach as the fallback) with one
+   pytest command that runs them, a
    run of the selected tests (``run_tests``) through :mod:`verinoda.experiments`, and the changed lines a
    coverage report (lcov, Cobertura, JaCoCo, coverage.py JSON: :mod:`verinoda.coverage_import`) shows no test
    ran, in any language.
@@ -5350,8 +5352,12 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
         gt = gametests.for_change(ctx.g, {c.node for c in code_changes if c.node is not None and c.node in ctx.g.G})
         if gt and (gt["registered"] or gt["unregistered"]):
             out["gametests"] = gt
+    aff = _affected(ctx, changes, out["static"])
+    if aff is not None:
+        out["affected"] = aff
     reached_any = {c.symbol for c in code_changes if per.get(c.symbol)} | \
-        {s for s, t in ((observed or {}).get("reached") or {}).items() if t}
+        {s for s, t in ((observed or {}).get("reached") or {}).items() if t} | \
+        {s for t in (aff or {}).get("tests", []) if t["source"] == "observed" for s in t["reaches"]}
     # "no test reaches" is said only of a symbol the static graph can reach at all: without any static caller
     # (a callback, a registration, dispatch through a CLI or a subprocess) the tests' reach is unknown
     silent = [c for c in code_changes if c.symbol not in reached_any]
@@ -5432,6 +5438,64 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
 
 
 MAX_RUN_TESTS = 50
+MAX_AFFECTED = 50
+
+
+def _affected(ctx: _Ctx, changes: list[Change], static: list[dict]) -> dict | None:
+    """The tests to run for the change, each labelled: ``observed`` (the test map shows it ran a changed function),
+    ``changed`` (a test the change edits) and ``static`` (static reach, for the tests the map has no current,
+    complete record of); tests whose current, complete mapping ran none of the changed functions are left out
+    and counted. One pytest command runs the Python ones (:func:`verinoda.testmap.pytest_command`)."""
+    from verinoda import testhistory, testmap, treestate
+
+    fns = [(c.file, c.qual) for c in changes if not c.test and c.qual and c.file.endswith(".py")
+           and c.kind in ("body", "signature", "removed")]
+    changed = [f"{c.file}::{c.qual.replace('.', '::')}" for c in changes
+               if c.test and c.qual and c.kind != "removed" and c.file.endswith(".py")
+               and testcode.is_test_name(_last(c.qual))]
+    if not (fns or changed or static):
+        return None
+
+    def versions(rel: str) -> set[str]:
+        ids = set()
+        try:
+            ids.add(treestate.content_id((ctx.repo / rel).read_bytes()))
+        except OSError:
+            pass
+        for side in ("old", "new"):
+            t = ctx.text(rel, side)
+            if t is not None:
+                ids.add(treestate.content_id(t.encode("utf-8")))
+        return ids
+
+    m = (testmap.affected(ctx.store, fns, versions, candidates=[t["test"] for t in static])
+         if ctx.store is not None else {"observed": {}, "not_reached": [], "mapped": 0})
+    rows: list[dict] = []
+    for t, v in m["observed"].items():
+        rows.append({"test": t, "source": "observed", "reaches": v["reaches"], "run": v.get("run"),
+                     "commit": (v.get("commit") or "")[:12] or None, "current": v.get("current", False)})
+    seen = {r["test"] for r in rows}
+    for t in changed:
+        if t not in seen:
+            seen.add(t)
+            rows.append({"test": t, "source": "changed", "reaches": []})
+    skipped = set(m["not_reached"])
+    for t in static:
+        if t["test"] not in seen and t["test"] not in skipped:
+            seen.add(t["test"])
+            rows.append({"test": t["test"], "source": "static", "reaches": t["reaches"], "distance": t["distance"]})
+    cache: dict = {}
+    for r in rows:
+        r["status"] = "strong_inference"
+        r["at"] = testhistory._locate(ctx.repo, r["test"], cache)
+    by = {k: sum(1 for r in rows if r["source"] == k) for k in ("observed", "changed", "static")}
+    return {"tests": rows[:MAX_AFFECTED], "total": len(rows), "by": by,
+            "not_reached_when_observed": sorted(skipped)[:20], "not_reached_total": len(skipped),
+            "mapped_tests": m["mapped"], "command": testmap.pytest_command(r["test"] for r in rows),
+            "basis": "observed: the persistent test map (the functions each test ran in its last traced run); "
+                     "static: reverse reach in the graph, for tests the map has no current, complete record of; "
+                     "changed: tests the change edits",
+            "limits": list(testmap.LIMITS)}
 
 
 def _report_paths(repo: Path, given: list[str] | None) -> set[str]:
@@ -5806,6 +5870,23 @@ def render_text(res: dict) -> str:
     st = t.get("static") or []
     out.append(f"Tests: {len(st)} reach the change statically" + (": " + ", ".join(x["test"] for x in st[:6])
                                                                    + (" ..." if len(st) > 6 else "") if st else "."))
+    if t.get("affected"):
+        a = t["affected"]
+        by = a["by"]
+        out.append(f"  affected tests: {a['total']} ({by['observed']} observed in the test map, {by['changed']} "
+                   f"changed, {by['static']} static fallback)"
+                   + (f"; {a['not_reached_total']} reaching it statically left out (their mapped run did not reach "
+                      "it)" if a.get("not_reached_total") else ""))
+        for r in a["tests"][:8]:
+            how = (f"observed (run {r['run']}, commit {r.get('commit') or '?'}"
+                   + ("" if r.get("current") else ", files changed since") + ")") if r["source"] == "observed" \
+                else r["source"]
+            out.append(f"    {r['test']}  [{r['status']}, {how}]")
+        if a["total"] > 8:
+            out.append(f"    ... {a['total'] - 8} more (--json)")
+        if a.get("command"):
+            out.append(f"  run them: {a['command']['command']}"
+                       + ("  (by file: runs more than the listed tests)" if a["command"]["by"] == "file" else ""))
     if t.get("observed") and not t.get("observe"):
         ob = t["observed"]
         out.append(f"  observed in run {ob['run']} (commit {str(ob.get('commit') or '?')[:10]}, run-scoped): "
