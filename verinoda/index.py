@@ -1458,6 +1458,9 @@ _TS_LANGS: dict[str, tuple[str, str]] = {
     ".kts": ("tree_sitter_kotlin", "language"), ".scala": ("tree_sitter_scala", "language"),
     ".php": ("tree_sitter_php", "language_php"), ".lua": ("tree_sitter_lua", "language"),
     ".swift": ("tree_sitter_swift", "language"),
+    # optional grammars (verinoda.grammars): without one, that language's spans are the heuristic ones
+    ".sol": ("tree_sitter_solidity", "language"), ".vb": ("tree_sitter_vb_dotnet", "language"),
+    ".r": ("tree_sitter_language_pack", "r"),
 }
 # Node types that define something (the outermost one starting on a line gives its end line).
 _TS_DEF_SUFFIXES = ("_definition", "_declaration", "_item", "_declarator", "_spec")
@@ -1480,7 +1483,10 @@ def _ts_parser(suffix: str):
             from tree_sitter import Language, Parser
 
             mod = importlib.import_module(spec[0])
-            _TS_PARSERS[suffix] = Parser(Language(getattr(mod, spec[1])()))
+            if spec[0] == "tree_sitter_language_pack":  # one package, a grammar per language name
+                _TS_PARSERS[suffix] = Parser(mod.get_language(spec[1]))
+            else:
+                _TS_PARSERS[suffix] = Parser(Language(getattr(mod, spec[1])()))
         except Exception:  # noqa: BLE001 - grammar missing or incompatible: no tree-sitter spans
             _TS_PARSERS[suffix] = None
     return _TS_PARSERS[suffix]
@@ -1509,6 +1515,8 @@ def ts_def_info(source: bytes, suffix: str) -> tuple[dict[int, int], dict[int, i
         t = node.type
         if node.is_named and (t in _TS_DEF_TYPES or t.endswith(_TS_DEF_SUFFIXES)):
             a, b = node.start_point[0] + 1, node.end_point[0] + 1
+            if node.end_point[1] == 0 and b > a:  # ends before the line's first character (VB.NET's newline)
+                b -= 1
             if b > ends.get(a, 0):
                 ends[a] = b
             name = node.child_by_field_name("name")
