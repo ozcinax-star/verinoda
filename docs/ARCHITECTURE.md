@@ -26,7 +26,7 @@ The design decisions (D1-D40) and their implementation status are in
   snapshot.py (stat-cached hashes, git state)        v
                                    claims.py <- entail.py, evidence.py, anchors.py
                                    critique.py (probes, definitive vs heuristic refutation)
-                                   store.py (SQLite atlas.db, schema v7, append-only)
+                                   store.py (SQLite atlas.db, schema v8, append-only)
   research.py / feedback.py / memory.py / experiments.py
   debug.py (ledger) <- looprules.py, failsig.py (+ runtime/failsig_plugin.py), treestate.py; testhistory.py
   review.py (change review) <- review_rules.py, anchors.py, treestate.py, guards.py, architecture_map.py,
@@ -183,7 +183,7 @@ The design decisions (D1-D40) and their implementation status are in
                             research.network) included
   trust.json                the projects the user trusts (`verinoda trust`), keyed by the resolved path
 <repo>/.verinoda/
-  atlas.db                  SQLite, schema v7: claims, evidence, history, plans, runtime runs, debug ledger,
+  atlas.db                  SQLite, schema v8: claims, evidence, history, plans, runtime runs, debug ledger,
                             change reviews (analyses rows `rev_...`), ...
                             (audited rows are never deleted; file_facts / resolutions / file_stat
                             are derived caches)

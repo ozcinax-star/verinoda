@@ -25,6 +25,7 @@ FORGOTTEN = "forgotten"
 EXPIRED = "expired"
 _TTL = re.compile(r"^\s*(\d{1,6})\s*([mhdw])\s*$")
 _UNIT = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
+MAX_TTL = timedelta(days=100 * 365)
 
 
 def parse_ttl(text: str) -> timedelta:
@@ -32,7 +33,10 @@ def parse_ttl(text: str) -> timedelta:
     m = _TTL.match(str(text or ""))
     if not m or int(m.group(1)) <= 0:
         raise ValueError(f"a time-to-live is a positive number with m, h, d or w (as 30d or 12h), not {text!r}")
-    return timedelta(**{_UNIT[m.group(2)]: int(m.group(1))})
+    ttl = timedelta(**{_UNIT[m.group(2)]: int(m.group(1))})
+    if ttl > MAX_TTL:
+        raise ValueError(f"a time-to-live is at most 100 years, not {text!r}")
+    return ttl
 
 
 def _when(stamp: str | None) -> datetime | None:
@@ -64,8 +68,8 @@ class Memory:
                 # recall() must only return facts whose backing claim stands.
                 raise ValueError(f"claim {source_claim_id} is {src['status']}; "
                                  "re-verify it before learning from it")
-        if ttl is not None and ttl <= timedelta(0):
-            raise ValueError("a time-to-live must be positive")
+        if ttl is not None and not timedelta(0) < ttl <= MAX_TTL:
+            raise ValueError("a time-to-live must be positive and at most 100 years")
         self._expire(key)
         prev = self.store.one(
             "SELECT * FROM memory WHERE key = ? ORDER BY version DESC LIMIT 1", (key,)
@@ -124,6 +128,7 @@ class Memory:
         missed (e.g. a status written by an older Verinoda), and invalidates
         it now, so a fallen claim can never be recalled.
         """
+        key = key or None
         self._expire(key)
         rows = (self.store.all("SELECT * FROM memory WHERE key = ? AND valid = 1", (key,)) if key else
                 self.store.all("SELECT * FROM memory WHERE valid = 1 ORDER BY key"))
@@ -170,6 +175,10 @@ class Memory:
         return out
 
     def invalidate_for_claim(self, claim_id: str, reason: str) -> int:
+        # a memory whose time-to-live ran out before its claim fell expired then: record that, not this
+        for r in self.store.all("SELECT DISTINCT key FROM memory WHERE source_claim_id = ? AND valid = 1",
+                                (claim_id,)):
+            self._expire(r["key"])
         rows = self.store.all(
             "SELECT id FROM memory WHERE source_claim_id = ? AND valid = 1", (claim_id,)
         )

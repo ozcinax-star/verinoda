@@ -185,3 +185,23 @@ def test_v7_database_gains_expiry(tmp_path):
         assert [e["event"] for e in mem.events("k")] == ["ADD"]
     finally:
         st.close()
+
+
+def test_review_fixes_ttl_cap_expiry_before_claim_fall_and_empty_key(env):
+    from datetime import timedelta
+
+    from verinoda.memory import parse_ttl
+
+    st, cl, mem, claim, repo = env
+    with pytest.raises(ValueError, match="100 years"):
+        parse_ttl("999999w")
+    with pytest.raises(ValueError):
+        mem.learn("k", "v", ttl=timedelta(days=10**7))
+    c = claim()
+    m = mem.learn("owner.fn", "m.py::owner", source_claim_id=c["id"], ttl=timedelta(days=1))
+    st.update("memory", m["id"], {"expires_at": m["created_at"]})
+    cl.set_status(c["id"], "stale", reason="test", downgrade=False)
+    assert [e["event"] for e in mem.events("owner.fn")] == ["ADD", "EXPIRE"]
+    x = mem.learn("x", "1", ttl=timedelta(days=1))
+    st.update("memory", x["id"], {"expires_at": x["created_at"]})
+    assert mem.recall("") == [] and st.get("memory", x["id"])["invalidation_reason"] == "expired"
