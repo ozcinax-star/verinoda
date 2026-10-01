@@ -1451,6 +1451,7 @@ def cmd_routes(args) -> int:
                         "context": d.get("context"), **({"notes": d["notes"]} if d.get("notes") else {})}
                        for u, v, d in edges]
     report["derived_by"] = cross_service.ORIGIN
+    report = cross_service.bounded(report, everything=args.all)
 
     def render(r: dict) -> None:
         print(cross_service.render(r, show_routes=not args.no_table))
@@ -4622,6 +4623,10 @@ def build_parser() -> argparse.ArgumentParser:
                                    "one handler, ambiguous, unmatched or a method mismatch; tRPC, gRPC, GraphQL and "
                                    "event edges counted")
     sp.add_argument("--no-table", action="store_true", help="leave out the route table (text output)")
+    sp.add_argument("--all", action="store_true",
+                    help="every ambiguous call with every candidate, every unmatched call and method mismatch "
+                         "(default: ambiguous calls grouped by method, URL and candidates, at most 50 groups of 5 "
+                         "candidates, at most 50 unmatched calls and mismatches, each cut counted)")
     sp = add("export", cmd_export, "the graph for other tools: GraphML (Gephi, yEd), Neo4j Cypher, an Obsidian vault "
                                    "or an SVG drawing; each edge with its location and the status it can carry "
                                    "unchecked, no code, no machine paths")

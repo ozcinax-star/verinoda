@@ -386,8 +386,16 @@ def test_judge_kinds():
     assert run.judge(qu, 0, json.dumps({"items": [{"file": "a"}, {"file": "src\\options.go"}]})) == (True, "rank 2")
     assert not run.judge(qu, 0, json.dumps({"items": [{"file": "a"}, {"file": "b"}, {"file": "src/options.go"}]}))[0]
     ro = {"kind": "routes", "method": "GET", "path": "/items", "handler": "read_items"}
-    table = {"route_table": [{"method": "get", "path": "/items", "handler": "app/api.py:3 read_items"}]}
+    table = {"route_table": [{"methods": ["GET"], "path": "/items", "handler": "app_api_read_items",
+                              "at": "app/api.py:3"}]}
     assert run.judge(ro, 0, json.dumps(table))[0]
+    assert run.judge(dict(ro, method="post"), 0, json.dumps(table)) == \
+        (False, "route not in the table (same path: methods ['GET'])")
+    anyone = {"route_table": [{"methods": None, "path": "/items", "handler": "app_api_read_items"}]}
+    assert not run.judge(ro, 0, json.dumps(anyone))[0]          # a row for any method does not count for GET
+    assert run.judge({"kind": "routes", "path": "/items", "at": "app\\api.py:3"}, 0, json.dumps(table))[0]
+    assert not run.judge({"kind": "routes", "path": "/items", "at": "app/api.py:4"}, 0, json.dumps(table))[0]
+    assert not run.judge({"kind": "routes", "path": "/items/", "handler": "read_items"}, 0, json.dumps(table))[0]
     assert run.judge({"kind": "schema", "table": "user"}, 0, json.dumps({"tables": [{"name": "user"}]}))[0]
 
 
@@ -742,6 +750,28 @@ def test_environment_is_kept_per_run_and_per_repository(tmp_path):
     assert [x["environment"]["verinoda_commit"] for x in merged["runs"]] == ["aaa", "bbb"]
     md = report.render(merged)
     assert "at aaa" in md and "at bbb" in md
+
+
+def test_runs_on_the_same_verinoda_code_share_one_environment_line():
+    """H3: two runs whose commits differ only outside verinoda/ (gold files, the manifest) are not two Verinodas."""
+    base = {"verinoda_version": "0.3.2", "python": "3.13.14", "platform": "W", "cpus": 16, "verinoda_dirty": False}
+    same = [base | {"verinoda_commit": "aaa", "verinoda_code_tree": "t1"},
+            base | {"verinoda_commit": "bbb", "verinoda_code_tree": "t1"}]
+    (line,) = report.env_lines(same)
+    assert "at aaa and bbb" in line and "the same verinoda/ code" in line
+    other = [same[0], base | {"verinoda_commit": "ccc", "verinoda_code_tree": "t2"}]
+    assert len(report.env_lines(other)) == 2
+    dirty = [same[0], same[1] | {"verinoda_dirty": True}]
+    assert len(report.env_lines(dirty)) == 2
+    unknown = [base | {"verinoda_commit": "0000001"}, base | {"verinoda_commit": "0000002"}]
+    assert len(report.env_lines(unknown)) == 2                  # commits git does not know: not merged
+    # results written before the tree was recorded: git tells (8d9ab97 and 1ab4a71 added only gold files)
+    if subprocess.run(["git", "-C", str(report.ROOT), "cat-file", "-e", "1ab4a71^{commit}"],
+                      capture_output=True).returncode == 0:
+        old = [base | {"verinoda_commit": "8d9ab97"}, base | {"verinoda_commit": "1ab4a71"}]
+        assert report.env_lines(old) == [report._env_line(old[0], "8d9ab97 and 1ab4a71")
+                                          + " (the same verinoda/ code: the commits differ only in files outside "
+                                            "verinoda/)"]
 
 
 def test_python_older_than_3_11_is_refused(tmp_path, monkeypatch):

@@ -15,7 +15,9 @@ listeners of that name become ``emits`` edges.
 Every edge is ``INFERRED`` with ``_origin=verinoda.cross_service``: it is read from two texts, never verified
 (a base URL, a proxy, a gateway or a deployment can send the request elsewhere). Its location is the client
 call; ``route_at`` is the route declaration. A call that fits several handlers gets no edge: it is reported as
-ambiguous with every candidate (``verinoda routes``, and ``trace`` when such a call lies on the way).
+ambiguous with its candidates (``verinoda routes``, grouped and capped unless ``--all``, and ``trace`` when such a
+call lies on the way). A mount prefix is read where the text spells it, also through a constant or a pydantic
+settings default of another module; one it does not spell keeps the route, marked ``prefix not resolved``.
 """
 from __future__ import annotations
 
@@ -30,7 +32,9 @@ HTTP_RELATION = "requests"
 RPC_RELATION = "rpc_calls"
 EVENT_RELATION = "emits"
 RELATIONS = frozenset({HTTP_RELATION, RPC_RELATION, EVENT_RELATION})
-FACTS_VERSION = 2  # 2: mount prefixes that replace, top-level constants only, per-class JVM prefixes
+# 3: prefixes given by an expression (Python constants and settings defaults, JavaScript constants); 2: mount
+# prefixes that replace, top-level constants only, per-class JVM prefixes
+FACTS_VERSION = 3
 
 PY_SUFFIXES = (".py",)
 JS_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte")
@@ -38,7 +42,7 @@ JVM_SUFFIXES = (".java", ".kt")
 SUFFIXES = PY_SUFFIXES + JS_SUFFIXES + JVM_SUFFIXES
 HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 _VERBS = ("get", "post", "put", "patch", "delete", "head", "options")
-REPORT_CAP = 200  # entries per list kept in a report
+REPORT_CAP = 200  # ambiguous calls kept in the sidecar
 MAX_CHARS = 1_000_000  # a larger source file is generated code, not read
 
 # event names every emitter library uses for its own purposes (streams, sockets, the DOM, processes): an `on`
@@ -542,9 +546,26 @@ def match_segments(route: list[list[str]], client: list[str | None]) -> int | No
     return lits if len(client) == len(route) else None
 
 
-def join_path(*parts: str) -> str:
+def join_path(*parts: str, keep_slash: bool = False) -> str:
+    """The parts joined with one ``/`` between them. ``keep_slash``: a trailing ``/`` of the last part that has
+    one is kept (FastAPI serves ``prefix="/items"`` + ``"/"`` at ``/items/``, Flask and Django as written); the
+    matching ignores it either way, only the displayed path keeps what the code says."""
     segs = [p.strip("/") for p in parts if p and p.strip("/")]
-    return "/" + "/".join(segs)
+    out = "/" + "/".join(segs)
+    last = next((p for p in reversed(parts) if p), "")
+    return out + "/" if keep_slash and segs and last.endswith("/") else out
+
+
+def code_kind(path: str) -> str | None:
+    """``"test"`` for test code, ``"example"`` for example, sample, demo or tutorial code (by its path), else None."""
+    from verinoda.testcode import is_test_file
+
+    if is_test_file(path):
+        return "test"
+    return "example" if _EXAMPLE_PATH.search(path.replace("\\", "/")) else None
+
+
+_EXAMPLE_PATH = re.compile(r"(^|/)(examples?|samples?|demos?|docs_src|tutorials?)/")
 
 
 # -- Python -------------------------------------------------------------------------------------------
@@ -596,6 +617,118 @@ def _target_name(t) -> str | None:
     return _dotted(t) if isinstance(t, (ast.Name, ast.Attribute)) else None
 
 
+def _py_imports(nodes, frameworks: set[str] | None = None) -> dict[str, str]:
+    """Local name -> dotted origin (``pkg.mod`` or ``pkg.mod.name``, leading dots for a relative import) of the
+    imports among ``nodes``; the web frameworks imported are added to ``frameworks``."""
+    imports: dict[str, str] = {}
+    fws = frameworks if frameworks is not None else set()
+    for node in nodes:
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                imports[a.asname or a.name.split(".")[0]] = a.name if a.asname else a.name.split(".")[0]
+                fws.update(f for f in _PY_FRAMEWORKS if a.name.split(".")[0] == f)
+        elif isinstance(node, ast.ImportFrom):
+            mod = "." * node.level + (node.module or "")
+            fws.update(f for f in _PY_FRAMEWORKS if (node.module or "").split(".")[0] == f)
+            for a in node.names:
+                imports[a.asname or a.name] = f"{mod}.{a.name}" if mod and not mod.endswith(".") else f"{mod}{a.name}"
+    return imports
+
+
+def py_values(tree: ast.Module) -> dict[str, list]:
+    """The string values a module spells once, by the name another module reads them with:
+    ``NAME`` (a module-level constant), ``Cls.ATTR`` (a class attribute default) and ``obj.ATTR`` for a module-level
+    ``obj = Cls(...)`` that passes no other value for it (a pydantic ``Settings()`` instance). Each is
+    ``[value, line, kind]``, kind ``"const"``, ``"default"`` or ``"settings default"`` (a ``BaseSettings`` class:
+    the environment can give another value at run time). A name bound more than once has no entry."""
+    stores = Counter(n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
+    out: dict[str, list] = {}
+    classes: dict[str, tuple[dict[str, list], bool]] = {}
+
+    def assigned(node) -> tuple[str | None, ast.AST | None]:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            return node.targets[0].id, node.value
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+            return node.target.id, node.value
+        return None, None
+
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            settings = any((_dotted(b) or "").rpartition(".")[2] == "BaseSettings" for b in node.bases)
+            attrs: dict[str, list] = {}
+            seen = Counter(assigned(s)[0] for s in node.body)
+            for s in node.body:
+                name, value = assigned(s)
+                if name and seen[name] == 1 and _const_str(value) is not None:
+                    attrs[name] = [_const_str(value), s.lineno, "settings default" if settings else "default"]
+            classes[node.name] = (attrs, settings)
+            for a, v in attrs.items():
+                out[f"{node.name}.{a}"] = v
+    for node in tree.body:
+        name, value = assigned(node)
+        if not name or stores[name] != 1:
+            continue
+        if _const_str(value) is not None:
+            out[name] = [_const_str(value), node.lineno, "const"]
+        elif (isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id in classes
+              and not value.args):
+            attrs, _settings = classes[value.func.id]
+            given = {k.arg: k.value for k in value.keywords}
+            if None in given:  # Settings(**overrides): any attribute may be another value
+                continue
+            for a, v in attrs.items():
+                if a in given:
+                    s = _const_str(given[a])
+                    if s is not None:
+                        out[f"{name}.{a}"] = [s, value.lineno, "const"]
+                else:
+                    out[f"{name}.{a}"] = v
+    return out
+
+
+def _py_prefix(node, consts: dict[str, str], values: dict[str, list], imports: dict[str, str], rel: str) -> dict:
+    """A mount or router prefix expression: ``{"value": str}`` when this file spells it (with ``"from"`` notes
+    when it took a constant or a settings default), else ``{"expr": source, "pieces": [...]}`` whose ``["ref",
+    dotted, origin]`` pieces name another module's value (``origin``: where the name's head is imported from)
+    and whose ``["dyn", ...]`` pieces are values nothing here spells."""
+    s = _const_str(node)
+    if s is not None:
+        return {"value": s}
+    try:
+        src = ast.unparse(node)[:120]
+    except Exception:  # an expression ast cannot write back: the name of its type
+        src = type(node).__name__
+    pieces = py_pieces(node, consts) or [["dyn", "expr"]]
+    out, notes, resolved = [], [], True
+    for p in pieces:
+        if p[0] == "lit":
+            out.append(p)
+            continue
+        name = p[1]
+        if name in values:
+            v = values[name]
+            out.append(["lit", v[0]])
+            notes.append(_value_note(name, v, rel))
+            continue
+        head = name.partition(".")[0]
+        if name not in ("expr", "{...}") and head in imports:
+            out.append(["ref", name, imports[head]])
+        else:
+            out.append(["dyn", name])
+        resolved = False
+    if resolved:
+        return {"value": "".join(t for _k, t in out), "from": notes, "expr": src}
+    return {"expr": src, "pieces": out, **({"from": notes} if notes else {})}
+
+
+def _value_note(name: str, v: list, file: str | None) -> str:
+    where = f"{file}:{v[1]}" if file else f"line {v[1]}"
+    if v[2] == "settings default":
+        return (f"`{name}` = {v[0]!r}: the class default at {where}; the environment can set another value at "
+                f"run time")
+    return f"`{name}` = {v[0]!r} at {where}" + (" (a class default)" if v[2] == "default" else "")
+
+
 def py_facts(text: str, rel: str) -> dict:
     """Routes, mounts, client calls, events and gRPC services of one Python file (JSON-ready)."""
     if not _py_hinted(text):
@@ -604,23 +737,13 @@ def py_facts(text: str, rel: str) -> dict:
         tree = ast.parse(text)
     except (SyntaxError, ValueError, RecursionError):
         return {}
-    imports: dict[str, str] = {}   # local name -> dotted origin ("pkg.mod" or "pkg.mod.name"), dots for relative
     frameworks: set[str] = set()
     consts: dict[str, str] = {}
     objs: dict[str, dict] = {}
     client_vars: dict[str, dict] = {}
     stub_vars: dict[str, str] = {}
     nodes = list(ast.walk(tree))
-    for node in nodes:
-        if isinstance(node, ast.Import):
-            for a in node.names:
-                imports[a.asname or a.name.split(".")[0]] = a.name if a.asname else a.name.split(".")[0]
-                frameworks.update(f for f in _PY_FRAMEWORKS if a.name.split(".")[0] == f)
-        elif isinstance(node, ast.ImportFrom):
-            mod = "." * node.level + (node.module or "")
-            frameworks.update(f for f in _PY_FRAMEWORKS if (node.module or "").split(".")[0] == f)
-            for a in node.names:
-                imports[a.asname or a.name] = f"{mod}.{a.name}" if mod and not mod.endswith(".") else f"{mod}{a.name}"
+    imports = _py_imports(nodes, frameworks)
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             s = _const_str(node.value)
@@ -629,6 +752,21 @@ def py_facts(text: str, rel: str) -> dict:
     if consts:  # a name bound more than once (anywhere in the module) has no one value to read
         stores = Counter(n.id for n in nodes if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
         consts = {k: v for k, v in consts.items() if stores[k] == 1}
+
+    values: dict[str, list] | None = None
+
+    def prefix_fields(node) -> tuple[str | None, dict]:
+        """A prefix expression's value (None: not spelled here) and the fields that say where it came from."""
+        nonlocal values
+        if _const_str(node) is not None:
+            return _const_str(node), {}
+        if values is None:
+            values = py_values(tree)
+        p = _py_prefix(node, consts, values, imports, rel)
+        extra = {"prefix_expr": p["expr"]} | ({"prefix_from": p["from"]} if p.get("from") else {})
+        if "value" in p:
+            return p["value"], extra
+        return None, extra | {"prefix_pieces": p["pieces"]}
 
     def ctor(call) -> str | None:
         f = call.func
@@ -639,8 +777,10 @@ def py_facts(text: str, rel: str) -> dict:
             return
         c = ctor(call)
         if c in _PY_APPS:
-            prefix = _const_str(_kw(call, "prefix", "url_prefix")) or ""
-            objs[name] = {"kind": "router" if c in _PY_ROUTERS else "app", "prefix": prefix, "fw": _PY_APPS[c]}
+            given = _kw(call, "prefix", "url_prefix")
+            prefix, extra = prefix_fields(given) if given is not None else ("", {})
+            objs[name] = {"kind": "router" if c in _PY_ROUTERS else "app", "prefix": prefix or "", "fw": _PY_APPS[c],
+                          **extra}
         elif c in _PY_CLIENT_CTORS:
             base = _kw(call, "base_url")
             client_vars[name] = {"lib": _PY_CLIENT_CTORS[c],
@@ -679,12 +819,13 @@ def py_facts(text: str, rel: str) -> dict:
         out["routes"].append({"fw": fw, "obj": obj, "methods": methods, "path": path, "line": line,
                               "handler": handler})
 
-    def mount_record(parent: str, expr, prefix: str | None, line: int, replaces: bool = False) -> None:
+    def mount_record(parent: str, expr, prefix: str | None, line: int, replaces: bool = False,
+                     fields: dict | None = None) -> None:
         d = _dotted(expr)
         if not d:
             return
         # Flask: a url_prefix given to register_blueprint replaces the blueprint's own (None: not given)
-        extra = {"replaces": True} if replaces else {}
+        extra = ({"replaces": True} if replaces else {}) | (fields or {})
         head, _, tail = d.partition(".")
         if tail:   # users.router: the module users (imported) holds router
             origin = imports.get(head, head)
@@ -721,12 +862,15 @@ def py_facts(text: str, rel: str) -> dict:
             if isinstance(f, ast.Attribute):
                 recv, attr = _dotted(f.value), f.attr
                 if attr == "include_router" and node.args:
-                    mount_record(recv or "", node.args[0], _const_str(_kw(node, "prefix")) or "", node.lineno)
+                    given = _kw(node, "prefix")
+                    prefix, fields = prefix_fields(given) if given is not None else ("", {})
+                    # a prefix not spelled here keeps the mount: its rows say "prefix not resolved"
+                    mount_record(recv or "", node.args[0], prefix or "", node.lineno, fields=fields)
                 elif attr == "register_blueprint" and node.args:
                     given = _kw(node, "url_prefix")
-                    if given is None or _const_str(given) is not None:  # a computed prefix: the mount is unknown
-                        mount_record(recv or "", node.args[0], _const_str(given) if given is not None else None,
-                                     node.lineno, replaces=True)
+                    prefix, fields = prefix_fields(given) if given is not None else (None, {})
+                    mount_record(recv or "", node.args[0], prefix if given is None or prefix is not None else "",
+                                 node.lineno, replaces=True, fields=fields)
                 elif attr in ("add_url_rule", "add_api_route", "add_route") or attr in tuple("add_" + v for v in _VERBS):
                     h = _kw(node, "view_func", "endpoint", "handler")
                     if h is None:
@@ -1000,6 +1144,8 @@ def js_facts(text: str, rel: str) -> dict:
         if not a or len(a[0]) < 2 or not obj or not server(obj):
             continue
         prefix = _js_literal(a[0][0])
+        if prefix is None and a[0][0].strip() in consts:  # app.use(API_PREFIX, router)
+            prefix = consts[a[0][0].strip()]
         if prefix is None or not prefix.startswith("/"):
             continue
         tgt = re.sub(r"\s*\.\s*(?:routes|middleware)\s*\(\s*\)\s*$", "", a[0][-1].strip())
@@ -1414,9 +1560,13 @@ def _bare(label: str) -> str:
 
 
 class _Linker:
-    def __init__(self, g, facts: dict[str, dict]):
+    def __init__(self, g, facts: dict[str, dict], read=None):
         self.g = g
         self.facts = facts
+        self.read = read or (lambda f: _read_text(g, f))
+        self._values: dict[str, tuple[dict, dict]] = {}
+        self._py_pool: list[str] | None = None
+        self._scopes: dict[str, frozenset[str]] = {}
         self.files: dict[str, str] = {}
         for n, d in g.G.nodes(data=True):
             f = d.get("source_file")
@@ -1499,7 +1649,9 @@ class _Linker:
                 return cand
         return None
 
-    def resolve_py(self, f: str, mod: str) -> list[str]:
+    def resolve_py(self, f: str, mod: str, pool=None) -> list[str]:
+        """The files of ``pool`` (default: the files with facts) module ``mod`` imported from ``f`` can be."""
+        pool = self.facts if pool is None else pool
         level = len(mod) - len(mod.lstrip("."))
         body = mod.lstrip(".").replace(".", "/")
         if level:
@@ -1508,35 +1660,106 @@ class _Linker:
                 base = posixpath.dirname(base)
             target = posixpath.join(base, body) if body else base
             cands = [target + ".py", target + "/__init__.py"]
-            return [c for c in cands if c in self.facts]
-        return sorted(x for x in self.facts if x.endswith("/" + body + ".py") or x == body + ".py"
-                      or x.endswith("/" + body + "/__init__.py"))
+            return [c for c in cands if c in pool]
+        return sorted(x for x in pool if x.endswith("/" + body + ".py") or x == body + ".py"
+                      or x.endswith("/" + body + "/__init__.py") or x == body + "/__init__.py")
+
+    # prefixes another module spells (`prefix=settings.API_V1_STR`)
+    def _module_values(self, f: str) -> tuple[dict[str, list], dict[str, str]]:
+        """The values (:func:`py_values`) and imports of a Python file, read once; empty when it cannot be read."""
+        if f not in self._values:
+            vals: tuple[dict, dict] = ({}, {})
+            try:
+                text = self.read(f)
+                if text is not None and len(text) <= MAX_CHARS:
+                    tree = ast.parse(text)
+                    vals = (py_values(tree), _py_imports(tree.body))
+            except (OSError, SyntaxError, ValueError, RecursionError):
+                pass
+            self._values[f] = vals
+        return self._values[f]
+
+    def _py_files(self) -> list[str]:
+        if self._py_pool is None:
+            self._py_pool = sorted({f for f in candidate_files(self.g) if f.lower().endswith(PY_SUFFIXES)}
+                                   | {f for f in self.facts if f.lower().endswith(PY_SUFFIXES)})
+        return self._py_pool
+
+    def imported_value(self, f: str, name: str, origin: str, depth: int = 0) -> tuple[str, str] | None:
+        """The value of ``name`` (``settings.API_V1_STR``) in ``f``, whose head is imported from ``origin``, and a
+        note on where it is spelled; None when no one module spells it (re-exports followed three times)."""
+        _head, _, rest = name.partition(".")
+        last = origin.rstrip(".").rpartition(".")[2]
+        mod = origin[:len(origin) - len(last)]
+        mod = mod[:-1] if mod.strip(".") else mod
+        tries = ([(origin, rest)] if rest else []) + ([(mod, last + ("." + rest if rest else ""))] if mod else [])
+        for m, key in tries:
+            hits = self.resolve_py(f, m, self._py_files())
+            if len(hits) != 1:
+                continue
+            vals, imps = self._module_values(hits[0])
+            if key in vals:
+                return vals[key][0], _value_note(key, vals[key], hits[0])
+            khead = key.partition(".")[0]
+            if khead in imps and depth < 3:
+                got = self.imported_value(hits[0], key, imps[khead], depth + 1)
+                if got:
+                    return got
+        return None
+
+    def _prefix(self, f: str, rec: dict, field: str = "prefix") -> tuple[str | None, tuple[str, ...], str | None]:
+        """A mount's or a router's prefix: ``(value, notes, expression not resolved)``; the value is None for a
+        Flask ``register_blueprint`` without ``url_prefix``."""
+        notes = tuple(rec.get("prefix_from") or ())
+        pieces = rec.get("prefix_pieces")
+        if not pieces:
+            return rec.get(field), notes, None
+        out = []
+        for p in pieces:
+            if p[0] == "lit":
+                out.append(p[1])
+                continue
+            got = self.imported_value(f, p[1], p[2]) if p[0] == "ref" and len(p) > 2 else None
+            if got is None:
+                return "", notes, rec.get("prefix_expr") or p[1]
+            out.append(got[0])
+            notes += (got[1],)
+        return "".join(out), notes, None
 
     # route table
     def routes(self) -> list[dict]:
-        mounts: dict[tuple[str, str], list[tuple[str, str, str]]] = defaultdict(list)
+        mounts: dict[tuple[str, str], list[tuple]] = defaultdict(list)
         for f, fx in self.facts.items():
             for mt in fx.get("mounts") or []:
-                for tf, tobj in self._mount_targets(f, mt):
-                    mounts[(tf, tobj)].append((f, mt.get("on") or "", mt.get("prefix"), bool(mt.get("replaces"))))
+                targets = self._mount_targets(f, mt)
+                if targets:
+                    mp, notes, unresolved = self._prefix(f, mt)
+                for tf, tobj in targets:
+                    mounts[(tf, tobj)].append((f, mt.get("on") or "", mp, bool(mt.get("replaces")), notes,
+                                               (unresolved,) if unresolved else ()))
 
-        def prefixes(f: str, obj: str | None, seen: frozenset) -> list[tuple[str, bool]]:
+        def prefixes(f: str, obj: str | None, seen: frozenset) -> list[tuple[str, bool, tuple, tuple]]:
+            """``(prefix, mount known, notes, expressions not resolved)`` for each chain of mounts."""
             if obj is None:
-                return [("", True)]
+                return [("", True, (), ())]
             info = (self.facts[f].get("objs") or {}).get(obj) or {}
-            own = info.get("prefix") or ""
+            own, own_notes, own_unres = self._prefix(f, info)
+            own, own_unres = own or "", (own_unres,) if own_unres else ()
             ups = mounts.get((f, obj)) or []
             if not ups or (f, obj) in seen:
                 # an object this file does not construct is a router by its name (`router`, `bp`), else an app
                 kind = info.get("kind") or ("router" if re.search(r"(?i)router|blueprint|^bp$|_bp$", obj) else "app")
-                return [(own, kind != "router")]
+                return [(own, kind != "router", own_notes, own_unres)]
             out = []
-            for pf, pobj, mp, replaces in ups:
-                for pp, known in prefixes(pf, pobj or None, seen | {(f, obj)}):
+            for pf, pobj, mp, replaces, m_notes, m_unres in ups:
+                for pp, known, notes, unres in prefixes(pf, pobj or None, seen | {(f, obj)}):
                     # Flask's register_blueprint(url_prefix=) replaces the blueprint's own prefix; FastAPI's
                     # include_router(prefix=) and Express's app.use('/p', router) come before it
-                    out.append((join_path(pp, mp) if replaces and mp is not None else join_path(pp, mp or "", own),
-                                known))
+                    if replaces and mp is not None:
+                        out.append((join_path(pp, mp), known, notes + m_notes, unres + m_unres))
+                    else:
+                        out.append((join_path(pp, mp or "", own), known, notes + m_notes + own_notes,
+                                    unres + m_unres + own_unres))
             return out
 
         # Django: a URLconf's prefix is the chain of includes that name it
@@ -1557,23 +1780,30 @@ class _Linker:
         nest_prefix = nest[0] if len(nest) == 1 else ""
         table = []
         for f, fx in sorted(self.facts.items()):
+            # Python frameworks serve the path as written: FastAPI's prefix="/items" + "/" is /items/ (Express
+            # serves a router's "/" at the mount path itself)
+            keep = f.lower().endswith(PY_SUFFIXES)
+            kind = code_kind(f)
             for r in fx.get("routes") or []:
                 node, how = self.handler(f, r["handler"], r["line"])
                 if node is None:
                     continue
                 if r.get("urlconf"):
-                    pres = [(p, True) for p in dj_prefixes(f, frozenset())]
+                    pres = [(p, True, (), ()) for p in dj_prefixes(f, frozenset())]
                 elif r.get("nest"):
-                    pres = [(nest_prefix, True)]
+                    pres = [(nest_prefix, True, (), ())]
                 else:
                     pres = prefixes(f, r.get("obj"), frozenset())
-                for pre, known in pres:
-                    path = join_path(pre, r["path"]) if r["path"] not in ("", "/") or pre else "/"
+                for pre, known, notes, unresolved in pres:
+                    path = join_path(pre, r["path"], keep_slash=keep) if r["path"] not in ("", "/") or pre else "/"
                     if r["path"] == "*":
                         path = join_path(pre, "*")
+                    mount = ([] if known else ["not found"]) + [f"prefix not resolved: {u}" for u in unresolved]
                     table.append({"fw": r["fw"], "methods": r["methods"], "path": path, "at": f"{f}:{r['line']}",
                                   "handler": node, "how": how, "segs": route_segments(path),
-                                  **({} if known else {"mount": "not found"})})
+                                  **({"mount": "; ".join(dict.fromkeys(mount))} if mount else {}),
+                                  **({"prefix_from": list(dict.fromkeys(notes))} if notes else {}),
+                                  **({"code": kind} if kind else {})})
             nx_path = _next_route(f)
             if nx_path is not None:
                 for e in fx.get("next") or []:
@@ -1581,7 +1811,7 @@ class _Linker:
                     if node:
                         table.append({"fw": "next.js", "methods": [e["method"]] if e["method"] else None,
                                       "path": nx_path, "at": f"{f}:{e['line']}", "handler": node, "how": "file route",
-                                      "segs": route_segments(nx_path)})
+                                      "segs": route_segments(nx_path), **({"code": kind} if kind else {})})
         return table
 
     def _mount_targets(self, f: str, mt: dict) -> list[tuple[str, str]]:
@@ -1639,7 +1869,21 @@ class _Linker:
                 # before the wildcard (an SPA fallback, `app.get('*')`) is no link at all
                 named = [r for r, _ in cands if not any(s[0] == "rest" for s in r["segs"])]
                 cands = named or [r for r, lits in cands if lits > 0]
-                call = {"at": at, "method": c["method"], "url": _show(pieces), "lib": c["lib"]}
+                kind = code_kind(f)
+                call = {"at": at, "method": c["method"], "url": _show(pieces), "lib": c["lib"],
+                        **({"code": kind} if kind else {})}
+                if cands and (kind or c["lib"] == "supertest"):
+                    # test and example code calls the app it builds or imports: a route of an unrelated example
+                    # app is no candidate when that app is known
+                    scope = self._scope(f)
+                    local = [r for r in cands if r["at"].rpartition(":")[0] in scope]
+                    if local:
+                        cands = local
+                    elif c["lib"] == "supertest" and (len(scope) > 1 or self._serves(scope)):
+                        # request(app): the app is built here or imported; another file's routes are not its own
+                        self._cap("unmatched", dict(call, why=f"no route read in the app under test fits (this file "
+                                                              f"and {len(scope) - 1} it imports)"))
+                        continue
                 if not cands:
                     self._cap("unmatched", call)
                     continue
@@ -1651,8 +1895,10 @@ class _Linker:
                 handlers = sorted({r["handler"] for r in fit})
                 caller = self.node_at(f, c["line"])
                 if len(handlers) > 1:
-                    self._cap("ambiguous", dict(call, caller=caller, protocol="http",
-                                                candidates=[dict(_route_row(r), handler=r["handler"]) for r in fit[:8]]))
+                    # every candidate is kept here; `routes` shows a bounded view (bounded()), the sidecar 8
+                    self.report["ambiguous"].append(dict(call, caller=caller, protocol="http", candidates=[
+                        dict(_route_row(r), handler=r["handler"], **({"code": r["code"]} if r.get("code") else {}))
+                        for r in fit]))
                     continue
                 r = fit[0]
                 if caller is None or caller == r["handler"]:
@@ -1664,8 +1910,10 @@ class _Linker:
                      "context": f"{c['method'] or 'any method'} {_show(pieces)} -> {_route_row(r)['route']} "
                                 f"({r['fw']}, {r['at']})"}
                 extra = list(notes)
-                if r.get("mount") == "not found":
+                if "not found" in (r.get("mount") or ""):
                     extra.append("the router's mount point was not found: its path is the router's own")
+                if "prefix not resolved" in (r.get("mount") or ""):
+                    extra.append(f"the route's path lacks a prefix the text does not spell ({r['mount']})")
                 if c["method"] is None:
                     extra.append("the call's method is computed")
                 if extra:
@@ -1693,12 +1941,42 @@ class _Linker:
             return b if b is not None else [["dyn", "baseURL"]]
         return None
 
+    def _scope(self, f: str) -> frozenset[str]:
+        """``f`` and the files it imports, three imports deep: relative JavaScript imports and ``require``s, and
+        the graph's ``imports_from`` edges."""
+        if f in self._scopes:
+            return self._scopes[f]
+        seen, frontier = {f}, [f]
+        for _ in range(3):
+            nxt = []
+            for x in frontier:
+                deps = {self.resolve_js(x, imp[0]) for imp in ((self.facts.get(x) or {}).get("imports") or {}).values()
+                        if isinstance(imp, list) and imp}
+                fn = self.files.get(x) or self._graph_file(x)
+                if fn:
+                    deps |= {self.g.file(v) for v, _d in self.g.out_edges(fn, {"imports_from"})}
+                for d in deps:
+                    if d and d not in seen:
+                        seen.add(d)
+                        nxt.append(d)
+            frontier = nxt
+        self._scopes[f] = frozenset(seen)
+        return self._scopes[f]
+
+    def _graph_file(self, f: str) -> str | None:
+        if not hasattr(self, "_file_nodes"):
+            self._file_nodes = {d.get("source_file"): n for n, d in self.g.G.nodes(data=True)
+                                if d.get("source_file") and self.g.is_file_node(n)}
+        return self._file_nodes.get(f)
+
+    def _serves(self, scope: frozenset[str]) -> bool:
+        """Whether a file of ``scope`` builds an app or declares a route."""
+        return any((self.facts.get(x) or {}).get("routes") or (self.facts.get(x) or {}).get("objs") for x in scope)
+
     def _cap(self, key: str, entry: dict) -> None:
-        lst = self.report[key]
-        if len(lst) < REPORT_CAP:
-            lst.append(entry)
-        else:
-            self.report[key + "_more"] = self.report.get(key + "_more", 0) + 1
+        """Every entry is kept: the cuts are made, and counted, where the report is shown (:func:`bounded`) or
+        stored (the sidecar keeps :data:`REPORT_CAP` ambiguous calls)."""
+        self.report[key].append(entry)
 
     def link_events(self) -> None:
         listeners: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -1811,9 +2089,21 @@ def _route_row(r: dict) -> dict:
     return {"route": f"{ms} {r['path']}", "at": r["at"], "framework": r["fw"]}
 
 
-def link(g, facts: dict[str, dict]) -> tuple[list[tuple[str, str, dict]], dict]:
-    """The cross-service edges of the graph and a report (route table, ambiguous, unmatched, method mismatches)."""
-    lk = _Linker(g, {f: fx for f, fx in facts.items() if fx})
+def _read_text(g, f: str, read=None) -> str | None:
+    """A project file's text (``read`` as :func:`collect` takes it, else from ``g.root``); None when unreadable."""
+    try:
+        data = read(f) if read else (g.root / f).read_bytes()
+    except (OSError, AttributeError, TypeError):
+        return None
+    if isinstance(data, bytes):
+        data = data.decode("utf-8", errors="replace")
+    return data.lstrip("﻿") if isinstance(data, str) else None
+
+
+def link(g, facts: dict[str, dict], read=None) -> tuple[list[tuple[str, str, dict]], dict]:
+    """The cross-service edges of the graph and a report (route table, ambiguous, unmatched, method mismatches).
+    ``read`` reads a file a prefix names (``settings.API_V1_STR``) that has no facts of its own."""
+    lk = _Linker(g, {f: fx for f, fx in facts.items() if fx}, read=lambda f: _read_text(g, f, read))
     lk.link_http()
     lk.link_events()
     lk.link_rpc()
@@ -1857,7 +2147,7 @@ def collect(g, read=None, old: dict | None = None) -> tuple[dict[str, dict], lis
         if text.startswith("﻿"):
             text = text[1:]
         files[f] = {"sha256": sha, "facts": file_facts(text, f)}
-    edges, report = link(g, {f: v["facts"] for f, v in files.items()})
+    edges, report = link(g, {f: v["facts"] for f, v in files.items()}, read=read)
     return files, edges, report, parsed
 
 
@@ -1884,11 +2174,62 @@ def ambiguous_on_way(g, reach: set[str], target: str, D) -> list[dict]:
     return out[:5]
 
 
+AMBIGUOUS_GROUPS = 50      # groups of ambiguous calls `routes` shows unless --all
+AMBIGUOUS_CANDIDATES = 5   # candidates shown per group
+AMBIGUOUS_ATS = 5          # further call sites named per group
+LIST_CAP = 50              # unmatched calls and method mismatches shown unless --all
+
+
+def bounded(report: dict, *, everything: bool = False) -> dict:
+    """``report`` bounded for ``verinoda routes``: ambiguous calls with the same method, URL and candidates are one
+    entry (the first call, ``calls`` in all, ``also_at`` for the next few), at most :data:`AMBIGUOUS_GROUPS` groups
+    of :data:`AMBIGUOUS_CANDIDATES` candidates, at most :data:`LIST_CAP` unmatched calls and method mismatches;
+    every cut is counted (``candidates_total``, ``also_at_more``, ``<list>_more``) and ``<list>_by_code`` counts
+    the calls made from test and example code. ``everything``: every call and candidate, nothing grouped."""
+    amb = [a for a in report.get("ambiguous") or [] if isinstance(a, dict)]
+    out = dict(report, ambiguous_calls=len(amb))
+    for key in ("ambiguous", "unmatched", "method_mismatch"):
+        rows = [a for a in report.get(key) or [] if isinstance(a, dict)]
+        if rows:
+            out[key + "_by_code"] = dict(sorted(Counter(a.get("code") or "other" for a in rows).items()))
+        if not everything and len(rows) > LIST_CAP and key != "ambiguous":
+            out.update({key: rows[:LIST_CAP], key + "_more": len(rows) - LIST_CAP})
+    if everything:
+        return out
+    groups: dict[tuple, dict] = {}
+    for a in amb:
+        cands = a.get("candidates") or []
+        key = (a.get("protocol"), a.get("method"), a.get("url"),
+               tuple(sorted((str(c.get("handler")), str(c.get("at"))) for c in cands if isinstance(c, dict))))
+        g = groups.get(key)
+        if g is None:
+            groups[key] = dict(a, calls=1, candidates=cands[:AMBIGUOUS_CANDIDATES],
+                               **({"candidates_total": len(cands)} if len(cands) > AMBIGUOUS_CANDIDATES else {}))
+            continue
+        g["calls"] += 1
+        if len(g.setdefault("also_at", [])) < AMBIGUOUS_ATS:
+            g["also_at"].append(a.get("at"))
+        else:
+            g["also_at_more"] = g.get("also_at_more", 0) + 1
+    shown = list(groups.values())
+    out.update(ambiguous=shown[:AMBIGUOUS_GROUPS], ambiguous_groups=len(shown),
+               ambiguous_more=max(0, len(shown) - AMBIGUOUS_GROUPS))
+    if not out["ambiguous_more"]:
+        out.pop("ambiguous_more")
+    out["bounded"] = (f"ambiguous calls grouped by method, URL and candidates, at most {AMBIGUOUS_GROUPS} groups of "
+                      f"{AMBIGUOUS_CANDIDATES} candidates; at most {LIST_CAP} unmatched calls and method mismatches; "
+                      f"`routes --all` lists every call and candidate")
+    return out
+
+
 def render(report: dict, *, show_routes: bool = True) -> str:
     """Plain text for ``verinoda routes``."""
+    n_amb = report.get("ambiguous_calls", len(report["ambiguous"]))
+    n_un = len(report["unmatched"]) + report.get("unmatched_more", 0)
+    n_mm = len(report["method_mismatch"]) + report.get("method_mismatch_more", 0)
     out = [f"{report['routes']} route(s), {report['clients']} client call(s) with a URL: {report['linked']} linked, "
-           f"{len(report['ambiguous'])} ambiguous, {len(report['unmatched'])} unmatched, "
-           f"{len(report['method_mismatch'])} method mismatch(es), {report['unresolved_urls']} URL(s) not spelled "
+           f"{n_amb} ambiguous, {n_un} unmatched, "
+           f"{n_mm} method mismatch(es), {report['unresolved_urls']} URL(s) not spelled "
            f"in the text, {report.get('external', 0)} to a public host (another service's)"]
     ev, rpc = report.get("events") or {}, report.get("rpc") or {}
     if ev.get("linked") or rpc.get("linked"):
@@ -1898,18 +2239,28 @@ def render(report: dict, *, show_routes: bool = True) -> str:
         out.append("routes:")
         for r in report["route_table"]:
             ms = "|".join(r["methods"]) if r.get("methods") else "ANY"
-            out.append(f"  {ms} {r['path']}  {r['at']}  [{r['fw']}]" + (f" (mount not found)" if r.get("mount") else ""))
-    for key, title in (("ambiguous", "ambiguous (no edge; every candidate listed)"),
+            out.append(f"  {ms} {r['path']}  {r['at']}  [{r['fw']}]" + (f" ({r['code']})" if r.get("code") else "")
+                       + (f" (mount {r['mount']})" if r.get("mount") else ""))
+    grouped = "bounded" in report
+    for key, title in (("ambiguous", "ambiguous (no edge; " + ("grouped, capped: --all lists every call)"
+                                                               if grouped else "every candidate listed)")),
                        ("method_mismatch", "path matches, method does not (no edge)"),
                        ("unmatched", "no route matches (no edge)")):
         rows = report.get(key) or []
         if rows:
             out.append(f"{title}:")
             for a in rows:
-                out.append(f"  {a['at']}  {a.get('method') or ''} {a.get('url', '')}".rstrip())
+                calls = f"  ({a['calls']} calls)" if a.get("calls", 1) > 1 else ""
+                code = f"  [{a['code']}]" if a.get("code") else ""
+                out.append(f"  {a['at']}  {a.get('method') or ''} {a.get('url', '')}".rstrip() + code + calls)
+                if a.get("why"):
+                    out.append(f"    {a['why']}")
                 for c in (a.get("candidates") or a.get("routes") or []):
-                    out.append(f"    {c['route']}  {c['at']}")
+                    out.append(f"    {c['route']}  {c['at']}" + (f"  [{c['code']}]" if c.get("code") else ""))
+                if a.get("candidates_total"):
+                    out.append(f"    ... {a['candidates_total'] - len(a.get('candidates') or [])} more candidate(s)")
             if report.get(key + "_more"):
-                out.append(f"  ... {report[key + '_more']} more")
+                unit = " group(s)" if key == "ambiguous" and grouped else ""
+                out.append(f"  ... {report[key + '_more']} more{unit}")
     out.append("every edge is INFERRED (derived_by=verinoda.cross_service): read from the two texts, not verified")
     return "\n".join(out)
