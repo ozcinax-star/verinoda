@@ -369,7 +369,10 @@ def _r_update(r: dict) -> None:
         print(f"  decisions: could not be checked ({dec['error']})" if dec.get("error") else
               f"  decisions: {dec['violations']} violated, {dec['possible']} possible, {dec['reviews']} review, "
               f"{dec['triggers']} trigger" + (f", {dec['not_checked']} not checked" if dec.get("not_checked") else "")
-              + (" - `verinoda decide check` for the sites" if any(dec.values()) else ""))
+              + (f", {dec['script_guards']} script guard(s): `decide check` runs them" if dec.get("script_guards")
+                 else "")
+              + (" - `verinoda decide check` for the sites"
+                 if any(v for k, v in dec.items() if k != "script_guards") else ""))
     con = r.get("consolidated")
     if con:
         print(f"  consolidate: could not run ({con['error']})" if con.get("error") else
@@ -741,8 +744,12 @@ def _decision_summary(repo: Path, *, noop: bool = False) -> dict | None:
                                "(`verinoda decide check` checks now)"}
         res = guards.check(repo, graph=index.load(repo) if graph_path(repo).exists() else None, records=recs)
         out = {k: len(res[k]) for k in ("violations", "possible", "reviews", "triggers")}
+        # a script guard runs only from `decide check`: counted on its own, not as "not checked" on every update
+        scripts = sum(1 for u in res["unknown"] if u.get("kind") == "script")
         # what was not checked (a file that does not parse, a record that cannot be read) is never "0 violated"
-        out["not_checked"] = len(res["unknown"]) + sum(1 for n in res["not_enforced"] if n.get("problem"))
+        out["not_checked"] = len(res["unknown"]) - scripts + sum(1 for n in res["not_enforced"] if n.get("problem"))
+        if scripts:
+            out["script_guards"] = scripts
         return out
     except Exception as exc:  # noqa: BLE001 - the update itself succeeded; say why the check did not run
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
@@ -2120,6 +2127,9 @@ def _r_decide_check(r: dict) -> None:
                 shown.add(head)
                 pre = "pre-existing " if key == "pre_existing" else ""
                 print(f"{pre}{label} {f['decision']} {f['guard']} {f['kind']} {f.get('what') or ''}")
+                if f["kind"] == "script":  # what a script guard's finding rests on, the graph it read included
+                    for lim in f.get("limits") or []:
+                        print(f"     limit: {lim}")
             tags = ", ".join(x for x in (f.get("status"), f.get("since")) if x)
             print(f"  {f['at']} {f.get('line') or ''}  [{tags}]")
             print(f"     {f['why']}")
@@ -2210,14 +2220,15 @@ def _r_brief(b: dict, indent: str = "") -> None:
 
 
 def _decide_graph(args, repo: Path, recs) -> tuple:
-    """(graph, note, stale_graph) for a decision check: the index refreshed first when an edge guard needs it."""
+    """(graph, note, stale_graph) for a decision check: the index refreshed first when an edge guard needs it
+    (or a script guard, which reads the graph file itself)."""
     from verinoda import decisions as dm
     from verinoda import guards
     from verinoda.paths import db_path, graph_path
 
     graph, note, stale_graph = None, None, None
-    if any(d.enforced and g.get("kind") in dm.EDGE_KINDS and g.get("status") == "accepted"
-           for d in recs for g in d.guards):
+    kinds = {g.get("kind") for d in recs if d.enforced for g in d.guards if g.get("status") == "accepted"}
+    if kinds & {*dm.EDGE_KINDS, "script"}:
         if not args.no_refresh and db_path(repo).is_file():
             from verinoda import buildlock, workflow
             from verinoda.snapshot import current_state
@@ -2235,7 +2246,7 @@ def _decide_graph(args, repo: Path, recs) -> tuple:
                         stale_graph = guards.stale_graph_note(up)
             finally:
                 st.close()
-        if graph_path(repo).exists():
+        if kinds & set(dm.EDGE_KINDS) and graph_path(repo).exists():
             from verinoda import index
 
             graph = index.load(repo)
@@ -2251,7 +2262,7 @@ def _decide_check(args, repo: Path) -> int:
     graph, note, stale_graph = _decide_graph(args, repo, recs)
     try:
         res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs,
-                           decisions_dir=ddir, graph_stale=stale_graph)
+                           decisions_dir=ddir, graph_stale=stale_graph, run_scripts=True)
     except ValueError as exc:
         if getattr(args, "json", False):  # like every other error of decide check: JSON on stdout too
             print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
@@ -2280,7 +2291,7 @@ def _decide_baseline(args, repo: Path) -> int:
         ddir = dm.decisions_dir_source(repo, ddir_arg)[0]
         graph, _note, stale_graph = _decide_graph(args, repo, recs)
         res = guards.check(repo, graph=graph, records=recs, decisions_dir=ddir_arg, graph_stale=stale_graph,
-                           use_baseline=not args.record)
+                           use_baseline=not args.record, run_scripts=True)
         if args.record:
             out = bl.record(ddir, res, statement=args.said, replace=args.replace, today=dm._today())
         elif args.shrink:
