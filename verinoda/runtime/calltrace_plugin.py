@@ -41,7 +41,7 @@ Output: ``$VERINODA_ARTIFACTS/$VERINODA_TRACE_FILE`` (default
 ``calltrace.jsonl``), JSON lines: one ``header`` (schema
 ``verinoda.calltrace/1``), one ``test`` record per test (phase outcomes), one
 ``edge`` record per distinct (caller site, callee), one ``raise`` record per distinct (project code
-site, exception type) an exception was raised at (``sys.monitoring`` only). A test record names the
+site, exception type) an exception started at (``sys.monitoring`` only; not the frames it passed through). A test record names the
 exception of a failed phase (``exc``: its type and the innermost project frame). Paths are relative to the
 copy root with ``/`` separators; ``<ext>`` marks a caller or callee outside it.
 ``VERINODA_TRACE_MODE`` = ``auto`` (default) | ``monitoring`` | ``setprofile``
@@ -337,16 +337,25 @@ def _start_monitoring() -> bool:
             pass
         return DISABLE
 
+    line_at: dict = {}   # (code, offset) -> line
+
     def on_raise(code, offset, exc):
-        # every raise in Python code reaches here (it cannot be disabled per code object): keep the project's
+        # every raise in Python code reaches here, in each frame it passes through (it cannot be disabled per
+        # code object): keep the project frame where it starts, the one whose traceback entry is the last
         r = _started.get(code)
         if r is None:
             r = _repo_code(code)
         if not r:
             return None
         try:
+            tb = exc.__traceback__
+            if tb is not None and tb.tb_next is not None:
+                return None  # passing through: raised further in
             t = type(exc)
-            key = (code, _line_of(code, offset), f"{t.__module__}.{t.__qualname__}")
+            line = line_at.get((code, offset))
+            if line is None:
+                line = line_at[(code, offset)] = _line_of(code, offset)
+            key = (code, line, f"{t.__module__}.{t.__qualname__}")
         except Exception:  # noqa: BLE001
             return None
         ent = _raises.get(key)

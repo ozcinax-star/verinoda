@@ -48,6 +48,10 @@ BASE = {
         "    if n < 0:\n"
         "        raise ValueError('negative')\n"
         "    return n\n"
+        "\n"
+        "\n"
+        "def outer(n):\n"
+        "    return check(n)\n"
     ),
     "tests/test_orders.py": (
         "import pytest\n"
@@ -66,6 +70,11 @@ BASE = {
         "\n"
         "def test_check_passes():\n"
         "    assert orders.check(2) == 2\n"
+        "\n"
+        "\n"
+        "def test_outer_passes_it_on():\n"
+        "    with pytest.raises(Exception):\n"
+        "        orders.outer(-1)\n"
     ),
 }
 
@@ -99,6 +108,10 @@ HEAD_ORDERS = (
     "    if n < 0:\n"
     "        raise KeyError('negative')\n"
     "    return n\n"
+    "\n"
+    "\n"
+    "def outer(n):\n"
+    "    return check(n)\n"
 )
 
 pytestmark = [pytest.mark.experiment,
@@ -135,7 +148,7 @@ def test_both_runs_are_recorded_and_compared(pair):
     _repo, _st, d = pair
     assert "error" not in d, d
     assert d["base"]["ref"] == "HEAD" and d["base"]["complete"] and d["head"]["complete"]
-    assert d["tests_compared"] == 3 and d["changed"] is True
+    assert d["tests_compared"] == 4 and d["changed"] is True
 
 
 def test_calls_added_and_removed(pair):
@@ -160,6 +173,8 @@ def test_sql_added_removed_and_the_n_plus_one_gone(pair):
     assert "SELECT price FROM item WHERE id = ?" in removed
     gone = next(i for i in sql["removed"] if i["what"] == "SELECT price FROM item WHERE id = ?")
     assert gone["executions"] == 6 and gone["at"] == "app/orders.py:12"
+    counts = pair[2]["counts"]["sql"]
+    assert counts == sql["added_total"] + sql["removed_total"] + sql["changed_total"] + 1  # the N+1 that went
     assert sql["n_plus_one_removed"] == ["SELECT price FROM item WHERE id = ?"] and sql["n_plus_one_added"] == []
 
 
@@ -168,6 +183,8 @@ def test_exceptions_raised_in_project_code(pair):
     ex = pair[2]["exceptions"]
     assert "builtins.KeyError raised in app/orders.py::check" in _whats(ex, "added")
     assert "builtins.ValueError raised in app/orders.py::check" in _whats(ex, "removed")
+    # only where it starts: outer() lets it through in both revisions
+    assert not any("::outer" in w for w in _whats(ex, "added") + _whats(ex, "removed"))
 
 
 def test_a_test_outcome_that_changed_names_the_exception(pair):
@@ -223,7 +240,7 @@ def test_render_lists_the_changes(pair):
     assert "calls added" in text and "+ app/orders.py::check -> app/orders.py::audit" in text
     assert "- SELECT price FROM item WHERE id = ? x6 @app/orders.py:12" in text
     assert "N+1 gone in head: SELECT price FROM item WHERE id = ?" in text
-    assert "test tests/test_orders.py::test_check_refuses: passed -> failed (builtins.KeyError" in text
+    assert "test tests/test_orders.py::test_check_refuses: passed -> failed (head: builtins.KeyError at app/orders.py:" in text
 
 
 def test_a_base_that_does_not_exist_is_an_error(tmp_path):
@@ -269,3 +286,43 @@ def test_observe_compare_on_the_command_line(pair, capsys):
     assert rd["tests_compared"] == 1 and "SELECT price FROM item WHERE id = ?" in _whats(rd["sql"], "removed")
     with pytest.raises(SystemExit, match="--compare nope"):
         cli.main(["observe", "--compare", "nope", "--repo", str(repo)])
+
+
+# -- review round ---------------------------------------------------------------------------------
+
+def test_a_test_new_in_an_existing_file_is_left_out_of_the_base_run(pair):
+    from verinoda import treestate
+
+    repo, _st, _ = pair
+    commit = treestate.resolve_commit(repo, "HEAD")
+    src = rt._Sources(repo, commit)
+    assert rundiff._exists_at(repo, commit, "tests/test_orders.py::test_total", src)
+    assert rundiff._exists_at(repo, commit, "tests/test_orders.py::test_total[a-1]", src)  # params not checked
+    assert not rundiff._exists_at(repo, commit, "tests/test_orders.py::test_brand_new", src)
+    assert not rundiff._exists_at(repo, commit, "tests/test_orders.py::TestX::test_y", src)
+    assert not rundiff._exists_at(repo, commit, "tests/test_gone.py", src)
+    assert rundiff._exists_at(repo, commit, "tests", src)
+
+
+def test_an_exception_whose_line_moved_is_not_a_change():
+    a = {"exc": {"call": {"type": "builtins.ValueError", "at": ["app/m.py", 3, "f"]}}}
+    b = {"exc": {"call": {"type": "builtins.ValueError", "at": ["app/m.py", 5, "f"]}}}
+    c = {"exc": {"call": {"type": "builtins.ValueError", "at": ["app/m.py", 5, "g"]}}}
+    assert rundiff._exc(a, key=True) == rundiff._exc(b, key=True) != rundiff._exc(c, key=True)
+    assert rundiff._exc(b) == "builtins.ValueError at app/m.py:5"
+
+
+def test_the_base_run_is_never_the_latest_run(pair):
+    _repo, st, d = pair
+    assert rt.latest_run(st, complete_only=True)["id"] != d["base"]["run_id"]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="raises are recorded with sys.monitoring")
+def test_a_cut_raise_list_makes_missing_exceptions_unknown(pair):
+    repo, st, d = pair
+    base, head = rundiff.RunView(st, d["base"]["run_id"], repo), rundiff.RunView(st, d["head"]["run_id"], repo)
+    common = set(base.outcomes) & set(head.outcomes)
+    base.raises_cut = True
+    ex = rundiff._diff("exception", base.raises, head.raises, base, head, common, lambda k: k[2])
+    assert ex["added"] and all(i["status"] == "unknown" for i in ex["added"])
+    assert ex["removed"] and all(i["status"] == "observed" for i in ex["removed"])  # head kept all of its sites

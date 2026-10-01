@@ -193,7 +193,8 @@ MAX_RAISES_KEPT = 2000   # raise sites kept in a run's header, most hit first
 def _raises_for_header(raises: list[dict]) -> list[dict]:
     """The raise records as the run header keeps them: site, type, hits and up to 10 tests."""
     out = []
-    for r in sorted(raises, key=lambda r: (-int(r.get("hits") or 0), r["site"][0], r["site"][1], r.get("type") or ""))[
+    kept = [r for r in raises if r["site"][0] != EXT and not is_test_path(r["site"][0])]  # test code: not compared
+    for r in sorted(kept, key=lambda r: (-int(r.get("hits") or 0), r["site"][0], r["site"][1], r.get("type") or ""))[
             :MAX_RAISES_KEPT]:
         tests = sorted({t for t in (_ctx_test(c) for c in r.get("contexts", [])) if t})
         out.append({"site": r["site"], "type": str(r.get("type") or "?"), "hits": int(r.get("hits") or 0),
@@ -367,7 +368,7 @@ def ingest(store: Store, trace: dict, *, experiment_id: str | None, snapshot_id:
     header["tests_outcomes"] = trace["tests"]
     if trace.get("raises"):
         header["raises"] = _raises_for_header(trace["raises"])
-        header["raises_total"] = len(trace["raises"])
+        header["raises_total"] = sum(1 for r in trace["raises"] if r["site"][0] != EXT and not is_test_path(r["site"][0]))
     header.update(extra_header or {})
     rid = run_id or new_id("rtr")
     rows = []
@@ -398,7 +399,9 @@ def load_run(store: Store, run_id: str) -> dict | None:
 
 
 def latest_run(store: Store, *, complete_only: bool = False) -> dict | None:
-    sql = "SELECT id FROM runtime_runs" + (" WHERE complete = 1" if complete_only else "") \
+    # a run of another commit (``observe(ref=...)``) describes that commit, not the working tree
+    sql = "SELECT id FROM runtime_runs WHERE json_extract(header, '$.ref') IS NULL" \
+        + (" AND complete = 1" if complete_only else "") \
         + " ORDER BY created_at DESC, rowid DESC LIMIT 1"
     row = store.one(sql)
     return load_run(store, row["id"]) if row else None

@@ -111,6 +111,9 @@ class RunView:
             d["hits"] += int(c.get("hits") or 0)
             d["tests"] |= tests
         self.raises_recorded = bool(self.h.get("raises_recorded"))
+        stats = _dict(self.h.get("stats"))
+        self.raises_cut = (int(self.h.get("raises_total") or 0) > len(_list(self.h.get("raises")))
+                           or int(stats.get("raises_dropped") or 0) > 0)
         self.raises: dict[tuple, dict] = {}
         for r in _list(self.h.get("raises")):
             site = r.get("site") or []
@@ -162,6 +165,9 @@ def _item(kind: str, what: str, d: dict, *, present: RunView, absent: RunView, c
     if not absent.complete:
         status, basis = "unknown", (f"seen in run {present.id}; run {absent.id} is incomplete, so it may have "
                                     "made it too")
+    elif kind == "exception" and absent.raises_cut:
+        status, basis = "unknown", (f"seen in run {present.id}; run {absent.id} kept only part of its raise "
+                                    "sites, so it may have raised it too")
     else:
         status, basis = "observed", f"seen in run {present.id}, not in run {absent.id} of the same tests"
     return {"kind": kind, "what": what, **({"at": d["at"]} if d.get("at") else {}), "hits": d.get("hits"),
@@ -172,8 +178,12 @@ def _item(kind: str, what: str, d: dict, *, present: RunView, absent: RunView, c
 def _diff(kind: str, a: dict, b: dict, base: RunView, head: RunView, common: set[str], label) -> dict:
     added = [_item(kind, label(k), b[k], present=head, absent=base, common=common) for k in sorted(set(b) - set(a))]
     removed = [_item(kind, label(k), a[k], present=base, absent=head, common=common) for k in sorted(set(a) - set(b))]
-    added.sort(key=lambda i: (i.get("new_tests_only", False), -int(i.get("hits") or 0), i["what"]))
-    removed.sort(key=lambda i: (i.get("new_tests_only", False), -int(i.get("hits") or 0), i["what"]))
+    def order(src: dict):  # SQL by executions (its items carry no hits)
+        return lambda i: (i.get("new_tests_only", False),
+                          -int(src[i["what"]]["executions"] if kind == "sql" else i.get("hits") or 0), i["what"])
+
+    added.sort(key=order(b))
+    removed.sort(key=order(a))
     return {"added": added[:MAX_ITEMS], "added_total": len(added), "removed": removed[:MAX_ITEMS],
             "removed_total": len(removed)}
 
@@ -254,7 +264,7 @@ def compare(store, repo: Path, base_run: str, head_run: str, *, graph=None, rout
         ob, oh = rt.phase_outcome(base.outcomes[t].get("phases") or {}), rt.phase_outcome(
             head.outcomes[t].get("phases") or {})
         eb, eh = _exc(base.outcomes[t]), _exc(head.outcomes[t])
-        if ob != oh or eb != eh:
+        if ob != oh or _exc(base.outcomes[t], key=True) != _exc(head.outcomes[t], key=True):
             tests.append({"test": t, "base": ob, "head": oh, **({"base_exception": eb} if eb else {}),
                           **({"head_exception": eh} if eh else {}), "status": "observed",
                           "basis": f"run {base.id} and run {head.id}"})
@@ -262,28 +272,38 @@ def compare(store, repo: Path, base_run: str, head_run: str, *, graph=None, rout
     out["counts"] = {k: (out[k].get("added_total", 0) + out[k].get("removed_total", 0)
                          + out[k].get("changed_total", 0)) for k in ("calls", "library_calls", "exceptions", "sql",
                                                                       "routes") if k in out}
+    if isinstance(out.get("sql"), dict) and "n_plus_one_added" in out["sql"]:
+        out["counts"]["sql"] += len(out["sql"]["n_plus_one_added"]) + len(out["sql"]["n_plus_one_removed"])
     out["counts"]["test_outcomes"] = len(tests)
     out["changed"] = any(out["counts"].values())
     out["limits"] = list(LIMITS)
     if not (base.complete and head.complete):
         out["limits"].append("a run is incomplete: what it lacks is unknown, not absent")
+    if base.raises_cut or head.raises_cut:
+        out["limits"].append("a run kept only part of its raise sites: an exception missing from it is unknown")
     return out
 
 
-def _exc(outcome: dict) -> str | None:
+def _exc(outcome: dict, *, key: bool = False):
+    """The exception that ended a failed phase: ``type at path:line`` to show, or with ``key`` the
+    (type, path, function) compared between runs - a line that moved is not a change."""
     exc = outcome.get("exc") or {}
     for phase in ("call", "setup", "teardown"):
         if isinstance(exc.get(phase), dict):
             e = exc[phase]
-            at = e.get("at")
-            return e.get("type", "?") + (f" at {at[0]}:{at[1]}" if isinstance(at, list) and len(at) >= 2 else "")
+            at = e.get("at") if isinstance(e.get("at"), list) else []
+            if key:
+                return (e.get("type", "?"), at[0] if at else None, at[2] if len(at) > 2 else None)
+            return e.get("type", "?") + (f" at {at[0]}:{at[1]}" if len(at) >= 2 else "")
     return None
 
 
 def observe_pair(store, repo: Path, test_ids, base_ref: str, *, graph=None, timeout: float | None = None,
-                 flaws: bool = True, head: dict | None = None, route_table: list[dict] | None = None) -> dict:
+                 flaws: bool = True, head: dict | None = None, route_table: list[dict] | None = None,
+                 mode: str = "auto", flaw_thresholds: dict | None = None, limits: dict | None = None) -> dict:
     """Run ``test_ids`` at ``base_ref`` (and on the working tree unless ``head``, an observe result of it, is
-    given) and compare the two runs."""
+    given) and compare the two runs. ``mode``, ``flaw_thresholds`` and ``limits`` are the tracer settings of
+    both runs (give the ones the head was made with)."""
     from verinoda import treestate
 
     try:
@@ -291,15 +311,17 @@ def observe_pair(store, repo: Path, test_ids, base_ref: str, *, graph=None, time
     except Exception as exc:  # noqa: BLE001 - not a commit: said, never a crash of the caller
         return {"error": f"{base_ref} does not name a commit: {exc}"[:300]}
     head = head or rt.observe(store, repo, test_ids, timeout=timeout, graph=graph if graph is not None else False,
-                              flaws=flaws)
+                              flaws=flaws, mode=mode, flaw_thresholds=flaw_thresholds, limits=limits)
     if not head.get("run_id"):
-        return {"error": f"the head run did not record: {head.get('error')}", "head": head}
+        return {"error": f"the head run did not record: {head.get('error')}", "head_run": None}
     ids = list(head.get("tests_requested") or test_ids)
-    kept = [t for t in ids if _exists_at(repo, commit, t)]
+    src = rt._Sources(repo, commit)
+    kept = [t for t in ids if _exists_at(repo, commit, t, src)]
     if ids and not kept:
         return {"error": f"none of the selected tests exists at {base_ref}: they are new", "head_run": head["run_id"],
                 "next_step": "nothing to compare at run time; the head run alone is in observe"}
-    base = rt.observe(store, repo, kept, timeout=timeout, graph=False, flaws=flaws, ref=base_ref)
+    base = rt.observe(store, repo, kept, timeout=timeout, graph=False, flaws=flaws, ref=base_ref, mode=mode,
+                      flaw_thresholds=flaw_thresholds, limits=limits)
     if not base.get("run_id") or base.get("error"):
         return {"error": f"the base run at {base_ref} did not record: {base.get('error')}",
                 "next_step": base.get("next_step") or "check that the tests run at that commit",
@@ -310,17 +332,40 @@ def observe_pair(store, repo: Path, test_ids, base_ref: str, *, graph=None, time
         return {"error": str(exc), "base_run": base["run_id"], "head_run": head["run_id"]}
     if len(kept) < len(ids):
         out["tests_new_in_head"] = [t for t in ids if t not in kept][:20]
+    if out["tests_compared"] == 0:
+        return {"error": f"no test ran in both runs (base {out['base']['tests']}, head {out['head']['tests']} "
+                         "test(s)): nothing to compare", "base_run": base["run_id"], "head_run": head["run_id"],
+                "next_step": "read the base run's log: the tests may not run at that commit"}
     return out
 
 
-def _exists_at(repo: Path, commit: str, test_id: str) -> bool:
-    """The file of a pytest id (``path::name``, or a path) exists at ``commit``."""
+def _exists_at(repo: Path, commit: str, test_id: str, src=None) -> bool:
+    """The test a pytest id names exists at ``commit``: its file, and its class and function names (a
+    parametrize suffix is not checked). A file that cannot be parsed there counts as present."""
+    import ast
+
     from verinoda.snapshot import git
 
-    path = test_id.split("::", 1)[0].replace("\\", "/").rstrip("/")
+    path, _, rest = test_id.partition("::")
+    path = path.replace("\\", "/").rstrip("/")
     if not path:
         return True
-    return git(repo, "cat-file", "-e", f"{commit}:{path}") is not None
+    if git(repo, "cat-file", "-e", f"{commit}:{path}") is None:
+        return False
+    names = [n.split("[", 1)[0] for n in rest.split("::") if n] if rest else []
+    if not names or src is None:
+        return True
+    tree = src.tree(path)
+    if tree is None:
+        return True
+    body = tree.body
+    for name in names:
+        hit = next((n for n in body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                    and n.name == name), None)
+        if hit is None:
+            return False
+        body = hit.body if isinstance(hit, ast.ClassDef) else []
+    return True
 
 
 def route_table(repo: Path, graph) -> list[dict]:
@@ -374,6 +419,6 @@ def render(d: dict) -> list[str]:
         for s in sec.get("n_plus_one_removed") or []:
             out.append(f"  N+1 gone in head: {s}")
     for t in d.get("test_outcomes") or []:
-        out.append(f"  test {t['test']}: {t['base']} -> {t['head']}"
-                   + (f" ({t['head_exception']})" if t.get("head_exception") else ""))
+        exc = " / ".join(f"{side}: {t[side + '_exception']}" for side in ("base", "head") if t.get(side + "_exception"))
+        out.append(f"  test {t['test']}: {t['base']} -> {t['head']}" + (f" ({exc})" if exc else ""))
     return out

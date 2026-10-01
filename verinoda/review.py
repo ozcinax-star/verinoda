@@ -4723,7 +4723,9 @@ def _observed_tests(ctx: _Ctx, changes: list[Change]) -> dict | None:
     try:
         from verinoda.runtime import trace
 
-        run = ctx.store.one("SELECT * FROM runtime_runs WHERE complete = 1 ORDER BY created_at DESC, rowid DESC LIMIT 1")
+        # a run of another commit (the base of a runtime diff) does not describe the working tree
+        run = ctx.store.one("SELECT * FROM runtime_runs WHERE complete = 1 AND json_extract(header, '$.ref') IS NULL "
+                            "ORDER BY created_at DESC, rowid DESC LIMIT 1")
     except Exception:  # noqa: BLE001 - no runtime tables or data
         return None
     if not run:
@@ -5425,9 +5427,12 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
                 from verinoda.runtime import rundiff
 
                 # the same tests on the base commit: what the change altered at run time
-                out["observe"]["runtime_diff"] = rundiff.observe_pair(
-                    ctx.store, ctx.repo, py_ids, ctx.base_commit, graph=ctx.g, head=res,
-                    route_table=rundiff.route_table(ctx.repo, ctx.g))
+                try:
+                    out["observe"]["runtime_diff"] = rundiff.observe_pair(
+                        ctx.store, ctx.repo, py_ids, ctx.base_commit, graph=ctx.g, head=res,
+                        route_table=rundiff.route_table(ctx.repo, ctx.g))
+                except Exception as exc:  # noqa: BLE001 - the comparison is extra: its failure is said
+                    out["observe"]["runtime_diff"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
             reached = {t for v in by_symbol.values() for t in v}
             out["no_test_reaches"] = [s for s in out["no_test_reaches"] if not by_symbol.get(s)]
             out["reach_unknown"] = [r for r in out["reach_unknown"] if not by_symbol.get(r["symbol"])]

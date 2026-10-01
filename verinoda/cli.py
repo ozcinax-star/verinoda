@@ -3100,11 +3100,13 @@ def cmd_observe(args) -> int:
 
         summary["runtime_diff"] = rundiff.observe_pair(st, repo, ids, args.compare, graph=g, head=res,
                                                        timeout=args.timeout, flaws=not args.no_flaws,
-                                                       route_table=rundiff.route_table(repo, g))
+                                                       route_table=rundiff.route_table(repo, g), mode=args.mode,
+                                                       flaw_thresholds=th)
     _emit(args, summary, _r_observe)
     # 3: the run did not establish what was asked (incomplete trace, or reach asked with the tracer off)
     unobserved = any(not v["n"] and not v["observed"] for v in summary.get("target_reach", {}).values())
-    return 0 if res.get("complete") and not unobserved else 3
+    failed_diff = bool((summary.get("runtime_diff") or {}).get("error"))
+    return 0 if res.get("complete") and not unobserved and not failed_diff else 3
 
 
 # -- debug ledger ------------------------------------------------------------------------------
