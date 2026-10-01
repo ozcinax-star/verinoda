@@ -999,10 +999,13 @@ class AtlasTools:
             if g.file(nid):  # the rationale comments attached to it, quoted (rationale.py)
                 from verinoda import rationale
 
-                why = rationale.for_node(g, nid)
+                if not g.is_file_node(nid) and g.file(nid) in (fresh.get("files") or ()):  # line is the index's
+                    why, out["rationale_note"] = [], rationale.STALE_NOTE
+                else:
+                    why = rationale.for_node(g, nid)
                 if why:
-                    out["rationale"] = [{k: r[k] for k in ("at", "tag", "text", "attach", "status")}
-                                        | {"text": r["text"][:200]} for r in why[:RATIONALE_CAP]]
+                    out["rationale"] = [{k: r[k] for k in ("at", "tag", "attach", "status", "attach_status")}
+                                        | {"text": rationale.clip(r["text"], 200)} for r in why[:RATIONALE_CAP]]
                     if len(why) > RATIONALE_CAP:
                         out["rationale_total"] = len(why)
                     out["rationale_note"] = rationale.NOTE
