@@ -40,7 +40,9 @@ so a later hard kill does not lose it.
 Output: ``$VERINODA_ARTIFACTS/$VERINODA_TRACE_FILE`` (default
 ``calltrace.jsonl``), JSON lines: one ``header`` (schema
 ``verinoda.calltrace/1``), one ``test`` record per test (phase outcomes), one
-``edge`` record per distinct (caller site, callee). Paths are relative to the
+``edge`` record per distinct (caller site, callee), one ``raise`` record per distinct (project code
+site, exception type) an exception started at (``sys.monitoring`` only; not the frames it passed through). A test record names the
+exception of a failed phase (``exc``: its type and the innermost project frame). Paths are relative to the
 copy root with ``/`` separators; ``<ext>`` marks a caller or callee outside it.
 ``VERINODA_TRACE_MODE`` = ``auto`` (default) | ``monitoring`` | ``setprofile``
 | ``off`` (outcomes and timing only; the overhead baseline).
@@ -91,13 +93,16 @@ _edges: dict = {}        # (caller code, caller line, callee code) -> [hits, set
 _bounds: dict = {}       # (caller code, caller line, callee name) -> [hits, set(ctx)]
 _threaded: set = set()   # edge keys seen on a non-main thread
 _outcomes: dict = {}     # nodeid -> {phase: outcome, "duration": s}
+_raises: dict = {}       # (code, line, exception type name) -> [hits, set(ctx)]
+MAX_RAISES = 5000        # distinct raise sites kept; later new ones are counted in the header
 ctx = "<collection>"
 _main_ident = threading.get_ident()
 _get_ident = threading.get_ident
 _getframe = sys._getframe
 _state = {"tracer": "off", "tool_id": None, "active": False, "complete": True, "breach": None,
           "degraded_after": None, "n_call": 0, "dropped": 0,
-          "written": False, "session": None, "exitstatus": None, "stopped_early": False}
+          "written": False, "session": None, "exitstatus": None, "stopped_early": False,
+          "raises_dropped": 0}
 _n_start = 0     # in-repo function starts seen (hot path: a module global, not a dict entry)
 _est_bytes = 0   # estimated size of the output so far
 
@@ -255,6 +260,7 @@ def _stop_tracer() -> None:
             mon.set_events(tool, 0)
             mon.register_callback(tool, mon.events.PY_START, None)
             mon.register_callback(tool, mon.events.CALL, None)
+            mon.register_callback(tool, mon.events.RAISE, None)
         except (ValueError, RuntimeError):
             pass
     elif _state["tracer"] == "setprofile":
@@ -331,9 +337,41 @@ def _start_monitoring() -> bool:
             pass
         return DISABLE
 
+    line_at: dict = {}   # (code, offset) -> line
+
+    def on_raise(code, offset, exc):
+        # every raise in Python code reaches here, in each frame it passes through (it cannot be disabled per
+        # code object): keep the project frame where it starts, the one whose traceback entry is the last
+        r = _started.get(code)
+        if r is None:
+            r = _repo_code(code)
+        if not r:
+            return None
+        try:
+            tb = exc.__traceback__
+            if tb is not None and tb.tb_next is not None:
+                return None  # passing through: raised further in
+            t = type(exc)
+            line = line_at.get((code, offset))
+            if line is None:
+                line = line_at[(code, offset)] = _line_of(code, offset)
+            key = (code, line, f"{t.__module__}.{t.__qualname__}")
+        except Exception:  # noqa: BLE001
+            return None
+        ent = _raises.get(key)
+        if ent is None:
+            if len(_raises) >= MAX_RAISES:
+                _state["raises_dropped"] += 1
+                return None
+            ent = _raises[key] = [0, set()]
+        ent[0] += 1
+        ent[1].add(ctx)
+        return None
+
     mon.register_callback(tool, mon.events.PY_START, py_start)
     mon.register_callback(tool, mon.events.CALL, call)
-    mon.set_events(tool, mon.events.PY_START)
+    mon.register_callback(tool, mon.events.RAISE, on_raise)
+    mon.set_events(tool, mon.events.PY_START | mon.events.RAISE)
     _state.update(tracer="sys.monitoring", tool_id=tool, active=True)
     return True
 
@@ -436,8 +474,10 @@ def _site(code, line) -> list:
 def _write(final: bool) -> None:
     edges = list(_edges.items())
     bounds = list(_bounds.items())
+    raises = list(_raises.items())
     threaded = set(_threaded)
-    ctxs = sorted({c for _, (_, cs) in edges for c in list(cs)} | {c for _, (_, cs) in bounds for c in list(cs)})
+    ctxs = sorted({c for _, (_, cs) in edges for c in list(cs)} | {c for _, (_, cs) in bounds for c in list(cs)}
+                  | {c for _, (_, cs) in raises for c in list(cs)})
     cid = {c: i for i, c in enumerate(ctxs)}
     lines: list[str] = []
     size = 0
@@ -453,7 +493,11 @@ def _write(final: bool) -> None:
         records.append({"k": "edge", "caller": _site(caller_code, line), "callee": ["<ext>", 0, name],
                         "hits": hits, "ctx": sorted(cid[c] for c in list(cs)), "boundary": True})
     records.sort(key=lambda r: (r["caller"][0], r["caller"][1], r["callee"][0], r["callee"][2]))
-    for rec in records:
+    raise_recs = sorted(({"k": "raise", "site": _site(code, line), "type": name, "hits": hits,
+                          "ctx": sorted(cid[c] for c in list(cs))}
+                         for (code, line, name), (hits, cs) in raises),
+                        key=lambda r: (r["site"][0], r["site"][1], r["type"]))
+    for rec in records + raise_recs:
         text = json.dumps(rec, separators=(",", ":"))
         if size + len(text) + 1 > MAX_BYTES:
             truncated = True
@@ -474,10 +518,11 @@ def _write(final: bool) -> None:
         "limits": {"max_py_start": MAX_PY_START, "max_edges": MAX_EDGES, "max_bytes": MAX_BYTES,
                    "deadline_s": DEADLINE_S},
         "stats": {"py_start": _n_start, "call_sites": _state["n_call"], "edges": len(edges),
-                  "boundary": len(bounds), "written_records": len(lines), "dropped": _state["dropped"],
+                  "boundary": len(bounds), "raises": len(raises), "raises_dropped": _state["raises_dropped"],
+                  "written_records": len(lines), "dropped": _state["dropped"],
                   "est_bytes": _est_bytes, "bytes": size},
         "cpu_s": round(time.process_time() - _T0_CPU, 3), "wall_s": round(time.perf_counter() - _T0_WALL, 3),
-        "contexts": ctxs, "tests": len(tests),
+        "contexts": ctxs, "tests": len(tests), "raises_recorded": _state["tracer"] == "sys.monitoring",
     }
     if not final and _state["breach"] is None:
         header["complete"] = False
@@ -529,6 +574,38 @@ def pytest_runtest_teardown(item):
 
 def pytest_runtest_logfinish(nodeid, location):
     _set_ctx("<session>")
+
+
+def _exc_of(excinfo) -> dict | None:
+    """The type of a phase's exception and the innermost project frame it passed through."""
+    try:
+        t = excinfo.type
+        out = {"type": f"{t.__module__}.{t.__qualname__}"}
+        tb, at = excinfo.tb, None
+        while tb is not None:
+            code = tb.tb_frame.f_code
+            if _repo_code(code):
+                at = [_rel(code.co_filename), int(tb.tb_lineno or 0), _qual(code)]
+            tb = tb.tb_next
+        if at:
+            out["at"] = at
+        return out
+    except Exception:  # noqa: BLE001 - an exception the hook cannot describe is left out
+        return None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    try:
+        rep = outcome.get_result()
+    except Exception:  # noqa: BLE001
+        return
+    if rep.failed and call.excinfo is not None:
+        exc = _exc_of(call.excinfo)
+        if exc:
+            res = _outcomes.setdefault(item.nodeid, {"phases": {}, "duration": 0.0})
+            res.setdefault("exc", {})[call.when] = exc
 
 
 def pytest_runtest_logreport(report):
