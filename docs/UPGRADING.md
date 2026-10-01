@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D108)
+## Upgrading from 0.3.2 (D60-D109)
 
 ### D63: Running a project's own tests safely
 
@@ -493,6 +493,12 @@ change: the tool count in UPGRADING.md stays as it is.
 New: `verinoda docs check [PATHS] [--fix] [--exclude GLOB]` checks the paths and line references in the
 repository's documents against the working tree (exit 1 when one is broken, renamed, moved or changed); `--fix`
 repairs renamed paths and moved line numbers. The MCP tool count is unchanged.
+
+### D109: Git hooks for re-indexing
+
+New: `verinoda hooks install` (and `setup --hooks`) adds post-commit, post-checkout, post-merge and post-rewrite
+hooks that run `verinoda update` in the background (only in the project's own work tree); `verinoda hooks uninstall` removes exactly what it added. Nothing
+changes unless you run it. The MCP tool count is unchanged.
 
 ### D60-D62
 
