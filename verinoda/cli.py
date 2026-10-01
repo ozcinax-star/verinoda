@@ -46,6 +46,8 @@ PLAN_EXIT = {"ready": 0, "answered": 0, "invalid": 2, "invalid_plan": 2, "needs_
 TRACE_MODES = ("auto", "monitoring", "setprofile", "off")   # verinoda.runtime.trace.MODES
 NETWORK_CHOICES = ("off", "cache", "on")                      # verinoda.paths.NETWORK_MODES
 OBSERVE_LIST_CAP = 10
+SARIF_HELP = ("print the findings as a SARIF 2.1.0 log (GitHub code scanning: upload it with "
+              "github/codeql-action/upload-sarif); the exit code is unchanged")
 
 
 # -- output helpers -------------------------------------------------------------
@@ -90,6 +92,16 @@ def _emit(args, obj, render=None) -> None:
         _write(_dump(obj))
     else:
         render(obj)
+
+
+def _emit_sarif(args, res: dict, command: str) -> bool:
+    """``--sarif``: the result written as a SARIF 2.1.0 log instead of text or JSON (the exit code is the same)."""
+    if not getattr(args, "sarif", False):
+        return False
+    from verinoda import sarif
+
+    _write(sarif.dumps(sarif.export(res, command)))
+    return True
 
 
 def _repo(args) -> Path:
@@ -804,12 +816,131 @@ def cmd_notes(args) -> int:
     return 1 if args.changed and bad else 0
 
 
+MAP_ACTIONS = ("save", "show", "list")  # `map save NAME`: a project folder with such a name is passed as ./save
+
+
 def cmd_map(args) -> int:
+    if args.path in MAP_ACTIONS:
+        return _cmd_named_map(args)
+    if args.name is not None or args.trace:
+        print("error: a second argument and --trace go with `map save NAME` (saved maps: map save|show|list)",
+              file=sys.stderr)
+        return 2
+    repo = Path(getattr(args, "repo", None) or args.path).resolve()
+    _need_graph(repo)
+    got = _map_result(args, repo)
+    if isinstance(got, int):
+        return got
+    res, failed = got
+    if args.json:
+        _write(_dump(res))
+        return 2 if failed else 0
+    _r_map(args, res)
+    if failed and args.view == "repo":
+        print("error: a --target is not a file of the graph (see above); pass a repository-relative path",
+              file=sys.stderr)
+    elif failed:
+        print("error: a --target did not name one symbol exactly (see above); pass it as path/file.py::Name or a "
+              "node id", file=sys.stderr)
+    return 2 if failed else 0
+
+
+def _cmd_named_map(args) -> int:
+    """``map save NAME`` (a trace or map result kept under a name), ``map show NAME``, ``map list``."""
+    from verinoda import named_maps as nm
+
+    repo = Path(args.repo).resolve() if args.repo else find_repo_root()
+    view_args = [f for f, v in (("--view", args.view), ("--target", args.target), ("--base", args.base),
+                                ("--max-tokens", args.max_tokens)) if v is not None]
+    # like plain `map`, an argument that would be ignored is refused
+    stray = ["NAME"] if args.path == "list" and args.name else []
+    if args.path != "save":
+        stray += (["--trace"] if args.trace else []) + (["--mode"] if args.mode != "flow" else []) + view_args
+    elif args.trace:
+        stray += view_args
+    elif args.mode != "flow":
+        stray.append("--mode")
+    if stray:
+        print(f"error: `map {args.path}` does not take {', '.join(stray)}"
+              + (" with --trace (a trace or a view, not both)" if args.path == "save" and args.trace else ""),
+              file=sys.stderr)
+        return 2
+    if args.path == "list":
+        res = nm.listing(repo)
+        _emit(args, res, lambda r: _write(nm.render_list(r)))
+        return 0
+    if not args.name:
+        print(f"error: `map {args.path}` needs a NAME", file=sys.stderr)
+        return 2
+    if args.path == "show":
+        res = nm.read(repo, args.name)
+        if args.json:
+            _write(_dump(res))
+        else:
+            _write(nm.render(res))
+            if res.get("result") is not None:
+                print()
+                if res["kind"] == "trace":
+                    _r_trace(res["result"])
+                else:
+                    _r_map(argparse.Namespace(view=(res.get("args") or {}).get("view"), max_lines=args.max_lines),
+                           res["result"])
+        return {"current": 0, "stale": 1, "unknown": 1}.get(res["status"], 2)
+    try:
+        name = nm.check_name(args.name)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _need_graph(repo)
+    from verinoda import freshness, index, retrieval
+
+    if args.trace:
+        source, target = args.trace
+        fresh = freshness.check(repo)
+        result = retrieval.trace(index.load(repo), source, target, mode=args.mode, stale=fresh["files"])
+        if result["status"] != "found":
+            _r_trace(result)
+            print(f"error: not saved: the trace is {result['status']!r}", file=sys.stderr)
+            return 2
+        kind, saved_args = "trace", {"source": source, "target": target, "mode": args.mode}
+    else:
+        got = _map_result(args, repo)
+        if isinstance(got, int):
+            return got
+        result, failed = got
+        if failed:
+            _r_map(args, result)
+            print("error: not saved: a --target did not resolve (see above)", file=sys.stderr)
+            return 2
+        fresh = freshness.check(repo)
+        kind = "map"
+        saved_args = {k: v for k, v in (("view", args.view), ("target", args.target), ("base", args.base),
+                                        ("max_tokens", args.max_tokens)) if v}
+        # no --target: the views took the working-tree changes; the targets they used make the map again
+        used = {"impact": ("impact", "targets"), "repo": ("repo", "focus")}.get(args.view)
+        used = (result.get(used[0]) or {}).get(used[1]) if used else None
+        if not args.target and used:
+            saved_args["target"] = list(used)
+            saved_args.pop("base", None)
+    try:
+        res = nm.save(repo, name, kind, saved_args, result, stale=fresh.get("files") or ())
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(f"saved map {r['name']} ({r['kind']}) to {r['path']}: snapshot {r['snapshot']}"
+                                     + (f", commit {r['commit'][:12]}" if r.get("commit") else "")
+                                     + f", {r['cited_files']} cited file(s)"
+                                     + (f"\n note: {r['note']}" if r.get("note") else "")
+                                     + f"\n read it back: verinoda map show {r['name']}"
+                                     + f"\n share it (.verinoda is git-ignored): git add -f {r['path']}"))
+    return 0
+
+
+def _map_result(args, repo: Path):
+    """``(views, failed)`` of ``verinoda map`` (or the exit code of a bad argument)."""
     from verinoda import architecture_map as am
     from verinoda import freshness, index
 
-    repo = Path(getattr(args, "repo", None) or args.path).resolve()
-    _need_graph(repo)
     g = index.load(repo)
     fresh = freshness.check(repo)
     # a target the user named that does not name one symbol exactly is an error, never a guess
@@ -833,9 +964,10 @@ def cmd_map(args) -> int:
         res = am.build_map(g)
     for v in res.values():
         v.update(freshness.summary(fresh))
-    if args.json:
-        _write(_dump(res))
-        return 2 if failed else 0
+    return res, failed
+
+
+def _r_map(args, res: dict) -> None:
     from verinoda import map_text
 
     # all views at once: a short summary of each; one view: more lines of it
@@ -858,13 +990,6 @@ def cmd_map(args) -> int:
         print()
     if not args.view:
         print("one view in more detail: --view NAME [--max-lines N]; everything: --json")
-    if failed and args.view == "repo":
-        print("error: a --target is not a file of the graph (see above); pass a repository-relative path",
-              file=sys.stderr)
-    elif failed:
-        print("error: a --target did not name one symbol exactly (see above); pass it as path/file.py::Name or a "
-              "node id", file=sys.stderr)
-    return 2 if failed else 0
 
 
 def cmd_review(args) -> int:
@@ -901,7 +1026,8 @@ def cmd_review(args) -> int:
                         since_last=args.since_last)
     finally:
         st.close()
-    _emit(args, res, lambda r: _write(rv.render_text(r)))
+    if not _emit_sarif(args, res, "review"):
+        _emit(args, res, lambda r: _write(rv.render_text(r)))
     return int(res["exit"])
 
 
@@ -920,6 +1046,23 @@ def cmd_coverage(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 4
     _emit(args, res, lambda r: _write(ci.render_text(r)))
+    return 0
+
+
+def cmd_sarif(args) -> int:
+    from verinoda import sarif
+
+    repo = _repo(args)
+    if args.limit < 1:
+        print("error: --limit must be a positive number", file=sys.stderr)
+        return 2
+    paths = [_rel_in_repo(repo.resolve(), p, "--path") for p in args.path or []]
+    res = sarif.report(repo, _report_args(repo, args.files), paths or None, limit=args.limit)
+    _emit(args, res, lambda r: _write(sarif.render_text(r)))
+    if not any("runs" in x for x in res["sarif"]):
+        print("error: no SARIF file read: " + "; ".join(f"{x['file']}: {x.get('error')}" for x in res["sarif"]),
+              file=sys.stderr)
+        return 4
     return 0
 
 
@@ -1258,6 +1401,25 @@ def cmd_docs(args) -> int:
         res["exit"] = 1 if res["broken"] or res["changed"] or res["renamed"] or res["moved"] else 0
     _emit(args, res, lambda r: print(docrefs.render(r)))
     return res["exit"]
+
+
+def cmd_context(args) -> int:
+    from verinoda import scoped
+
+    repo = _repo(args)
+    if not (repo / ".verinoda").is_dir():
+        print(f"note: {repo} has no .verinoda/ folder: only rules and decision records found by path are read",
+              file=sys.stderr)
+    res = scoped.for_file(repo, args.file)
+
+    def render(r: dict) -> None:
+        if r.get("outside"):
+            print(f"{r['file']} is outside the project {repo}")
+        else:
+            print(scoped.text(r, limit=None) or f"nothing in this project names {r['file']}")
+
+    _emit(args, res, render)
+    return 2 if res.get("outside") else 0
 
 
 def cmd_owners(args) -> int:
@@ -1735,7 +1897,8 @@ def _decide_check(args, repo: Path) -> int:
         return 2
     if note:
         res["index"] = note
-    _emit(args, res, _r_decide_check)
+    if not _emit_sarif(args, res, "decide check"):
+        _emit(args, res, _r_decide_check)
     return res["exit"]
 
 
@@ -2489,6 +2652,36 @@ def _r_debug_strategy(r: dict) -> None:
         print(f"  limit: {ln}")
 
 
+def _r_debug_flaky(r: dict) -> None:
+    rec = r["recorded"]
+    print(f"recorded: {rec['runs']} run(s), {rec['tests']} test(s); a fix holds after {r['verify_runs']} passes "
+          "in a row on a changed tree")
+    for title, key in (("flaky (both outcomes on one tree)", "flaky"), ("held since the last failure", "held")):
+        if r.get(key):
+            print(f"{title}:")
+        for e in r.get(key) or []:
+            tag = " [quarantined]" if e.get("quarantined") else ""
+            print(f"  {e['test']}{tag}  pass rate {e['pass_rate']} ({e['passed']}/{e['runs']})"
+                  + (f"  at {e['at']}" if e.get("at") else ""))
+            print(f"      {e['finding']}")
+    for p in r.get("pending") or []:
+        print(f"  not yet held: {p['test']} ({p['passes']} of {p['of']} passes)")
+    if r.get("quarantine"):
+        print("quarantine (yours):")
+    for q in r.get("quarantine") or []:
+        state = f"{q.get('now')}, pass rate {q['pass_rate']} over {q['runs']} run(s)" if q["runs"] else "no runs"
+        print(f"  {q['test']}  {state}" + (f"  - {q['reason']}" if q.get("reason") else ""))
+    if r.get("quarantine_candidates"):
+        print(f"  not quarantined: {', '.join(r['quarantine_candidates'][:5])} (`verinoda debug quarantine TEST`)")
+    t = r.get("test")
+    if t:
+        print(f"{t['test']}: {t.get('next_step') or str(t['passed']) + '/' + str(t['runs']) + ' passed'}")
+        for h in t.get("history") or []:
+            print(f"  {h['session']} #{h['attempt']} {h['kind']}: {h['outcome']} (tree {h['tree']})")
+    for ln in r.get("limits") or []:
+        print(f"  limit: {ln}")
+
+
 def _debug_command(args) -> list[str] | None:
     argv = list(getattr(args, "command", None) or [])
     if argv and argv[0] == "--":
@@ -2561,6 +2754,30 @@ def cmd_debug(args) -> int:
                     print(f"  not run: {ln}")
                 if r.get("basis"):
                     print(f"  basis: {r['basis']}")
+            _emit(args, res, render)
+            return 0
+        if sub == "flaky":
+            from verinoda import testhistory
+
+            try:
+                res = testhistory.report(st, repo, runs=args.runs, test=args.test)
+            except ValueError as exc:
+                raise SystemExit(f"error: {exc}")
+            _emit(args, res, _r_debug_flaky)
+            return 0
+        if sub == "quarantine":
+            from verinoda import testhistory
+
+            try:
+                res = testhistory.quarantine(st, args.test, remove=args.remove, reason=args.reason)
+            except ValueError as exc:
+                raise SystemExit(f"error: {exc}")
+
+            def render(r):
+                print(f"{r['test']}: {'quarantined' if r['quarantined'] else 'off the quarantine list'}"
+                      + ("" if r["changed"] else " (already)"))
+                if r.get("note"):
+                    print(f"  note: {r['note']}")
             _emit(args, res, render)
             return 0
         if sub == "differential":
@@ -2784,7 +3001,8 @@ def cmd_check(args) -> int:
             raise SystemExit("error: give PATHs or --diff, not both")
     res = codecheck.check(repo, args.paths or None, diff=args.diff, snippet=snippet, as_path=as_path,
                           env=args.env, include_exists=args.all, use_cache=not args.no_cache)
-    _emit(args, res, _r_check)
+    if not _emit_sarif(args, res, "check"):
+        _emit(args, res, _r_check)
     return int(res["exit"])
 
 
@@ -3224,8 +3442,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="after reading a changed note again: anchor it to the code as it is now; repeatable")
     sp.add_argument("--delete", action="append", metavar="SUBJECT",
                     help="delete a note (one whose code is gone, for instance); repeatable")
-    sp = add("map", cmd_map, "top-down architecture views", repo=False)
-    sp.add_argument("path", nargs="?", default=".")
+    sp = add("map", cmd_map, "top-down architecture views; `map save NAME [--trace SOURCE TARGET | --view V]` keeps "
+                             "one under a name, `map show NAME` reads it back with whether the files it cites "
+                             "changed since (exit 1 = stale), `map list` lists them", repo=False)
+    sp.add_argument("path", nargs="?", default=".",
+                    help="project root, or save|show|list (a project folder with such a name: ./save)")
+    sp.add_argument("name", nargs="?", help="with save or show: the map's name (.verinoda/maps/NAME.json)")
+    sp.add_argument("--trace", nargs=2, metavar=("SOURCE", "TARGET"),
+                    help="with save: keep the trace between two symbols (as `verinoda trace`) instead of a view")
+    sp.add_argument("--mode", choices=["flow", "any"], default="flow", help="with --trace: as for trace")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
                                        "cycles", "dead", "hotspots", "sides", "repo"],
@@ -3267,6 +3492,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--coverage", action="append", metavar="REPORT",
                     help="a coverage report (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON; repeatable): the "
                          "changed lines no test ran (default: the reports found at the usual paths)")
+    sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)
     sp = add("coverage", cmd_coverage, "coverage reports (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON) read "
                                        "into lines and symbols: what ran, what did not, which tests ran it; with "
                                        "--base-report the indirect coverage changes")
@@ -3277,6 +3503,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="the base version's report (repeatable): lines whose coverage changed")
     sp.add_argument("--base", help="with --base-report: the commit the working tree is compared with (default HEAD)")
     sp.add_argument("--limit", type=int, default=40, help="symbols shown (default 40)")
+    sp = add("sarif", cmd_sarif, "SARIF 2.1 files (a linter's, CodeQL's) read as evidence: each result a claim at "
+                                 "its file:line, the named tool's statement, not checked here (strong_inference "
+                                 "while the file is older than the SARIF file, else weak_inference); exit 4 = no "
+                                 "file read")
+    sp.add_argument("files", nargs="+", metavar="FILE", help="SARIF files to read")
+    sp.add_argument("--path", action="append", help="only results in these files or folders (repeatable)")
+    sp.add_argument("--limit", type=int, default=40, help="results shown (default 40)")
     sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
                                    "parameters, and near-duplicate functions with a similarity score")
     sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
@@ -3429,6 +3662,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="leave out documents matching this glob (repeatable), e.g. a vendored or template folder")
     c.add_argument("--fix", action="store_true", help="rewrite renamed paths and moved line numbers in place (the "
                                                       "reference's own characters only); the rest stays flagged")
+    sp = add("context", cmd_context, "what the project says about one file: decision records whose guards name it, "
+                                     "your notes on it or on a glob matching it (`scope:` in a note's header), "
+                                     "Cursor and Kiro rules for it (what the Read/Edit hook shows an agent)")
+    sp.add_argument("file", help="the file (repository-relative or absolute)")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
@@ -3582,6 +3819,7 @@ def build_parser() -> argparse.ArgumentParser:
     grp.add_argument("--base", metavar="REF", help="as --changed, against this git revision (e.g. origin/main)")
     c.add_argument("--no-refresh", action="store_true",
                    help="do not update a stale index first (edge guards: no_edge, layers, allow_edges, public)")
+    c.add_argument("--sarif", action="store_true", help=SARIF_HELP)
     c = add("brief", cmd_decide, "what a decision needs, from the code: forces with evidence, what is absent, "
                                  "decisions on record, options, and the questions only the user can answer (no "
                                  "recommendation)", parent=dsub)
@@ -3784,6 +4022,16 @@ def build_parser() -> argparse.ArgumentParser:
     c = add("observe", cmd_debug, "strategy: the repro once more under the call tracer (are the edits reached?)",
             parent=dsub)
     c.add_argument("--session")
+    c = add("flaky", cmd_debug, "each test's pass rate over the ledger's recorded runs: flaky tests, fixes that "
+                                "held for N passes, the quarantine list", parent=dsub)
+    c.add_argument("--runs", type=int, metavar="N", help="passes in a row on a changed tree a fix needs "
+                                                         "(default debug.rerun_times)")
+    c.add_argument("--test", metavar="ID", help="also this test's history")
+    c = add("quarantine", cmd_debug, "add a test to your quarantine list (or --remove it); Verinoda never skips "
+                                     "it", parent=dsub)
+    c.add_argument("test", metavar="TEST_ID")
+    c.add_argument("--remove", action="store_true")
+    c.add_argument("--reason")
 
     sp = add("observe", cmd_observe, "run tests under the call tracer (isolated copy) and summarise what they "
                                      "reached (exit 3 when the trace is incomplete)")
@@ -3852,6 +4100,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "something found; exit 4: no manifest read)")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
+    sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)
     sp.add_argument("--no-cache", action="store_true",
                     help="do not read or write .verinoda/cache/check (the environment's name index, kept per "
                          "environment in the user cache, is still used: delete its names-*.txt to rebuild it)")

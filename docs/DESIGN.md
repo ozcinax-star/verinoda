@@ -8957,6 +8957,386 @@ new; findings gone after a revert are listed and rendered; the CLI `--since-last
 a call moved to a new function is new and the exit code still counts the old one; a review of other concerns is
 not compared; findings past the per-concern cap are compared; in a project path with a space and non-ASCII. `tests/test_mcp.py` lists the new MCP argument.
 
+## 88. Glob-scoped context (D115, 2026-10-01)
+
+### 88.1 Why
+
+A rule about a part of the code ("the data layer is the only one that opens connections", "views never touch the
+database") is written down once, in a decision record, a note or an editor's rule file, and then nobody sees it
+at the moment it matters: when the agent opens a file it applies to. Kiro steering files and Cursor rules attach
+such text to globs; Verinoda's decision records already name files in their guards. This puts all of them in
+front of the agent when it reads or edits a matching file.
+
+### 88.2 Decisions
+
+- **`verinoda context FILE`** (CLI, `--json`) and MCP **`read_context`**, a hook call like D62's `grep_context`:
+  reached through `run_tool`, not listed, not advertised in the gateway's text; its answer is a Claude Code
+  PostToolUse hook output (`additionalContext`) or `{}` when nothing names the file or anything fails, so a Read
+  is never held up. The hooks template gains a `Read|Edit|MultiEdit|Write` entry that calls it with the tool's
+  `file_path` (opt-in, like the Grep hook). The server has one more tool: 40.
+- **Decision records**: an enforced record's accepted guard whose glob fields match the file (only_in
+  `allowed`, no_edge `from`/`to`, layers `order`, allow_edges `from`/`allowed`, public `module`/`api`; a
+  `tag:NAME` read as its committed globs, with the same `guards.glob_match` the checks use), and governed symbols
+  in the file. The item names the record, the guard and its record file. Whether the code keeps the record is
+  `decide check`'s question; this only says the record is about the file.
+- **Notes**: the user's notes anchored in the file, with their state (fresh, changed, gone); and notes scoped to
+  globs: a Markdown file in the notes folder whose header has `scope: GLOB[, GLOB]` and no `file:` (such a file
+  is not a regular note, so the notes view is unchanged).
+- **Other tools' rules**: Cursor's `.cursor/rules/*.mdc` with `globs:` and Kiro's `.kiro/steering/*.md` with
+  `inclusion: fileMatch` and `fileMatchPattern:`, in the project and, when the project is a folder of its
+  repository, at the repository's top (matched against the repository path). Always-on rules (`alwaysApply:
+  true`) are not listed: they are not about this file. Their globs are read as those tools read them: `**/` is no
+  folder or any number, `{ts,tsx}` either; front matter lists (flow or block), quoted values, a closing `---`
+  with trailing spaces or at the end of the file are read.
+- **Quoted, not summarised.** Each note or rule quotes its first line of text (a heading only when nothing else is
+  there; 160 characters) with `path:line`, and a decision guard is quoted as written (its spec), not with its tags
+  expanded. Scoped notes and rules come first (they are written for files like this one), then notes on the file,
+  then decision records; the hook's block is cut between items at 700 characters and says how many more `verinoda
+  context` shows (the CLI shows them all).
+- **Cheap on every Read.** The sources are parsed once and kept until one of their files changes (a stat of each
+  rule, note and record file, and the config files, per call); `read_context` takes no server lock, so a Read
+  never waits for an analyze.
+
+### 88.3 Measured
+
+Tests only.
+
+Review round (two reviewers): fixed `**/` and brace globs (fnmatch read `src/**/*.ts` as needing a folder),
+commas inside brace sets, quoted Kiro values, a closing `---` with spaces or at the end of the file, headings
+quoted instead of the rule, always-on rules with globs listed, workspace-level Cursor and Kiro rules not read,
+every source re-parsed on every hook call (0.5-0.8 s with 500 records), the server lock held by the hook, the
+CLI's messages for a path outside the project, and rewritten historical upgrade notes.
+
+### 88.4 Not done
+
+- Only the first line of a note or rule is quoted; the agent reads the file for the rest.
+- Decision guards are matched as `decide check` matches them (`guards.glob_match`), which can differ from the
+  editors' dialect in corner cases; that is deliberate, so the two never disagree about a guard.
+- Claims are not listed (a stale claim about the file shows in `verinoda update` and `analyze`).
+
+### 88.5 Tests
+
+`tests/test_scoped.py`: decision records (only_in and layers), a glob-scoped note, a Cursor rule and a Kiro
+steering file found for the files they name, an always-on rule left out, nothing for a file nothing names, an
+absolute path, a path outside the project; the text cap; the MCP hook output and `{}`, and the CLI, in a project
+path with a space and non-ASCII. `tests/test_mcp.py`: the tool's parameters, the gateway's hidden tools and the
+hooks template's Read/Edit entry.
+
+## 89. SARIF in and out, CI check status (D116, 2026-10-01)
+
+### 89.1 Why
+
+GitHub code scanning, and most CI dashboards and editors, read SARIF. Verinoda's `review`, `check` and `decide
+check` findings were only text or Verinoda's own JSON, so they could not show up next to CodeQL's or a linter's
+results on a pull request; and a linter's or CodeQL's SARIF could not be read as evidence alongside Verinoda's own
+claims. Copilot review and Code Pathfinder both speak SARIF.
+
+### 89.2 Decisions
+
+- New module `verinoda/sarif.py`; no new MCP tool and no new MCP argument (the core menu and the tool count are
+  unchanged, so UPGRADING's tool count does not change).
+- **Out**: `--sarif` on `review`, `check` and `decide check` prints one SARIF 2.1.0 log (one run) instead of the
+  text or `--json`; the exit code is the command's own, so a CI step fails or passes as before, and the log is
+  uploaded with `github/codeql-action/upload-sarif`. `automationDetails.id` is `verinoda/<command>/` so the three
+  uploads stay separate categories in code scanning.
+  - Rule ids: `review/<concern>/<rule>` (plus `review/tests/uncovered-changed-lines`), `decide/<decision>/<guard>`,
+    `check/<verdict>/<site kind>`; `ruleIndex` set on every result.
+  - Location: the finding's `file:line`, `file:line-end` or `file:line:col` as a relative `uri` (percent-encoded)
+    under `%SRCROOT%`; a bare file path has no region. A finding cited at a symbol (`file::Name`) or at nothing is
+    not written and is counted in the run's `properties.not_exported`, never silently dropped.
+  - Level from the claim status: verified statuses `error`, `strong_inference` `warning`, `weak_inference` and
+    `unknown` `note`. A review finding is something to read, not a defect, so it is a `warning` at most. `check`
+    sites: `absent` is `statically_verified` (the closed-world rule plus the resolver) when the container is the
+    standard library or the project's own code, else `strong_inference` (an installed package, a stub, a
+    classpath or the environment's `sys.path`: what was installed or built here, which CI's may not match);
+    `not_installed` `strong_inference` (CI's environment may differ), `unknown` `unknown`; `guarded` and
+    `exists` are not written.
+  - `review`: an `introduced` finding is `baselineState: new`, a `preexisting` one `unchanged`; findings past the
+    review's per-concern cap are counted in `properties.not_listed`, the review's unknowns in
+    `properties.unknowns`.
+  - `properties` carry `status` and, when present, `evidence_at`, `basis`, `derived_by`, `delta`, `verdict`,
+    `since`, `rank`.
+  - `decide check`: with a base, a violation, possible violation or review is `baselineState: new` or
+    `unchanged` as its own `since` says (new/touched or pre-existing); a
+    violation the baseline lists or a waiver covers is written with an `external` suppression and its reason
+    (still there, not failing). Governed symbols to review are notes when they have a file location; triggers
+    have none and are counted as not exported.
+- **In**: `verinoda sarif FILE... [--path P] [--limit N] [--json]` reads SARIF 2.1 files the way
+  `coverage_import` reads coverage reports. Each result becomes a claim `<tool> reports <rule> (<level>): <message>`
+  at its first physical location, with `stated_by`, `rule`, `level`, the innermost definition around the line
+  (`coverage_import.facts_of`/`symbol_of`), and `evidence_at` = the location and the SARIF file. It is the named
+  tool's statement, not checked here: `strong_inference` while the SARIF file is newer than the file it names,
+  `weak_inference` when the file changed after it. Errors first, then warnings, notes.
+  - Paths: a relative uri, one under a `uriBaseId` from `originalUriBaseIds`, an `artifacts[index]` entry, a
+    `file://` uri under the repository or under one of the run's `originalUriBaseIds`; else, only for an absolute
+    path that exists nowhere on this machine and has no third-party folder in it (`site-packages`,
+    `node_modules`, `vendor`...), the longest suffix of the path that is a repository file (a CI runner's path).
+    A suffix tie is a guess: the claim is `weak_inference` and names the original uri. A relative uri that is
+    not a repository file, and a file that exists here outside the repository, are not in the repository. `..`
+    never leaves the repository. Each distinct location is resolved once per run.
+  - Rules: `ruleIndex` / `rule.index` in the driver, or in `tool.extensions[rule.toolComponent.index]` (CodeQL),
+    else by id; the level is the result's when it is one of the four SARIF levels, else the rule's
+    `defaultConfiguration.level`, else `warning`.
+  - Messages: `message.text`, else the rule's `messageStrings[id]` with `{0}`... arguments filled in one pass
+    (`{{` and `}}` are literal braces), else the rule's description; clipped to 300 characters.
+  - Counted, not listed: suppressed results (a suppression with no status or `accepted`; `rejected` and
+    `underReview` do not hide a result), `pass` / `notApplicable`, `baselineState: absent` (fixed), results
+    without a physical location, results outside the repository (the first 20 uris listed), outside `--path`,
+    and results that cannot be read (`unreadable`, with one example): a malformed result does not stop its run.
+  - A file that is not SARIF 2.1, not JSON, missing or over 100 MB is an error entry, never a crash; exit 4 when
+    no file was read.
+
+### 89.3 Measured
+
+- The review fixture (one changed function that gained a `subprocess.run`): `review --sarif` exits like
+  `review --json`, every concern finding is either a result at `cart.py` or counted in `not_exported`, all levels
+  `warning` or `note`.
+- The logs pass a SARIF 2.1.0 schema subset written in the test (types, required keys, level, suppression kind
+  and baseline state enums, region minimums, rule ids unique and `ruleIndex` consistent, relative posix uris).
+- An exported log read back with `verinoda sarif` gives Verinoda's own findings as `stated_by: Verinoda` claims.
+- A real `check --sarif` on `os.pathh` gives `source: stdlib`, `statically_verified`, `error`.
+
+Review round: CodeQL's rules in `tool.extensions` are now found through `rule.toolComponent`, so their default
+level and `messageStrings` apply (before, every such result was a `warning`). The suffix tie is limited to
+absolute paths that exist nowhere here and lie under no third-party folder, and is `weak_inference` (before, a
+relative uri or a sibling project's file could be tied to a repository file by its bare name, as
+`strong_inference`). `decide check` takes `baselineState` from each finding's `since` (a pre-existing possible
+violation was `new`); `review` sets it from `delta` and counts findings past its per-concern cap and its
+unknowns. An `absent` check site is verified only against the standard library or the project's own code.
+Rejected and under-review suppressions no longer hide a result. A non-string level, a boolean `startLine` and a
+malformed result no longer crash or cut the run short (one malformed result among three: two claims and
+`unreadable: 1`, where the rest of the run used to be lost). Message arguments are filled in one pass. Each
+location is resolved and stat'ed once per run (50 results on one file: one lookup).
+
+### 89.4 Not done
+
+- Not uploaded or validated against GitHub here (no network): the shape follows the SARIF 2.1.0 schema and the
+  fields GitHub documents; a file-level location (no line) is valid SARIF but code scanning shows it at the file.
+- No `partialFingerprints`: `upload-sarif` computes them from the file contents.
+- Import reads the first physical location of a result; related locations, code flows and logical locations are
+  not read; `review` does not yet take imported SARIF results on its changed lines (a next step: a `--sarif-in`
+  like `--coverage`).
+- Levels follow how sure a statement is, not how severe it is; no `security-severity` is set.
+- A path from another machine that matches two repository files by suffix takes the longest suffix that exists;
+  with equal suffixes the first one found wins. The suffix can be the bare file name (a file at the repository
+  root), which is why such a claim is `weak_inference`.
+- The test of a real `review --sarif` checks that at least one result is written and that the log passes the
+  schema subset; it is not checked against GitHub's own SARIF validator (no network).
+
+### 89.5 Tests
+
+`tests/test_sarif.py`: a schema subset validator (and that it rejects a broken log); review findings at their
+lines, a warning at most, a symbol-cited finding counted in `not_exported`; `decide check` violations as errors,
+possible ones as notes, `baselineState`, baselined and waived ones suppressed; `check` verdicts to levels with
+columns, guarded sites left out; a path with spaces and non-ASCII as a valid uri; `check --sarif` through the CLI
+with its exit code; ruff-like and CodeQL-like SARIF read as claims (rule by index, `messageStrings`, artifacts,
+`originalUriBaseIds`, suppressed, pass, absent, no location, outside the repository); a file changed after the
+SARIF is weak; an absolute CI path tied by suffix and `--path`; an exported log read back; broken files as errors;
+`verinoda sarif` CLI (`--json`, text, exit 4); a real `review --sarif` in a git worktree with at least one
+result. Review round: the review cap and unknowns counted and `delta` as `baselineState`; a pre-existing possible
+violation `unchanged`; an installed-package `absent` site `strong_inference`; CodeQL extension rules (level and
+message); suffix ties limited (a file here, a `site-packages` path, a relative uri: not tied; a CI path: weak);
+rejected and under-review suppressions; an invalid level, a boolean line and a malformed result in one run;
+one-pass message arguments with escapes; one path lookup per location. Also run:
+`tests/test_cli.py`, `tests/test_docs.py`, `tests/test_line_endings.py`, `tests/test_decide.py`,
+`tests/test_codecheck.py`.
+
+## 90. Flaky test history (D117, 2026-10-01)
+
+### 90.1 Why
+
+`debug rerun` measured a pass rate for one series and one repro command, then the per-test picture was gone:
+the next session could not say which tests had flipped before, a user had nowhere to keep "this test is known
+flaky", and nothing said when a failing test's change had held long enough to trust. Test-optimization tools
+(Datadog Test Optimization) keep per-test history across runs, a quarantine list and "fixed after N reruns". This
+decision keeps that history locally, from the runs the debug ledger already makes.
+
+### 90.2 Decisions
+
+- **Where the rows come from.** Every debug-ledger attempt Verinoda runs itself (`debug start`, `try`, `rerun`,
+  `differential`, `bisect`, `observe`) that passed or failed writes one `test_runs` row per test, from the
+  per-test outcomes the failure-signature plugin already records (`passed`/`xpassed` -> pass, `failed`/`error`
+  -> fail; skipped and xfailed tests are not rows). A runner without per-test outcomes (Go, Cargo, a script)
+  writes one row for the command (`$ <command>`, pytest's output-only options left out). Agent-reported runs
+  never count (as in `debug rerun`), and timeouts and inconclusive runs leave no rows: their per-test outcomes
+  may be partial.
+- **Schema v7** (`store.py`): `test_runs` (attempt, session, test, outcome, kind, tree hash, evidence id;
+  unique per attempt and test, so recording twice adds nothing) and `test_quarantine` (one row per add or
+  remove; the latest row per test is its state). Both are append-only (delete/update triggers). Attempts
+  recorded before v7 are added the first time the history is read (`sync`), so an upgraded project keeps its
+  ledger's history; runs are read in the attempts' order (time, then attempt row), not the rows' insertion order.
+- **Flaky** = one tree (the ledger's tree hash) has both a passing and a failing run of the test. Failures on one
+  tree and passes on another are a change, not flakiness.
+- **Held** (the row's "fix verified by N reruns") = the test passed the last N recorded runs of the working tree
+  in a row since its last failure there, each on a tree no run of it ever failed on. A pass on a failing tree
+  makes the test flaky there, not fixed. Runs of other commits (`bisect`, `differential`, any run copied from a
+  commit) never count toward held: an older commit passing says nothing about the newest one. N is
+  `debug.rerun_times` (5), `--runs N` (1 or more; 0 or less is an error) overrides. Fewer passes are listed as "not yet held
+  (k of N)". The word is "held", never "fixed": the debug ledger's rule that Verinoda never says fixed stands.
+- **Quarantine is the user's list.** `verinoda debug quarantine TEST [--remove] [--reason]` logs the decision;
+  `debug flaky` shows each quarantined test's state (flaky, held, passing, failing, no runs) and lists flaky
+  tests not on the list as candidates. Verinoda never skips, deselects or reruns a test because it is quarantined.
+- **Claims.** Flaky and held entries carry `status: strong_inference`, the finding in words, `evidence` (up to
+  three evidence ids of the runs: a failing and a passing run of the flaky tree; the last failure and the last
+  pass of a held test) and `at` (the test's `path:line` in the working tree, found by its `def`). Pass rates and
+  counts are counts of recorded rows.
+- **Surfaces.** CLI only: `debug flaky [--runs N] [--test ID] [--json]` and `debug quarantine`. `debug rerun`
+  adds `tests_both_outcomes` (the tests that passed and failed within that series) when there are any. No MCP
+  tool or argument was added (the core menu is unchanged).
+- **Lists** (flaky, held, pending, quarantine, candidates) are capped at 20 (`truncated: true` when cut);
+  `--test ID` adds that test's last 20 runs. `at` is looked up only for the entries shown, each file read once.
+- **`debug quarantine --json`** has one shape on every path: `test`, `quarantined`, `changed`, `recorded_runs`,
+  `reason`, `since`, and a `note` for an unknown id or a new reason given for a test already on the list (the
+  logged reason stays; remove and add again to change it).
+
+### 90.3 Measured
+
+- Synthetic store (scratch script, this machine under load): 2,000 tests x 10 runs. Recording one run's 2,000
+  rows: 22 ms. `report` over 20,000 rows: 201 ms. The JSON answer with every list at its cap: 6,890 characters.
+- End to end (`tests/test_testhistory.py`): a copy of `examples/orders_app` with a test that fails every second
+  run; `debug start` + `debug rerun --times 2` give pass, fail, pass; `debug flaky` lists exactly that test,
+  pass rate 0.67, at `tests/test_flip.py:4`, with two evidence ids; the always-passing `test_pricing.py`
+  tests of the same runs are not listed.
+- Not measured: a real flaky suite over weeks of sessions.
+
+Review round: a review found that bisect and differential passes on older commits could make a test still
+failing at HEAD "held", that attempts added by `sync` sorted after newer live ones (a false "held" after an
+upgrade), that `at` read the test file again for every flaky test before the cap (5.12 s for one 2,000-test
+file), that the quarantine list was not capped, that `--runs 0`/`-3` were silently replaced, and that the
+`quarantine --json` keys changed with the path. All six are fixed, each with a test. Re-measured: one 2,000-test
+file, 4 runs on one tree with every test flipping, in a directory with spaces and non-ASCII characters:
+`report` 162 ms, 20 entries, 7,254 JSON characters.
+
+### 90.4 Not done
+
+- Only runs made through the debug ledger are recorded; `experiment run`, `analyze --run-tests` and
+  `review --run-tests` do not write per-test rows (they do not load the failure-signature plugin).
+- Flaky needs both outcomes on one tree: a test that failed once on a tree run only once is not flaky yet.
+  N passes never prove a cause is gone; the history is this machine's.
+- "Held" reads the working tree's runs in the order they ran; a `bisect` or `differential` run neither counts
+  toward it nor restarts it, but a failure it records on a tree makes a later pass on that tree no held fix.
+  Two attempts made in the same second in different sessions are ordered by when they were stored.
+- A pytest id parametrised over absolute paths is normalised by the failure signature; other run-to-run id
+  changes (a renamed test) start a new history.
+- The quarantine list is not consulted by the debug ledger's loop rules, `close` or any run.
+
+### 90.5 Tests
+
+- `tests/test_testhistory.py` (14): flaky on one tree vs a change across trees; held after N passes on a changed
+  tree, pending below N, undone by a later failure; a pass on the failing tree is flaky, not held; only
+  Verinoda's pass/fail runs are recorded and a runner without per-test ids counts as its command (output-only
+  pytest options ignored); recording twice adds nothing, older attempts are added on read, both tables are
+  append-only; the quarantine log (add, already, remove, unknown id note, errors, state, candidates); a test's
+  `path:line`; a v6 database migrates to v7; bisect and differential passes never hold a fix; a pass on a tree
+  that failed before is not held; attempts added on read keep their run order; every list including the
+  quarantine is capped and files are read only for shown entries; `--runs` below 1 is an error; end to end a real `debug rerun` series plus the CLI (`debug
+  quarantine`, `debug flaky` text and `--json --test`).
+- Run: `tests/test_testhistory.py`, `tests/test_debug.py` (48), `tests/test_cli.py`, `tests/test_buildinfo.py`,
+  `tests/test_store.py`, `tests/test_docs.py` (one expected failure: UPGRADING.md lacks v7, see above),
+  `tests/test_line_endings.py`.
+
+## 91. Named flow maps (D118, 2026-10-01)
+
+### 91.1 Why
+
+A trace or a map view an agent worked out ("how an order request reaches the repository") is gone when the
+session ends; the next agent, or a reviewer, runs it again or trusts a copy pasted into a note that nobody
+checks. Windsurf/Devin Codemaps keep such maps by name. Here a saved map is citable by name, and reading it back
+says whether the code it describes is still the code: an old map is never presented as current.
+
+### 91.2 Decisions
+
+- **No new command or tool: `map` gets three actions, MCP `map_view` one view.** `verinoda map save NAME
+  [--trace SOURCE TARGET [--mode] | --view V [--target ...] [--base] [--max-tokens]]` (neither: the default
+  views), `map show NAME`, `map list`. The first positional of `map` is the project folder; `save`, `show` and
+  `list` there are the actions (a project folder with such a name is passed as `./save` or `--repo`). The MCP
+  read is `map_view` with `view: saved`, `targets: [NAME]` (none: the list), reached through `run_tool` in the
+  core profile: the core menu grows by six characters (`|saved`), no tool and no argument is added, the tool
+  count stays as it is.
+- **What is saved is the `--json` result the command prints**, with the arguments that made it, under
+  `.verinoda/maps/NAME.json` (`verinoda.named_map/1`), the index's latest snapshot id and commit, and for each
+  file the result cites the sha256 **the snapshot recorded** - not the file on disk: the result describes the
+  indexed version. A file is cited when a string or key of the result names a snapshot path, alone or as
+  `path:LINE`, `path:A-B` or `path::Symbol`, as the whole string or as a word of a longer one (the tests view
+  writes `"apply_discount() (orders/pricing.py:11)"` and `"orders/repository.py:9 .__init__()"`). The
+  index-freshness keys of the result (`stale_count`, `stale_files`, `index_freshness`) are dropped before the
+  citations are read and are not saved: a file is never cited because it changed since the index; a cited file that had changed since the
+  index when saving is recorded as `stale_at_save` and makes the map read back stale at once.
+- **Reading back hashes the cited files again** (stat-cached, `snapshot.hash_files`): `current` when each has the
+  recorded hash, `stale` when one changed or is gone, `unknown` when the map cites no file (an empty cycles or
+  sides view, an impact view of a clean tree): nothing was compared, so the claim is `unknown`, not
+  `primary_source_verified`, and the next step is the command that makes the map from the code now. The answer carries `as_of` (snapshot, commit, saved_at),
+  the changed files (up to 20, with the exact count), one `primary_source_verified` claim stating the hash
+  comparison (evidence: each changed file with its saved hash prefix and `modified`/`removed`), the command
+  that makes the map again, and `limits`. The saved result is returned as it was, under `result`, after those
+  keys; in the MCP answer `status`, `name`, `as_of`, the changed files, the claim and the next step are kept
+  first and are never cut before the saved result.
+- **Refused, not saved**: a trace that is not `found`, a view whose `--target` did not resolve (exit 2), a name
+  that is not 1-64 letters, digits, `.`, `_`, `-` starting with a letter or digit (no path can be formed from
+  it). Saving under an existing name replaces the map (written to a temporary file, then renamed).
+- **Exit codes of `map show`**: 0 current, 1 stale (for CI: a map cited in a document that no longer holds),
+  1 also for unknown (it cannot be shown current), 2 not found, invalid name, or a map file that is not a
+  valid saved map (not JSON, `files` not a map of repository-relative paths to sha256 hashes); such a file is
+  listed as `invalid` and never stops the other maps from being listed.
+- **Names are exact, and names that differ only in case are refused**: `maps/` ignores case on Windows and
+  macOS, so `map save T1` beside `t1` would replace it; it is refused (exit 2) and `map show T1` finds only a
+  file named exactly `T1.json`.
+- **An impact or repo view saved without `--target`** took its targets from the working-tree changes; the
+  targets it used are saved as its `target` argument, so the re-run command makes the same map.
+- **Arguments that would be ignored are refused** (exit 2), as plain `map` does: `--trace` with a view
+  argument, `--mode` without `--trace`, any view or trace argument with `show` or `list`, a name with `list`.
+- **Sharing**: `.verinoda/` is git-ignored as a whole (`.verinoda/.gitignore` is `*`), so a map is shared by
+  committing it explicitly: `git add -f .verinoda/maps/NAME.json` (printed by `map save`); once tracked, later
+  saves show up as changes.
+
+### 91.3 Measured
+
+On a scanned copy of `examples/orders_app`: the trace `create_order_handler -> OrderRepository.save` saves as
+1,821 bytes citing 3 files; the default views (`map save all`) as 21,953 bytes citing 11 files. Reading either
+back took about 0.04 s. The MCP answer for the trace is 1,828 characters, for all default views 11,678 (cut
+to the 12,000 cap with the status keys first). Core menu: 4,444 characters (limit 4,500).
+
+Review round: the citations were read as whole strings only, so a saved tests view cited 0 of the 6 files
+it names and read `current` after any edit; it now cites them (per view on the scratch copy: hierarchy 11,
+dependencies 7, dataflow 3, config 5, tests 6, history 11, repo 7, dead 2, hotspots 5; cycles, sides and a
+clean-tree impact view 0 and read `unknown`). The freshness keys decided the citations before being dropped
+(a cycles view saved beside an edited `orders/pricing.py` read stale); they are now dropped first. Also fixed:
+a map citing nothing read `current`; an impact view without `--target` did not keep its targets; `T1` replaced
+`t1`; a broken map file crashed `map show` and `map list`; an unreadable index gave a traceback with exit 1;
+ignored arguments passed silently. `git add -f` on a saved map stages it (checked on the scratch copy).
+
+### 91.4 Not done
+
+- `current` means only that the files the map cites are as they were. A file it does not cite can change what
+  a new run returns (a new path through a new file, a new dependent of an impact target, a new folder in the
+  hierarchy); the read says so in `limits`. A whole-project view cites most files and goes stale with almost any
+  change.
+- A file is cited only when a string of the result names it; a view that names a folder or a package (the
+  hierarchy's folder rows) is checked through the files it does name.
+- The saved result is not re-run or migrated: a map saved by an older Verinoda keeps that version's shape.
+- An impact view saved without `--target` cites the changed files it was computed from, so it reads back
+  stale until the change is indexed and the map saved again.
+- A map file is checked for shape when read, not for having been written by Verinoda: a hand-edited hash
+  only makes the map read stale.
+- Saving is CLI only; agents read maps by name but do not write them (no write tool behind the core menu).
+
+### 91.5 Tests
+
+`tests/test_named_maps.py`: citation of `path:LINE`, `path:A-B`, `path::Symbol` and keys; name checks; a trace
+saved through the CLI reads current, stays current when an uncited file changes, goes stale (exit 1, the file
+named, the claim's evidence, the re-run command, the result kept) when a cited file changes or is removed; a
+view saved, listed, shown and replaced; a map saved from a file changed since the index reads stale; refusals
+(unresolved trace, bad name, missing name, stray argument, unknown map, empty list); MCP `map_view` saved view
+(read, list, two targets, bad name, unknown name, a small response cap keeping the status first).
+Review round: citations inside longer strings; a saved tests view cites the files it names and goes stale on
+an edit to one; a view saved beside an unrelated stale file cites nothing from it and reads `unknown` (exit 1);
+an impact view without `--target` keeps its targets; a name differing only in case is refused; broken map
+files (list `files`, a `../` path, not JSON) read `invalid` (exit 2) and are listed without hiding the
+others, also through MCP; an unreadable index does not crash a read and refuses a save; ignored arguments are
+refused.
+Also run: `tests/test_mcp.py` (view enum, core menu under 4,500), `tests/test_docs.py`, `tests/test_cli.py -k
+"map or trace or help"`, `tests/test_architecture_map.py`, `tests/test_line_endings.py`.
+
 ## Sources
 
 - **Retrieval:**

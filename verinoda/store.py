@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 class SchemaTooNew(RuntimeError):
@@ -515,8 +515,42 @@ CREATE TRIGGER IF NOT EXISTS no_update_debug_attempts BEFORE UPDATE ON debug_att
 BEGIN SELECT RAISE(ABORT, 'debug attempts are append-only'); END;
 """
 
+# v7: per-test outcomes of the debug ledger's runs (one row per test per attempt Verinoda ran) and the quarantine
+# list the user keeps (one row per add or remove; the latest row per test is its state). Both append-only.
+_SCHEMA_V7 = """
+CREATE TABLE IF NOT EXISTS test_runs (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    attempt_id TEXT NOT NULL REFERENCES debug_attempts(id),
+    session_id TEXT NOT NULL,
+    test TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (outcome IN ('pass','fail')),
+    kind TEXT NOT NULL,
+    tree_hash TEXT,
+    evidence_id TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (attempt_id, test)
+);
+CREATE INDEX IF NOT EXISTS idx_test_runs_test ON test_runs(test, seq);
+CREATE TRIGGER IF NOT EXISTS no_delete_test_runs BEFORE DELETE ON test_runs
+BEGIN SELECT RAISE(ABORT, 'test runs are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_test_runs BEFORE UPDATE ON test_runs
+BEGIN SELECT RAISE(ABORT, 'test runs are append-only'); END;
+CREATE TABLE IF NOT EXISTS test_quarantine (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    test TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('add','remove')),
+    reason TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_test_quarantine_test ON test_quarantine(test, seq);
+CREATE TRIGGER IF NOT EXISTS no_delete_test_quarantine BEFORE DELETE ON test_quarantine
+BEGIN SELECT RAISE(ABORT, 'the quarantine log is append-only; remove a test with a new row'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_test_quarantine BEFORE UPDATE ON test_quarantine
+BEGIN SELECT RAISE(ABORT, 'the quarantine log is append-only'); END;
+"""
+
 _MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5,
-                               6: _SCHEMA_V6}
+                               6: _SCHEMA_V6, 7: _SCHEMA_V7}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",
