@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D158)
+## Upgrading from 0.4.0 (D137-D159)
 
 ### D137: Trigram regex index
 
@@ -236,6 +236,13 @@ menu is 23 characters shorter than before. Re-run `verinoda setup` only if a cli
 callers: `graphquery.run` takes an object query (`query=`, from `graphquery.build`), a shared context (`ctx=`) and
 the asked route (`route=`); its text form and results are unchanged. `testmap.mapping_current` is the rule
 `testmap.affected` used inside; nothing else changed there. Nothing to migrate: tq writes nothing.
+
+### D159: Typed questions, batched
+
+New command `verinoda tq` and MCP tool `tq` (41 tools; through `run_tool` in the core profile). The core menu's
+`history_search` catalog line is shorter and run_tool's `arguments` description lost its example. Library callers:
+`graphquery.run` gains `query=`, `ctx=` and `route=` (text calls unchanged), and `testmap.mapping_current` is new.
+Nothing to migrate; tq writes nothing. (Also in docs/UPGRADING.md.)
 
 ## Upgrading from 0.3.2 (D60-D136)
 

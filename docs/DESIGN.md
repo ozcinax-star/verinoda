@@ -13979,6 +13979,182 @@ Django proxy model and its proxy `CreateModel`; mistyped optional keys of a side
 FROM`, a shadowed module constant and an unrelated object's attribute; framework tables in a live database. `test_architecture_map.py` and
 `test_index.py` follow the new path end and sidecar counts.
 
+## 132. Typed questions, batched (D159, 2026-10-01)
+
+### 132.1 Why
+
+An agent that needs several closed facts about the code ("does A call B?", "who calls F?", "does this handler
+write that table?") today asks `project_query` or `analyze` once per fact and reads a ranked excerpt or a claim
+block each time. Each call costs a turn and a few thousand characters, and the answer to a yes/no question is
+prose the agent must interpret. `verinoda tq` answers up to 20 such questions in one call, each with one typed
+value, its status, the `file:line` it rests on and, when it is not settled, why and the next step. It adds no
+analysis: every answer comes from an engine Verinoda already has, and its status is never above that engine's.
+The design is docs/drafts/13.6-13.8-spec.md (sections 1-4 and the 13.6 build plan in section 8).
+
+### 132.2 Decisions
+
+- **Gold set first.** `benchmarks/tq_gold/` was committed (b016512) before any tq code: 109 hand-checked cases
+  (75 dev, 34 held-out, split by `sha256(id)[0] < 0x56`) over the query-language fixture (copied to
+  `fixtures/qlang/`, plus `admin.py` with a real SQL injection and `dyn.py` with calls through `getattr` and a
+  variable) and `examples/orders_app`. `MANIFEST.json` holds the sha256 of both splits and every fixture file; a
+  test fails if any changed. (Until the review round it did not hash `examples/orders_app`, which 38 cases run on;
+  its 11 files were added then, unchanged since b016512.) `score.py` scores answers: `?` is never wrong, a count is right when it is a lower
+  bound, a SQL line cited up to two lines below the gold line is a hit. The set is small (the spec's 450/300
+  targets and per-type n >= 30 belong to 13.7).
+- **Graph queries as objects.** `graphquery.build` / `path` / `node` / `edge` / `id_in` make the same checked
+  tree as `parse`; `run(query=...)` takes it, so a resolved name is never spliced into query text. A variable
+  pinned by `id = ...` (text or object) is walked from those ids only, so the two forms take the same code path;
+  a test checks equal rows for the text form with ids, the text form with names and the object form, with and
+  without `--verify`, and for a grouped count.
+- **One shared context per batch.** `graphquery.Shared` holds the freshness check, the relations present, the
+  route table (`graphquery.route_table`) and the lines cache; `run(ctx=...)` fills and reuses it. Tests count one
+  `freshness.check` and one `cross_service.collect` for a batch of seven questions that all need them.
+- **The asked route is verified.** `run(route="POST /b")` makes `--verify` re-read that route's declaration, not
+  the handler's first route (a test blanks one of two stacked decorators in the shared lines).
+- **`testmap.mapping_current`** is the nested `current` of `testmap.affected`, lifted unchanged; `affected` calls
+  it. tq's `tested` reads `test_map` through a read-only SQLite connection.
+- **Statuses.** The answer's status is the weaker of the engine's and the type's ceiling (`claims.ORDER`, with
+  `stale` just above `unknown`). `exists`/`which`: `statically_verified` only when the definition line is re-read
+  (`entail.def_around`); `calls`/`reaches`/`route`: q's `--verify` rule; `writes`/`reads`: `strong_inference` at
+  most (run without verify); `callers` and `q ... as=count`: `>=N`, `strong_inference` at most; `taint`:
+  `strong_inference` at most; `tested`: `observed` and run-scoped, `stale` when another file the test ran changed.
+- **A "no" is an absence.** `strong_inference` only for a depth-1 `calls` whose caller's AST has no call of that
+  name and whose text (from the def line, its defaults included, to the end, the definition's own name left out)
+  does not spell it, and for a name the index does not define (`exists`, `which`) when no file changed since the
+  index defines it; never for a dunder such as `__init__` or `__enter__`, which construction, `with` and operators
+  call without spelling it; `weak_inference` otherwise. When the AST has a call of the asked name that the graph did not bind, the answer is `?` with
+  `next: verinoda resolve-call FILE:LINE NAME`, not a no (found on `pong -> ping` in the fixture and
+  `testmap.affected -> mapping_current` in this repository); since the review round `reaches`, deeper `calls`
+  and `route` (from the handler) make the same check before a no. `calls` and `reaches` walk `calls|indirect_call`
+  edges, as `callers` counts them (an `indirect_call` is INFERRED, so it gives `weak_inference`).
+- **Every unknown has a next step**: candidates and `pass path/file.py::symbol` for an ambiguous name,
+  `verinoda update` / `index_update` for a stale file, `verinoda routes` with up to five routes, `verinoda
+  schema` with the known tables, `verinoda observe TEST` for a test never traced, `ask again: q2,q3` for a budget
+  cut, `pass env` for a library name not decided.
+- **Names**: `naming.resolve`, exact only; overloads count as one name. `not_found`, `unresolved` and `similar`
+  are "no such symbol" (a similar name is never used); `ambiguous`, `not_indexed` and `not_a_symbol` are `?`.
+  `exists NAME scope=lib` asks `codecheck.api` instead (its `found` used as given, `strong_inference` at most).
+- **Budgets**: one deadline for the batch (default 30 s), min(200,000, 1,000,000 / n) expansions per question;
+  rows past the row cap are not a cut (a row found is found). A cut answer is `?` with `cut: true`; the decided
+  answers stay.
+- **Surface.** CLI `verinoda tq` (line form, `-f` with lines or JSON objects, `--no-verify`, `--need`, `--json`;
+  exit 0/1/2/3). MCP `tq` (41 tools): in `CORE_TOOLS` (15), not in `CORE_DIRECT`, so the core menu reaches it
+  through `run_tool`; the full profile lists it and its instructions have one line for it. The core instructions
+  are unchanged: the core-menu test now exempts `tq` from "every core tool is named in the instructions" (the spec
+  keeps that sentence for study F). The MCP text form has no question echo; `format="json"` gives `verinoda.tq/1`.
+- **Menu.** The spec's computed numbers (4,441 / 4,590) were not used; measured with the tests' own computation
+  after shortening the `history_search` catalog line and run_tool's `arguments` description (see Measured).
+- **Review round.** A reviewer confirmed six wrong or overstated answers, each fixed with a regression test in
+  `tests/test_tq.py`: (1) the depth-1 `calls` spelled check started after the def line, so `def f(cb=target)` and
+  every one-line def gave a strong no; it now reads the def line too, without the definition's own name. (2) An
+  implicit dunder call (`Order(1)` for `Order.__init__`, `with k` for `__enter__`, `k()` for `__call__`) was a
+  strong no; a dunder is now a weak no at most, and `__init__`/`__new__` look for a call of the owning class (`?`
+  with `resolve-call` when there is one). (3) `exists NAME` was a strong no when an indexed file changed since the
+  index now defines NAME; a changed Python file's current text is searched for `def`/`class`/an assignment of the
+  name, and a hit is `?` with the index update (in `calls` and the other types too, through the same resolver).
+  (4) `tested` built F's name with one owner only, so a nested function (`outer.inner`) or a nested class's method
+  (`A.B.deep`) that the map shows running was a strong no; F's dotted name now comes from the AST through every
+  owner, and a recorded function of the same name under another owner in F's file makes the answer `?`. (5)
+  `reaches` ignored the AST call evidence `calls` used, so it said no where `calls` said `?` (calls inside nested
+  functions: the pattern behind the wrong answers on this repository); see the bullet above. (6) `taint` matched
+  the asked names only against a finding's pattern and kind, so `taint request USERS.execute` was "no path" while
+  taint reported exactly that flow; the sink's call and `*.x` patterns now match, and a name that matches no rule
+  and no finding is `?` with the names found (`taint request.args shell` is now `?`: the rules' kind is
+  `command`). Minors fixed: `which` with more than 10 files is invalid (it silently kept 10); `callers` says "an
+  INFERRED or indirect call edge"; the text render says when `as=rows` was cut at 5; the MCP `questions` argument
+  is `list[Any]`, so through `run_tool` a question of another JSON type is invalid alone (it failed the call); a
+  route operand of 3 or more words is invalid and a trailing slash is ignored; `tested` takes `via` from the
+  latest run; `taint` checks the batch deadline before it starts; `MANIFEST.json` hashes `examples/orders_app`.
+  The skipped minors are in Limits.
+- **Determinism.** No threads, no randomness, sorted lists; the same batch gives the same JSON apart from
+  `seconds` (test).
+
+### 132.3 Measured
+
+All on 2026-10-01, Windows, the repository's `.venv`, in-process through `AtlasTools` (MCP text form), warm graph.
+
+Gold set (`score.py`, verify on and off give the same verdicts):
+
+| split | n | right | wrong | unknown | wrong at statically_verified / observed | locator hits |
+|---|---|---|---|---|---|---|
+| held_out | 34 | 30 | 0 | 4 | 0 | 16/16 |
+| dev | 75 | 70 | 1 (`weak_inference`) | 4 | 0 | 38/39 |
+
+Held-out with verify: 10 `statically_verified` (10 right), 8 `strong_inference` (8 right), 12 `weak_inference`
+(12 right), 4 unknown. Dev with verify: 27 / 21 / 23 (22 right) / 4 (re-measured in the review round: `taint
+request.args shell`, a right weak no before, is now `?`, since no rule or finding uses the name `shell`). The dev wrong answer is the `getattr` trap
+`reaches run_by_name target` answered no at `weak_inference`; the missed locator is `calls through_variable target`
+(the `indirect_call` edge cites the assignment line 17, the call is on line 18). Every unknown had a next step.
+
+Menu (the test's computation, orders_app copy):
+
+| | before (440d476) | after |
+|---|---|---|
+| core menu | 4,449 | 4,426 (limit < 4,500) |
+| decision-records menu | 4,598 | 4,575 (limit < 4,600) |
+| core instructions | 1,303 | 1,303 (limit < 1,400) |
+
+20 questions, one tq call vs the same questions in natural language through project_query and analyze (one call
+each; analyze `budget_seconds=60`):
+
+| repository | tq time (3 runs) | tq chars (text / json) | project_query (20 calls) | analyze (20 calls) |
+|---|---|---|---|---|
+| orders_app (42 nodes) | 0.705 s cold, 0.206 s, 0.221 s | 2,721 / 3,463 | 1.90 s, 15,589 chars (median 408) | 16.94 s, 102,741 chars (median 5,385) |
+| this repository, scanned copy of cc9fb68 (37,993 nodes) | 6.118 s cold, 1.942 s, 1.858 s | 2,825 / 3,557 | 18.08 s, 111,530 chars (median 5,729.5) | 148.77 s, 164,541 chars (median 7,759) |
+
+On this repository: 7 yes, 6 no, 4 counts, 1 `which`, 2 unknown (a call the graph did not bind; a test never
+traced). Checked by hand afterwards, three of the six no answers are wrong, all at `weak_inference`: `reaches
+cmd_q tokenize`, `reaches cmd_tq naming.resolve` and `reaches AtlasTools.tq tq.ask` (calls made inside a nested
+function or through a constructor are not edges of the outer function). The two strong no answers (`exists
+graphquery.py::explain_plan`, `calls freshness.check graphquery.run`) are right; `reaches taint.run
+graphquery.run` (weak no) was not traced, and taint.py does not name graphquery. The 20 questions were not
+recorded beyond the ones named here, so this table cannot be re-run as it was, and it was not re-measured after
+the review round: the three wrong weak no answers are of the pattern finding 5 fixed (a call named B in A's AST,
+nested functions included, now gives `?`), but whether each of them now gives `?` was not checked.
+
+### 132.4 Not done
+
+- The gold set is small (109 cases, 34 held-out) and written by the same author as the rules; no per-type cell
+  reaches n = 30, so nothing here is a calibrated frequency (`measured:` is 13.7).
+- A weak no is often wrong on a large codebase: three of six on this repository. They are marked `enough: no` and
+  carry `next`, but an agent must not state them as facts.
+- `calls`/`reaches` see what the graph sees: calls in nested functions belong to the nested function, dynamic
+  dispatch is not followed. A no is checked against A's AST for a call named B (nested defs included) only, not
+  against the intermediate functions of a deeper path. `writes`/`reads` have no such check (a table is not a
+  call name).
+- Freshness covers the files a no names (A, B, F, the handler, and a changed file defining an absent name): a
+  `reaches`/`route`/`writes` no through an intermediate file changed since the index stays a weak no.
+- `taint` checks the batch deadline before it starts but cannot be stopped inside `taint.run`, and the expansion
+  budget does not apply to it.
+- Route operands are not normalised beyond a trailing slash: `/orders/{oid}` against `<int:oid>` is `?` with
+  `verinoda routes` and the known routes.
+- The 20 questions behind the Measured comparison table were not recorded, so that table cannot be reproduced.
+- `writes`/`reads` never reach `statically_verified`; `dataschema` edges are INFERRED in both test repositories,
+  so table answers were all `weak_inference` there.
+- `tested` was measured only on synthetic test-map rows (no traced run in the gold repositories).
+- A cold first call on a 38k-node graph took 6.1 s (naming and route caches); warm batches took under 2 s.
+- The spec's study F (the instructions sentence), the calibration table (13.7) and host intent (13.8) are not
+  built.
+
+### 132.5 Tests
+
+- `tests/test_tq.py`: the frozen gold set (hashes, split rule); gate A on held-out and dev (0 wrong at verified or
+  observed, every unknown with a next step, locator hits >= 95%, wrong answers only at `weak_inference`); the
+  shared context (one freshness check, one route collection); each type's yes, no and unknown (exists with
+  `scope=lib`, which, calls with verify on and off, INFERRED hop, AST-call gap, route bound from the table, writes,
+  reads, unknown table, callers, taint, q in three modes and a bad query); an ambiguous name; a stale file; the
+  test map (observed, run-scoped no, failed early, incomplete trace, fixture-shared function, stale); a budget cut
+  keeping decided answers; bad questions and batch errors; the line form and its echo; byte-identical answers; CLI
+  exit codes 0/1/2/3 and `-f`; the MCP tool. Review round: a name on the def line and one-line defs, implicit
+  dunder calls, `reaches` with the AST call evidence, `tested` on nested definitions and a same-name function under
+  another owner, a name defined in a changed indexed file, taint's call and `*.x` matching and an unknown sink
+  name, the minors (11 `which` files, a 3-word route, a trailing slash, the rows-cut note), and a question of
+  another JSON type through `run_tool`; the frozen-set test also hashes `examples/orders_app`.
+- `tests/test_query_language.py`: equal rows for the text and object forms; one freshness check per shared
+  context; verify re-reading the asked route.
+- `tests/test_testmap.py`: `mapping_current` and its cache.
+- `tests/test_mcp.py`: tq's parameters and read-only hint, 15 core tools, both menu limits, the instructions rule.
+
 ## Sources
 
 - **Retrieval:**
