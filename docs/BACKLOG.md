@@ -135,7 +135,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 18.2 | **Taint analysis** | User-declared sources, sinks and sanitizers; library behaviour as data; each result with its full path; SARIF | CodeQL, Semgrep Pro, Pysa, Joern, Code Pathfinder | a source-to-sink path reported with every hop |
 
 ## 19 - Behaviour probes and test generation
 
