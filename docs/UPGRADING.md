@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D122)
+## Upgrading from 0.3.2 (D60-DD123)
 
 ### D63: Running a project's own tests safely
 
@@ -584,6 +584,12 @@ added.
 
 New: `verinoda tour SOURCE TARGET` writes a CodeTour `.tour` file from a trace path, pinned to the commit; `verinoda
 tour --check FILE [--fix]` re-anchors its steps after the code moves. The MCP tool count is unchanged.
+
+### DD123: Pattern trends and code monitors
+
+New: `verinoda monitor` keeps saved searches in a committed `verinoda-monitors.json` and exits 1 when one gains a
+match its baseline does not have; `monitor trend ID` counts a regex monitor's matches over the history. The MCP
+tool count is unchanged.
 
 ### D60-D62
 
