@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D134)
+## Upgrading from 0.3.2 (D60-D135)
 
 ### D63: Running a project's own tests safely
 
@@ -667,6 +667,14 @@ was added.
 New: `verinoda consolidate` re-verifies stale claims against the current tree and finds duplicate claims
 (`--merge` folds them, nothing deleted); `update --consolidate` or `claims.consolidate_on_update` in
 `.verinoda/config.json` runs it after each update (never with `--merge`). No MCP tool changes.
+
+### D135: Error and trace import
+
+`verinoda trace-log FILE` also reads a Sentry event export or an OpenTelemetry trace in OTLP JSON from a local
+file: each frame is mapped onto the repository or reported as stale, ambiguous or not in the repository, and a
+mapped frame is recorded as a claim scoped to its event. A file named `.json` / `.jsonl` / `.ndjson` is read as
+JSON and refused if it does not parse; any other file is read as an export only when it parses and holds an event
+or span, and as a log otherwise, as before.
 
 ### D60-D62
 
