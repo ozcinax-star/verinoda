@@ -7,10 +7,9 @@ report shows no test ran, and what the review could not tell (its unknowns) - ea
 The caps add up to 100. Every input is listed with its value, weight, cap and points, also when it counted
 nothing, and an input the review could not measure is listed as not measured, never as zero risk.
 
-The weights are a choice, not a measurement: the score is a heuristic (``strong_inference``; ``weak_inference``
-when the graph was not read, so neither the dependents nor the tests' reach were measured). It orders changes by
-how much of what the review found there is; a low score says the rules found little, never that the change is
-safe.
+The weights are a choice, not a measurement: the score is a heuristic (``strong_inference``). It orders changes
+by how much of what the review found there is; a low score says the rules found little, never that the change is
+safe. A review with no changed definition scores 0 with no parts: what it could not tell is in its ``unknown``.
 """
 from __future__ import annotations
 
@@ -51,9 +50,35 @@ def _line_of(change: dict) -> str:
     return f"{change['file']}:{str(lines).split('-')[0]}" if lines else change["file"]
 
 
-def score(res: dict, *, graph: bool = True) -> dict:
-    """The ``risk`` block of a ``review`` result ``res``; ``graph``: the graph was read (dependents and the tests'
-    reach were measured)."""
+def _uncovered_unmeasured(res: dict, cov: dict | None) -> str | None:
+    """Why the uncovered changed lines were not measured, or None when a report measured the changed files."""
+    if res.get("mode") == "planned":
+        return "a planned change has no changed lines to measure"
+    if cov is None:
+        if any(u.get("kind") == "coverage_report" for u in res.get("unknown") or []):
+            return "the coverage report given could not be read (unknown: coverage_report)"
+        return "no coverage report was read (pass --coverage REPORT)"
+    missing = _missing(cov)
+    if missing and not (cov.get("patch") or {}).get("measured_changed_lines"):
+        return "the coverage report measured none of the changed lines (not in it: " + ", ".join(missing[:3]) + ")"
+    return None
+
+
+def _missing(cov: dict) -> list[str]:
+    return sorted({*(cov.get("not_in_report") or []), *(cov.get("ambiguous") or [])})
+
+
+def _zero() -> dict:
+    """The block of a review with no changed definition: nothing to score, no parts."""
+    return {"score": 0, "of": MAX_SCORE, "band": _band(0), "status": "strong_inference",
+            "finding": f"risk score 0 of {MAX_SCORE}: no changed definition to score; {NOT_SAFE}",
+            "evidence_at": [], "parts": [], "method": METHOD, "limits": LIMITS}
+
+
+def score(res: dict) -> dict:
+    """The ``risk`` block of a ``review`` result ``res``."""
+    if not res.get("changes"):
+        return _zero()
     concerns = res.get("concerns") or {}
     findings = [f for fs in concerns.values() for f in fs if f.get("delta") != "preexisting"]
     strong = [f for f in findings if rr.at_least_strong(f["status"])]
@@ -81,12 +106,12 @@ def score(res: dict, *, graph: bool = True) -> dict:
         "unknowns": (len(unknown), [u["at"] for u in unknown if u.get("at")]),
     }
     not_measured: dict[str, str] = {}
-    if not graph:
-        for k in ("dependents", "untested", "reach_unknown"):
-            not_measured[k] = "no graph was read (run `verinoda scan`)"
-    if cov is None:
-        not_measured["uncovered_lines"] = ("a planned change has no changed lines to measure" if res.get("mode") ==
-                                           "planned" else "no coverage report was read (pass --coverage REPORT)")
+    why_cov = _uncovered_unmeasured(res, cov)
+    if why_cov:
+        not_measured["uncovered_lines"] = why_cov
+    dif = res.get("differential") or {}
+    if "preexisting" not in dif:
+        not_measured["preexisting"] = dif.get("skipped") or "no base version was compared"
     from verinoda.review import CONCERNS
 
     skipped = [k for k in CONCERNS if k not in concerns]
@@ -95,6 +120,20 @@ def score(res: dict, *, graph: bool = True) -> dict:
         notes.append("findings of " + ", ".join(skipped) + ": not checked (the concerns asked for)")
     if (res.get("concerns_truncated") or {}):
         notes.append("findings beyond the ones listed per concern are not counted (concerns_truncated)")
+    if res.get("mode") == "planned":
+        notes.append("a planned change: the findings parts count the findings in the targets' current code, "
+                     "not only ones the change would introduce")
+    if any(u.get("kind") == "graph_stale" for u in unknown):
+        notes.append("the graph is older than some files (unknown: graph_stale): dependents and the tests' reach "
+                     "may miss callers there")
+    if cov is not None and not why_cov:
+        if _missing(cov):
+            notes.append("uncovered_lines counts only the changed files the coverage report measured (not in it: "
+                         + ", ".join(_missing(cov)[:3]) + ")")
+        stale = sum(1 for u in cov.get("uncovered") or [] if u.get("status") != "strong_inference")
+        if stale:
+            notes.append(f"uncovered_lines: {stale} change(s) read from a report older than the file "
+                         "(weak_inference: lines may have moved), counted at full weight")
     parts = []
     total = 0
     for name, what, weight, cap in PARTS:
@@ -109,20 +148,19 @@ def score(res: dict, *, graph: bool = True) -> dict:
             if ats:
                 row["at"] = ats[:MAX_AT]
         parts.append(row)
-    pre = (res.get("differential") or {}).get("preexisting", 0)
-    parts.append({"part": "preexisting", "counts": "findings the base had too (differential), not the change's",
-                  "value": pre, "weight": 0, "cap": 0, "points": 0})
+    pre = {"part": "preexisting", "counts": "findings the base had too (differential), not the change's",
+           "value": dif.get("preexisting", 0), "weight": 0, "cap": 0, "points": 0}
+    if "preexisting" in not_measured:
+        pre.update(value=None, not_measured=not_measured["preexisting"])
+    parts.append(pre)
     band = _band(total)
     counted = [f"{p['part']} {p['value']}x{p['weight']}={p['points']}" for p in parts if p["points"]]
-    status = "strong_inference" if graph else "weak_inference"
     text = (f"risk score {total} of {MAX_SCORE} ({band}): " + (", ".join(counted) if counted else
                                                                "none of the inputs counted anything")
             + f"; {NOT_SAFE}")
-    out = {"score": total, "of": MAX_SCORE, "band": band, "status": status, "finding": text,
+    out = {"score": total, "of": MAX_SCORE, "band": band, "status": "strong_inference", "finding": text,
            "evidence_at": list(dict.fromkeys(a for p in parts for a in p.get("at") or []))[:10],
            "parts": parts, "method": METHOD, "limits": LIMITS}
-    if not res.get("changes"):
-        out["finding"] = f"risk score 0 of {MAX_SCORE}: no changed definition to score; {NOT_SAFE}"
     if not_measured:
         out["not_measured"] = sorted(not_measured)
     if notes:

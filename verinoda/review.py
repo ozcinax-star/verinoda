@@ -5019,7 +5019,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     }
     from verinoda import risk
 
-    res["risk"] = risk.score(res, graph=g is not None)
+    res["risk"] = risk.score(res)
     res["summary"] = _summary(res)
     if len(api) > MAX_API_CHANGES:   # breaking first: what is cut is the tail of compatible and unknown ones
         res["api_changes"], res["api_changes_total"] = api[:MAX_API_CHANGES], len(api)
