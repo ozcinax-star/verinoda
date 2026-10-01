@@ -32,9 +32,10 @@ HTTP_RELATION = "requests"
 RPC_RELATION = "rpc_calls"
 EVENT_RELATION = "emits"
 RELATIONS = frozenset({HTTP_RELATION, RPC_RELATION, EVENT_RELATION})
-# 3: prefixes given by an expression (Python constants and settings defaults, JavaScript constants); 2: mount
+# 4: a parameter or attribute store voids a value, same-file constants cited; 3: prefixes given by an expression
+# (Python constants and settings defaults, JavaScript constants); 2: mount
 # prefixes that replace, top-level constants only, per-class JVM prefixes
-FACTS_VERSION = 3
+FACTS_VERSION = 4
 
 PY_SUFFIXES = (".py",)
 JS_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte")
@@ -635,13 +636,25 @@ def _py_imports(nodes, frameworks: set[str] | None = None) -> dict[str, str]:
     return imports
 
 
+def _name_bindings(nodes) -> Counter:
+    """How often each name is bound among ``nodes``: assignments and other stores, and function parameters (a
+    parameter shadows a module constant of the same name inside its function)."""
+    out = Counter(n.id for n in nodes if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
+    out.update(n.arg for n in nodes if isinstance(n, ast.arg))
+    return out
+
+
 def py_values(tree: ast.Module) -> dict[str, list]:
     """The string values a module spells once, by the name another module reads them with:
     ``NAME`` (a module-level constant), ``Cls.ATTR`` (a class attribute default) and ``obj.ATTR`` for a module-level
     ``obj = Cls(...)`` that passes no other value for it (a pydantic ``Settings()`` instance). Each is
     ``[value, line, kind]``, kind ``"const"``, ``"default"`` or ``"settings default"`` (a ``BaseSettings`` class:
-    the environment can give another value at run time). A name bound more than once has no entry."""
-    stores = Counter(n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
+    the environment can give another value at run time). A name bound more than once, also as a function's
+    parameter, has no entry. An attribute assigned anywhere (``obj.ATTR = ...``, ``self.ATTR = ...`` in the
+    class) has no default; nor has ``obj.ATTR`` when the class defines ``__init__`` (unless ``BaseSettings``)."""
+    nodes = list(ast.walk(tree))
+    stores = _name_bindings(nodes)
+    attr_stores = {_dotted(n) for n in nodes if isinstance(n, ast.Attribute) and isinstance(n.ctx, ast.Store)}
     out: dict[str, list] = {}
     classes: dict[str, tuple[dict[str, list], bool]] = {}
 
@@ -657,13 +670,20 @@ def py_values(tree: ast.Module) -> dict[str, list]:
             settings = any((_dotted(b) or "").rpartition(".")[2] == "BaseSettings" for b in node.bases)
             attrs: dict[str, list] = {}
             seen = Counter(assigned(s)[0] for s in node.body)
+            # an attribute a method assigns (self.ATTR = ..., cls.ATTR = ...) is not the class default's
+            set_inside = {n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)
+                          and isinstance(n.ctx, ast.Store) and isinstance(n.value, ast.Name)}
             for s in node.body:
                 name, value = assigned(s)
-                if name and seen[name] == 1 and _const_str(value) is not None:
+                if name and seen[name] == 1 and _const_str(value) is not None and name not in set_inside:
                     attrs[name] = [_const_str(value), s.lineno, "settings default" if settings else "default"]
-            classes[node.name] = (attrs, settings)
+            has_init = any(isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef)) and s.name == "__init__"
+                           for s in node.body)
+            # an __init__ may set any attribute of the instance: only the class's own attribute is known
+            classes[node.name] = ({} if has_init and not settings else attrs, settings)
             for a, v in attrs.items():
-                out[f"{node.name}.{a}"] = v
+                if f"{node.name}.{a}" not in attr_stores:
+                    out[f"{node.name}.{a}"] = v
     for node in tree.body:
         name, value = assigned(node)
         if not name or stores[name] != 1:
@@ -677,6 +697,8 @@ def py_values(tree: ast.Module) -> dict[str, list]:
             if None in given:  # Settings(**overrides): any attribute may be another value
                 continue
             for a, v in attrs.items():
+                if f"{name}.{a}" in attr_stores:  # CFG.PREFIX = "..." somewhere: no one value
+                    continue
                 if a in given:
                     s = _const_str(given[a])
                     if s is not None:
@@ -686,9 +708,9 @@ def py_values(tree: ast.Module) -> dict[str, list]:
     return out
 
 
-def _py_prefix(node, consts: dict[str, str], values: dict[str, list], imports: dict[str, str], rel: str) -> dict:
-    """A mount or router prefix expression: ``{"value": str}`` when this file spells it (with ``"from"`` notes
-    when it took a constant or a settings default), else ``{"expr": source, "pieces": [...]}`` whose ``["ref",
+def _py_prefix(node, values: dict[str, list], imports: dict[str, str], rel: str) -> dict:
+    """A mount or router prefix expression: ``{"value": str}`` when this file spells it (with a ``"from"`` note
+    for each constant or default it took), else ``{"expr": source, "pieces": [...]}`` whose ``["ref",
     dotted, origin]`` pieces name another module's value (``origin``: where the name's head is imported from)
     and whose ``["dyn", ...]`` pieces are values nothing here spells."""
     s = _const_str(node)
@@ -698,7 +720,8 @@ def _py_prefix(node, consts: dict[str, str], values: dict[str, list], imports: d
         src = ast.unparse(node)[:120]
     except Exception:  # an expression ast cannot write back: the name of its type
         src = type(node).__name__
-    pieces = py_pieces(node, consts) or [["dyn", "expr"]]
+    # no constants given: every name goes through ``values``, so even a same-file constant gets its note
+    pieces = py_pieces(node, {}) or [["dyn", "expr"]]
     out, notes, resolved = [], [], True
     for p in pieces:
         if p[0] == "lit":
@@ -749,9 +772,11 @@ def py_facts(text: str, rel: str) -> dict:
             s = _const_str(node.value)
             if s is not None:
                 consts[node.targets[0].id] = s
-    if consts:  # a name bound more than once (anywhere in the module) has no one value to read
-        stores = Counter(n.id for n in nodes if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
-        consts = {k: v for k, v in consts.items() if stores[k] == 1}
+    bindings = _name_bindings(nodes)
+    if consts:  # a name bound more than once (anywhere in the module, also as a parameter) has no one value
+        consts = {k: v for k, v in consts.items() if bindings[k] == 1}
+    # an imported name a parameter or an assignment rebinds is not the imported value where it is read
+    prefix_imports = {k: v for k, v in imports.items() if not bindings[k]}
 
     values: dict[str, list] | None = None
 
@@ -762,7 +787,7 @@ def py_facts(text: str, rel: str) -> dict:
             return _const_str(node), {}
         if values is None:
             values = py_values(tree)
-        p = _py_prefix(node, consts, values, imports, rel)
+        p = _py_prefix(node, values, prefix_imports, rel)
         extra = {"prefix_expr": p["expr"]} | ({"prefix_from": p["from"]} if p.get("from") else {})
         if "value" in p:
             return p["value"], extra
@@ -1738,10 +1763,11 @@ class _Linker:
                     mounts[(tf, tobj)].append((f, mt.get("on") or "", mp, bool(mt.get("replaces")), notes,
                                                (unresolved,) if unresolved else ()))
 
-        def prefixes(f: str, obj: str | None, seen: frozenset) -> list[tuple[str, bool, tuple, tuple]]:
-            """``(prefix, mount known, notes, expressions not resolved)`` for each chain of mounts."""
+        def prefixes(f: str, obj: str | None, seen: frozenset) -> list[tuple[str, bool, tuple, tuple, frozenset]]:
+            """``(prefix, mount known, notes, expressions not resolved, files of the chain)`` for each chain of
+            mounts; the files are where the route's objects and their mounts are, up to the app."""
             if obj is None:
-                return [("", True, (), ())]
+                return [("", True, (), (), frozenset({f}))]
             info = (self.facts[f].get("objs") or {}).get(obj) or {}
             own, own_notes, own_unres = self._prefix(f, info)
             own, own_unres = own or "", (own_unres,) if own_unres else ()
@@ -1749,17 +1775,18 @@ class _Linker:
             if not ups or (f, obj) in seen:
                 # an object this file does not construct is a router by its name (`router`, `bp`), else an app
                 kind = info.get("kind") or ("router" if re.search(r"(?i)router|blueprint|^bp$|_bp$", obj) else "app")
-                return [(own, kind != "router", own_notes, own_unres)]
+                return [(own, kind != "router", own_notes, own_unres, frozenset({f}))]
             out = []
             for pf, pobj, mp, replaces, m_notes, m_unres in ups:
-                for pp, known, notes, unres in prefixes(pf, pobj or None, seen | {(f, obj)}):
+                for pp, known, notes, unres, chain in prefixes(pf, pobj or None, seen | {(f, obj)}):
+                    chain = chain | {f}
                     # Flask's register_blueprint(url_prefix=) replaces the blueprint's own prefix; FastAPI's
                     # include_router(prefix=) and Express's app.use('/p', router) come before it
                     if replaces and mp is not None:
-                        out.append((join_path(pp, mp), known, notes + m_notes, unres + m_unres))
+                        out.append((join_path(pp, mp), known, notes + m_notes, unres + m_unres, chain))
                     else:
                         out.append((join_path(pp, mp or "", own), known, notes + m_notes + own_notes,
-                                    unres + m_unres + own_unres))
+                                    unres + m_unres + own_unres, chain))
             return out
 
         # Django: a URLconf's prefix is the chain of includes that name it
@@ -1770,11 +1797,11 @@ class _Linker:
                 for tf in self.resolve_py(f, mod):
                     includes[tf].append((f, inc["prefix"]))
 
-        def dj_prefixes(f: str, seen: frozenset) -> list[str]:
+        def dj_prefixes(f: str, seen: frozenset) -> list[tuple[str, frozenset]]:
             ups = includes.get(f)
             if not ups or f in seen:
-                return [""]
-            return [join_path(pp, p) for uf, p in ups for pp in dj_prefixes(uf, seen | {f})]
+                return [("", frozenset({f}))]
+            return [(join_path(pp, p), chain | {f}) for uf, p in ups for pp, chain in dj_prefixes(uf, seen | {f})]
 
         nest = sorted({fx["nest_prefix"] for fx in self.facts.values() if fx.get("nest_prefix")})
         nest_prefix = nest[0] if len(nest) == 1 else ""
@@ -1789,18 +1816,18 @@ class _Linker:
                 if node is None:
                     continue
                 if r.get("urlconf"):
-                    pres = [(p, True, (), ()) for p in dj_prefixes(f, frozenset())]
+                    pres = [(p, True, (), (), chain) for p, chain in dj_prefixes(f, frozenset())]
                 elif r.get("nest"):
-                    pres = [(nest_prefix, True, (), ())]
+                    pres = [(nest_prefix, True, (), (), frozenset({f}))]
                 else:
                     pres = prefixes(f, r.get("obj"), frozenset())
-                for pre, known, notes, unresolved in pres:
+                for pre, known, notes, unresolved, chain in pres:
                     path = join_path(pre, r["path"], keep_slash=keep) if r["path"] not in ("", "/") or pre else "/"
                     if r["path"] == "*":
                         path = join_path(pre, "*")
                     mount = ([] if known else ["not found"]) + [f"prefix not resolved: {u}" for u in unresolved]
                     table.append({"fw": r["fw"], "methods": r["methods"], "path": path, "at": f"{f}:{r['line']}",
-                                  "handler": node, "how": how, "segs": route_segments(path),
+                                  "handler": node, "how": how, "segs": route_segments(path), "chain": chain,
                                   **({"mount": "; ".join(dict.fromkeys(mount))} if mount else {}),
                                   **({"prefix_from": list(dict.fromkeys(notes))} if notes else {}),
                                   **({"code": kind} if kind else {})})
@@ -1811,7 +1838,8 @@ class _Linker:
                     if node:
                         table.append({"fw": "next.js", "methods": [e["method"]] if e["method"] else None,
                                       "path": nx_path, "at": f"{f}:{e['line']}", "handler": node, "how": "file route",
-                                      "segs": route_segments(nx_path), **({"code": kind} if kind else {})})
+                                      "segs": route_segments(nx_path), "chain": frozenset({f}),
+                                      **({"code": kind} if kind else {})})
         return table
 
     def _mount_targets(self, f: str, mt: dict) -> list[tuple[str, str]]:
@@ -1830,16 +1858,33 @@ class _Linker:
             return [(tf, used[0])] if len(used) == 1 else [(tf, objs[0])] if len(objs) == 1 else []
         hits = []
         for mod in mt.get("mods") or []:
-            for tf in self.resolve_py(f, mod):
+            found = [(tf, mt["obj"]) for tf in self.resolve_py(f, mod)] or self._reexported(f, mod, mt["obj"])
+            for tf, obj in found:
                 fx = self.facts[tf]
-                if mt["obj"] in (fx.get("objs") or {}) or any(r.get("obj") == mt["obj"] for r in fx.get("routes") or []):
-                    hits.append((tf, mt["obj"]))
+                if obj in (fx.get("objs") or {}) or any(r.get("obj") == obj for r in fx.get("routes") or []):
+                    hits.append((tf, obj))
         return hits if len(hits) == 1 else []
+
+    def _reexported(self, f: str, mod: str, name: str, depth: int = 0) -> list[tuple[str, str]]:
+        """``(file, name there)`` for ``name`` of module ``mod`` (imported from ``f``) when that module only
+        re-exports it (a package ``__init__.py`` with ``from .main import api_router``); three re-exports at most."""
+        hits = self.resolve_py(f, mod, self._py_files())
+        if len(hits) != 1 or depth >= 3:
+            return []
+        _vals, imps = self._module_values(hits[0])
+        origin = imps.get(name)
+        if not origin:
+            return []
+        src_mod, _, src_name = origin.rpartition(".")
+        if not src_mod or not src_mod.strip("."):  # `from . import x`: the name is a module, not an object
+            return []
+        found = [(tf, src_name) for tf in self.resolve_py(hits[0], src_mod)]
+        return found or self._reexported(hits[0], src_mod, src_name, depth + 1)
 
     def link_http(self) -> None:
         table = self.routes()
         self.report["routes"] = len(table)
-        self.report["route_table"] = [{k: v for k, v in r.items() if k != "segs"} for r in table]
+        self.report["route_table"] = [{k: v for k, v in r.items() if k not in ("segs", "chain")} for r in table]
         by_len: dict[int, list[dict]] = defaultdict(list)
         rest: list[dict] = []
         for r in table:
@@ -1867,22 +1912,32 @@ class _Linker:
                         cands.append((r, lits))
                 # a catch-all (`*`, `{path:path}`) gives way to a route that names the path; one that names nothing
                 # before the wildcard (an SPA fallback, `app.get('*')`) is no link at all
+                lits_of = {id(r): lits for r, lits in cands}
                 named = [r for r, _ in cands if not any(s[0] == "rest" for s in r["segs"])]
                 cands = named or [r for r, lits in cands if lits > 0]
                 kind = code_kind(f)
                 call = {"at": at, "method": c["method"], "url": _show(pieces), "lib": c["lib"],
                         **({"code": kind} if kind else {})}
+                dropped = 0
                 if cands and (kind or c["lib"] == "supertest"):
                     # test and example code calls the app it builds or imports: a route of an unrelated example
-                    # app is no candidate when that app is known
+                    # app is no candidate when that app is known. A route is the app's when a file of its mount
+                    # chain (its own file, the files that mount it, up to the app) is in the test's import closure
                     scope = self._scope(f)
-                    local = [r for r in cands if r["at"].rpartition(":")[0] in scope]
-                    if local:
-                        cands = local
-                    elif c["lib"] == "supertest" and (len(scope) > 1 or self._serves(scope)):
-                        # request(app): the app is built here or imported; another file's routes are not its own
+                    local = [r for r in cands if r["chain"] & scope]
+                    other = [r for r in cands if not r["chain"] & scope]
+                    if local and other and (max(lits_of[id(r)] for r in other)
+                                            > max(lits_of[id(r)] for r in local)):
+                        pass  # a route outside names more of the path than any inside: no narrowing, no guess
+                    elif local:
+                        cands, dropped = local, len(other)
+                    elif (c["lib"] == "supertest" and (len(scope) > 1 or self._serves(scope))
+                          and all("not found" not in (r.get("mount") or "") for r in cands)):
+                        # request(app): the app is built here or imported, and every route that fits is mounted
+                        # on another app; one whose mount was not found might still be this app's
                         self._cap("unmatched", dict(call, why=f"no route read in the app under test fits (this file "
-                                                              f"and {len(scope) - 1} it imports)"))
+                                                              f"and the {len(scope) - 1} it imports); "
+                                                              f"{len(cands)} on other apps do"))
                         continue
                 if not cands:
                     self._cap("unmatched", call)
@@ -1891,6 +1946,14 @@ class _Linker:
                        or (c["method"] == "HEAD" and "GET" in r["methods"])]
                 if not fit:
                     self._cap("method_mismatch", dict(call, routes=[_route_row(r) for r in cands[:5]]))
+                    continue
+                # a route whose prefix the text does not spell matches without it: no edge from that alone
+                unres = [r for r in fit if "prefix not resolved" in (r.get("mount") or "")]
+                if unres and len(unres) < len(fit):
+                    fit = [r for r in fit if r not in unres]
+                elif unres:
+                    shown = "; ".join(f"{_route_row(r)['route']} ({r['mount']})" for r in unres[:3])
+                    self._cap("unmatched", dict(call, why=f"only routes whose prefix is not resolved fit: {shown}"))
                     continue
                 handlers = sorted({r["handler"] for r in fit})
                 caller = self.node_at(f, c["line"])
@@ -1912,8 +1975,10 @@ class _Linker:
                 extra = list(notes)
                 if "not found" in (r.get("mount") or ""):
                     extra.append("the router's mount point was not found: its path is the router's own")
-                if "prefix not resolved" in (r.get("mount") or ""):
-                    extra.append(f"the route's path lacks a prefix the text does not spell ({r['mount']})")
+                if unres:
+                    extra.append(f"{len(unres)} route(s) whose prefix is not resolved also fit without it")
+                if dropped:
+                    extra.append(f"{dropped} route(s) outside the app under test also match the path")
                 if c["method"] is None:
                     extra.append("the call's method is computed")
                 if extra:
@@ -1942,12 +2007,12 @@ class _Linker:
         return None
 
     def _scope(self, f: str) -> frozenset[str]:
-        """``f`` and the files it imports, three imports deep: relative JavaScript imports and ``require``s, and
-        the graph's ``imports_from`` edges."""
+        """``f`` and every file it imports, directly or through others: relative JavaScript imports and
+        ``require``s, and the graph's ``imports_from`` edges."""
         if f in self._scopes:
             return self._scopes[f]
         seen, frontier = {f}, [f]
-        for _ in range(3):
+        while frontier:
             nxt = []
             for x in frontier:
                 deps = {self.resolve_js(x, imp[0]) for imp in ((self.facts.get(x) or {}).get("imports") or {}).values()
@@ -2014,7 +2079,7 @@ class _Linker:
         if len(nodes) > 1:
             self.report["rpc"]["ambiguous"] += 1
             self._cap("ambiguous", {"at": f"{f}:{line}", "protocol": protocol, "url": what, "caller": caller,
-                                    "candidates": [{"route": what, "at": at, "handler": n} for n, at in cands[:8]]})
+                                    "candidates": [{"route": what, "at": at, "handler": n} for n, at in cands]})
             return
         if not nodes:
             self._cap("unmatched", {"at": f"{f}:{line}", "protocol": protocol, "url": what})
@@ -2255,6 +2320,9 @@ def render(report: dict, *, show_routes: bool = True) -> str:
                 out.append(f"  {a['at']}  {a.get('method') or ''} {a.get('url', '')}".rstrip() + code + calls)
                 if a.get("why"):
                     out.append(f"    {a['why']}")
+                if a.get("also_at"):
+                    more = f" (+{a['also_at_more']} more)" if a.get("also_at_more") else ""
+                    out.append(f"    also at {', '.join(str(x) for x in a['also_at'])}{more}")
                 for c in (a.get("candidates") or a.get("routes") or []):
                     out.append(f"    {c['route']}  {c['at']}" + (f"  [{c['code']}]" if c.get("code") else ""))
                 if a.get("candidates_total"):

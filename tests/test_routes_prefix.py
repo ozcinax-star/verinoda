@@ -295,6 +295,22 @@ def test_join_path_keeps_a_written_trailing_slash(parts, keep, joined):
     ('class S:\n    P = "/a"\ns = S(P="/b")\n', "s.P", "/b", "const"),               # the instance passes its own
     ('class S(BaseSettings):\n    P: str = "/a"\ns = S(**env)\n', "s.P", None, None),   # any value
     ('class C:\n    P = "/a"\n', "C.P", "/a", "default"),
+    # a parameter of the same name shadows the constant inside its function: no one value
+    ('API = "/api"\ndef mount(app, API):\n    pass\n', "API", None, None),
+    # __init__ (or any method) sets the attribute on the instance: neither default is the value read
+    ('class S:\n    P = "/class-default"\n    def __init__(self):\n        self.P = "/from-init"\ns = S()\n',
+     "s.P", None, None),
+    ('class S:\n    P = "/class-default"\n    def __init__(self):\n        self.P = "/from-init"\ns = S()\n',
+     "S.P", None, None),
+    # an __init__ that may set anything: the instance's value is unknown, the class's own is still read
+    ('class S:\n    P = "/a"\n    def __init__(self, **kw):\n        self.__dict__.update(kw)\ns = S()\n',
+     "s.P", None, None),
+    ('class S:\n    P = "/a"\n    def __init__(self, **kw):\n        self.__dict__.update(kw)\ns = S()\n',
+     "S.P", "/a", "default"),
+    # an attribute assigned later in the module
+    ('class C:\n    P = "/v1"\nCFG = C()\nif True:\n    CFG.P = "/v2"\n', "CFG.P", None, None),
+    ('class C:\n    P = "/v1"\nC.P = "/v2"\n', "C.P", None, None),
+    ('class C:\n    P = "/v1"\nCFG = C()\nif True:\n    CFG.P = "/v2"\n', "C.P", "/v1", "default"),
 ])
 def test_py_values(src, key, value, kind):
     import ast
@@ -308,3 +324,240 @@ def test_flask_url_prefix_from_an_imported_constant():
                                   'from .views import bp\napp.register_blueprint(bp, url_prefix=API)\n', "w/app.py")
     (mt,) = fx["mounts"]
     assert mt["prefix_pieces"] == [["ref", "API", ".conf.API"]] and mt["prefix_expr"] == "API" and mt["replaces"]
+
+
+def _mount(fx: dict, obj: str) -> dict:
+    (mt,) = [m for m in fx["mounts"] if m["obj"] == obj]
+    return mt
+
+
+def test_a_parameter_that_shadows_a_constant_leaves_the_prefix_unresolved():
+    fx = cross_service.file_facts(
+        'from fastapi import FastAPI\nfrom .routes import r1, r2\nAPI = "/api"\napp = FastAPI()\n'
+        'def mount(app, API):\n    app.include_router(r2, prefix=API)\n', "a/main.py")
+    mt = _mount(fx, "r2")
+    assert not mt["prefix"] and mt["prefix_pieces"] == [["dyn", "API"]]
+
+
+def test_an_imported_name_a_parameter_shadows_is_not_followed():
+    fx = cross_service.file_facts(
+        'from fastapi import FastAPI\nfrom .conf import settings\nfrom .routes import r2\napp = FastAPI()\n'
+        'def mount(app, settings):\n    app.include_router(r2, prefix=settings.API)\n', "a/main.py")
+    assert _mount(fx, "r2")["prefix_pieces"] == [["dyn", "settings.API"]]
+
+
+def test_attribute_overrides_leave_the_prefix_unresolved():
+    fx = cross_service.file_facts(
+        'from fastapi import FastAPI\nfrom .routes import r3, r4\n'
+        'class Settings:\n    PREFIX = "/class-default"\n    def __init__(self):\n        self.PREFIX = "/from-init"\n'
+        'settings = Settings()\n'
+        'class Cfg:\n    PREFIX = "/v1"\nCFG = Cfg()\nif True:\n    CFG.PREFIX = "/v2"\n'
+        'app = FastAPI()\napp.include_router(r3, prefix=settings.PREFIX)\napp.include_router(r4, prefix=CFG.PREFIX)\n',
+        "a/conf.py")
+    assert not _mount(fx, "r3")["prefix"] and not _mount(fx, "r4")["prefix"]
+    assert _mount(fx, "r3")["prefix_pieces"] == [["dyn", "settings.PREFIX"]]
+
+
+def test_a_same_file_constant_is_cited_too():
+    fx = cross_service.file_facts('from fastapi import FastAPI\nfrom .routes import r1\nAPI = "/api"\n'
+                                  'app = FastAPI()\napp.include_router(r1, prefix=API)\n', "a/main.py")
+    mt = _mount(fx, "r1")
+    assert mt["prefix"] == "/api" and mt["prefix_from"] == ["`API` = '/api' at a/main.py:3"]
+
+
+SCOPE = {
+    # FastAPI: the test's app has a catch-all page and mounts a router four imports away from the test
+    "app/__init__.py": "",
+    "app/main.py": """from fastapi import FastAPI
+
+from app.api import api_router
+
+app = FastAPI()
+app.include_router(api_router)
+
+
+@app.get("/{page}")
+def page(page: str):
+    return page
+""",
+    "app/api/__init__.py": "from app.api.main import api_router\n",
+    "app/api/main.py": """from fastapi import APIRouter
+
+from app.api.routes import items
+
+api_router = APIRouter()
+api_router.include_router(items.router)
+""",
+    "app/api/routes/__init__.py": "",
+    "app/api/routes/items.py": """from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/items")
+def read_items():
+    return []
+""",
+    "tests/test_items.py": """from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+def test_items():
+    client = TestClient(app)
+    client.get("/items")
+""",
+    # an example app with a catch-all, and another example app (not imported) that names the path
+    "examples/one/app.py": """from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/{page}")
+def one_page(page: str):
+    return page
+""",
+    "examples/one/test_one.py": """from fastapi.testclient import TestClient
+
+from .app import app
+
+
+def test_orders():
+    client = TestClient(app)
+    client.get("/orders")
+""",
+    "examples/two/app.py": """from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/orders")
+def orders():
+    return []
+""",
+    # Express: test -> server -> app -> routes/index -> routes/users, mounted at /api and /users
+    "web/src/server.js": """const app = require('./app');
+module.exports = app;
+""",
+    "web/src/app.js": """const express = require('express');
+const routes = require('./routes');
+const app = express();
+app.use('/api', routes);
+module.exports = app;
+""",
+    "web/src/routes/index.js": """const express = require('express');
+const users = require('./users');
+const router = express.Router();
+router.use('/users', users);
+module.exports = router;
+""",
+    "web/src/routes/users.js": """const express = require('express');
+const router = express.Router();
+router.get('/', function listUsers(req, res) { res.json([]); });
+module.exports = router;
+""",
+    "web/test/api.test.js": """const request = require('supertest');
+const app = require('../src/server');
+
+describe('users', function () {
+  it('lists', function (done) {
+    request(app).get('/api/users').expect(200, done);
+  });
+});
+""",
+    # Flask: a blueprint whose url_prefix is computed; a client call fits it only without the prefix
+    "flk/app.py": """from flask import Flask
+
+from .views import bp
+from .conf import get_prefix
+
+app = Flask(__name__)
+app.register_blueprint(bp, url_prefix=get_prefix())
+""",
+    "flk/views.py": """from flask import Blueprint
+
+bp = Blueprint("bp", __name__)
+
+
+@bp.route("/y/z")
+def why():
+    return "y"
+""",
+    "flk/conf.py": """def get_prefix():
+    return "/v9"
+""",
+    "flk/client.py": """import requests
+
+
+def call_y():
+    return requests.get("http://svc/y/z")
+""",
+}
+
+
+@pytest.fixture(scope="module")
+def scope_proj(tmp_path_factory) -> Path:
+    root = tmp_path_factory.mktemp("routes_scope") / "proj"
+    for rel, text in SCOPE.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(text.encode("utf-8"))
+    workflow.init(root)
+    st = open_store(root)
+    try:
+        workflow.scan(st, root)
+    finally:
+        st.close()
+    search_index._HANDLES.clear()
+    return root
+
+
+def test_a_router_mounted_deep_in_the_app_under_test_keeps_the_call_ambiguous(scope_proj, capsys):
+    rep = _routes(scope_proj, capsys, "--all")
+    assert not [e for e in rep["edges"] if e["at"] == "tests/test_items.py:8"]   # never a guess at GET /{page}
+    (amb,) = [a for a in rep["ambiguous"] if a["at"] == "tests/test_items.py:8"]
+    assert {c["at"] for c in amb["candidates"]} == {"app/main.py:9", "app/api/routes/items.py:6"}
+
+
+def test_a_more_specific_route_outside_the_app_under_test_keeps_the_call_ambiguous(scope_proj, capsys):
+    rep = _routes(scope_proj, capsys, "--all")
+    assert not [e for e in rep["edges"] if e["at"] == "examples/one/test_one.py:8"]
+    (amb,) = [a for a in rep["ambiguous"] if a["at"] == "examples/one/test_one.py:8"]
+    assert {c["at"] for c in amb["candidates"]} == {"examples/one/app.py:6", "examples/two/app.py:6", "app/main.py:9"}
+
+
+def test_a_supertest_call_links_through_a_deep_mount_chain(scope_proj, capsys):
+    rep = _routes(scope_proj, capsys, "--all")
+    (row,) = _row(rep, "web/src/routes/users.js:3")
+    assert row["path"] == "/api/users"
+    assert ("web/test/api.test.js:6", "web/src/routes/users.js:3") in {(e["at"], e["route_at"]) for e in rep["edges"]}
+    assert not [u for u in rep["unmatched"] if u["at"] == "web/test/api.test.js:6"]
+
+
+def test_a_route_whose_prefix_is_not_resolved_gives_no_edge(scope_proj, capsys):
+    rep = _routes(scope_proj, capsys, "--all")
+    (row,) = _row(rep, "flk/views.py:6")
+    assert row["mount"] == "prefix not resolved: get_prefix()"
+    assert not [e for e in rep["edges"] if e["at"] == "flk/client.py:5"]
+    (un,) = [u for u in rep["unmatched"] if u["at"] == "flk/client.py:5"]
+    assert "prefix is not resolved" in un["why"] and "GET /y/z" in un["why"]
+
+
+def test_rpc_ambiguous_calls_keep_every_candidate():
+    lk = cross_service._Linker.__new__(cross_service._Linker)
+    lk.report = {"rpc": {"ambiguous": 0, "linked": 0}, "ambiguous": [], "unmatched": []}
+    lk.node_at = lambda f, line: "caller"
+    lk._rpc_edge("c.py", 3, [(f"h{k}", f"s{k}.py:1") for k in range(12)], "grpc", "Greeter.Hi")
+    (amb,) = lk.report["ambiguous"]
+    assert len(amb["candidates"]) == 12
+    out = cross_service.bounded(lk.report | {"routes": 0, "clients": 0, "linked": 0, "unresolved_urls": 0,
+                                             "method_mismatch": [], "route_table": []})
+    assert out["ambiguous"][0]["candidates_total"] == 12
+
+
+def test_the_text_view_names_the_other_call_sites():
+    rep = {"routes": 1, "clients": 9, "linked": 0, "unresolved_urls": 0, "route_table": [], "method_mismatch": [],
+           "unmatched": [], "ambiguous": [_amb(i * 60, 2) for i in range(8)]}
+    text = cross_service.render(cross_service.bounded(rep))
+    assert "(8 calls)" in text
+    assert "also at t/x.js:60, t/x.js:120, t/x.js:180, t/x.js:240, t/x.js:300 (+2 more)" in text
