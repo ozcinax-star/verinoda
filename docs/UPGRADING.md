@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D153)
+## Upgrading from 0.4.0 (D137-D154)
 
 ### D137: Trigram regex index
 
@@ -180,6 +180,12 @@ MCP `code_check` never runs a checker.
 latest run) and adds `tests.observe.runtime_diff`; it also
 records SQL now (the flaws recorder), so it takes about twice as long. Runs gain `raise` records (Python 3.12+) and
 per-test `exc`; `runtime.trace.observe()` takes `ref=`. Nothing to migrate; the MCP tools are unchanged.
+
+### D154: Taint analysis
+
+New command `verinoda taint` (exit 3 when a path is found) and the library data `verinoda/data/taint_python.json`.
+A project may add a `[taint]` table to `verinoda.toml` (`sources`, `sinks = [{match, arg, keyword, kind,
+when_keyword, safe_keywords}]`, `sanitizers` as calls or `{match, kinds}`, `builtin`); unknown keys are errors. `sarif.export(res, "taint")` is new. No MCP change; nothing to migrate.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
