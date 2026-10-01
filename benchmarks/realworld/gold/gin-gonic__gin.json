@@ -1,0 +1,69 @@
+{
+  "repo": "gin-gonic/gin",
+  "tag": "v1.12.0",
+  "sha": "73726dc606796a025971fe451f0aa6f1b9b847f6",
+  "written": "2026-10-01",
+  "method": "Each fact was read by hand in the clone at the pinned sha (grep for the definition, then the lines read) before Verinoda was run on this repository. Line numbers are 1-based.",
+  "facts": [
+    {
+      "id": "def-default",
+      "fact": "func Default (the engine with Logger and Recovery) is defined at gin.go:236",
+      "source": "gin.go:236",
+      "check": {"kind": "q", "query": "match (f:function) where f.name = \"Default\" and f.file = \"gin.go\" return f", "cites": ["gin.go:236"]}
+    },
+    {
+      "id": "default-calls-new",
+      "fact": "Default calls New (gin.go:238 `engine := New()`)",
+      "source": "gin.go:238",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"Default\" and a.file = \"gin.go\" and b.name = \"New\" return a, b", "cites": ["gin.go:238"]}
+    },
+    {
+      "id": "default-calls-recovery",
+      "fact": "Default installs Recovery (gin.go:239 `engine.Use(Logger(), Recovery())`), and Recovery is defined at recovery.go:35",
+      "source": "gin.go:239, recovery.go:35",
+      "check": {"kind": "trace", "source": "Default", "target": "Recovery", "via_files": ["recovery.go"]}
+    },
+    {
+      "id": "servehttp-calls-handle",
+      "fact": "Engine.ServeHTTP (gin.go:662) calls engine.handleHTTPRequest at gin.go:672",
+      "source": "gin.go:672",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"ServeHTTP\" and a.file = \"gin.go\" and b.name = \"handleHTTPRequest\" return a, b", "cites": ["gin.go:672"]}
+    },
+    {
+      "id": "request-reaches-tree",
+      "fact": "A request reaches the radix tree: ServeHTTP -> handleHTTPRequest -> node.getValue (gin.go:715; getValue defined at tree.go:418)",
+      "source": "gin.go:672, gin.go:715, tree.go:418",
+      "check": {"kind": "trace", "source": "ServeHTTP", "target": "getValue", "via_files": ["tree.go"]}
+    },
+    {
+      "id": "get-registers-route",
+      "fact": "RouterGroup.GET registers a route: GET -> handle (routergroup.go:117) -> Engine.addRoute (routergroup.go:89) -> node.addRoute (gin.go:377, defined tree.go:135)",
+      "source": "routergroup.go:117, routergroup.go:89, gin.go:377, tree.go:135",
+      "check": {"kind": "q", "query": "match (a:function)-[calls*1..4]->(b:function) where a.name = \"GET\" and a.file = \"routergroup.go\" and b.name = \"addRoute\" and b.file = \"tree.go\" return a, b", "cites": ["routergroup.go:117"]}
+    },
+    {
+      "id": "recovery-calls-writer",
+      "fact": "Recovery calls RecoveryWithWriter (recovery.go:36); RecoveryWithWriter is defined at recovery.go:45",
+      "source": "recovery.go:36, recovery.go:45",
+      "check": {"kind": "q", "query": "match (a:function)-[calls]->(b:function) where a.name = \"Recovery\" and b.name = \"RecoveryWithWriter\" return a, b", "cites": ["recovery.go:36"]}
+    },
+    {
+      "id": "context-json-method",
+      "fact": "Context (struct at context.go:61) has the method JSON at context.go:1205",
+      "source": "context.go:1205",
+      "check": {"kind": "q", "query": "match (m:function) where m.name = \"JSON\" and m.file = \"context.go\" return m", "cites": ["context.go:1205"]}
+    },
+    {
+      "id": "query-radix-tree",
+      "fact": "The route matching (radix tree insert and lookup) lives in tree.go",
+      "source": "tree.go:135, tree.go:418",
+      "check": {"kind": "query", "question": "how are request paths matched against the radix tree of routes", "top_k": 8, "expect_file": "tree.go"}
+    },
+    {
+      "id": "query-recovery",
+      "fact": "Panic recovery middleware lives in recovery.go",
+      "source": "recovery.go:35",
+      "check": {"kind": "query", "question": "where does the middleware recover from a panic and write a 500", "top_k": 8, "expect_file": "recovery.go"}
+    }
+  ]
+}
