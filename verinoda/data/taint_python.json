@@ -1,0 +1,266 @@
+{
+  "about": "Library behaviour as data for `verinoda taint` (Python): where untrusted values enter (sources), calls that must not receive them unchecked (sinks, with the argument that matters), and calls whose result is safe to pass on (sanitizers). A name `a.b` matches an attribute chain or name ending in `.a.b`; `a.b()` matches a call of it; `*.m` any receiver's method `m`. Route handler parameters taken from the request are sources too (verinoda reads the route decorators). A project adds to or replaces these in verinoda.toml [taint]. A source's threat is remote (a request from the network) or local (the user running the program: argv, the environment, input()); local ones are used with --local.",
+  "sources": [
+    {
+      "match": "request.args",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.form",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.values",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.json",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.get_json()",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.data",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.files",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.cookies",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.headers",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.GET",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.POST",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.body",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.query_params",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.path_params",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "input()",
+      "kind": "user",
+      "threat": "local"
+    },
+    {
+      "match": "sys.argv",
+      "kind": "argv",
+      "threat": "local"
+    },
+    {
+      "match": "os.environ",
+      "kind": "environment",
+      "threat": "local"
+    },
+    {
+      "match": "os.getenv()",
+      "kind": "environment",
+      "threat": "local"
+    }
+  ],
+  "sinks": [
+    {
+      "match": "*.execute",
+      "arg": 0,
+      "kind": "sql"
+    },
+    {
+      "match": "*.executemany",
+      "arg": 0,
+      "kind": "sql"
+    },
+    {
+      "match": "*.executescript",
+      "arg": 0,
+      "kind": "sql"
+    },
+    {
+      "match": "*.raw",
+      "arg": 0,
+      "kind": "sql"
+    },
+    {
+      "match": "os.system",
+      "arg": 0,
+      "kind": "command"
+    },
+    {
+      "match": "os.popen",
+      "arg": 0,
+      "kind": "command"
+    },
+    {
+      "match": "subprocess.run",
+      "arg": 0,
+      "kind": "command",
+      "when_keyword": "shell"
+    },
+    {
+      "match": "subprocess.call",
+      "arg": 0,
+      "kind": "command",
+      "when_keyword": "shell"
+    },
+    {
+      "match": "subprocess.Popen",
+      "arg": 0,
+      "kind": "command",
+      "when_keyword": "shell"
+    },
+    {
+      "match": "subprocess.check_output",
+      "arg": 0,
+      "kind": "command",
+      "when_keyword": "shell"
+    },
+    {
+      "match": "subprocess.check_call",
+      "arg": 0,
+      "kind": "command",
+      "when_keyword": "shell"
+    },
+    {
+      "match": "eval",
+      "arg": 0,
+      "kind": "code"
+    },
+    {
+      "match": "exec",
+      "arg": 0,
+      "kind": "code"
+    },
+    {
+      "match": "pickle.loads",
+      "arg": 0,
+      "kind": "deserialization"
+    },
+    {
+      "match": "yaml.load",
+      "arg": 0,
+      "kind": "deserialization"
+    },
+    {
+      "match": "open",
+      "arg": 0,
+      "kind": "path"
+    },
+    {
+      "match": "send_file",
+      "arg": 0,
+      "kind": "path"
+    },
+    {
+      "match": "render_template_string",
+      "arg": 0,
+      "kind": "template"
+    },
+    {
+      "match": "redirect",
+      "arg": 0,
+      "kind": "redirect"
+    },
+    {
+      "match": "requests.get",
+      "arg": 0,
+      "kind": "request"
+    },
+    {
+      "match": "requests.post",
+      "arg": 0,
+      "kind": "request"
+    },
+    {
+      "match": "urllib.request.urlopen",
+      "arg": 0,
+      "kind": "request"
+    },
+    {
+      "match": "subprocess.getoutput",
+      "arg": 0,
+      "kind": "command"
+    },
+    {
+      "match": "subprocess.getstatusoutput",
+      "arg": 0,
+      "kind": "command"
+    },
+    {
+      "match": "marshal.loads",
+      "arg": 0,
+      "kind": "deserialization"
+    },
+    {
+      "match": "jinja2.Template",
+      "arg": 0,
+      "kind": "template"
+    },
+    {
+      "match": "Markup",
+      "arg": 0,
+      "kind": "xss"
+    },
+    {
+      "match": "httpx.get",
+      "arg": 0,
+      "kind": "request"
+    },
+    {
+      "match": "httpx.post",
+      "arg": 0,
+      "kind": "request"
+    },
+    {
+      "match": "sqlalchemy.text",
+      "arg": 0,
+      "kind": "sql"
+    }
+  ],
+  "sanitizers": [
+    "int()",
+    "float()",
+    "bool()",
+    "len()",
+    "shlex.quote()",
+    "html.escape()",
+    "markupsafe.escape()",
+    "escape()",
+    "os.path.basename()",
+    "secure_filename()",
+    "werkzeug.utils.secure_filename()",
+    "uuid.UUID()"
+  ]
+}

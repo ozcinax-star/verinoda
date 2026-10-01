@@ -3546,6 +3546,35 @@ def cmd_inventory(args) -> int:
     return 0 if res["units"] else 1
 
 
+def cmd_taint(args) -> int:
+    """Paths from untrusted sources to dangerous calls in the project's Python code."""
+    from verinoda import index, slicing, taint
+    from verinoda.paths import graph_path
+
+    repo = _repo(args)
+    scope = []
+    for p in args.paths or []:
+        q = Path(p)
+        tries = [q] if q.is_absolute() else [repo / q, Path.cwd() / q]
+        found = next((t for t in tries if t.exists()), tries[0])
+        try:
+            scope.append(found.resolve().relative_to(repo.resolve()).as_posix())
+        except ValueError:
+            print(f"error: {p} is outside the project {repo}", file=sys.stderr)
+            return 2
+    try:
+        graph = index.load(repo) if graph_path(repo).exists() else None
+        res = taint.run(repo, scope, depth=taint.DEPTH if args.depth is None else args.depth,
+                        builtin=False if args.no_builtin else None, tests=args.tests, graph=graph,
+                        local=args.local)
+    except (taint.TaintError, slicing.SliceError) as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    if not _emit_sarif(args, res, "taint"):
+        _emit(args, res, lambda r: _write(taint.render(r)))
+    return 3 if res["findings"] else 0
+
+
 def cmd_slice(args) -> int:
     """A backward (default) or forward slice of a Python line, across callers for a backward one."""
     from verinoda import slicing
@@ -5171,6 +5200,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-groups", type=int, default=50, help="groups listed at most (default 50)")
     sp.add_argument("--timeout", type=float, default=60.0,
                     help="seconds each search may read files (default 60; loading the index for symbols is apart)")
+    sp = add("taint", cmd_taint, "paths from untrusted sources (request data, argv, environment, route parameters) "
+                                 "to dangerous calls (SQL, shell, eval, file paths, ...) in the project's Python "
+                                 "code, every hop at file:line; sources, sinks and sanitizers from the library data "
+                                 "and [taint] in verinoda.toml (exit 3 when a path is found)")
+    sp.add_argument("paths", nargs="*", metavar="PATH", help="only files under these (default: the whole project)")
+    sp.add_argument("--depth", type=int, help="calls up followed from a parameter (0-3, default 2)")
+    sp.add_argument("--no-builtin", action="store_true",
+                    help="only the project's own [taint] sources, sinks and sanitizers, not the library's")
+    sp.add_argument("--tests", action="store_true", help="also test code")
+    sp.add_argument("--local", action="store_true",
+                    help="also local sources (sys.argv, the environment, input()); default: remote ones only "
+                         "(request data, route parameters) and the project's own")
+    sp.add_argument("--sarif", action="store_true", help="the paths as a SARIF 2.1.0 log (code flows)")
     sp = add("slice", cmd_slice, "where a Python line's values come from (backward slice: data and control "
                                  "dependence inside the function, then the arguments its callers pass, from the "
                                  "index) or what a definition there can affect (--forward)")
