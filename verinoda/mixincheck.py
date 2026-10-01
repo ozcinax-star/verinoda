@@ -268,7 +268,39 @@ def _value(n, src: bytes, consts: dict[str, str]):
         return text.rsplit(".", 1)[-1]   # an enum constant (Opcodes.GETFIELD) or a name this reader does not resolve
 
 
-def _injection(aname: str, a, m, src: bytes, consts: dict[str, str]) -> dict:
+def _handler_params(m, src: bytes, tvars: set[str]) -> list[str] | None:
+    """The parameter types of a handler method as written, without type arguments or package (``List<String>``
+    -> ``List``; a type variable is ``?``, any reference type once erased); None when one is not read."""
+    ps = m.child_by_field_name("parameters")
+    if ps is None:
+        return None
+    out = []
+    for p in ps.named_children:
+        if p.type == "formal_parameter":
+            text = _type(p.child_by_field_name("type"), src)
+        elif p.type == "spread_parameter":
+            ty = next((c for c in p.named_children if c.type not in ("modifiers", "variable_declarator")), None)
+            if ty is None:
+                return None
+            text = _type(ty, src) + "[]"
+        else:
+            continue
+        base, dims = "".join(text.split()), ""
+        while "<" in base:
+            nxt = re.sub(r"<[^<>]*>", "", base)
+            if nxt == base:
+                return None
+            base = nxt
+        while base.endswith("[]"):
+            base, dims = base[:-2], dims + "[]"
+        base = base.rsplit(".", 1)[-1]
+        if not base:
+            return None
+        out.append(("?" if base in tvars else base) + dims)
+    return out
+
+
+def _injection(aname: str, a, m, src: bytes, consts: dict[str, str], tvars: set[str] = frozenset()) -> dict:
     """What an injector (or ``@Overwrite``) names: its target method selectors, its ``@At`` points and the
     values that pick a slot (``ordinal``, ``index``, ``name``, ``constant``, ``cancellable``)."""
     nm = m.child_by_field_name("name")
@@ -284,14 +316,15 @@ def _injection(aname: str, a, m, src: bytes, consts: dict[str, str]) -> dict:
         sels = [member]
     return {"kind": aname, "line": _line(a), "member": member, "values": vals,
             "selectors": [s for s in sels if isinstance(s, str)],
-            "unread": any(not isinstance(s, str) for s in sels)}
+            "unread": any(not isinstance(s, str) for s in sels),
+            "params": _handler_params(m, src, set(tvars) | _typevars(m, src))}
 
 
 def _member_items(mc: MixinClass, m, src: bytes, consts: dict[str, str], ctv: set[str]) -> None:
     mods = next((c for c in m.named_children if c.type == "modifiers"), None)
     for aname, a in _annotations(mods, src):
         if m.type == "method_declaration" and (aname in MIXIN_INJECTORS or aname == "Overwrite"):
-            mc.injections.append(_injection(aname, a, m, src, consts))
+            mc.injections.append(_injection(aname, a, m, src, consts, ctv))
         if aname in MIXIN_INJECTORS:
             sels = _strings(a, src, "method", consts)
             for node, s in sels:

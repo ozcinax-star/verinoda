@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -239,6 +240,12 @@ def test_export_given_elsewhere_the_audit_and_the_cli(tmp_path, capsys):
     out = capsys.readouterr().out
     assert f"applied [observed] {SRC}:12  @Inject {MIXIN}.onDamage" in out
     assert "not_applied [strong_inference]" in out and "audit [observed]" in out
+    # a folder that holds no export is told in the text output too, not only with --json
+    empty = tmp_path / "games" / "instance"
+    empty.mkdir(parents=True)
+    assert cli.main(["mixin-check", "--repo", str(repo), "--export", str(empty)]) == 0
+    out = capsys.readouterr().out
+    assert f"note: --export {empty}: no Mixin export there" in out and "export: no Mixin debug export" in out
     with pytest.raises(SystemExit, match="not a folder"):
         cli.main(["mixin-check", "--repo", str(repo), "--export", str(tmp_path / "nowhere")])
     with pytest.raises(SystemExit, match="without --conflicts"):
@@ -334,3 +341,147 @@ def test_a_mixin_claim_cites_the_exported_class(guard_repo):
         assert not any("bytecode is not checked" in u for u in unc)
     finally:
         shutil.rmtree(guard_repo / "run")
+
+
+# -- review round: overloads, target names as paths, odd exports --------------------------------------------
+
+def _source(repo: Path, text: str) -> None:
+    (repo / SRC).write_text(text, encoding="utf-8")
+    old = (repo / EXPORT / "class" / (LE + ".class")).stat().st_mtime - 3600
+    os.utime(repo / SRC, (old, old))
+
+
+OVERLOADS = """package com.example.mod.mixin;
+
+import net.minecraft.entity.LivingEntity;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.*;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+@Mixin(LivingEntity.class)
+public abstract class LivingMixin {
+    @Inject(method = "damage", at = @At("HEAD"))
+    private void onDamage(CallbackInfo ci) {}
+    @Inject(method = "heal", at = @At("HEAD"))
+    private void onDamage(float f, CallbackInfo ci) {}
+}
+"""
+
+
+def test_overloaded_handlers_each_get_their_own_merged_method(tmp_path):
+    repo = _repo(tmp_path)
+    _source(repo, OVERLOADS)
+    rows = [r for r in mixincheck.lookup(repo)["export"]["rows"] if r["member"] == "onDamage"]
+    by_line = {r["at"]: r for r in rows}
+    first, second = by_line[f"{SRC}:10"], by_line[f"{SRC}:12"]
+    assert first["verdict"] == "applied" and first["handler"] == f"{HANDLER}({CB})V"
+    # the heal injector's handler (float, CallbackInfo) is not in the export: the merged one is the other's
+    assert second["verdict"] == "not_applied" and "handler" not in second, second
+    assert "another injector's" in second["why"]
+    got = mixinexport.claim_evidence(repo, SRC, 12, "onDamage", "net.minecraft.entity.LivingEntity")
+    assert got["verdict"] == "not_applied"
+    assert mixinexport.claim_evidence(repo, SRC, 10, "onDamage", "net.minecraft.entity.LivingEntity")[
+        "verdict"] == "applied"
+
+
+def test_same_named_handlers_not_told_apart_are_unknown():
+    def mc(*params):
+        return SimpleNamespace(name=MIXIN, injections=[
+            {"kind": "Inject", "member": "x", "params": p} for p in params])
+
+    one, two = ("handler$zza000$x", f"({CB})V"), ("handler$zzb000$x", f"(F{CB})V")
+    mine = {one: {}}
+    # parameter types not read: which injector the one merged method belongs to is not known
+    assert mixinexport._assign(mc(None, None), mine) == [mixinexport.AMBIGUOUS, mixinexport.AMBIGUOUS]
+    assert mixinexport._assign(mc(["CallbackInfo"], ["float", "CallbackInfo"]), {one: {}, two: {}}) == [one, two]
+    assert mixinexport._assign(mc(["float", "CallbackInfo"], ["CallbackInfo"]), {one: {}, two: {}}) == [two, one]
+    # one merged method is never handed to two injectors
+    assert mixinexport._assign(mc(["CallbackInfo"], ["CallbackInfo"]), mine) == [mixinexport.AMBIGUOUS] * 2
+    # an @Overwrite takes the overload its parameters name, not the first by name
+    ow = SimpleNamespace(name=MIXIN, injections=[{"kind": "Overwrite", "member": "foo", "params": ["long"]}])
+    assert mixinexport._assign(ow, {("foo", "(I)V"): {}, ("foo", "(J)V"): {}}) == [("foo", "(J)V")]
+
+
+def test_handler_parameter_types_against_a_descriptor():
+    src = b"""package p;
+import org.spongepowered.asm.mixin.*;
+import org.spongepowered.asm.mixin.injection.*;
+@Mixin(targets = "a/B")
+abstract class M<T> {
+    @Inject(method = "f", at = @At("HEAD"))
+    private <U> void h(java.util.List<String> l, Outer.Inner i, int[][] a, T t, U u, Object... rest) {}
+}
+"""
+    inj = mixincheck.read_mixins("M.java", src)[0].injections[0]
+    assert inj["params"] == ["List", "Inner", "int[][]", "?", "?", "Object[]"]
+    desc = "(Ljava/util/List;Lx/Outer$Inner;[[ILjava/lang/Object;Ljava/lang/Number;[Ljava/lang/Object;)V"
+    assert mixinexport.desc_params(desc) == ["List", "Inner", "int[][]", "Object", "Number", "Object[]"]
+    assert mixinexport.params_fit(inj["params"], desc) is True
+    assert mixinexport.params_fit(inj["params"], "(Ljava/util/List;)V") is False
+    assert mixinexport.params_fit(["?"], "(I)V") is False and mixinexport.params_fit(None, "()V") is None
+
+
+def test_a_target_name_is_never_a_path_out_of_the_export(tmp_path):
+    repo = _repo(tmp_path)
+    # a class file and a non-class file outside the repository, where "../../../../" from the export lands
+    (tmp_path / "secret").mkdir()
+    (tmp_path / "secret" / "Evil.class").write_bytes(ORIGINAL[LE])
+    (tmp_path / "notaclass.class").write_bytes(b"hello")
+    _source(repo, SOURCE.replace("@Mixin(LivingEntity.class)",
+                                 '@Mixin(targets = {"../../../../secret/Evil", "../../../../notaclass"})'))
+    res = mixincheck.lookup(repo)
+    sec = res["export"]
+    assert "this reader reads" not in json.dumps(sec)
+    assert all(r.get("evidence", EXPORT).startswith(EXPORT) for r in sec["rows"])
+    assert all(k["export"].startswith(EXPORT) for k in sec["classes"])
+    assert all(r["verdict"] == "unknown" for r in sec["rows"] if r["mixin"].endswith("LivingMixin"))
+    exp = mixinexport.Export(repo / EXPORT, EXPORT)
+    assert exp.class_path(LE) is not None
+    for bad in ("../../../../secret/Evil", f"{tmp_path.as_posix()}/secret/Evil", "/secret/Evil", "a\\b",
+                "C:/x/Evil", "a//b", "a/./b", "1a/b", ""):
+        assert exp.class_path(bad) is None, bad
+
+
+def test_a_found_export_pointing_out_of_the_repository_is_not_read(tmp_path):
+    repo = _repo(tmp_path, export=None)
+    outside = tmp_path / "elsewhere"
+    _write_export(outside)
+    (repo / "run").mkdir()
+    try:
+        os.symlink(outside, repo / "run" / ".mixin.out", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        try:   # Windows without the right to make symbolic links: a junction
+            import _winapi
+            _winapi.CreateJunction(str(outside), str(repo / "run" / ".mixin.out"))
+        except (ImportError, OSError, AttributeError):
+            pytest.skip("no symbolic links or junctions here")
+    found, notes = mixinexport.find_exports(repo, [repo])
+    assert found == [] and notes and "points outside the repository" in notes[0]
+    # given with --export it is read
+    found, _ = mixinexport.find_exports(repo, [repo], [str(repo / "run" / ".mixin.out")])
+    assert len(found) == 1
+
+
+def test_a_claim_whose_mixin_is_not_matched_is_not_told_as_no_export(tmp_path):
+    repo = _repo(tmp_path)
+    got = mixinexport.claim_evidence(repo, SRC, 12, "notAHandler", "net.minecraft.entity.LivingEntity")
+    assert got["verdict"] == "unmatched" and EXPORT in got["why"] and got["next"]
+    assert mixinexport.claim_evidence(repo, SRC, 12, "onDamage", "net.minecraft.entity.LivingEntity")[
+        "verdict"] == "applied"
+
+
+def test_a_handler_called_only_from_another_method_is_told(tmp_path):
+    repo = _repo(tmp_path)
+    _source(repo, SOURCE.replace('@Redirect(method = "baseTick"', '@Redirect(method = "playSound"'))
+    q = _rows(mixincheck.lookup(repo))[("LivingMixin", "quiet")]
+    assert q["verdict"] == "applied" and "playSound" in q["selector_mismatch"] and "but the method(s)" in q["why"]
+    assert "selector_mismatch" not in _rows(mixincheck.lookup(_repo(tmp_path / "b")))[("LivingMixin", "quiet")]
+
+
+def test_audit_lines_follow_quoted_newlines(tmp_path):
+    d = tmp_path / ".mixin.out"
+    (d / "audit").mkdir(parents=True)
+    (d / "audit" / mixinexport.AUDIT_CSV).write_text(
+        'Class,Method,Signature,Interface\n"a/B","x\ny",()V,c.I\na/C,z,()V,c.I\n', encoding="utf-8")
+    rows = mixinexport.read_audit(mixinexport.Export(d, "x"))
+    assert [r["evidence"].rsplit(":", 1)[1] for r in rows] == ["2", "4"]

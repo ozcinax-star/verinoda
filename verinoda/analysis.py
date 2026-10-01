@@ -975,7 +975,7 @@ def _mixin_export_ev(ctx: _Ctx, f: str, ann: int, a: int, b: int, label: str, ta
             return None, [seen]
         ev["locator"] = locator
         return ev, [seen]
-    if verdict in ("not_applied", "unknown"):
+    if verdict in ("not_applied", "unknown", "unmatched"):
         return None, [f"Mixin's debug export: {got['why']}{note}" + (f"; next: {got['next']}" if got.get("next")
                                                                       else "")]
     return None, ["what it changed at run time is not observed: no Mixin debug export (.mixin.out; start the game "

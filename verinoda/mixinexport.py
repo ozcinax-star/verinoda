@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,7 +55,11 @@ HANDLER_PREFIXES = {
 NEXT_EXPORT = ("add -Dmixin.debug.export=true to the JVM arguments of the run configuration (Loom: "
                "loom { runs { client { vmArg \"-Dmixin.debug.export=true\" } } }; ForgeGradle: jvmArgs), start the "
                "game until the target classes load, then run mixin-check again (or pass the folder with --export)")
-NEXT_RERUN = "start the game again with -Dmixin.debug.export=true so the export matches the current Mixin, then " \
+# a JVM internal class name: Java identifiers (with $) split by "/"; no "..", ":", "\" or leading "/"
+INTERNAL_NAME = re.compile(r"(?:[^\W\d]|\$)[\w$]*(?:/(?:[^\W\d]|\$)[\w$]*)*")
+PRIMITIVES = {"B": "byte", "C": "char", "D": "double", "F": "float", "I": "int", "J": "long", "S": "short",
+              "Z": "boolean"}
+NEXT_RERUN ="start the game again with -Dmixin.debug.export=true so the export matches the current Mixin, then " \
              "run mixin-check again"
 
 
@@ -65,7 +70,17 @@ class Export:
     _cache: dict[str, dict | None] = field(default_factory=dict)
 
     def class_path(self, binary: str) -> Path | None:
-        p = self.dir / "class" / (binary + ".class")
+        """The exported class file of the JVM internal name ``binary``, or None. A target name comes from the
+        project's source: only a valid internal name is looked up, and only a file inside ``class/``."""
+        if not isinstance(binary, str) or not INTERNAL_NAME.fullmatch(binary):
+            return None
+        base = self.dir / "class"
+        p = base / (binary + ".class")
+        try:
+            if not p.resolve().is_relative_to(base.resolve()):
+                return None
+        except (OSError, RuntimeError):
+            return None
         return p if p.is_file() else None
 
     def read(self, binary: str) -> dict | None:
@@ -90,9 +105,21 @@ def find_exports(repo: Path, roots: list[Path], given: list[str] | None = None) 
     ``run/*/.mixin.out``) and those given (an export folder, the folder holding one, or its ``class`` folder)."""
     cands: list[Path] = []
     notes: list[str] = []
+    top = repo.resolve()
     for root in roots:
-        cands += [root / EXPORT_DIR, root / "run" / EXPORT_DIR]
-        cands += sorted(root.glob(f"runs/*/{EXPORT_DIR}")) + sorted(root.glob(f"run/*/{EXPORT_DIR}"))
+        found = [root / EXPORT_DIR, root / "run" / EXPORT_DIR]
+        found += sorted(root.glob(f"runs/*/{EXPORT_DIR}")) + sorted(root.glob(f"run/*/{EXPORT_DIR}"))
+        for d in found:
+            # a folder found (not given) is read only when it, and its class/ and audit/, stay in the repository
+            try:
+                inside = all(x.resolve().is_relative_to(top) for x in (d, d / "class", d / "audit"))
+            except (OSError, RuntimeError):
+                inside = False
+            if inside:
+                cands.append(d)
+            elif (d / "class").is_dir() or (d / "audit").is_dir():
+                notes.append(f"{_shown(d, repo)}: not read, it points outside the repository (pass it with "
+                             "--export to read it)")
     for g in given or []:
         p = Path(g) if Path(g).is_absolute() else repo / g
         if (p / "class").is_dir() or (p / "audit").is_dir():
@@ -214,11 +241,11 @@ def changes(exp: dict, orig: dict | None, orig_evidence: str | None) -> dict:
     return out
 
 
-def _handler(member: str, mine: dict[tuple[str, str], dict], others: set[str] = frozenset()
-             ) -> tuple[str, str] | None:
-    """The merged method of an injector's handler ``member``: renamed (``prefix$id$[mod$]member``), else as
-    written. A name whose part after ``prefix$id$`` is another of the Mixin's handlers (``others``) is that
-    one's, not ``member``'s with a mod id."""
+def _handlers(member: str, mine: dict[tuple[str, str], dict], others: set[str] = frozenset()
+              ) -> list[tuple[str, str]]:
+    """The merged methods that may be an injector's handler ``member``: renamed (``prefix$id$[mod$]member``),
+    else as written. A name whose part after ``prefix$id$`` is another of the Mixin's handlers (``others``) is
+    that one's, not ``member``'s with a mod id."""
     exact, with_mod = [], []
     for k in sorted(mine):
         parts = k[0].split("$")
@@ -229,10 +256,118 @@ def _handler(member: str, mine: dict[tuple[str, str], dict], others: set[str] = 
             exact.append(k)
         elif "$" in rest and rest.split("$", 1)[1] == member and rest not in others:
             with_mod.append(k)
-    got = exact or with_mod
-    if got:
-        return got[0]
-    return next((k for k in sorted(mine) if k[0] == member), None)
+    return exact or with_mod or [k for k in sorted(mine) if k[0] == member]
+
+
+def _handler(member: str, mine: dict[tuple[str, str], dict], others: set[str] = frozenset()
+             ) -> tuple[str, str] | None:
+    got = _handlers(member, mine, others)
+    return got[0] if got else None
+
+
+def desc_params(desc: str) -> list[str] | None:
+    """A method descriptor's parameter types as simple names (``(FLnet/x/Outer$Inner;[I)V`` -> ``float``,
+    ``Inner``, ``int[]``); None when it is not read."""
+    if not desc.startswith("("):
+        return None
+    out, i, dims = [], 1, ""
+    while i < len(desc) and desc[i] != ")":
+        c = desc[i]
+        if c == "[":
+            dims += "[]"
+            i += 1
+            continue
+        if c == "L":
+            j = desc.find(";", i)
+            if j < 0:
+                return None
+            name, i = desc[i + 1:j].rsplit("/", 1)[-1].rsplit("$", 1)[-1], j + 1
+        elif c in PRIMITIVES:
+            name, i = PRIMITIVES[c], i + 1
+        else:
+            return None
+        out.append(name + dims)
+        dims = ""
+    return out if i < len(desc) else None
+
+
+def params_fit(params: list[str] | None, desc: str) -> bool | None:
+    """Whether a handler's parameter types as written (:func:`verinoda.mixincheck._handler_params`) are those of
+    the descriptor ``desc``; None when either is not read."""
+    d = desc_params(desc)
+    if params is None or d is None:
+        return None
+    if len(params) != len(d):
+        return False
+    for s, b in zip(params, d):
+        if s.startswith("?"):            # a type variable: any reference type once erased
+            bdims = b[len(b.rstrip("[]")):]
+            base = b[:len(b) - len(bdims)]
+            if s[1:] != bdims or (base in PRIMITIVES.values() and not bdims):
+                return False
+        elif s != b:
+            return False
+    return True
+
+
+AMBIGUOUS = ("ambiguous",)
+
+
+def _assign(mc, mine: dict[tuple[str, str], dict]) -> list:
+    """Per injector of ``mc`` (in order) its merged method, None when it has none, or :data:`AMBIGUOUS` when
+    injectors that share a handler name cannot be told apart. A merged method goes to one injector only:
+    where several share a name, each takes the one whose descriptor has its parameter types."""
+    injs = mc.injections
+    names = {i["member"] for i in injs}
+    groups: dict[tuple[bool, str], list[int]] = {}
+    for n, inj in enumerate(injs):
+        groups.setdefault((inj["kind"] == "Overwrite", inj["member"]), []).append(n)
+    out: list = [None] * len(injs)
+    taken: set = set()
+    for (overwrite, member), idx in groups.items():
+        cands = ([k for k in sorted(mine) if k[0] == member] if overwrite
+                 else _handlers(member, mine, names - {member}))
+        cands = [k for k in cands if k not in taken]
+        fit = {n: {k: params_fit(injs[n].get("params"), k[1]) for k in cands} for n in idx}
+        if len(idx) == 1:
+            n = idx[0]
+            sure = [k for k in cands if fit[n][k]]
+            out[n] = (sure or cands or [None])[0]
+            if out[n] is not None:
+                taken.add(out[n])
+            continue
+        free, left, moved = set(cands), list(idx), True
+        while moved:
+            moved = False
+            for n in list(left):
+                opts = [k for k in cands if k in free and fit[n][k]]
+                if len(opts) == 1 and not any(fit[o][opts[0]] for o in left if o != n):
+                    out[n] = opts[0]
+                    free.discard(opts[0])
+                    taken.add(opts[0])
+                    left.remove(n)
+                    moved = True
+        for n in left:
+            maybe = [k for k in cands if k in free and fit[n][k] is not False]
+            out[n] = AMBIGUOUS if maybe else None
+    return out
+
+
+def _selector_names(inj: dict) -> list[str] | None:
+    """The method names an injector's selectors name (``Lpkg/X;damage(F)Z`` -> ``damage``), None when one is
+    a pattern or not read."""
+    if inj.get("unread") or not inj.get("selectors"):
+        return None
+    out = []
+    for s in inj["selectors"]:
+        s = s.strip()
+        if s.startswith("L") and ";" in s:
+            s = s.split(";", 1)[1]
+        name = s.split("(", 1)[0].split(":", 1)[0].strip()
+        if not name or any(c in name for c in "*/^$[]"):
+            return None
+        out.append(name)
+    return out
 
 
 def injection_rows(mc, binary: str, shown_target: str, exp: Export, orig: dict | None, source_mtime: float | None
@@ -241,7 +376,12 @@ def injection_rows(mc, binary: str, shown_target: str, exp: Export, orig: dict |
     the target ``binary``, from the export ``exp``."""
     got = exp.read(binary)
     rows = []
-    for inj in mc.injections:
+    mine: dict = {}
+    keys: list = [None] * len(mc.injections)
+    if got is not None and "unreadable" not in got:
+        mine = {k: v for k, v in got["merged"].items() if _dotted(v.get("mixin")) == _dotted(mc.name)}
+        keys = _assign(mc, mine)
+    for inj, key in zip(mc.injections, keys):
         row = {"at": f"{mc.path}:{inj['line']}", "mixin": mc.name, "kind": f"@{inj['kind']}",
                "member": inj["member"], "target_class": shown_target}
         if got is None:
@@ -260,14 +400,23 @@ def injection_rows(mc, binary: str, shown_target: str, exp: Export, orig: dict |
         row["evidence"] = got["path"]
         stale = source_mtime is not None and source_mtime > got["mtime"]
         exported = time.strftime("%Y-%m-%d %H:%M", time.localtime(got["mtime"]))
-        mine = {k: v for k, v in got["merged"].items() if _dotted(v.get("mixin")) == _dotted(mc.name)}
         omethods = {(m[0], m[1]) for m in orig["methods"]} if orig else None
-        if inj["kind"] == "Overwrite":
-            key = next((k for k in sorted(mine) if k[0] == inj["member"]), None)
-        else:
-            key = _handler(inj["member"], mine, {i["member"] for i in mc.injections} - {inj["member"]})
+        if key is AMBIGUOUS:
+            same = sum(1 for i in mc.injections if i["member"] == inj["member"])
+            row.update(verdict="unknown", status="unknown", ambiguous=True,
+                       why=f"{same} injectors of {mc.name} have a handler named {inj['member']}, and which merged "
+                           f"method of {got['path']} is this one's is not told apart by its parameter types",
+                       next="give the handlers different names, or compare the descriptors in the exported class "
+                            "with the handler's parameters")
+            rows.append(row)
+            continue
         if key is None:
-            if mine:
+            if sum(1 for i in mc.injections if i["member"] == inj["member"]) > 1 and any(
+                    k in keys for k in _handlers(inj["member"], mine)):
+                why = (f"the method(s) of {got['path']} merged by {mc.name} under the name {inj['member']} are "
+                       f"another injector's (their parameter types are not those of this {row['kind']}): this "
+                       f"{row['kind']} was not applied in the run that wrote the export")
+            elif mine:
                 why = (f"{got['path']} holds {len(mine)} method(s) {mc.name} merged, none of them the handler "
                        f"{inj['member']}: this {row['kind']} was not applied in the run that wrote the export "
                        "(require = 0, a failed or skipped injection)")
@@ -296,6 +445,11 @@ def injection_rows(mc, binary: str, shown_target: str, exp: Export, orig: dict |
             row.update(verdict="applied", status="observed", called_from=calls,
                        why=f"{got['path']} has the handler {key[0]}{key[1]} with {ann}, called from "
                            + ", ".join(calls[:5]))
+            sels = _selector_names(inj)
+            if sels and not any(c.split("(", 1)[0] in sels for c in calls):
+                row["selector_mismatch"] = (f"the method(s) the injector names ({', '.join(sels)}) are not among "
+                                            "those calling the handler (a remapped name, or another target)")
+                row["why"] += f"; but {row['selector_mismatch']}"
         else:
             walked = all(m[3] is not False for m in got["code"]["methods"])   # None: abstract or native
             row.update(verdict="merged", status="observed",
@@ -318,9 +472,12 @@ def read_audit(exp: Export) -> list[dict]:
     except OSError:
         return []
     out = []
-    for i, cells in enumerate(csv.reader(io.StringIO(text)), 1):
+    reader = csv.reader(io.StringIO(text))
+    end = 0
+    for cells in reader:
+        first, i, end = end == 0, end + 1, reader.line_num   # i: the line the record starts on
         cells = [c.strip() for c in cells]
-        if len(cells) < 4 or (i == 1 and cells[0].lower() == "class"):
+        if len(cells) < 4 or (first and cells[0].lower() == "class"):
             continue
         out.append({"class": _dotted(cells[0]), "method": cells[1] + cells[2], "interface": _dotted(cells[3]),
                     "status": "observed", "evidence": f"{exp.shown}/audit/{AUDIT_CSV}:{i}",
@@ -356,7 +513,8 @@ def section(exports: list[Export], notes: list[str], rows: list[dict], classes: 
 
 def render(sec: dict) -> list[str]:
     if sec["status"] != "found":
-        return [f"  export: {sec['why']}", f"    next: {sec['next']}"]
+        return ([f"  export: {sec['why']}"] + [f"    note: {n}" for n in sec.get("notes") or []]
+                + [f"    next: {sec['next']}"])
     c = sec["counts"]
     out = [f"  Mixin export ({', '.join(sec['dirs'])}): {c['applied']} applied, {c['merged']} merged, "
            f"{c['not_applied']} not applied, {c['unknown']} unknown"]
@@ -388,8 +546,9 @@ def render(sec: dict) -> list[str]:
 
 def claim_evidence(repo: Path, path: str, line: int | None, member: str, target_class: str) -> dict:
     """What the export says about the handler ``member`` of the Mixin in ``path`` (its annotation at ``line``)
-    injecting into ``target_class`` (dotted): ``{"verdict", "why", ...}`` as :func:`injection_rows` gives it, or
-    ``{"verdict": "none"}`` when no export is found."""
+    injecting into ``target_class`` (dotted): ``{"verdict", "why", ...}`` as :func:`injection_rows` gives it,
+    ``{"verdict": "none"}`` when no export is found, ``{"verdict": "unmatched", ...}`` when one is but no Mixin of
+    the file names that handler on that class."""
     from verinoda import mixincheck
 
     repo = Path(repo).resolve()
@@ -422,4 +581,7 @@ def claim_evidence(repo: Path, path: str, line: int | None, member: str, target_
                     return got
             return {"verdict": "unknown", "why": f"no Mixin export found holds {target_class}",
                     "next": f"start the game with -Dmixin.debug.export=true until {target_class} loads"}
-    return {"verdict": "none"}
+    return {"verdict": "unmatched",
+            "why": f"a Mixin export is there ({', '.join(e.shown for e in exports[:3])}), but no @Mixin of {path} "
+                   f"read here names the handler {member} on {target_class}, so it is not looked up in the export",
+            "next": f"run verinoda mixin-check {path} to see each injector of the file against the export"}
