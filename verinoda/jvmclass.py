@@ -365,6 +365,7 @@ def class_code(b: bytes) -> dict | None:
 
 
 _ANNOTATION_ATTRS = ("RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations")
+MAX_ANNOTATION_DEPTH = 32   # nested annotations and arrays deeper than this make the class file unread
 
 
 def class_annotations(b: bytes) -> dict | None:
@@ -410,7 +411,9 @@ def class_annotations(b: bytes) -> dict | None:
                 return None
             k += 1
 
-        def value(o: int):
+        def value(o: int, depth: int = 0):
+            if depth > MAX_ANNOTATION_DEPTH:
+                raise ValueError("annotation nesting")
             tag = chr(b[o])
             if tag in "BCDFIJSZ":
                 v = cp[u2(o + 1)]
@@ -422,21 +425,21 @@ def class_annotations(b: bytes) -> dict | None:
             if tag == "c":
                 return {"class": cp[u2(o + 1)]}, o + 3
             if tag == "@":
-                return annotation(o + 1)
+                return annotation(o + 1, depth + 1)
             if tag == "[":
                 out, o2 = [], o + 3
                 for _ in range(u2(o + 1)):
-                    v, o2 = value(o2)
+                    v, o2 = value(o2, depth + 1)
                     out.append(v)
                 return out, o2
             raise ValueError(tag)
 
-        def annotation(o: int):
+        def annotation(o: int, depth: int = 0):
             ann = {"type": cp[u2(o)], "values": {}}
             o += 4
             for _ in range(u2(o - 2)):
                 name = cp[u2(o)]
-                ann["values"][name], o = value(o + 2)
+                ann["values"][name], o = value(o + 2, depth)
             return ann, o
 
         def attrs(o: int) -> tuple[list, int]:
@@ -468,7 +471,7 @@ def class_annotations(b: bytes) -> dict | None:
                     out["methods"].append([cp[nm], cp[desc], anns])
         out["annotations"], _ = attrs(i)
         return out
-    except (IndexError, struct.error, TypeError, ValueError, KeyError):
+    except (IndexError, struct.error, TypeError, ValueError, KeyError, RecursionError):
         return None
 
 

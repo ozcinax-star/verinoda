@@ -24,7 +24,7 @@ skip any Mixin at load time: a pair with one is marked, its code is never run. T
 method is read from the files: ``statically_verified`` when both selectors carry the same descriptor,
 ``strong_inference`` when one names only the method (it matches every overload).
 
-A log (``--log``: ``latest.log``, a crash report) is read for Mixin's failure lines (``InvalidInjectionException``,
+A log (``--log``: ``latest.log``, a crash report, a rotated ``.log.gz``) is read for Mixin's failure lines (``InvalidInjectionException``,
 ``Critical injection failure``, ``@Redirect conflict``, ``Method overwrite conflict``, ``Mixin [...] FAILED``,
 ``Mixin apply for mod ... failed``): each names the Mixin (``config.json:Class``), observed with the line as
 evidence, and its mod through the config that lists it (``statically_verified``, the manifest as evidence), else
@@ -33,11 +33,13 @@ the mod the line names (``observed``), else ``unknown``; the pairs found for tha
 """
 from __future__ import annotations
 
+import gzip
 import io
 import json
 import re
 import time
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +48,11 @@ from verinoda.mixincheck import parse_member, parse_selector
 
 DEFAULT_PRIORITY = 1000                 # Mixin's default priority (of a Mixin and of a config's Mixins)
 MAX_NESTED_DEPTH = 2
+MAX_ENTRY = 4 << 20                     # a manifest, config, refmap or class file read from a jar
+MAX_NESTED_JAR = 64 << 20               # a jar nested in a jar
+MAX_LOG = 256 << 20                     # a log, after gunzip
+_ZIP_ERRORS = (KeyError, OSError, EOFError, RuntimeError, NotImplementedError, zipfile.BadZipFile, zlib.error)
+_GAME = ("net.minecraft.", "com.mojang.")   # the targets whose names tell the namespace
 STATUS = "strong_inference"             # what a pair does at run time is predicted, never observed here
 _NESTED = ("META-INF/jars/", "META-INF/jarjar/")
 _LOADER_FAMILY = {"fabric": "fabric", "quilt": "fabric", "forge": "forge", "neoforge": "neoforge"}
@@ -75,6 +82,7 @@ class Config:
     priority: int | None = None          # mixinPriority: the default of its Mixins
     refmap: dict = field(default_factory=dict)
     plugin: str | None = None            # a config plugin may skip any of its Mixins at load time
+    refmap_name: str | None = None
 
 
 @dataclass
@@ -83,17 +91,24 @@ class Mod:
     evidence: str                        # the manifest that names it (or why there is none)
     source: str                          # "project" or the jar's label
     loader: str | None = None
+    version: str | None = None
     configs: dict[str, Config] = field(default_factory=dict)
     injections: list[dict] = field(default_factory=list)
     mixins: int = 0
 
     def record(self) -> dict:
-        return {"mod": self.id, "source": self.source, "evidence": self.evidence, "loader": self.loader,
+        return {"mod": self.id, "version": self.version, "source": self.source, "evidence": self.evidence,
+                "loader": self.loader,
                 "configs": sorted(self.configs), "mixins": self.mixins, "injectors": len(self.injections)}
 
 
-def _manifest(name: str, text: str) -> tuple[str | None, str | None, list[str], int]:
-    """``(mod id, loader, mixin configs named, line of the id)`` of a mod manifest."""
+def _json(text: str):
+    """JSON as the loaders read it: control characters (a raw newline) inside strings accepted."""
+    return json.JSONDecoder(strict=False).raw_decode(text.lstrip("\ufeff \t\r\n"))[0]
+
+
+def _manifest(name: str, text: str) -> tuple[str | None, str | None, list[str], int, str | None]:
+    """``(mod id, loader, mixin configs named, line of the id, version)`` of a mod manifest."""
     lines = text.splitlines()
 
     def line_of(needle: str) -> int:
@@ -102,23 +117,24 @@ def _manifest(name: str, text: str) -> tuple[str | None, str | None, list[str], 
     if name.endswith("MANIFEST.MF"):
         m = re.search(r"^MixinConfigs:\s*(.+(?:\r?\n [^\r\n]*)*)", text, re.M)
         cfgs = [c.strip() for c in re.sub(r"\r?\n ", "", m.group(1)).split(",") if c.strip()] if m else []
-        return None, None, cfgs, 1
+        return None, None, cfgs, 1, None
     if name.endswith(".json"):
         try:
-            data = json.JSONDecoder().raw_decode(text.lstrip("\ufeff \t\r\n"))[0]
+            data = _json(text)
         except ValueError:
-            return None, None, [], 1
+            return None, None, [], 1, None
         if not isinstance(data, dict):
-            return None, None, [], 1
+            return None, None, [], 1, None
         if name.endswith("quilt.mod.json"):
             ql = data.get("quilt_loader") if isinstance(data.get("quilt_loader"), dict) else {}
-            mid, raw, loader = ql.get("id"), data.get("mixin"), "quilt"
+            mid, raw, loader, ver = ql.get("id"), data.get("mixin"), "quilt", ql.get("version")
         else:
-            mid, raw, loader = data.get("id"), data.get("mixins"), "fabric"
+            mid, raw, loader, ver = data.get("id"), data.get("mixins"), "fabric", data.get("version")
         raw = raw if isinstance(raw, list) else [raw] if raw else []
         cfgs = [c.get("config") if isinstance(c, dict) else c for c in raw]
         mid = mid if isinstance(mid, str) and mid else None
-        return mid, loader, [c for c in cfgs if isinstance(c, str)], line_of(f'"{mid}"') if mid else 1
+        return (mid, loader, [c for c in cfgs if isinstance(c, str)], line_of(f'"{mid}"') if mid else 1,
+                ver if isinstance(ver, str) else None)
     try:
         import tomllib  # type: ignore[import-not-found]
     except ImportError:  # pragma: no cover - py3.10
@@ -126,27 +142,46 @@ def _manifest(name: str, text: str) -> tuple[str | None, str | None, list[str], 
     try:
         data = tomllib.loads(text)
     except Exception:  # noqa: BLE001 - an unreadable manifest names nothing
-        return None, None, [], 1
-    mods = [m for m in (data.get("mods") or []) if isinstance(m, dict) and isinstance(m.get("modId"), str)]
+        return None, None, [], 1, None
+    raw_mods, raw_mixins = data.get("mods"), data.get("mixins")
+    mods = [m for m in (raw_mods if isinstance(raw_mods, list) else [])
+            if isinstance(m, dict) and isinstance(m.get("modId"), str)]
     mid = mods[0]["modId"] if mods else None
-    cfgs = [m.get("config") for m in (data.get("mixins") or []) if isinstance(m, dict)]
+    ver = mods[0].get("version") if mods else None
+    cfgs = [m.get("config") for m in (raw_mixins if isinstance(raw_mixins, list) else []) if isinstance(m, dict)]
     loader = "neoforge" if name.endswith("neoforge.mods.toml") else "forge"
-    return mid, loader, [c for c in cfgs if isinstance(c, str)], line_of(f'"{mid}"') if mid else 1
+    return (mid, loader, [c for c in cfgs if isinstance(c, str)], line_of(f'"{mid}"') if mid else 1,
+            ver if isinstance(ver, str) and "$" not in ver else None)
 
 
 def _config(name: str, text: str, evidence: str) -> Config | None:
     """A Mixin config (``{"package": ..., "mixins": [...], "client": [...], "server": [...]}``), else None."""
     try:
-        data = json.loads(text.lstrip("\ufeff"))
+        data = _json(text)
     except ValueError:
         return None
     if not isinstance(data, dict) or not isinstance(data.get("package"), str):
         return None
-    classes = [c for key in ("mixins", "client", "server") for c in (data.get(key) or [])
-               if isinstance(c, str)]
-    prio, plugin = data.get("mixinPriority"), data.get("plugin")
+    classes = [c for key in ("mixins", "client", "server")
+               for c in (data[key] if isinstance(data.get(key), list) else []) if isinstance(c, str)]
+    prio, plugin, rm = data.get("mixinPriority"), data.get("plugin"), data.get("refmap")
     return Config(name, evidence, data["package"], list(dict.fromkeys(classes)),
-                  prio if isinstance(prio, int) else None, plugin=plugin if isinstance(plugin, str) else None)
+                  prio if isinstance(prio, int) and not isinstance(prio, bool) else None,
+                  plugin=plugin if isinstance(plugin, str) else None,
+                  refmap_name=rm if isinstance(rm, str) else None)
+
+
+def _refmap(text: str) -> dict[str, dict[str, str]] | None:
+    """A refmap's ``mappings``: Mixin class -> written name -> mapped name; None when its shape is not that."""
+    try:
+        data = _json(text)
+    except ValueError:
+        return None
+    maps = data.get("mappings") if isinstance(data, dict) else None
+    if not isinstance(maps, dict):
+        return None
+    return {cls: {k: v for k, v in m.items() if isinstance(k, str) and isinstance(v, str)}
+            for cls, m in maps.items() if isinstance(cls, str) and isinstance(m, dict)}
 
 
 def _dotted(name: str) -> str:
@@ -182,6 +217,19 @@ def _plain(v):
     return v
 
 
+def _read(z: zipfile.ZipFile, n: str, cap: int, label: str, notes: list[str]) -> bytes | None:
+    """An entry's bytes, or None with a note (too large, damaged, encrypted, an unknown compression)."""
+    try:
+        info = z.getinfo(n)
+        if info.file_size > cap:
+            notes.append(f"{label}!/{n} is {info.file_size} bytes, over the {cap} read here: skipped")
+            return None
+        return z.read(info)[:cap]
+    except _ZIP_ERRORS as exc:
+        notes.append(f"{label}!/{n} is not readable: {exc.__class__.__name__}")
+        return None
+
+
 def _jar_mods(jar: Path | bytes, label: str, depth: int, notes: list[str], where: str) -> list[Mod]:
     """The mods of a jar (a file, or the bytes of a nested one: its own mod, then those of the jars it nests)
     with the Mixins its configs list. ``label`` starts the evidence (``x.jar!/...``), ``where`` says where the
@@ -196,12 +244,10 @@ def _jar_mods(jar: Path | bytes, label: str, depth: int, notes: list[str], where
         names = set(z.namelist())
 
         def text(n: str) -> str | None:
-            try:
-                return z.read(n).decode("utf-8", "replace")
-            except (KeyError, OSError, zipfile.BadZipFile):
-                return None
+            b = _read(z, n, MAX_ENTRY, label, notes)
+            return None if b is None else b.decode("utf-8", "replace")
 
-        mid = loader = None
+        mid = loader = version = None
         mid_at = f"{label}!/"
         listed: list[str] = []
         for n in ("fabric.mod.json", "quilt.mod.json", "META-INF/neoforge.mods.toml", "META-INF/mods.toml",
@@ -209,9 +255,9 @@ def _jar_mods(jar: Path | bytes, label: str, depth: int, notes: list[str], where
             t = text(n) if n in names else None
             if t is None:
                 continue
-            i, ld, cfgs, ln = _manifest(n, t)
+            i, ld, cfgs, ln, ver = _manifest(n, t)
             if i and mid is None:
-                mid, loader, mid_at = i, ld, f"{label}!/{n}:{ln}"
+                mid, loader, mid_at, version = i, ld, f"{label}!/{n}:{ln}", ver
             listed += [c for c in cfgs if c not in listed]
         configs = [c for c in listed if c in names]
         if not listed and loader not in ("fabric", "quilt"):
@@ -220,37 +266,43 @@ def _jar_mods(jar: Path | bytes, label: str, depth: int, notes: list[str], where
                        and re.search(r"mixin", n, re.I)]
         if configs:
             mod = Mod(mid or Path(label.rsplit("!/", 1)[-1]).stem, mid_at if mid else
-                      f"{label} names no mod id: the jar's name is used", where, loader)
+                      f"{label} names no mod id: the jar's name is used", where, loader, version)
             for cname in configs:
                 cfg = _config(cname, text(cname) or "", f"{label}!/{cname}")
                 if cfg is None:
                     continue
                 if cname not in listed:
                     cfg.evidence += " (named by no manifest read)"
-                rm = (json.loads(text(cname) or "{}") or {}).get("refmap")
-                if isinstance(rm, str) and rm in names:
-                    try:
-                        cfg.refmap = (json.loads(text(rm) or "{}").get("mappings") or {})
-                    except (ValueError, AttributeError):
-                        notes.append(f"unreadable refmap: {label}!/{rm}")
+                rm = cfg.refmap_name
+                if rm and rm in names:
+                    got = _refmap(text(rm) or "")
+                    if got is None:
+                        notes.append(f"{label}!/{rm} is not a refmap this reader reads: names compared as written")
+                    else:
+                        cfg.refmap = got
                 mod.configs[cname] = cfg
                 for cls in cfg.classes:
                     entry = f"{cfg.package}.{cls}".replace(".", "/") + ".class"
                     if entry not in names:
                         notes.append(f"{label}!/{cname} lists {cls}, which the jar does not hold")
                         continue
-                    _read_class(mod, cfg, z.read(entry), f"{label}!/{entry}")
+                    data = _read(z, entry, MAX_ENTRY, label, notes)
+                    if data is not None:
+                        _read_class(mod, cfg, data, f"{label}!/{entry}", notes)
             out.append(mod)
         if depth < MAX_NESTED_DEPTH:
             for n in sorted(names):
                 if n.startswith(_NESTED) and n.endswith(".jar"):
-                    out += _jar_mods(z.read(n), f"{label}!/{n}", depth + 1, notes, f"{where}, nested {n}")
+                    data = _read(z, n, MAX_NESTED_JAR, label, notes)
+                    if data is not None:
+                        out += _jar_mods(data, f"{label}!/{n}", depth + 1, notes, f"{where}, nested {n}")
     return out
 
 
-def _read_class(mod: Mod, cfg: Config, data: bytes, evidence: str) -> None:
+def _read_class(mod: Mod, cfg: Config, data: bytes, evidence: str, notes: list[str]) -> None:
     got = jvmclass.class_annotations(data)
     if not got or not got.get("name"):
+        notes.append(f"{evidence} is not a class file this reader reads: its Mixins are not compared")
         return
     mixin_ann = next((a for a in got["annotations"] if a["type"] == "Lorg/spongepowered/asm/mixin/Mixin;"), None)
     if mixin_ann is None:
@@ -300,7 +352,7 @@ def _project_mods(repo: Path, paths: list[str] | None, notes: list[str]) -> tupl
             except OSError:
                 continue
             if base in ("fabric.mod.json", "quilt.mod.json", "mods.toml", "neoforge.mods.toml"):
-                mid, loader, cfgs, ln = _manifest(base, text)
+                mid, loader, cfgs, ln, _ver = _manifest(base, text)
                 if mid:
                     manifests.append((mid, loader, cfgs, f"{rel}:{ln}"))
             else:
@@ -392,7 +444,10 @@ def mod_jars(repo: Path, roots: list[Path], config: dict | None, with_paths: lis
 
 # -- pairs -------------------------------------------------------------------------------------------------
 
-def _namespace(cls: str, name: str | None) -> str:
+def _namespace(cls: str, name: str | None) -> str | None:
+    """The mapping namespace a game target is named in; None for a target outside the game's packages."""
+    if not cls.startswith(_GAME):
+        return None
     simple = cls.rsplit(".", 1)[-1]
     if _INTERMEDIARY.match(simple) or (name and _INTERMEDIARY.match(name)):
         return "intermediary"
@@ -447,8 +502,16 @@ def _shared_site(a: dict, b: dict, points: tuple[str, ...] | None = None) -> dic
 
 
 def _slot(inj: dict) -> tuple:
+    """``(ordinal, index, name)`` as written; a ``name`` array (a class file's ``String[]``, ``{"x"}``) of one is
+    that name, of several a tuple."""
+    def norm(x):
+        if isinstance(x, list):
+            xs = [y for y in x if isinstance(y, (int, str)) and not isinstance(y, bool)]
+            return xs[0] if len(xs) == 1 else tuple(xs) or None
+        return x if isinstance(x, (int, str)) and not isinstance(x, bool) else None
+
     v = inj["values"]
-    return tuple(v.get(k) if isinstance(v.get(k), (int, str)) else None for k in ("ordinal", "index", "name"))
+    return tuple(norm(v.get(k)) for k in ("ordinal", "index", "name"))
 
 
 def _constants(inj: dict) -> str:
@@ -503,7 +566,8 @@ def classify(a: dict, b: dict) -> tuple[str, str]:
         spec = _constants(a)
         return "order_dependent", (f"both change the same constant ({spec}): the result follows the order they "
                                    f"apply in (priority {pa}, {pb}), and the later may no longer find it")
-    if ka == kb == "ModifyVariable" and any(_slot(a)) and _slot(a) == _slot(b) and _shared_site(a, b):
+    if ka == kb == "ModifyVariable" and any(x is not None for x in _slot(a)) and _slot(a) == _slot(b) \
+            and _shared_site(a, b):
         return "order_dependent", (f"both change the same local (ordinal, index, name = {_slot(a)}) at the same "
                                    f"point: the later one (priority {pa}, {pb}) sees the value the earlier set")
     if ka == kb == "ModifyArg" and isinstance(a["values"].get("index"), int) \
@@ -543,6 +607,11 @@ def _keys(inj: dict, not_compared: list[dict]) -> list[dict]:
     if inj["unread"]:
         not_compared.append({"at": inj["evidence"], "mixin": inj["mixin"], "kind": f"@{inj['kind']}",
                              "why": "a method selector is not a constant string this reader resolves"})
+    elif not inj["selectors"]:
+        not_compared.append({"at": inj["evidence"], "mixin": inj["mixin"], "kind": f"@{inj['kind']}",
+                             "why": ("its target method is given by @Desc (target = ...), not compared here"
+                                     if inj["values"].get("target") is not None else
+                                     "it names no target method this reader reads")})
     for sel in inj["selectors"]:
         resolved = inj["refmap"].get(sel, sel)
         parsed = parse_selector(resolved)
@@ -564,17 +633,22 @@ def _keys(inj: dict, not_compared: list[dict]) -> list[dict]:
     return out
 
 
-def pairs(mods: list[Mod]) -> tuple[list[dict], list[dict], list[dict], list[str]]:
-    """``(conflicts, shared, not_compared, namespaces)``: the pairs of Mixins of different mods on one method."""
+def pairs(mods: list[Mod]) -> tuple[list[dict], list[dict], list[dict], dict[str, list[str]]]:
+    """``(conflicts, shared, not_compared, namespaces)``: the pairs of Mixins of different mods on one method, and
+    the mods per namespace their game targets are named in."""
     not_compared: list[dict] = []
     groups: dict[tuple[str, str], list[dict]] = {}
-    spaces: dict[str, int] = {}
+    spaces: dict[str, list[str]] = {}
     for m in mods:
+        counted: dict[str, int] = {}
         for inj in m.injections:
             for k in _keys(inj, not_compared):
                 groups.setdefault((k["_cls"], k["_name"]), []).append(k)
                 ns = _namespace(k["_cls"], k["_name"])
-                spaces[ns] = spaces.get(ns, 0) + 1
+                if ns:
+                    counted[ns] = counted.get(ns, 0) + 1
+        if counted:   # a mod's namespace: the one most of its game targets are named in
+            spaces.setdefault(max(sorted(counted), key=counted.get), []).append(m.id)
     conflicts, shared = [], []
     for (cls, name), rows in sorted(groups.items()):
         if len({r["mod"] for r in rows}) < 2:
@@ -587,6 +661,7 @@ def pairs(mods: list[Mod]) -> tuple[list[dict], list[dict], list[dict], list[str
                 fa, fb = _LOADER_FAMILY.get(a["loader"] or ""), _LOADER_FAMILY.get(b["loader"] or "")
                 if fa and fb and fa != fb:
                     continue    # mods of different loaders never load together
+                unsure = [x["mod"] for x, f in ((a, fa), (b, fb)) if not f]
                 if a["_desc"] and b["_desc"] and a["_desc"] != b["_desc"]:
                     continue
                 sev, why = classify(a, b)
@@ -597,6 +672,9 @@ def pairs(mods: list[Mod]) -> tuple[list[dict], list[dict], list[dict], list[str
                 if same != "statically_verified":
                     row["same_target_why"] = ("a selector without a descriptor matches every overload of "
                                               f"{name}; the target's class file is not read to tell them apart")
+                if unsure:
+                    row["loader_note"] = (f"the loader of {' and '.join(unsure)} is not known (no manifest read): "
+                                          "the pair assumes the two load together")
                 plugins = sorted({x["plugin"] for x in (a, b) if x.get("plugin")})
                 if plugins:
                     row["plugin_note"] = (f"a Mixin config plugin ({', '.join(plugins)}) decides at load time "
@@ -618,27 +696,30 @@ def pairs(mods: list[Mod]) -> tuple[list[dict], list[dict], list[dict], list[str
                            "mods": sorted({s["mod"] for s in sides}), "mixins": sides})
     order = {"conflict": 0, "order_dependent": 1}
     conflicts.sort(key=lambda r: (order[r["severity"]], r["target"]))
-    return conflicts, shared, not_compared, sorted(spaces)
+    return conflicts, shared, not_compared, {k: sorted(v) for k, v in sorted(spaces.items())}
 
 
 # -- the log -----------------------------------------------------------------------------------------------
 
-_REF = r"(?P<{0}cfg>[\w.-]+?\.json):(?P<{0}cls>[\w$]+(?:\.[\w$]+)*)(?:->@(?P<{0}kind>\w+)::(?P<{0}h>[\w$<>]+))?"
+# a Mixin as Mixin 0.8 prints it: "cfg.json:Cls", "cfg.json:Cls from mod x", with "->@Kind::handler" for an injector
+_MOD_ID = r"[\w.]+(?:-[\w.]+)*"
+_REF = (r"(?P<{0}cfg>[\w.-]+?\.json):(?P<{0}cls>[\w$]+(?:\.[\w$]+)*)(?: from mod (?P<{0}mod>" + _MOD_ID + r"))?"
+        r"(?:->@(?P<{0}kind>\w+)::(?P<{0}h>[\w$<>]+))?")
 _LOG_RULES = (
     ("redirect_conflict", re.compile(r"@Redirect conflict\. Skipping " + _REF.format("a") + r"\S* with priority "
                                      r"(?P<ap>-?\d+), already redirected by " + _REF.format("b") +
                                      r"\S* with priority (?P<bp>-?\d+)")),
     ("overwrite_conflict", re.compile(r"Method overwrite conflict for (?P<method>\S+) in " + _REF.format("a") +
-                                      r", previously written by (?P<bfqn>[\w.$]+)")),
+                                      r", previously written by (?P<bfqn>[\w$]+(?:\.[\w$]+)*)")),
     ("apply_failed", re.compile(r"Mixin \[" + _REF.format("a") + r"\] from phase \[\w+\] in config \[[^\]]+\] "
                                 r"FAILED during (?P<phase>\w+)")),
-    ("apply_failed", re.compile(r"Mixin apply for mod (?P<mod>[\w-]+) failed " + _REF.format("a") +
-                                r":? from mod [\w-]+ -> (?P<target>[\w.$]+)")),
+    ("apply_failed", re.compile(r"Mixin apply for mod (?P<mod>" + _MOD_ID + r") failed " + _REF.format("a") +
+                                r":?(?: from mod " + _MOD_ID + r")? -> (?P<target>[\w.$]+)")),
     ("injection_failed", re.compile(r"(?:InvalidInjectionException|InjectionError|InvalidMixinException|"
                                     r"Critical injection failure)")),
 )
 _ANY_REF = re.compile(_REF.format("a"))
-_FROM_MOD = re.compile(r"\bfrom mod (?P<mod>[\w-]+)")
+_FROM_MOD = re.compile(r"\bfrom mod (?P<mod>" + _MOD_ID + r")")
 _TARGETS = re.compile(r"could not find any targets matching '(?P<sel>[^']+)' in (?:the target class )?'?"
                       r"(?P<target>[\w./$]*\w)")
 _ON = re.compile(r"@(?P<kind>\w+) annotation on (?P<h>[\w$<>]+)")
@@ -673,7 +754,8 @@ def read_log(lines: list[str]) -> list[dict]:
                 row["injector"], row["handler"] = "@" + g["akind"], g["ah"]
             elif on and "injector" not in row:
                 row["injector"], row["handler"] = "@" + on.group("kind"), on.group("h")
-            fm = g.get("mod") or (_FROM_MOD.search(line).group("mod") if _FROM_MOD.search(line) else None)
+            fm = g.get("amod") or g.get("mod") or (_FROM_MOD.search(line).group("mod") if _FROM_MOD.search(line)
+                                                   else None)
             if fm and "log_mod" not in row:
                 row["log_mod"], row["log_mod_line"] = fm, i
             tm = _TARGETS.search(line)
@@ -685,6 +767,8 @@ def read_log(lines: list[str]) -> list[dict]:
                 row["what"] = what
                 row["other"] = ({"config": g["bcfg"], "mixin_written": g["bcls"], "priority": int(g["bp"])}
                                 if what == "redirect_conflict" else {"mixin_written": g["bfqn"]})
+                if g.get("bmod"):
+                    row["other"].update(log_mod=g["bmod"], log_mod_line=i)
                 if what == "redirect_conflict":
                     row["priority"] = int(g["ap"])
                 if g.get("method"):
@@ -705,7 +789,7 @@ def _who(ref: dict, mods: list[Mod]) -> None:
         return
     for m in holders:
         cfg = m.configs[cfg_name]
-        ref.update(mixin=f"{cfg.package}.{written}", mod=m.id, mod_status="statically_verified",
+        ref.update(mixin=_dotted(f"{cfg.package}.{written}"), mod=m.id, mod_status="statically_verified",
                    mod_evidence=f"{cfg.evidence} (listed by {m.evidence})")
         return
     for m in mods:
@@ -713,29 +797,31 @@ def _who(ref: dict, mods: list[Mod]) -> None:
             ref.update(mixin=_dotted(written), mod=m.id, mod_status="statically_verified",
                        mod_evidence=next(inj["evidence"] for inj in m.injections if inj["mixin"] == _dotted(written)))
             return
-    ref["mixin"] = _dotted(written) if not cfg_name else written
+    ref["mixin"] = _dotted(written)
+
+
+def _resolve(ref: dict, mods: list[Mod], log_name: str) -> None:
+    """A Mixin the log names, with its mod: from the configs read, else the one the log line names, else
+    unknown with the next step."""
+    _who(ref, mods)
+    if ref.get("mod") is None and ref.get("log_mod"):
+        ref.pop("next", None)
+        ref.update(mod=ref["log_mod"], mod_status="observed",
+                   mod_evidence=f"{log_name}:{ref['log_mod_line']} names the mod")
+    if "mod" not in ref:
+        ref.update(mod=None, mod_status="unknown", next=NEXT_JARS + (
+            f" (the config {ref['config']} is in no mod read)" if ref.get("config") else ""))
+    ref.pop("log_mod", None)
+    ref.pop("log_mod_line", None)
 
 
 def failures(lines: list[str], mods: list[Mod], conflicts: list[dict], log_name: str) -> list[dict]:
     out = read_log(lines)
     for row in out:
-        _who(row, mods)
-        if row.get("mod_status") == "unknown" and row.get("log_mod"):
-            row.pop("next", None)
-            row.update(mod=row["log_mod"], mod_status="observed",
-                       mod_evidence=f"{log_name}:{row['log_mod_line']} names the mod")
-        if "mod" not in row:
-            if row.get("log_mod"):
-                row.update(mod=row["log_mod"], mod_status="observed",
-                           mod_evidence=f"{log_name}:{row['log_mod_line']} names the mod")
-            else:
-                row.update(mod=None, mod_status="unknown", next=NEXT_JARS + (
-                    f" (the config {row['config']} is in no mod read)" if row.get("config") else ""))
-        row.pop("log_mod", None)
-        row.pop("log_mod_line", None)
+        _resolve(row, mods, log_name)
         row["evidence"] = f"{log_name}:{row['log_line']}: {row['evidence']}"
         if row.get("other"):
-            _who(row["other"], mods)
+            _resolve(row["other"], mods, log_name)
         names = {row.get("mixin")} | ({row["other"].get("mixin")} if row.get("other") else set())
         related = [c for c in conflicts if any(s["mixin"] in names for s in c["mixins"])]
         if related:
@@ -757,35 +843,55 @@ def check(repo: Path, paths: list[str] | None = None, with_paths: list[str] | No
     roots = list(dict.fromkeys([repo] + [jvmclass.build_root(repo, repo / f) for f in mixin_files(repo)]))
     jars, jnotes = mod_jars(repo, roots, config, with_paths)
     notes += jnotes
-    by_id = {m.id: m for m in project}
-    others: list[Mod] = []
-    nested_copies = 0
+    read: dict[str, list[Mod]] = {}
     for jar, how in jars:
-        for m in _jar_mods(jar, jar.name, 0, notes, f"{jar.as_posix()} ({how})"):
-            if m.id in by_id:
-                prev = by_id[m.id]
-                if any(f"!/{d}" in m.evidence for d in _NESTED) and prev.source != "project":
-                    nested_copies += 1      # a library several mods bundle: the loader keeps one copy
-                    continue
-                notes.append(f"{m.evidence.split(':')[0]}: mod {m.id} is already read from "
-                             + ("the project's sources" if prev.source == "project" else prev.source.split(" (")[0])
-                             + "; this copy is skipped")
+        try:
+            got = _jar_mods(jar, jar.name, 0, notes, f"{jar.as_posix()} ({how})")
+        except Exception as exc:  # noqa: BLE001 - one damaged jar is a note, never the end of the check
+            notes.append(f"{jar.name} could not be read: {exc.__class__.__name__}")
+            continue
+        for m in got:
+            read.setdefault(m.id, []).append(m)
+    project_ids = {m.id for m in project}
+    others, nested_copies = [], 0
+    for mid, copies in read.items():
+        if mid in project_ids:
+            notes += [f"{m.evidence.split(':')[0]}: mod {mid} is already read from the project's sources; this copy "
+                      "is skipped" for m in copies]
+            continue
+        keep = _newest(copies)
+        others.append(keep)
+        for m in copies:
+            if m is keep:
                 continue
-            by_id[m.id] = m
-            others.append(m)
+            if not _same_version(m.version, keep.version):
+                notes.append(f"mod {mid}: {keep.version or 'no version'} from {keep.evidence.split(':')[0]} is "
+                             f"read (the loader keeps the newest copy), {m.version or 'no version'} from "
+                             f"{m.evidence.split(':')[0]} is skipped")
+            elif any(f"!/{d}" in m.evidence for d in _NESTED):
+                nested_copies += 1      # a library several mods bundle: the loader keeps one copy
+            else:
+                notes.append(f"{m.evidence.split(':')[0]}: mod {mid} is already read from "
+                             f"{keep.source.split(' (')[0]}; this copy is skipped")
     if nested_copies:
         notes.append(f"{nested_copies} nested jar(s) hold a mod already read (a library several mods bundle; "
                      "the loader keeps one copy): read once")
     mods = project + others
     conflicts, shared, not_compared, spaces = pairs(mods)
     if len(spaces) > 1:
-        notes.append(f"the targets are named in several namespaces ({', '.join(spaces)}): names of different "
-                     "namespaces are not compared (a production jar without a refmap, or a jar not remapped to the "
-                     "build's names)")
+        notes.append("the game's classes are named in several namespaces: " + "; ".join(
+            f"{ns} by {', '.join(ids[:5])}" + (f" and {len(ids) - 5} more" if len(ids) > 5 else "")
+            for ns, ids in spaces.items()) + ": names of different namespaces are not compared (a production jar "
+            "without a refmap, or a jar not remapped to the build's names)")
     fails = []
+    log_unread = False
     if log is not None:
-        lines = Path(log).read_text(encoding="utf-8", errors="replace").splitlines()
-        fails = failures(lines, mods, conflicts, Path(log).name)
+        lines, why = read_log_file(Path(log))
+        if lines is None:
+            log_unread = True
+            notes.append(f"{Path(log).name} {why}: its Mixin failures are unknown")
+        else:
+            fails = failures(lines, mods, conflicts, Path(log).name)
     mods_with = [m for m in mods if m.mixins]
     if not [m for m in others if m.mixins]:
         notes.append("no mod jar with Mixins found (classpath, Loom's remapped mods, run/mods, mods, --with): "
@@ -793,12 +899,47 @@ def check(repo: Path, paths: list[str] | None = None, with_paths: list[str] | No
     counts = {"conflict": sum(r["severity"] == "conflict" for r in conflicts),
               "order_dependent": sum(r["severity"] == "order_dependent" for r in conflicts),
               "compatible": len(shared), "failures": len(fails),
-              "unknown": sum(f["mod_status"] == "unknown" for f in fails)}
-    return {"status": "found" if mods_with or fails else "no_mixins", "project_mixins": n_project,
+              "unknown": sum(f["mod_status"] == "unknown" for f in fails) + log_unread}
+    return {"status": "found" if mods_with or fails or log_unread else "no_mixins", "project_mixins": n_project,
             "mods": [m.record() for m in mods], "jars_read": len(jars), "other_mods": sum(1 for m in others if
                                                                                         m.mixins),
             "conflicts": conflicts, "shared": shared, "failures": fails, "not_compared": not_compared,
             "counts": counts, "notes": list(dict.fromkeys(notes)), "seconds": round(time.perf_counter() - t0, 3)}
+
+
+def _newest(copies: list[Mod]) -> Mod:
+    """The copy of a mod id the loader keeps: the highest version (a version this reader cannot read ranks below
+    any it can), the first read among equals."""
+    from verinoda.packset import _cmp, _ver
+
+    best, best_v = copies[0], _ver(copies[0].version or "")
+    for m in copies[1:]:
+        v = _ver(m.version or "")
+        if v is not None and (best_v is None or _cmp(v, best_v) > 0):
+            best, best_v = m, v
+    return best
+
+
+def _same_version(a: str | None, b: str | None) -> bool:
+    """Whether two versions rank equal (``2.0.7+abc`` and ``2.0.7+abd``: build metadata does not count)."""
+    from verinoda.packset import _cmp, _ver
+
+    va, vb = _ver(a or ""), _ver(b or "")
+    return a == b if va is None or vb is None else _cmp(va, vb) == 0
+
+
+def read_log_file(path: Path) -> tuple[list[str] | None, str]:
+    """The lines of a log (a ``.gz`` one unpacked), or None and why when it is not text."""
+    try:
+        with (gzip.open(path, "rb") if path.suffix == ".gz" else path.open("rb")) as f:
+            data = f.read(MAX_LOG + 1)
+    except (OSError, EOFError, zlib.error) as exc:
+        return None, f"is not readable ({exc.__class__.__name__})"
+    if len(data) > MAX_LOG:
+        data = data[:MAX_LOG]
+    if b"\x00" in data[:65536]:
+        return None, "is not text (a binary file)" + ("" if path.suffix == ".gz" else "; a .gz log is unpacked")
+    return data.decode("utf-8", "replace").splitlines(), ""
 
 
 def lookup(repo: Path, paths: list[str] | None = None, with_paths: list[str] | None = None,
@@ -818,12 +959,14 @@ def lookup(repo: Path, paths: list[str] | None = None, with_paths: list[str] | N
 
 
 def exit_code(res: dict) -> int:
-    """2: no Mixin read; 3: a clash or a failure in the log; 4: something unknown (no other mod's Mixins read,
-    a failure whose mod is not found); 0 otherwise."""
+    """2: no Mixin read; 3: a clash, or a failure in the log named with its mod; 4: something unknown (no other
+    mod's Mixins read, a failure whose mod is not found, a log that is not text); 0 otherwise. 3 wins over 4, as
+    ``mixin-check``'s absent wins over unknown."""
     if res["status"] == "no_mixins":
         return 2
     c = res["counts"]
-    if c["conflict"] or c["order_dependent"] or c["failures"]:
+    named = sum(1 for f in res["failures"] if f.get("mod"))
+    if c["conflict"] or c["order_dependent"] or named:
         return 3
     return 4 if c["unknown"] or not res["other_mods"] else 0
 
@@ -848,8 +991,9 @@ def render(res: dict) -> str:
     for r in res["conflicts"]:
         out.append(f"  {r['severity']} [{r['status']}] {r['target']}  (same method: {r['same_target']})")
         out.append(f"    {r['why']}")
-        if r.get("plugin_note"):
-            out.append(f"    note: {r['plugin_note']}")
+        for k in ("plugin_note", "loader_note"):
+            if r.get(k):
+                out.append(f"    note: {r[k]}")
         out += [_side_line(s) for s in r["mixins"]]
     for r in res["shared"]:
         out.append(f"  compatible [{r['status']}] {r['target']}  ({', '.join(r['mods'])})")

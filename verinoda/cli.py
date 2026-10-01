@@ -4136,12 +4136,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--conflicts", action="store_true",
                     help="instead: Mixins of several mods on the same target method (the project's and those of the "
                          "mod jars found: classpath, Loom's remapped mods, run/mods, mods, --with), each pair a "
-                         "conflict, order-dependent or compatible with both Mixins (exit 3: a clash or a failure in "
-                         "the log; 4: no other mod's Mixins read, or a failure's mod not found; 2: no Mixin)")
+                         "conflict, order-dependent or compatible with both Mixins (exit 3: a clash, or a failure "
+                         "in the log named with its mod; 4: no other mod's Mixins read, a failure's mod not found, "
+                         "or a log that is not text; 2: no Mixin)")
     sp.add_argument("--with", dest="with_paths", action="append", metavar="PATH",
                     help="a mod jar or a folder of jars to compare with (repeatable; implies --conflicts)")
-    sp.add_argument("--log", metavar="PATH", help="a game log or crash report: each Mixin failure in it named with "
-                                                  "its mod, by the config that lists it (implies --conflicts)")
+    sp.add_argument("--log", metavar="PATH", help="a game log or crash report (.gz too): each Mixin failure in it "
+                                                  "named with its mod, by the config that lists it (implies "
+                                                  "--conflicts)")
     sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")

@@ -365,3 +365,218 @@ def test_wildcard_imports_typeless_slots_and_a_shared_config_name(tmp_path):
     assert not any({s["mod"] for s in r["mixins"]} == {"p", "q"} for r in res["conflicts"])
     [fail] = res["failures"]
     assert fail["mod"] is None and fail["mod_status"] == "unknown" and fail["candidates"] == ["x1", "x2"]
+
+
+# -- second review round ------------------------------------------------------------------------------------
+
+# Mixin 0.8's MixinInfo prints "config:Class from mod id"
+REAL_LOG = """[12:00:02] [main/WARN] (mixin): @Redirect conflict. Skipping beta.mixins.json:BetaMixin from mod beta->@Redirect::beta$redirect()V with priority 1000, already redirected by alpha.mixins.json:AlphaMixin from mod alpha->@Redirect::alpha$redirect()V with priority 1100
+[12:00:03] [main/ERROR] (mixin): Mixin [ghost.mixins.json:GhostMixin from mod ghost] from phase [DEFAULT] in config [ghost.mixins.json] FAILED during APPLY
+[12:00:04] [main/WARN] (mixin): Method overwrite conflict for tick in ow.mixins.json:OwMixin from mod ow, previously written by com.other.OtherMixin. Skipping method.
+[12:00:05] [main/ERROR] (mixin): Mixin apply for mod fabric-x-v1 failed fabric-x-v1.mixins.json:XMixin from mod fabric-x-v1 -> net.minecraft.class_1: java.lang.RuntimeException
+"""
+
+
+def test_real_mixin_log_lines_name_the_mixin_and_its_mod(tmp_path):
+    rows = {r["config"]: r for r in mixinconflicts.read_log(REAL_LOG.splitlines())}
+    assert [rows[c]["what"] for c in ("beta.mixins.json", "ghost.mixins.json", "ow.mixins.json")] == [
+        "redirect_conflict", "apply_failed", "overwrite_conflict"]
+    assert rows["beta.mixins.json"]["log_mod"] == "beta" and rows["beta.mixins.json"]["handler"] == "beta$redirect"
+    assert rows["beta.mixins.json"]["other"]["log_mod"] == "alpha"
+    assert rows["ghost.mixins.json"]["mixin_written"] == "GhostMixin" and rows["ghost.mixins.json"]["log_mod"] == "ghost"
+    assert rows["ow.mixins.json"]["other"] == {"mixin_written": "com.other.OtherMixin"}
+    assert rows["fabric-x-v1.mixins.json"]["log_mod"] == "fabric-x-v1"
+    repo = tmp_path / "proj"
+    write(repo / "mods" / "alpha.jar", redirect_mod("alpha", priority=1100))
+    write(repo / "mods" / "beta.jar", redirect_mod("beta"))
+    log = tmp_path / "latest.log"
+    log.write_text(REAL_LOG, encoding="utf-8")
+    res = mixinconflicts.lookup(repo, log=log)
+    fails = {f["config"]: f for f in res["failures"]}
+    beta = fails["beta.mixins.json"]
+    assert beta["mod"] == "beta" and beta["mod_status"] == "statically_verified"
+    assert beta["other"]["mod"] == "alpha" and beta["other"]["mod_status"] == "statically_verified"
+    assert beta["likely_cause"][0]["severity"] == "conflict"
+    ghost = fails["ghost.mixins.json"]   # in no jar read: the mod the line names
+    assert ghost["mod"] == "ghost" and ghost["mod_status"] == "observed" and ghost["mod_evidence"] == \
+        "latest.log:2 names the mod"
+
+
+def raw_jar(files: dict[str, bytes | str]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for n, data in files.items():
+            z.writestr(n, data)
+    return buf.getvalue()
+
+
+def test_lenient_manifests_and_unknown_loaders(tmp_path):
+    repo = tmp_path / "proj"
+    name = "com/a/mixin/AMixin"
+    tick = {"tick": ("()V", [(OVERWRITE, {})])}
+    # Fabric Loader reads a raw newline inside a string; so does this reader
+    fmj = '{\n  "id": "amod",\n  "description": "line one\nline two",\n  "mixins": ["amod.mixins.json"]\n}'
+    write(repo / "mods" / "amod-1.0.jar", raw_jar({
+        "fabric.mod.json": fmj, "amod.mixins.json": json.dumps({"package": "com.a.mixin", "mixins": ["AMixin"]}),
+        name + ".class": mixin_class(name, LE, tick)}))
+    write(repo / "mods" / "forgy.jar", jar_bytes("forgy", {"com/f/F": mixin_class("com/f/F", LE, tick)},
+                                                 package="com.f", loader="forge"))
+    res = mixinconflicts.lookup(repo)
+    assert ("amod", "fabric") in [(m["mod"], m["loader"]) for m in res["mods"]]
+    assert res["conflicts"] == []     # a Fabric and a Forge mod never load together
+    # a jar whose loader is not known (only MANIFEST.MF names its config) pairs, and the row says so
+    write(repo / "mods" / "plain.jar", raw_jar({
+        "META-INF/MANIFEST.MF": "Manifest-Version: 1.0\nMixinConfigs: plain.mixins.json\n",
+        "plain.mixins.json": json.dumps({"package": "com.p", "mixins": ["P"]}),
+        "com/p/P.class": mixin_class("com/p/P", LE, tick)}))
+    res = mixinconflicts.lookup(repo)
+    rows = [r for r in res["conflicts"] if "plain" in {s["mod"] for s in r["mixins"]}]
+    assert rows and all("the loader of plain is not known" in r["loader_note"] for r in rows)
+
+
+def test_malformed_jars_become_notes_never_a_crash(tmp_path, monkeypatch):
+    repo = tmp_path / "proj"
+    name = "com/a/mixin/AMixin"
+    ok_class = mixin_class(name, LE, {"tick": ("()V", [(OVERWRITE, {})])})
+    # a damaged class entry (its deflated bytes flipped)
+    good = jar_bytes("a", {name: ok_class}, package="com.a.mixin")
+    data = bytearray(good)
+    info = zipfile.ZipFile(io.BytesIO(good)).getinfo(name + ".class")
+    data[info.header_offset + 30 + len(info.filename) + len(info.extra) + 5] ^= 0xFF
+    write(repo / "mods" / "a.jar", bytes(data))
+    # refmaps of the wrong shape, a config whose class list is a number, a class file that is not one
+    for i, maps in enumerate(([1], "x", {name: [1]})):
+        write(repo / "mods" / f"r{i}.jar", raw_jar({
+            "fabric.mod.json": json.dumps({"id": f"r{i}", "mixins": ["r.mixins.json"]}),
+            "r.mixins.json": json.dumps({"package": "com.a.mixin", "mixins": ["AMixin"], "refmap": "r.json"}),
+            "r.json": json.dumps({"mappings": maps}), name + ".class": ok_class}))
+    write(repo / "mods" / "five.jar", raw_jar({
+        "fabric.mod.json": json.dumps({"id": "five", "mixins": ["five.mixins.json"]}),
+        "five.mixins.json": json.dumps({"package": "com.f", "mixins": 5, "client": "com.f.Str"})}))
+    write(repo / "mods" / "junk.jar", raw_jar({
+        "fabric.mod.json": json.dumps({"id": "junk", "mixins": ["junk.mixins.json"]}),
+        "junk.mixins.json": json.dumps({"package": "com.j", "mixins": ["J"]}), "com/j/J.class": b"\xca\xfe\xba\xbe"}))
+    res = mixinconflicts.lookup(repo)
+    notes = "\n".join(res["notes"])
+    assert "a.jar!/com/a/mixin/AMixin.class is not readable: BadZipFile" in notes
+    assert "r0.jar!/r.json is not a refmap this reader reads" in notes and "r1.jar!/r.json" in notes
+    assert "junk.jar!/com/j/J.class is not a class file this reader reads" in notes
+    assert {m["mod"]: m["mixins"] for m in res["mods"]}["five"] == 0
+    assert any({s["mod"] for s in r["mixins"]} == {"r0", "r1"} for r in res["conflicts"])
+    # an entry larger than the cap is skipped with a note, not read
+    monkeypatch.setattr(mixinconflicts, "MAX_ENTRY", 10)
+    assert "over the 10 read here" in "\n".join(mixinconflicts.lookup(repo)["notes"])
+    # annotations nested past the cap make the class file unread, never a RecursionError
+    deep: list = []
+    cur = deep
+    for _ in range(400):
+        nxt: list = []
+        cur.append(nxt)
+        cur = nxt
+    assert jvmclass.class_annotations(class_bytes("a/B", annotations=((MIXIN, {"value": deep}),))) is None
+
+
+def variable_mod(mod_id: str, **vals) -> bytes:
+    name = f"com/{mod_id}/M"
+    return jar_bytes(mod_id, {name: mixin_class(name, LE, {f"{mod_id}$v": ("(F)F", [(INJ + "ModifyVariable;", {
+        "method": [DAMAGE], "at": at("HEAD"), **vals})])})}, package=f"com.{mod_id}")
+
+
+def test_modify_variable_slots_zero_and_name_arrays(tmp_path):
+    repo = tmp_path / "proj"
+    write(repo / "mods" / "o1.jar", variable_mod("o1", ordinal=0))
+    write(repo / "mods" / "o2.jar", variable_mod("o2", ordinal=0))
+    write(repo / "mods" / "n1.jar", variable_mod("n1", name=["amount"]))   # a class file's String[]
+    write(repo / "mods" / "n2.jar", variable_mod("n2", name="amount"))
+    res = mixinconflicts.lookup(repo)
+    pairs = {tuple(sorted(s["mod"] for s in r["mixins"])): r["severity"] for r in res["conflicts"]}
+    assert pairs == {("o1", "o2"): "order_dependent", ("n1", "n2"): "order_dependent"}
+
+
+def test_the_newest_copy_of_a_mod_is_read(tmp_path):
+    repo = tmp_path / "proj"
+
+    def lib(version: str, overwrite: bool) -> bytes:
+        meths = {"tick": ("()V", [(OVERWRITE, {})])} if overwrite else \
+            {"lib$t": ("()V", [(INJ + "Inject;", {"method": ["jump"], "at": [at("HEAD")]})])}
+        return raw_jar({"fabric.mod.json": json.dumps({"id": "lib", "version": version, "mixins": ["lib.mixins.json"]}),
+                        "lib.mixins.json": json.dumps({"package": "com.lib", "mixins": ["L"]}),
+                        "com/lib/L.class": mixin_class("com/lib/L", LE, meths)})
+    write(repo / "mods" / "aaa.jar", jar_bytes("aaa", {}, package="x", nested={"lib-2.0.jar": lib("2.0", True)}))
+    write(repo / "mods" / "zzz.jar", jar_bytes("zzz", {}, package="x", nested={"lib-1.0.jar": lib("1.0", False)}))
+    # the same version but for its build metadata, which does not rank: a copy, not another version
+    write(repo / "mods" / "zzzz.jar", jar_bytes("zzzz", {}, package="x",
+                                                nested={"lib-2.0.jar": lib("2.0+build.7", True)}))
+    write(repo / "mods" / "other.jar", jar_bytes("other", {"com/o/O": mixin_class("com/o/O", LE, {
+        "tick": ("()V", [(OVERWRITE, {})])})}, package="com.o"))
+    res = mixinconflicts.lookup(repo)
+    [row] = res["conflicts"]
+    assert {s["mod"] for s in row["mixins"]} == {"lib", "other"}
+    assert next(m for m in res["mods"] if m["mod"] == "lib")["version"] == "2.0"
+    notes = "\n".join(res["notes"])
+    assert "mod lib: 2.0 from aaa.jar!/META-INF/jars/lib-2.0.jar!/fabric.mod.json is read" in notes
+    assert "1.0 from zzz.jar!/META-INF/jars/lib-1.0.jar!/fabric.mod.json is skipped" in notes
+    assert "1 nested jar(s) hold a mod already read" in notes and "2.0+build.7" not in notes
+
+
+def test_namespace_note_only_for_the_games_classes(tmp_path):
+    repo = tmp_path / "proj"
+    inter = "net/minecraft/class_1309"
+    for mid in ("i1", "i2"):
+        n = f"com/{mid}/M"
+        write(repo / "mods" / f"{mid}.jar", jar_bytes(mid, {n: mixin_class(n, inter, {
+            "method_5773": ("()V", [(OVERWRITE, {})])})}, package=f"com.{mid}"))
+    n = "com/c/M"   # a Mixin into another mod's class, named as that mod names it
+    write(repo / "mods" / "c.jar", jar_bytes("c", {n: mixin_class(n, "com/other/Thing", {
+        "tick": ("()V", [(OVERWRITE, {})])})}, package="com.c"))
+    res = mixinconflicts.lookup(repo)
+    assert not any("namespaces" in n for n in res["notes"])
+    write(repo / "mods" / "named.jar", other_mod())   # LivingEntity in named names
+    res = mixinconflicts.lookup(repo)
+    assert any("intermediary by i1, i2; named by othermod" in n for n in res["notes"])
+
+
+def test_logs_that_are_gzipped_binary_or_name_no_known_mod(tmp_path):
+    import gzip
+
+    repo = tmp_path / "proj"
+    write(repo / "mods" / "alpha.jar", redirect_mod("alpha"))
+    write(repo / "mods" / "beta.jar", redirect_mod("beta", "Lnet/minecraft/entity/Entity;discard()V"))
+    gz = tmp_path / "2026-10-01-1.log.gz"
+    gz.write_bytes(gzip.compress(b"Mixin apply for mod lost failed lost.mixins.json:LostMixin from mod lost -> "
+                                 b"net.minecraft.class_1\n"))
+    res = mixinconflicts.lookup(repo, log=gz)
+    assert res["failures"][0]["mod"] == "lost" and mixinconflicts.exit_code(res) == 3
+    binary = tmp_path / "crash.bin"
+    binary.write_bytes(b"\x00\x01\x02 not a log")
+    res = mixinconflicts.lookup(repo, log=binary)
+    assert res["counts"]["unknown"] == 1 and any("is not text" in n for n in res["notes"])
+    assert mixinconflicts.exit_code(res) == 4
+    # a failure whose mod nothing names: exit 4, as documented (a clash or a named failure would be 3)
+    unknown = tmp_path / "latest.log"
+    unknown.write_text("Mixin [ghost.mixins.json:GhostMixin] from phase [DEFAULT] in config [ghost.mixins.json] "
+                       "FAILED during APPLY\n", encoding="utf-8")
+    res = mixinconflicts.lookup(repo, log=unknown)
+    assert res["failures"][0]["mod_status"] == "unknown" and mixinconflicts.exit_code(res) == 4
+
+
+def test_desc_targets_unparsed_classes_and_inner_class_names(tmp_path):
+    repo = tmp_path / "proj"
+    n = "com/d/D"
+    write(repo / "mods" / "d.jar", jar_bytes("d", {n: mixin_class(n, LE, {"d$x": ("()V", [(INJ + "Inject;", {
+        "target": [("Lcom/llamalad7/mixinextras/sugar/Desc;", {"value": "tick"})], "at": [at("HEAD")]})])})},
+        package="com.d"))
+    inner = "com/w/Outer$WMixin"
+    write(repo / "mods" / "w.jar", raw_jar({
+        "fabric.mod.json": json.dumps({"id": "w", "mixins": ["w.mixins.json"]}),
+        "w.mixins.json": json.dumps({"package": "com.w", "mixins": ["Outer$WMixin"]}),
+        inner + ".class": mixin_class(inner, LE, {"tick": ("()V", [(OVERWRITE, {})])})}))
+    write(repo / "mods" / "othermod.jar", other_mod())
+    log = tmp_path / "latest.log"
+    log.write_text("Mixin [w.mixins.json:Outer$WMixin from mod w] from phase [DEFAULT] in config [w.mixins.json] "
+                   "FAILED during APPLY\n", encoding="utf-8")
+    res = mixinconflicts.lookup(repo, log=log)
+    assert any("given by @Desc" in r["why"] and r["mixin"] == "com.d.D" for r in res["not_compared"])
+    [fail] = res["failures"]
+    assert fail["mixin"] == "com.w.Outer.WMixin" and fail["mod"] == "w"
+    assert sorted(fail["likely_cause"][0]["mods"]) == ["othermod", "w"]
