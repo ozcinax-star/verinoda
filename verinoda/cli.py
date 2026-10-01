@@ -929,14 +929,24 @@ def _r_note_links(res: dict) -> None:
 MAP_ACTIONS = ("save", "show", "list")  # `map save NAME`: a project folder with such a name is passed as ./save
 
 
+def _dsm_flags_refused(args) -> bool:
+    """``--group-by`` / ``--depth`` / ``--model`` that would be ignored are refused (as every map argument is)."""
+    stray = [f for f, v, views in (("--group-by", args.group_by, ("dsm",)), ("--depth", args.depth, ("dsm",)),
+                                    ("--model", args.model, ("model",))) if v is not None and args.view not in views]
+    if stray:
+        print(f"error: {', '.join(stray)}: --group-by and --depth go with --view dsm, --model with --view model",
+              file=sys.stderr)
+        return True
+    if args.depth is not None and args.group_by == "tag":
+        print("error: --depth groups folders; with --group-by tag the groups are the tags", file=sys.stderr)
+        return True
+    return False
+
+
 def cmd_map(args) -> int:
     if args.path in MAP_ACTIONS:
         return _cmd_named_map(args)
-    stray = [f for f, v, views in (("--group-by", args.group_by, ("dsm",)), ("--depth", args.depth, ("dsm",)),
-                                    ("--model", args.model, ("model",))) if v is not None and args.view not in views]
-    if stray and args.path not in MAP_ACTIONS:
-        print(f"error: {', '.join(stray)}: --group-by and --depth go with --view dsm, --model with --view model",
-              file=sys.stderr)
+    if _dsm_flags_refused(args):
         return 2
     if args.name is not None or args.trace:
         print("error: a second argument and --trace go with `map save NAME` (saved maps: map save|show|list)",
@@ -952,7 +962,9 @@ def cmd_map(args) -> int:
         _write(_dump(res))
         return 2 if failed else 0
     _r_map(args, res)
-    if failed and args.view == "repo":
+    if failed and args.view == "model":
+        print(f"error: the model {args.model} was not read (see the problem above)", file=sys.stderr)
+    elif failed and args.view == "repo":
         print("error: a --target is not a file of the graph (see above); pass a repository-relative path",
               file=sys.stderr)
     elif failed:
@@ -967,7 +979,10 @@ def _cmd_named_map(args) -> int:
 
     repo = Path(args.repo).resolve() if args.repo else find_repo_root()
     view_args = [f for f, v in (("--view", args.view), ("--target", args.target), ("--base", args.base),
-                                ("--max-tokens", args.max_tokens)) if v is not None]
+                                ("--max-tokens", args.max_tokens), ("--group-by", args.group_by),
+                                ("--depth", args.depth), ("--model", args.model)) if v is not None]
+    if args.path == "save" and not args.trace and _dsm_flags_refused(args):
+        return 2
     # like plain `map`, an argument that would be ignored is refused
     stray = ["NAME"] if args.path == "list" and args.name else []
     if args.path != "save":
@@ -1031,7 +1046,8 @@ def _cmd_named_map(args) -> int:
         fresh = freshness.check(repo)
         kind = "map"
         saved_args = {k: v for k, v in (("view", args.view), ("target", args.target), ("base", args.base),
-                                        ("max_tokens", args.max_tokens)) if v}
+                                        ("max_tokens", args.max_tokens), ("group_by", args.group_by),
+                                        ("depth", args.depth), ("model", args.model)) if v}
         # no --target: the views took the working-tree changes; the targets they used make the map again
         used = {"impact": ("impact", "targets"), "repo": ("repo", "focus")}.get(args.view)
         used = (result.get(used[0]) or {}).get(used[1]) if used else None
@@ -1086,6 +1102,8 @@ def _map_result(args, repo: Path):
         from verinoda import dsm
 
         res = {"model": dsm.model_check(g, model=args.model)}
+        if args.model and res["model"]["status"] == "no_model":   # the file the user named was not read
+            failed = True
     elif args.view:
         res = {args.view: am.VIEWS[args.view](g)}
     else:

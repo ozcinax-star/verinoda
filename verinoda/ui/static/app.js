@@ -93,7 +93,7 @@
         matrix: "Dependency matrix", model: "Architecture model", undeclared: "Undeclared dependencies",
       },
       dsmNote: "Row uses column: the number is the references from the row's files to the column's. Groups are ordered so that a group comes before what it uses; a marked cell below the diagonal points back inside a cycle of groups. Edges are what the index extracted, never verified.",
-      dsmBy: "Group by", dsmFolder: "folder", dsmTag: "architecture tag", dsmDepth: "depth", dsmCycle: "cycle of groups", dsmPick: "Pick a cell to see its reference lines.",
+      dsmBy: "Group by", dsmFolder: "folder", dsmTag: "architecture tag", dsmDepth: "depth", dsmCycle: "cycle of groups", dsmPick: "Pick a cell to see its reference lines.", dsmOffline: "This exported file holds no dependency matrix; `verinoda ui` shows it.",
       modelNone: "No committed model: [architecture.model] in verinoda.toml, or verinoda map --view model --model workspace.dsl.",
       wikiMermaid: "Mermaid text: paste it into a Mermaid viewer (GitHub, GitLab, Obsidian, mermaid.live) to draw it. A dashed arrow comes from an inferred edge.",
       copy: "Copy", copied: "Copied", evidence: "Evidence", wikiNone: "No page named so.",
@@ -187,7 +187,7 @@
         matrix: "Bağımlılık matrisi", model: "Mimari model", undeclared: "Modelde olmayan bağımlılıklar",
       },
       dsmNote: "Satır sütunu kullanır: sayı, satırdaki dosyalardan sütundakilere yapılan başvurulardır. Gruplar, bir grup kullandıklarından önce gelecek şekilde sıralıdır; köşegenin altındaki işaretli hücre bir grup döngüsünün içinde geriye bakar. Bağlantılar indeksin çıkardıklarıdır, doğrulanmış değildir.",
-      dsmBy: "Gruplama", dsmFolder: "klasör", dsmTag: "mimari etiket", dsmDepth: "derinlik", dsmCycle: "grup döngüsü", dsmPick: "Başvuru satırlarını görmek için bir hücre seçin.",
+      dsmBy: "Gruplama", dsmFolder: "klasör", dsmTag: "mimari etiket", dsmDepth: "derinlik", dsmCycle: "grup döngüsü", dsmPick: "Başvuru satırlarını görmek için bir hücre seçin.", dsmOffline: "Bu dışa aktarılan dosyada bağımlılık matrisi yok; `verinoda ui` gösterir.",
       modelNone: "Kayıtlı model yok: verinoda.toml içinde [architecture.model] ya da verinoda map --view model --model workspace.dsl.",
       wikiMermaid: "Mermaid metni: çizmek için bir Mermaid görüntüleyicisine (GitHub, GitLab, Obsidian, mermaid.live) yapıştırın. Kesikli ok çıkarım yapılmış bir bağlantıdan gelir.",
       copy: "Kopyala", copied: "Kopyalandı", evidence: "Kanıt", wikiNone: "Bu adda sayfa yok.",
@@ -836,7 +836,7 @@
     else {
       parts.push(el("p", { class: "small", text: `${model.status} · ${(model.sources || []).join(", ")}` }));
       parts.push(el("ul", { class: "links" }, (model.relations || []).map((r) => el("li", {},
-        el("span", { class: "status st-" + (r.result === "matched" ? r.status : r.result === "model_only" ? "contradicted" : "unknown"), text: r.result.replace(/_/g, " ") }),
+        el("span", { class: "status st-" + (r.result === "matched" ? r.status : r.result === "model_only" ? "weak_inference" : "unknown"), text: r.result.replace(/_/g, " ") }),
         el("span", { text: ` ${r.from} → ${r.to} ` }), el("span", { class: "muted small", text: r.why || "" }), " ",
         ...(r.sites || []).slice(0, 1).map(atLink)))));
       const und = model.undeclared || [];
@@ -2036,7 +2036,7 @@
       case "/api/search": return { results: offlineSearch(p.get("q") || "") };
       case "/api/wiki": return D.wiki || { pages: [] }; // every page with its diagrams
       case "/api/decisions": return D.decisions || { records: [], relations: [], mermaid: "" };
-      case "/api/dsm": if (!D.dsm) throw notFound(t("offlineMissing")); return D.dsm;
+      case "/api/dsm": if (!D.dsm) throw notFound(t("dsmOffline")); return D.dsm;
       case "/api/model": return D.model || { status: "no_model" };
       case "/api/global": return offlineGlobal(flag("tests"), flag("data"));
       case "/api/impact": return offlineImpact(p.get("id") || "", flag("tests"));

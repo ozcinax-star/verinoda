@@ -271,3 +271,4 @@ table.dsm td.back { outline: 2px solid #d9534f; outline-offset: -2px; }
 .dsm-ctl { margin: 6px 0; }
 .dsm-ctl input { width: 80px; }
 .dsm-detail { margin: 6px 0 14px; }
+.wiki .warn { color: var(--warn); }

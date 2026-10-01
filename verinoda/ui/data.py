@@ -205,17 +205,24 @@ class Atlas:
         from verinoda import dsm
 
         snap = self.snapshot()
+        key = (by, depth if by == "folder" else None)
         with snap._lock:   # one computation per grouping, however many requests ask at once
             memo = snap.__dict__.setdefault("_dsm", {})
-            if (by, depth) not in memo:
-                memo[(by, depth)] = dsm.dsm(snap.g, by=by, depth=depth)
-            return memo[(by, depth)]
+            if key not in memo:
+                if len(memo) >= 8:   # a page that tries depth after depth keeps the last few
+                    memo.pop(next(iter(memo)))
+                memo[key] = dsm.dsm(snap.g, by=by, depth=depth)
+            return memo[key]
 
     def model(self) -> dict:
         """The committed C4 model (``[architecture.model]``) against the code, as the map's model view."""
         from verinoda import dsm
 
-        return dsm.model_check(self.snapshot().g)
+        snap = self.snapshot()
+        with snap._lock:
+            if "_model" not in snap.__dict__:
+                snap.__dict__["_model"] = dsm.model_check(snap.g)
+            return snap.__dict__["_model"]
 
     def decisions(self) -> dict:
         """The decision records by date with their relations and a Mermaid graph (read from the files; the

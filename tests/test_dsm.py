@@ -215,8 +215,12 @@ def test_relations_between_tags_in_verinoda_toml(tmp_path):
     v = dsm.model_check(g)
     res = {(r["from"], r["to"]): r["result"] for r in v["relations"]}
     assert res == {("ui", "core"): "matched", ("core", "ui"): "model_only"}
-    assert v["status"] == "differs" and v["undeclared"] == []
+    assert v["status"] == "unknown" and v["undeclared"] == []   # a relation line not read: never a verdict
     assert any("bad line" in p for p in v["problems"])
+    (tmp_path / "verinoda.toml").write_text(
+        '[architecture.tags]\nui = "src/ui/**"\ncore = "src/core/**"\n\n'
+        '[architecture.model]\nrelations = ["ui -> core", "core -> ui"]\n', encoding="utf-8")
+    assert dsm.model_check(g)["status"] == "differs"
     (tmp_path / "verinoda.toml").write_text(
         '[architecture.tags]\nui = "src/ui/**"\ncore = "src/core/**"\n\n'
         '[architecture.model]\nrelations = ["ui -> core"]\n', encoding="utf-8")
@@ -251,3 +255,110 @@ def test_the_dsm_and_model_views_through_the_cli(tmp_path, capsys, monkeypatch):
     assert out["dsm"]["groups"][0]["name"] == "a" and out["dsm"]["cells"][0]["references"] == 2
     assert cli.main(["map", str(tmp_path), "--view", "model"]) == 0
     assert "no model" in capsys.readouterr().out
+    assert cli.main(["map", str(tmp_path), "--view", "model", "--model", "missing.dsl"]) == 2
+    assert "was not read" in capsys.readouterr().err
+
+
+# -- review round ---------------------------------------------------------------------------------
+
+def test_nothing_checked_is_never_consistent(tmp_path):
+    g = _graph(tmp_path, [("src/a.py", "src/b.py", 1)])
+    (tmp_path / "w.dsl").write_text('workspace { model {\n u = person "U"\n s = softwareSystem "S"\n u -> s\n'
+                                    ' s -> typo\n } }\n', encoding="utf-8")
+    v = dsm.model_check(g, model="w.dsl")
+    assert v["status"] == "unknown" and v["summary"]["files_in_model"] == 0
+    assert any("typo is not an element" in p for p in v["problems"])
+
+
+def test_relationships_with_an_identifier_this_and_implied_sources_are_read():
+    dsl = """workspace {
+  model {
+    a = softwareSystem "A"
+    b = softwareSystem "B" {
+      -> a "implied"
+    }
+    softwareSystem "Anonymous" {
+      -> b "from an anonymous element"
+    }
+    r1 = a -> b "Uses"
+    a -> this
+    weird >> b
+  }
+}
+"""
+    els, rels, problems = dsm.parse_dsl(dsl, "w.dsl")
+    pairs = [(r["from"], r["to"]) for r in rels]
+    assert ("b", "a") in pairs and ("_1", "b") in pairs and ("a", "b") in pairs
+    assert any("`this` outside an element" in p for p in problems)
+
+
+def test_an_unquoted_glob_opens_no_comment():
+    dsl = """workspace { model {
+  a = container "A" {
+    properties {
+      verinoda.code src/a/*
+    }
+  }
+  b = container "B" {
+    properties {
+      verinoda.code src/b/**/*.py
+    }
+  }
+  a -> b // a real comment
+} }
+"""
+    els, rels, problems = dsm.parse_dsl(dsl, "w.dsl")
+    globs = {e["id"]: e["globs"] for e in els}
+    assert globs == {"a": ["src/a/*"], "b": ["src/b/**/*.py"]}
+    assert [(r["from"], r["to"]) for r in rels] == [("a", "b")] and problems == []
+
+
+def test_a_model_file_must_be_inside_the_repository(tmp_path):
+    repo, outside = tmp_path / "repo", tmp_path / "secret.dsl"
+    repo.mkdir()
+    outside.write_text("workspace { model { a -> TOPSECRET } }", encoding="utf-8")
+    g = _graph(repo, [("a.py", "b.py", 1)])
+    v = dsm.model_check(g, model=str(outside))
+    assert v["status"] == "no_model" and "outside the repository" in v["problems"][0]
+    assert not any("TOPSECRET" in p for p in v["problems"])
+    (repo / "docs").mkdir()
+    (repo / "docs" / "w.dsl").write_text('workspace { model {\n a = softwareSystem "A"\n} }', encoding="utf-8")
+    v = dsm.model_check(g, model=str(repo / "docs" / "w.dsl"))
+    assert v["sources"] == ["docs/w.dsl"] and v["elements"][0]["at"] == "docs/w.dsl:2"
+
+
+def test_text_relations_name_the_dsl_elements_first(tmp_path):
+    (tmp_path / "w.dsl").write_text("""workspace { !identifiers hierarchical
+ model {
+  s = softwareSystem "S" {
+   ui = container "UI"
+   core = container "Core"
+  }
+ } }
+""", encoding="utf-8")
+    (tmp_path / "verinoda.toml").write_text(
+        '[architecture.tags]\nui = "src/ui/**"\ncore = "src/core/**"\n\n'
+        '[architecture.model]\ndsl = "w.dsl"\nrelations = ["ui -> core"]\n', encoding="utf-8")
+    g = _graph(tmp_path, [("src/ui/a.py", "src/core/b.py", 2)])
+    v = dsm.model_check(g)
+    assert [(r["from"], r["to"], r["result"]) for r in v["relations"]] == [("s.ui", "s.core", "matched")]
+    assert v["undeclared"] == [] and v["status"] == "consistent"
+
+
+def test_back_marks_come_first_and_ties_keep_the_given_order(tmp_path):
+    g = _graph(tmp_path, [("a/x.py", "b/y.py", 9), ("b/y.py", "a/x.py", 2), ("c/z.py", "a/x.py", 1),
+                          ("c/z.py", "b/y.py", 30)])
+    v = dsm.dsm(g, depth=1)
+    assert v["cells"][0]["against_order"] and v["cells"][1]["references"] == 30
+    assert dsm.order_groups(["ui", "core"], {("ui", "core"): 1, ("core", "ui"): 1})[0] == ["ui", "core"]
+    assert dsm._greedy_order(["z", "a"], {("z", "a"): 1, ("a", "z"): 1}) == ["z", "a"]
+
+
+def test_dsm_options_are_saved_with_a_named_map_and_refused_where_ignored(capsys):
+    from verinoda import named_maps
+
+    cmd = named_maps.rerun_command({"name": "t", "kind": "map", "args": {"view": "dsm", "group_by": "tag"}})
+    assert cmd == "verinoda map save t --view dsm --group-by tag"
+    assert cli.main(["map", ".", "--view", "dsm", "--group-by", "tag", "--depth", "3"]) == 2
+    assert "with --group-by tag" in capsys.readouterr().err
+    assert cli.main(["map", "show", "x", "--group-by", "tag"]) == 2

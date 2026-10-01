@@ -31,6 +31,7 @@ EXACT_ORDER_MAX = 10       # up to this many groups in one cycle the order is se
 OTHER = "(other)"          # files no tag matches, when grouping by tags
 ROOT = "(root)"            # files at the top of the repository
 DSL_PROPERTY = "verinoda.code"
+NOT_READ = "line not read"   # a DSL line of a kind this reader skips: listed, but it hides no relation
 EDGE_LIMITS = [
     "edges are what the index extracted: reflection, DI containers, string class loading, HTTP and message "
     "calls between services and build-time wiring are not seen",
@@ -151,11 +152,11 @@ def _exact_order(nodes: list[str], w: dict[tuple[str, str], int]) -> list[str]:
                 continue
             # v goes next: a group placed after it that uses it points back
             back = sum(c for a, c in ins[v] if not mask >> a & 1 and a != v)
-            cand = (cur[0] + back, cur[1] + (nodes[v],))
+            cand = (cur[0] + back, cur[1] + (v,))
             nm = mask | 1 << v
             if best[nm] is None or cand < best[nm]:
                 best[nm] = cand
-    return list(best[(1 << n) - 1][1])
+    return [nodes[v] for v in best[(1 << n) - 1][1]]
 
 
 def _greedy_order(nodes: list[str], w: dict[tuple[str, str], int]) -> list[str]:
@@ -173,7 +174,7 @@ def _greedy_order(nodes: list[str], w: dict[tuple[str, str], int]) -> list[str]:
         moved = True
         while moved:
             moved = False
-            for x in sorted(left):
+            for x in sorted(left, key=nodes.index):
                 if not any(y in left for y in out_w[x]):
                     tail.append(x)
                     left.discard(x)
@@ -183,7 +184,7 @@ def _greedy_order(nodes: list[str], w: dict[tuple[str, str], int]) -> list[str]:
                     left.discard(x)
                     moved = True
         if left:
-            x = max(sorted(left), key=lambda z: sum(c for y, c in out_w[z].items() if y in left)
+            x = max(sorted(left, key=nodes.index), key=lambda z: sum(c for y, c in out_w[z].items() if y in left)
                     - sum(c for y, c in in_w[z].items() if y in left))
             head.append(x)
             left.discard(x)
@@ -250,7 +251,9 @@ def dsm(g: Graph, *, by: str = "folder", depth: int | None = None) -> dict:
     size = Counter(of.values())
     rows = []
     against = 0
-    for (a, b), c in sorted(cells.items(), key=lambda kv: (pos[kv[0][0]], pos[kv[0][1]])):
+    # the marks against the order first, then the heaviest: a response cut to size drops light cells, never those
+    for (a, b), c in sorted(cells.items(), key=lambda kv: (pos[kv[0][0]] < pos[kv[0][1]], -kv[1]["references"],
+                                                           pos[kv[0][0]], pos[kv[0][1]])):
         row = {"from": a, "to": b, **_cell_out(c), "against_order": pos[a] > pos[b]}
         against += row["against_order"] * c["references"]
         rows.append(row)
@@ -273,15 +276,16 @@ def dsm(g: Graph, *, by: str = "folder", depth: int | None = None) -> dict:
 
 _ELEMENT = re.compile(r'^(?:([A-Za-z_][\w.-]*)\s*=\s*)?(person|softwareSystem|container|component|element)\b'
                       r'\s*(?:"([^"]*)")?', re.I)
-_RELATION = re.compile(r'^(?:([A-Za-z_][\w.-]*|this)\s*)?->\s*([A-Za-z_][\w.-]*)(?:\s+"([^"]*)")?')
+_RELATION = re.compile(r'^(?:[A-Za-z_][\w.-]*\s*=\s*)?(?:([A-Za-z_][\w.-]*|this)\s*)?->\s*([A-Za-z_][\w.-]*)'
+                       r'(?:\s+"([^"]*)")?')
 _SKIP_BLOCKS = {"views", "styles", "deploymentenvironment", "configuration", "branding", "terminology",
                 "deploymentnode", "infrastructurenode", "softwaresysteminstance", "containerinstance",
                 "dynamic", "filtered"}
 
 
 def _dsl_lines(text: str) -> list[tuple[int, str]]:
-    """The DSL's lines with comments blanked (``//`` and ``/* */`` outside strings, ``#`` at a line's start),
-    numbered from 1. A glob such as ``"src/**"`` is a string: its ``/*`` opens no comment."""
+    """The DSL's lines with comments blanked (``//`` and ``/* */`` outside strings and at the start of a token,
+    ``#`` at a line's start), numbered from 1. A glob such as ``"src/**"`` or ``src/a/*`` opens no comment."""
     keep: list[str] = []
     i, n, quoted, block = 0, len(text), False, False
     while i < n:
@@ -301,10 +305,10 @@ def _dsl_lines(text: str) -> list[tuple[int, str]]:
         elif c == '"':
             quoted = True
             keep.append(c)
-        elif text.startswith("/*", i):
+        elif text.startswith("/*", i) and (i == 0 or text[i - 1] in " \t\r\n"):
             block, i = True, i + 2
             continue
-        elif text.startswith("//", i):
+        elif text.startswith("//", i) and (i == 0 or text[i - 1] in " \t\r\n"):
             while i < n and text[i] != "\n":
                 i += 1
             continue
@@ -319,6 +323,38 @@ def _dsl_lines(text: str) -> list[tuple[int, str]]:
     return out
 
 
+def _statements(text: str):
+    """``(line, statement, opens a block)`` of the DSL, and ``(line, None, False)`` for each closing brace: a line
+    may hold several (``workspace { model {``, ``} }``). Braces inside strings are text."""
+    for no, s in _dsl_lines(text):
+        buf, quoted = [], False
+        for ch in s:
+            if ch == '"':
+                quoted = not quoted
+            if quoted or ch not in "{}":
+                buf.append(ch)
+                continue
+            stmt = "".join(buf).strip()
+            buf = []
+            if ch == "{":
+                yield no, stmt, True
+            else:
+                if stmt:
+                    yield no, stmt, False
+                yield no, None, False
+        stmt = "".join(buf).strip()
+        if stmt:
+            yield no, stmt, False
+
+
+def resolve_id(ids: set[str], x: str) -> str | None:
+    """An element id as written: exact, else the one id ending in ``.x`` (hierarchical ids)."""
+    if x in ids:
+        return x
+    hits = [i for i in ids if i.endswith("." + x)]
+    return hits[0] if len(hits) == 1 else None
+
+
 def parse_dsl(text: str, src: str) -> tuple[list[dict], list[dict], list[str]]:
     """``(elements, relations, problems)`` of a Structurizr DSL text (the model's elements and relationships;
     views, styles and deployment are skipped). An element maps to code through its property ``verinoda.code``
@@ -326,9 +362,9 @@ def parse_dsl(text: str, src: str) -> tuple[list[dict], list[dict], list[str]]:
     elements: list[dict] = []
     relations: list[dict] = []
     problems: list[str] = []
-    hierarchical = bool(re.search(r"^\s*!identifiers\s+hierarchical\b", text, re.M | re.I))
+    hierarchical = bool(re.search(r"(?:^|[{\s])!identifiers\s+hierarchical\b", text, re.M | re.I))
     stack: list[tuple[str, dict | None]] = []   # (block kind, element or None)
-    pending: list[tuple[int, str | None, str, str | None]] = []
+    pending: list[tuple[int, str, str, str | None, bool]] = []   # (line, from, to, description, from is an id)
     anon = 0
 
     def current() -> dict | None:
@@ -337,14 +373,13 @@ def parse_dsl(text: str, src: str) -> tuple[list[dict], list[dict], list[str]]:
                 return el
         return None
 
-    for no, s in _dsl_lines(text):
-        if not s:
-            continue
-        opens = s.endswith("{")
-        body = s[:-1].strip() if opens else s
-        if body == "}" or s == "}":
+    for no, body, opens in _statements(text):
+        if body is None:   # a closing brace
             if stack:
                 stack.pop()
+            continue
+        if not body and opens:   # a brace on a line of its own opens the block of the line before: not read
+            stack.append(("skip", None))
             continue
         if any(k == "skip" for k, _ in stack):
             if opens:
@@ -388,28 +423,35 @@ def parse_dsl(text: str, src: str) -> tuple[list[dict], list[dict], list[str]]:
         m = _RELATION.match(body)
         if m:
             here = current()
-            a = m.group(1)
-            if a in (None, "this"):
+            a, implied = m.group(1), m.group(1) in (None, "this")
+            if implied:
                 a = here["id"] if here else None
             if a is None:
                 problems.append(f"{src}:{no}: a relationship with no source outside an element")
+            elif m.group(2) == "this":
+                if here is None:
+                    problems.append(f"{src}:{no}: `this` outside an element")
+                else:
+                    pending.append((no, a, here["id"], m.group(3), implied))
             else:
-                pending.append((no, a, m.group(2), m.group(3)))
+                pending.append((no, a, m.group(2), m.group(3), implied))
             if opens:
                 stack.append(("skip", None))
             continue
+        if "->" in body:   # a relationship this reader does not understand: said, never dropped silently
+            problems.append(f"{src}:{no}: not understood as a relationship: {body[:80]}")
+        elif not opens and word not in ("!identifiers", "!docs", "!adrs", "!impliedrelationships", "description",
+                                        "tags", "url", "technology", "perspectives", "include", "exclude",
+                                        "autolayout", "!const", "!constant", "name", "!include", "properties"):
+            if not body.startswith(("!", '"')):
+                problems.append(f"{src}:{no}: {NOT_READ}: {body[:80]}")
         if opens:   # model, workspace, group "...", a block not read: its elements are still elements
             stack.append(("group" if word in ("model", "workspace", "group", "enterprise") else "skip", None))
     ids = {e["id"] for e in elements if e["named"]}
-
-    def resolve(x: str) -> str | None:
-        if x in ids:
-            return x
-        hits = [i for i in ids if i.endswith("." + x)]
-        return hits[0] if len(hits) == 1 else None
-
-    for no, a, b, desc in pending:
-        ra, rb = resolve(a), resolve(b)
+    every = {e["id"] for e in elements}
+    for no, a, b, desc, implied in pending:
+        ra = a if implied and a in every else resolve_id(ids, a)   # an implied source is the element itself
+        rb = b if b in every and b not in ids else resolve_id(ids, b)
         if ra is None or rb is None:
             problems.append(f"{src}:{no}: {a if ra is None else b} is not an element of the model")
             continue
@@ -444,6 +486,8 @@ def load_model(repo: Path, model: str | None = None) -> tuple[list[dict], list[d
                 continue
             if isinstance(data.get("dsl"), str):
                 dsl_paths.append((data["dsl"], f"{where} dsl"))
+            elif data.get("dsl") is not None:
+                problems.append(f"{where} dsl: not a path string")
             rel = data.get("relations")
             if rel is not None:
                 if not isinstance(rel, list) or not all(isinstance(x, str) for x in rel):
@@ -451,10 +495,14 @@ def load_model(repo: Path, model: str | None = None) -> tuple[list[dict], list[d
                 else:
                     text_rel += [(x, where) for x in rel]
             break   # verinoda.toml wins over pyproject.toml, as for the tags
+    tags, _where, tag_problems = architecture_tags(repo)
+    problems += tag_problems
+    root = repo.resolve()
     for path, where in dsl_paths:
-        p = Path(path) if Path(path).is_absolute() else repo / path
-        rel_name = path.replace("\\", "/")
-        if not Path(path).is_absolute() and not _inside(path):
+        p = (Path(path) if Path(path).is_absolute() else repo / path).resolve()
+        try:
+            rel_name = p.relative_to(root).as_posix()
+        except ValueError:   # a link out of the repository too: the model belongs to the project
             problems.append(f"{where}: {path} is outside the repository")
             continue
         try:
@@ -467,20 +515,24 @@ def load_model(repo: Path, model: str | None = None) -> tuple[list[dict], list[d
         relations += rels
         problems += probs
         sources.append(rel_name)
-    tags, _where, tag_problems = architecture_tags(repo)
-    problems += tag_problems
-    known = {e["id"] for e in elements}
+    named = {e["id"] for e in elements if e["named"]}
     for line, where in text_rel:
         m = re.match(r"^\s*([\w.-]+)\s*->\s*([\w.-]+)\s*$", line)
         if not m:
             problems.append(f"{where} relations: {line!r} is not \"a -> b\"")
             continue
+        ends = []
         for x in m.groups():
-            if x not in known:
+            hit = resolve_id(named, x)   # an element of the DSL, else a tag of that name
+            if hit is None:
+                if x not in tags:
+                    problems.append(f"{where} relations: {x} is neither an element of the model nor a tag")
                 elements.append({"id": x, "name": x, "kind": "tag", "parent": None, "at": where, "globs": [],
                                  "mapped_by": None, "named": True})
-                known.add(x)
-        relations.append({"from": m.group(1), "to": m.group(2), "description": "", "at": where})
+                named.add(x)
+                hit = x
+            ends.append(hit)
+        relations.append({"from": ends[0], "to": ends[1], "description": "", "at": where})
     if text_rel:
         sources.append(text_rel[0][1])
     for e in elements:
@@ -601,7 +653,12 @@ def model_check(g: Graph, *, model: str | None = None) -> dict:
         limits.append(f"{overlap} file(s) match two elements at the same depth: each counts in the first defined")
     limits += dep_limits
     unmapped_els = [e["id"] for e in elements if not mapped(e["id"])]
-    status = "unknown" if count["unknown"] else ("differs" if count["model_only"] or und else "consistent")
+    judged = count["matched"] + count["model_only"]
+    blocking = [p for p in problems if NOT_READ not in p]
+    if count["unknown"] or blocking or not inner or not judged:
+        status = "unknown"   # a relation not judged, a line not read, or no code in the model: never "consistent"
+    else:
+        status = "differs" if count["model_only"] or und else "consistent"
     return {
         **base, "status": status, "sources": sources, "problems": problems,
         "elements": [{"id": e["id"], "name": e["name"], "kind": e["kind"], "parent": e["parent"], "at": e["at"],
@@ -627,20 +684,20 @@ def render_dsm(v: dict, cap: int) -> list[str]:
     width = min(width, 40)
     out = [f"   {len(groups)} groups ({v['basis']}); row uses column; a group comes before what it uses, so a "
            "mark below the diagonal (*) points back inside a cycle"]
-    out.append("   " + " " * (width + 5) + "".join(f"{g['index']:>5}" for g in shown))
+    out.append("   " + " " * (width + 5) + "".join(f"{g['index']:>6}" for g in shown))
     for g in shown:
         marks = []
         for h in shown:
             if h is g:
-                marks.append("    -")
+                marks.append("     -")
                 continue
             c = cell.get((g["name"], h["name"]))
             if not c:
-                marks.append("    .")
+                marks.append("     .")
                 continue
             n = c["references"]
             text = (str(n) if n < 1000 else "999+") + ("*" if c["against_order"] else "")
-            marks.append(f"{text:>5}")
+            marks.append(f"{text:>6}")
         name = g["name"] if len(g["name"]) <= width else "..." + g["name"][-(width - 3):]
         out.append(f"   {g['index']:>3} {name:<{width}} " + "".join(marks))
     if len(groups) > len(shown):
