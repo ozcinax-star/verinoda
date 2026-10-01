@@ -7,8 +7,24 @@
     {"name": "fastapi/sqlmodel", "url": "https://github.com/fastapi/sqlmodel", "tag": "0.0.47", "sha": "1c46f0decb64762b4beb085e3181428921166349", "license": "MIT", "stars": 18353, "stars_date": "2026-10-01", "language": "Python", "files_approx": 526},
     {"name": "expressjs/express", "url": "https://github.com/expressjs/express", "tag": "v5.2.1", "sha": "dbac741a49a5a64336b70c06e85c2e2706e36336", "license": "MIT", "stars": 69502, "stars_date": "2026-10-01", "language": "JavaScript", "files_approx": 218},
     {"name": "axios/axios", "url": "https://github.com/axios/axios", "tag": "v1.20.0", "sha": "84a9f3b9a4f3244b8c8e818f557d64c7b964fb25", "license": "MIT", "stars": 109249, "stars_date": "2026-10-01", "language": "JavaScript + TypeScript", "files_approx": 466},
-    {"name": "junegunn/fzf", "url": "https://github.com/junegunn/fzf", "tag": "v0.74.4", "sha": "a140afeb4d733cad3c96a56bf6db7e26853b6757", "license": "MIT", "stars": 83344, "stars_date": "2026-10-01", "language": "Go", "files_approx": 161},
-    {"name": "gin-gonic/gin", "url": "https://github.com/gin-gonic/gin", "tag": "v1.12.0", "sha": "73726dc606796a025971fe451f0aa6f1b9b847f6", "license": "MIT", "stars": 89264, "stars_date": "2026-10-01", "language": "Go", "files_approx": 130},
+    {"name": "junegunn/fzf", "url": "https://github.com/junegunn/fzf", "tag": "v0.74.4", "sha": "a140afeb4d733cad3c96a56bf6db7e26853b6757", "license": "MIT", "stars": 83344, "stars_date": "2026-10-01", "language": "Go", "files_approx": 161,
+     "scenario": {
+       "queries": ["how does the terminal draw the list of matches", "how is the input read from the default command", "how are results sorted by score"],
+       "analyze": ["how does a keystroke change the query and rerun the matcher", "how are matches ranked"],
+       "trace": ["main", "FuzzyMatchV2"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"scan\" return a limit 20"],
+       "edit": {"file": "src/core.go", "after_line": 55, "insert": "\t_ = opts // verinoda-bench edit"},
+       "check_file": "src/core.go"
+     }},
+    {"name": "gin-gonic/gin", "url": "https://github.com/gin-gonic/gin", "tag": "v1.12.0", "sha": "73726dc606796a025971fe451f0aa6f1b9b847f6", "license": "MIT", "stars": 89264, "stars_date": "2026-10-01", "language": "Go", "files_approx": 130,
+     "scenario": {
+       "queries": ["how is a route registered on a router group", "how does the middleware chain call the next handler", "how is a JSON response rendered"],
+       "analyze": ["what happens when a request arrives at the engine", "how are panics recovered"],
+       "trace": ["Default", "LoggerWithConfig"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"Next\" return a limit 20"],
+       "edit": {"file": "gin.go", "after_line": 238, "insert": "\t_ = engine // verinoda-bench edit"},
+       "check_file": "gin.go"
+     }},
     {"name": "sharkdp/bat", "url": "https://github.com/sharkdp/bat", "tag": "v0.26.1", "sha": "979ba22628bc9d8171f2cffca2bd5c90c9fc0a9e", "license": "Apache-2.0 OR MIT", "stars": 60627, "stars_date": "2026-10-01", "language": "Rust", "files_approx": 882},
     {"name": "google/gson", "url": "https://github.com/google/gson", "tag": "gson-parent-2.14.0", "sha": "3ff35d6269894901ab8006258395aafc4b9765cd", "license": "Apache-2.0", "stars": 24233, "stars_date": "2026-10-01", "language": "Java", "files_approx": 311},
     {"name": "guzzle/guzzle", "url": "https://github.com/guzzle/guzzle", "tag": "8.2.0", "sha": "93939470950a9b11e2e84204166ef5e048c55fe4", "license": "MIT", "stars": 23452, "stars_date": "2026-10-01", "language": "PHP", "files_approx": 176}
