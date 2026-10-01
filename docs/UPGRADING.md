@@ -225,6 +225,18 @@ before). `q` accepts the five relations; the `ui` local graph, impact and path f
 `--db`, a framework's bookkeeping tables are listed under `framework_tables` and no longer make exit 3. Tools that
 list every node or relation (export, the UI) show them. No MCP change.
 
+### Typed questions, batched
+
+New command `verinoda tq` (exit 0 when every answer is decided, 1 when one is `?` or a question is invalid, 2 when the
+batch cannot be read, 3 when a budget cut it) and a new MCP tool `tq`: 41 tools. In the core profile it is reached
+through `run_tool` (not listed in the menu, not named in the server instructions); `--profile full` lists it. The
+run_tool catalog line of `history_search` is shorter (`{text|symbol|message|base, ...}`; its full argument list still
+comes back in an `invalid_arguments` hint) and the gateway's `arguments` description lost its example, so the core
+menu is 23 characters shorter than before. Re-run `verinoda setup` only if a client pins the menu text. Library
+callers: `graphquery.run` takes an object query (`query=`, from `graphquery.build`), a shared context (`ctx=`) and
+the asked route (`route=`); its text form and results are unchanged. `testmap.mapping_current` is the rule
+`testmap.affected` used inside; nothing else changed there. Nothing to migrate: tq writes nothing.
+
 ## Upgrading from 0.3.2 (D60-D136)
 
 ### D63: Running a project's own tests safely
@@ -730,7 +742,7 @@ unchanged. The MCP tool count is unchanged.
 
 New: `verinoda context FILE` lists what the project says about a file (decision records whose guards name it,
 notes on it or on a matching glob, Cursor and Kiro rules); MCP `read_context` returns the same as a PostToolUse
-hook output, and the hooks template has a Read/Edit entry for it. The MCP server has one more tool: 40 tools.
+hook output, and the hooks template has a Read/Edit entry for it. The MCP server has one more tool (40 then).
 
 ### D116: SARIF in and out, CI check status
 

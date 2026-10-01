@@ -49,6 +49,7 @@ EXPECTED_PARAMS = {
     "grep_context": ({"pattern", "path", "command"}, set()),
     "read_context": ({"file_path"}, {"file_path"}),
     "node_inspect": ({"name"}, {"name"}),
+    "tq": ({"questions", "verify", "need", "format"}, {"questions"}),
     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
     "run_when": ({"symbol", "depth"}, {"symbol"}),
     "history_search": ({"text", "regex", "message", "author", "path", "since", "until", "diff", "base", "head",
@@ -98,7 +99,7 @@ EXPECTED_PARAMS = {
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
              "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context"}
+             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -233,6 +234,7 @@ def _all_calls(t: AtlasTools) -> dict:
     return {
         "project_query": lambda: t.project_query("where is the order saved?"),
         "node_inspect": lambda: t.node_inspect("place_order"),
+        "tq": lambda: t.tq(["exists place_order"]),
         "relation_trace": lambda: t.relation_trace("a", "b"),
         "run_when": lambda: t.run_when("place_order"),
         "history_search": lambda: t.history_search(text="place_order"),
@@ -336,7 +338,7 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
                 for t in anyio.run(srv.list_tools)]
 
     core = listing(mcp_server.build_server(repo))
-    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 14
+    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 15
     assert set(CORE_TOOLS) <= set(TOOL_NAMES) and GATEWAY not in TOOL_NAMES
     gate = next(t for t in core if t["name"] == GATEWAY)
     behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
@@ -350,11 +352,14 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     assert set(by["analyze"]) == {"question", "budget_seconds"} and "env" not in by["code_check"]
     wire = json.dumps(core, separators=(",", ":"))
     # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for 12 on 2026-09-26; 8,905 for 11 (D60);
-    # D82's deps argument and D84's dead view kept under the limit by shorter wording
+    # D82's deps argument and D84's dead view kept under the limit by shorter wording; tq's catalog line paid for by
+    # shorter history_search and run_tool.arguments texts: 4,449 -> 4,426 (the records menu 4,598 -> 4,575)
     assert len(wire) < 4500
     assert '"title"' not in wire and "outputSchema" not in wire
     text = instructions("core")
-    assert all(n in text for n in CORE_TOOLS) and "--profile full" in text and "question_plan_draft" not in text
+    # tq is named in run_tool's catalog only: a sentence for it in the instructions waits for a measured gain
+    assert all(n in text for n in CORE_TOOLS if n != "tq") and "tq" not in text
+    assert "--profile full" in text and "question_plan_draft" not in text
     assert len(text) < len(instructions("full")) and len(text) < 1400
     assert "decision_check" not in instructions("core", decisions=False)
     assert "decision_check" not in mcp_server.build_server(repo).verinoda_instructions

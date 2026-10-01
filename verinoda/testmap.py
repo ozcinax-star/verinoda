@@ -111,6 +111,20 @@ def _covers(qual: str, changed: str) -> bool:
     return qual == changed or qual.startswith(changed + ".")
 
 
+def mapping_current(store: Store, test: str, versions: Callable[[str], set[str]],
+                    fp_cache: dict[str, set[str]] | None = None) -> bool:
+    """Is ``test``'s mapping current: does every file it recorded have, now, a content id ``versions(path)``
+    allows (the one it had in the run)? A row without a fingerprint is not current. ``fp_cache`` keeps
+    ``versions`` per path across calls."""
+    cache = fp_cache if fp_cache is not None else {}
+    for r in store.all("SELECT DISTINCT path, fingerprint FROM test_map WHERE test = ?", (test,)):
+        if r["path"] not in cache:
+            cache[r["path"]] = versions(r["path"])
+        if not r["fingerprint"] or r["fingerprint"] not in cache[r["path"]]:
+            return False
+    return True
+
+
 def affected(store: Store, changed: Iterable[tuple[str, str]], versions: Callable[[str], set[str]],
              candidates: Iterable[str] = ()) -> dict:
     """The tests the map shows running a changed function, and what it says of ``candidates`` (other test ids).
@@ -138,12 +152,7 @@ def affected(store: Store, changed: Iterable[tuple[str, str]], versions: Callabl
     fp_cache: dict[str, set[str]] = {}
 
     def current(test: str) -> bool:
-        for r in store.all("SELECT DISTINCT path, fingerprint FROM test_map WHERE test = ?", (test,)):
-            if r["path"] not in fp_cache:
-                fp_cache[r["path"]] = versions(r["path"])
-            if not r["fingerprint"] or r["fingerprint"] not in fp_cache[r["path"]]:
-                return False
-        return True
+        return mapping_current(store, test, versions, fp_cache)
 
     meta = {}
     for t in sorted(set(hits) | {runner_id(c) for c in candidates}):

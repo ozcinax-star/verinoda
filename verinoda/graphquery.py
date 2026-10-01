@@ -540,7 +540,10 @@ def parse(text: str) -> Query:
         raise QueryError("the query is empty")
     if len(text) > MAX_QUERY_CHARS:
         raise QueryError(f"the query is over {MAX_QUERY_CHARS} characters")
-    q = _Parser(text).query()
+    return _checked(_Parser(text).query(), text)
+
+
+def _checked(q: Query, text: str | None) -> Query:
     match_vars: list[str] = []
     for p in q.patterns:
         for n in p.nodes:
@@ -597,6 +600,107 @@ def _check_cmp(c: Cmp, text: str) -> None:
                              text) from None
 
 
+# -- queries built as objects ---------------------------------------------------------------------------
+# A caller that already holds node ids (a resolved name) builds the tree itself: no query text is assembled,
+# so a name is never spliced into a string the parser would read. ``build`` runs the same checks as ``parse``.
+
+def node(var: str, *kinds: str) -> NodePat:
+    """A named node pattern ``(var:kind|...)``."""
+    for k in kinds:
+        if k not in KINDS:
+            raise QueryError(f"unknown kind {k!r}; kinds: {', '.join(KINDS)}")
+    return NodePat(var, tuple(kinds), 0, True)
+
+
+def edge(*rels: str, lo: int = 1, hi: int = 1, direction: str = "out") -> RelPat:
+    """An edge pattern ``-[rel|...*lo..hi]->`` (``direction``: out, in or both)."""
+    if direction not in ("out", "in", "both") or not 0 <= lo <= hi <= MAX_HOPS:
+        raise QueryError(f"an edge of {lo}..{hi} hops ({direction}) cannot be walked (at most {MAX_HOPS})")
+    return RelPat(tuple(rels) or None, direction, lo, hi, 0)
+
+
+def path(*parts) -> Pattern:
+    """A pattern from alternating nodes and edges: ``path(node("a"), edge("calls"), node("b"))``."""
+    nodes, rels = list(parts[::2]), list(parts[1::2])
+    if not nodes or len(nodes) != len(rels) + 1:
+        raise QueryError("a pattern alternates nodes and edges, starting and ending with a node")
+    return Pattern(nodes, rels, 0)
+
+
+def field_is(var: str, fld: str, value) -> Cmp:
+    """The condition ``var.fld = value``."""
+    return Cmp(FieldRef(var, fld, 0), "=", value, 0)
+
+
+def id_in(var: str, ids) -> object:
+    """The condition that ``var`` is one of these node ids (evaluated from the ids, not from every node)."""
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        raise QueryError(f"no node id for `{var}`")
+    cmps = [field_is(var, "id", i) for i in ids]
+    return cmps[0] if len(cmps) == 1 else BoolOp("or", cmps)
+
+
+def build(patterns: list[Pattern], where=None, items: list[str] | None = None, limit: int | None = None) -> Query:
+    """A checked query from objects; ``items``: variables, ``var.field`` or ``count(var)`` / ``count(*)``."""
+    its: list[Item] = []
+    for s in items or ():
+        if s.startswith("count(") and s.endswith(")"):
+            v = s[6:-1]
+            its.append(Item("count", None if v == "*" else v, None, 0))
+        elif "." in s:
+            v, _, f = s.partition(".")
+            its.append(Item("field", v, f, 0))
+        else:
+            its.append(Item("var", s, None, 0))
+    return _checked(Query("", list(patterns), where, its, limit), None)
+
+
+@dataclass
+class Shared:
+    """What a batch of queries over one graph reads once and shares: the freshness check (``fresh``), the
+    relations the graph has, the route table and the lines of the files read. :func:`run` fills it on first
+    use; counters say how often each was computed."""
+    fresh: dict | None = None
+    present: set | None = None
+    routes: dict | None = None
+    route_error: str | None = None
+    lines_cache: dict = field(default_factory=dict)
+    computed: dict = field(default_factory=lambda: {"fresh": 0, "routes": 0})
+
+
+def route_table(g, ctx: Shared) -> dict[str, list[dict]]:
+    """``{handler id: [{"route": "POST /orders", "at", "framework"}]}``, read once per :class:`Shared`."""
+    if ctx.routes is None:
+        from verinoda import cross_service, index
+
+        ctx.computed["routes"] += 1
+        ctx.routes = {}
+        try:
+            side = index._read_sidecar(g.root) or {}
+            block = side.get("cross_service") or {}
+            old = block.get("files") if block.get("facts_version") == cross_service.FACTS_VERSION else None
+            _files, _edges, report, _parsed = cross_service.collect(g, old=old)
+        except Exception:  # noqa: BLE001 - no route table: no node is a handler, and the result says so
+            ctx.route_error = "the route table could not be read"
+            return ctx.routes
+        for r in report.get("route_table") or []:
+            ms = "|".join(r["methods"]) if r.get("methods") else "ANY"
+            ctx.routes.setdefault(r["handler"], []).append(
+                {"route": f"{ms} {r['path']}", "at": r["at"], "framework": r.get("fw")})
+    return ctx.routes
+
+
+def _id_pins(conds: list) -> list[str] | None:
+    """The node ids a variable's own conditions pin it to (``v.id = "..."``, or several joined by OR), or None."""
+    for c in conds:
+        items = c.items if isinstance(c, BoolOp) and c.op == "or" else [c]
+        if all(isinstance(x, Cmp) and x.left.field == "id" and x.op == "=" and isinstance(x.value, str)
+               for x in items):
+            return [x.value for x in items]
+    return None
+
+
 # -- evaluation -----------------------------------------------------------------------------------------
 
 def _weaker(a: str, b: str) -> str:
@@ -622,16 +726,18 @@ class _Binding:
 
 
 class _Eval:
-    def __init__(self, g, q: Query, *, max_expansions: int, deadline: float, stale: set[str]):
+    def __init__(self, g, q: Query, *, max_expansions: int, deadline: float, stale: set[str],
+                 ctx: Shared | None = None):
         self.g, self.q = g, q
         self.max_expansions, self.deadline = max_expansions, deadline
         self.used = 0
         self.stale = stale
+        self.ctx = ctx if ctx is not None else Shared()
+        self.asked_route: str | None = None
         self.kind_cache: dict[str, frozenset] = {}
         self.ok_cache: dict[tuple[str, str], bool] = {}
         self.text_hits: dict[str, dict[str, list[tuple[int, str]]]] = {}   # node -> regex -> lines
-        self.lines_cache: dict[str, list[str] | None] = {}
-        self._routes: dict[str, list[dict]] | None = None
+        self.lines_cache: dict[str, list[str] | None] = self.ctx.lines_cache
         self.cands_cache: dict[str, list[str]] = {}
         mv = set(q.match_vars)
         self.match_vars = mv
@@ -665,24 +771,12 @@ class _Eval:
             raise _Stop("timeout")
 
     # routes
-    def routes(self) -> dict[str, list[dict]]:
-        if self._routes is None:
-            from verinoda import cross_service, index
+    @property
+    def route_error(self) -> str | None:
+        return self.ctx.route_error
 
-            self._routes = {}
-            try:
-                side = index._read_sidecar(self.g.root) or {}
-                block = side.get("cross_service") or {}
-                old = block.get("files") if block.get("facts_version") == cross_service.FACTS_VERSION else None
-                _files, _edges, report, _parsed = cross_service.collect(self.g, old=old)
-            except Exception:  # noqa: BLE001 - no route table: no node is a handler, and the result says so
-                self.route_error = "the route table could not be read"
-                return self._routes
-            for r in report.get("route_table") or []:
-                ms = "|".join(r["methods"]) if r.get("methods") else "ANY"
-                self._routes.setdefault(r["handler"], []).append(
-                    {"route": f"{ms} {r['path']}", "at": r["at"], "framework": r.get("fw")})
-        return self._routes
+    def routes(self) -> dict[str, list[dict]]:
+        return route_table(self.g, self.ctx)
 
     # nodes
     def kinds(self, n: str) -> frozenset:
@@ -869,7 +963,10 @@ class _Eval:
         sets = list(self.var_kinds.get(nd.var, ())) if nd.var in self.match_vars else []
         if nd.kinds:
             sets.append(nd.kinds)
-        if any(ks == ("handler",) for ks in sets):
+        pins = _id_pins(self.pushed.get(nd.var, ())) if nd.var in self.match_vars else None
+        if pins is not None:   # `v.id = ...`: those nodes only (their conditions are still checked as each is used)
+            pool = pins
+        elif any(ks == ("handler",) for ks in sets):
             pool = list(self.routes())
         else:
             pool = list(self.g.G.nodes)
@@ -1132,32 +1229,48 @@ def _project(ev: _Eval, b: _Binding, items: list[Item]) -> tuple[tuple, dict]:
     return tuple(key), vals
 
 
-def run(repo: Path, text: str, *, graph=None, max_rows: int = MAX_ROWS, max_expansions: int = MAX_EXPANSIONS,
-        timeout: float = TIMEOUT_S, verify: bool = False) -> dict:
+def run(repo: Path, text: str | None = None, *, query: Query | None = None, ctx: Shared | None = None, graph=None,
+        max_rows: int = MAX_ROWS, max_expansions: int = MAX_EXPANSIONS, timeout: float = TIMEOUT_S,
+        verify: bool = False, route: str | None = None) -> dict:
     """Evaluate a query over the project's graph (see the module docstring). :class:`QueryError` for a query that
-    cannot be read or names a relation the graph and Verinoda do not know."""
+    cannot be read or names a relation the graph and Verinoda do not know.
+
+    ``query``: the query as an object (:func:`build`) instead of ``text``; the rows are the same.
+    ``ctx``: a :class:`Shared` kept across the queries of a batch (one freshness check, one route table, one
+    lines cache). ``route``: the route ("POST /orders") the caller asked about; ``verify`` re-reads its
+    declaration line rather than the handler's first route."""
     from verinoda import freshness, index
 
     t0 = time.perf_counter()
     if max_rows < 1 or max_expansions < 1 or timeout <= 0:
         raise QueryError("--max-rows, --max-expansions and --timeout must be positive")
-    q = parse(text)
+    if (text is None) == (query is None):
+        raise QueryError("give the query as text or as an object, not both")
+    q = parse(text) if query is None else query
+    text = q.text
+    ctx = ctx if ctx is not None else Shared()
     repo = Path(repo).resolve()
     g = graph if graph is not None else index.load(repo)
-    present = {d.get("relation") for _u, _v, d in g.G.edges(data=True)}
+    if ctx.present is None:
+        ctx.present = {d.get("relation") for _u, _v, d in g.G.edges(data=True)}
+    present = ctx.present
     notes: list[str] = []
     for p in q.patterns + [x.pattern for x in _walk_cond(q.where) if isinstance(x, Exists)]:
         for r in p.rels:
             for name in r.rels or ():
                 if name not in present and name not in KNOWN_RELATIONS:
                     raise QueryError(f"unknown relation {name!r}; this graph has: {', '.join(sorted(present))}",
-                                     r.pos, text)
+                                     r.pos, text or None)
                 if name not in present:
                     notes.append(f"no `{name}` edge in this graph")
-    fresh = freshness.check(repo)
+    if ctx.fresh is None:
+        ctx.computed["fresh"] += 1
+        ctx.fresh = freshness.check(repo)
+    fresh = ctx.fresh
     stale = set(fresh.get("files") or [])
     deadline = time.monotonic() + timeout
-    ev = _Eval(g, q, max_expansions=max_expansions, deadline=deadline, stale=stale)
+    ev = _Eval(g, q, max_expansions=max_expansions, deadline=deadline, stale=stale, ctx=ctx)
+    ev.asked_route = route
     items = q.items or [Item("var", v, None, 0) for v in q.match_vars]
     aggregate = any(it.kind == "count" for it in items)
     named = [v for v in q.match_vars]
@@ -1334,7 +1447,9 @@ def _verify_row(ev: _Eval, row: dict) -> None:
     for var, n in b.nodes.items():
         f, ln = g.file(n), g.line(n)
         if "handler" in ev.kinds(n) and any("handler" in ks for ks in ev.var_kinds.get(var, ())):
-            for r in ev.routes().get(n, [])[:1]:
+            mine = ev.routes().get(n, [])
+            asked = [r for r in mine if r["route"] == ev.asked_route]
+            for r in (asked or mine)[:1]:   # the route the caller asked about, else the handler's first
                 rf, _, rl = r["at"].rpartition(":")
                 if not rf.endswith(".py"):
                     problems.append(f"{r['at']}: a route outside Python is read by pattern, not parsed")
