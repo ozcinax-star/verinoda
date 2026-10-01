@@ -620,3 +620,337 @@ def test_folders_above_the_root_or_behind_a_link_never_count(tmp_path, monkeypat
     monkeypatch.setattr(pathlib.Path, "resolve", no_resolve)
     assert vendored_reason(_write(repo, "src/app.py", "x = 1\n"), repo) is None
     assert vendored_reason(_write(repo, "vendor/v.py", "x = 1\n"), repo) == "vendored"
+
+
+# -- JS/TS: functions assigned to an object's property, and functions bound inside a function ---------------------
+
+_JS_FIXTURES = {
+    # Express 4/5 lib/response.js and lib/application.js are written this way
+    "response.js": '''\'use strict\'
+var send = require('send');
+var res = Object.create(null);
+module.exports = res;
+
+res.status = function status(code) {
+  this.statusCode = code;
+  return this;
+};
+
+res.send = function send(body) {
+  return this.status(200);
+};
+
+res.json = function json(obj) {
+  var body = stringify(obj);
+  return this.send(body);
+};
+
+res.sendFile = function sendFile(path) {
+  send(path);
+  return sendfile(this, path);
+};
+
+res.type = function contentType(type) {
+  return res.status(type);
+};
+
+res.render = function render(view) {
+  var app = this.app;
+  app.render(view);
+};
+
+res.links = (links) => res.send(links);
+
+res.set =
+res.header = function header(field) {
+  return this.links(field);
+};
+
+res.limit = 10;
+res.handlers = [stringify];
+window.helper = function helper() { return stringify(1); };
+
+function sendfile(res, file) {
+  return res.json(file);
+}
+
+function stringify(value) {
+  return JSON.stringify(value);
+}
+''',
+    "application.js": '''var app = exports = module.exports = {};
+
+app.init = function init() {
+  this.enable('x');
+};
+
+app.enable = function enable(setting, val) {
+  return tryRender(setting, val);
+};
+
+function tryRender(view, options) {
+  return view;
+}
+
+function Foo() {}
+
+Foo.create = function () {
+  return new Foo();
+};
+
+Foo.prototype.run = function () {
+  return Foo.create();
+};
+''',
+    "sdk.ts": '''export class LoginService {
+  public static loginAccessToken(options: unknown) {
+    return options
+  }
+}
+''',
+    "useAuth.ts": '''import { LoginService } from "./sdk"
+
+const isLoggedIn = () => true
+
+const useAuth = () => {
+  const login = async (data: string) => {
+    const response = await fetchToken({ body: data })
+    return response
+  }
+  const logout = () => {
+    track("logout")
+  }
+  function reset() {
+    logout()
+  }
+  return { login, logout, reset, ok: isLoggedIn() }
+}
+
+function other() {
+  logout()
+}
+
+function logout() {
+  return 0
+}
+
+function track(name: string) {
+  return name
+}
+
+async function fetchToken(options: unknown) {
+  return LoginService.loginAccessToken(options)
+}
+
+export default useAuth
+''',
+    "signals.js": '''function config() { return 1; }
+
+function composeSignals(signals, config) {
+  const controller = new AbortController();
+  const abort = (err) => {
+    controller.abort(err);
+  };
+  const unsubscribe = () => {
+    signals.forEach((s) => s.unsubscribe(abort));
+    use(config);
+  };
+  return unsubscribe;
+}
+''',
+}
+
+
+def _js_graph(tmp_path) -> dict:
+    from verinoda.project_index.extract import extract
+
+    paths = []
+    for name, body in _JS_FIXTURES.items():
+        path = tmp_path / name
+        path.write_text(body, encoding="utf-8")
+        paths.append(path)
+    return extract(paths, cache_root=tmp_path / "cache", root=tmp_path, parallel=False)
+
+
+def test_functions_assigned_to_a_module_object_are_its_methods(tmp_path):
+    out = _js_graph(tmp_path)
+    by_id = {n["id"]: n for n in out["nodes"]}
+    methods = {(by_id[e["source"]]["label"], by_id[e["target"]]["label"], e["source_location"])
+               for e in out["edges"] if e["relation"] == "method" and e["source"] in by_id}
+    # the property name is the method's name (`res.type = function contentType`), owned by `res`, at its line;
+    # both names of an alias chain (`res.set = res.header = function header`)
+    for name, line in (("status", 6), ("send", 11), ("json", 15), ("sendFile", 20), ("type", 25),
+                       ("render", 29), ("links", 34), ("set", 36), ("header", 37)):
+        assert ("res", f".{name}()", f"L{line}") in methods, name
+    for owner, name in (("app", "init"), ("app", "enable"), ("Foo()", "create"), ("Foo()", "run")):
+        assert any(o == owner and m == f".{name}()" for o, m, _ in methods), (owner, name)
+    labels = {(Path(n["source_file"]).name, n["label"]) for n in out["nodes"] if n.get("source_file")}
+    # not a function, or a receiver the file does not bind: no symbol
+    assert not any(label in (".limit()", ".handlers()", ".helper()", "helper()") for _, label in labels)
+    assert ("response.js", "res") in labels
+    contains = {(by_id[e["source"]]["label"], by_id[e["target"]]["label"])
+                for e in out["edges"] if e["relation"] == "contains" and e["source"] in by_id}
+    assert ("response.js", "res") in contains
+
+
+def test_calls_from_and_to_assigned_methods_resolve(tmp_path):
+    pairs = _call_pairs(tmp_path, _JS_FIXTURES)
+    # calls inside the methods are theirs; `this.m()` and `res.m()` reach the owner's method
+    for src, tgt in (("res.json", "stringify"), ("res.json", "res.send"), ("res.send", "res.status"),
+                     ("res.sendFile", "sendfile"), ("res.type", "res.status"), ("res.links", "res.send"),
+                     ("res.set", "res.links"), ("res.header", "res.links")):
+        assert ("response.js", src, tgt) in pairs, (src, tgt)
+    assert ("application.js", "app.init", "app.enable") in pairs
+    assert ("application.js", "app.enable", "tryRender") in pairs
+    assert ("application.js", "Foo().run", "Foo().create") in pairs
+    # a bare `send()` (the `send` package) is not res.send; `app.render()` on another object is not res.render;
+    # `res.json()` on a parameter named `res` is not the module object's method
+    assert ("response.js", "res.sendFile", "res.send") not in pairs
+    assert ("response.js", "res.render", "res.render") not in pairs
+    assert ("response.js", "sendfile", "res.json") not in pairs
+
+
+def test_a_function_bound_inside_a_function_is_its_own_symbol(tmp_path):
+    out = _js_graph(tmp_path)
+    by_id = {n["id"]: n for n in out["nodes"]}
+    contains = {(by_id[e["source"]]["label"], by_id[e["target"]]["label"], e["source_location"])
+                for e in out["edges"] if e["relation"] == "contains" and e["source"] in by_id}
+    assert ("useAuth()", "login()", "L6") in contains
+    assert ("useAuth()", "logout()", "L10") in contains
+    assert ("useAuth()", "reset()", "L13") in contains
+    pairs = _call_pairs(tmp_path, _JS_FIXTURES)
+    # the call inside `login` is login's, not useAuth's
+    assert ("useAuth.ts", "login", "fetchToken") in pairs
+    assert ("useAuth.ts", "useAuth", "fetchToken") not in pairs
+    assert ("useAuth.ts", "logout", "track") in pairs and ("useAuth.ts", "useAuth", "track") not in pairs
+    # a bare call binds to the definition visible from the caller: useAuth's `logout` inside it, the module's outside
+    def logout_under(parent_label: str) -> str:
+        return next(e["target"] for e in out["edges"] if e["relation"] == "contains"
+                    and by_id.get(e["source"], {}).get("label") == parent_label
+                    and by_id.get(e["target"], {}).get("label") == "logout()")
+
+    nested_logout, module_logout = logout_under("useAuth()"), logout_under("useAuth.ts")
+    assert nested_logout != module_logout
+    reset = next(nid for nid, n in by_id.items() if n["label"] == "reset()")
+    other = next(nid for nid, n in by_id.items() if n["label"] == "other()")
+    calls = {(e["source"], e["target"]) for e in out["edges"] if e["relation"] == "calls"}
+    assert (reset, nested_logout) in calls and (reset, module_logout) not in calls
+    assert (other, module_logout) in calls and (other, nested_logout) not in calls
+
+
+def test_a_nested_function_is_not_a_property_and_sees_the_enclosing_locals(tmp_path):
+    out = _js_graph(tmp_path)
+    by_id = {n["id"]: n for n in out["nodes"]}
+    names = {nid: n["label"] for nid, n in by_id.items() if n.get("source_file", "").endswith("signals.js")}
+    abort = next(nid for nid, label in names.items() if label == "abort()")
+    unsubscribe = next(nid for nid, label in names.items() if label == "unsubscribe()")
+    config = next(nid for nid, label in names.items() if label == "config()")
+    edges = {(e["source"], e["target"], e["relation"]) for e in out["edges"]}
+    # `controller.abort()` is not the nested `abort` calling itself
+    assert (abort, abort, "calls") not in edges
+    # the nested `abort` passed by name is an indirect call; `config` is the enclosing parameter, not config()
+    assert (unsubscribe, abort, "indirect_call") in edges
+    assert not any(s == unsubscribe and t == config for s, t, _ in edges)
+
+
+def _labelled_edges(tmp_path, fixtures: dict[str, str]) -> set[tuple[str, str, str, str]]:
+    """(caller file, caller label, relation, target file:label) for calls and indirect_call."""
+    from verinoda.project_index.extract import extract
+
+    paths = []
+    for name, body in fixtures.items():
+        path = tmp_path / name
+        path.write_text(body, encoding="utf-8")
+        paths.append(path)
+    out = extract(paths, cache_root=tmp_path / "cache", root=tmp_path, parallel=False)
+    by_id = {n["id"]: n for n in out["nodes"]}
+
+    def where(nid: str) -> str:
+        n = by_id.get(nid, {})
+        return f"{Path(str(n.get('source_file') or '')).name}:{n.get('label', nid)}"
+
+    return {(Path(e["source_file"]).name, str(by_id.get(e["source"], {}).get("label")), e["relation"],
+             where(e["target"]))
+            for e in out["edges"] if e["relation"] in ("calls", "indirect_call")}
+
+
+def test_a_later_assigned_method_does_not_hide_a_module_function_of_the_same_name(tmp_path):
+    edges = _labelled_edges(tmp_path, {"one.js": '''function send(x) { return x; }
+var res = {};
+res.send = function send2(b) { return b; };
+function other() { send(1); }
+function useRes() { res.send(2); }
+function pass() { run(send); }
+'''})
+    assert ("one.js", "other()", "calls", "one.js:send()") in edges
+    assert ("one.js", "useRes()", "calls", "one.js:.send()") in edges
+    assert ("one.js", "pass()", "indirect_call", "one.js:send()") in edges
+    assert ("one.js", "other()", "calls", "one.js:.send()") not in edges
+    assert not any(t == "one.js:.send()" for _, src, _, t in edges if src == "pass()")
+
+
+def test_nested_functions_are_not_bound_from_another_file_by_a_bare_name(tmp_path):
+    edges = _labelled_edges(tmp_path, {
+        "hooks.ts": '''export const useForm = () => {
+  const onSubmit = () => 1;
+  const reset = () => 2;
+  return { onSubmit, reset };
+};
+''',
+        "Form.ts": '''import { useForm } from "./hooks"
+
+function Form(props) {
+  const reset = props.reset;
+  reset();
+}
+
+function Other({ onSubmit }) {
+  onSubmit();
+  useForm();
+}
+
+function Passes(cb) {
+  run(reset);
+}
+''',
+    })
+    assert ("Form.ts", "Other()", "calls", "hooks.ts:useForm()") in edges
+    # `reset` / `onSubmit` here are the caller's own local and parameter, and `run(reset)` names
+    # nothing in scope: none of them is useForm's nested function
+    assert not any(t in ("hooks.ts:reset()", "hooks.ts:onSubmit()") for _, _, _, t in edges), edges
+
+
+def test_assigned_methods_are_not_bound_from_another_file_by_a_bare_name(tmp_path):
+    edges = _labelled_edges(tmp_path, {
+        "lib.js": '''var res = Object.create(null);
+module.exports = res;
+res.sendThing = function sendThing(b) { return b; };
+res.use = function use(fn) { return fn; };
+function View() {}
+View.prototype.resolve = function resolve(dir) { return dir; };
+''',
+        "main.js": '''const lib = require('./lib');
+function a(x) { sendThing(1); }
+function b(use) { assert(use); }
+function c() { lib.sendThing(2); }
+function d() { return resolve('views'); }
+''',
+    })
+    # nor is a `View.prototype.resolve` method reached by a bare `resolve()` (Express's application.js)
+    assert not any(src in ("a()", "b()", "d()") and t.startswith("lib.js:") for _, src, _, t in edges), edges
+
+
+def test_scoped_js_symbols_carry_the_no_bare_name_marker(tmp_path):
+    from verinoda.project_index.extract import extract
+
+    path = tmp_path / "m.js"
+    path.write_text('''var res = {};
+res.send = function send(b) { return b; };
+function outer() { const inner = () => 1; return inner(); }
+function plain() { return 1; }
+function Foo() {}
+Foo.prototype.run = function () { return 1; };
+''', encoding="utf-8")
+    out = extract([path], cache_root=tmp_path / "cache", root=tmp_path, parallel=False)
+    marked = {n["label"] for n in out["nodes"] if n.get("_no_bare_name")}
+    assert marked == {".send()", "inner()", ".run()"}

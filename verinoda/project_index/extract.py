@@ -7868,6 +7868,12 @@ def extract(
     for n in resolution_nodes:
         if n.get("file_type") == "rationale" or n.get("type") == "namespace":
             continue
+        # Verinoda patch: a JS/TS function bound inside a function, or a method
+        # assigned to a module object, has no bare name another file can call or
+        # pass (the engine marks them); member calls reach the methods through the
+        # member resolvers, which do not read this index.
+        if n.get("_no_bare_name"):
+            continue
         raw = n.get("label", "")
         normalised = raw.strip("()").lstrip(".")
         if normalised:
