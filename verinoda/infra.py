@@ -25,8 +25,8 @@ through ``COPY`` lines, or named by a code attribute (``source_dir``, ``filename
 archive or container resource, is ``strong_inference``: the image could still run something else (a package
 installed under the same name, a volume over the folder). A file found only by its path's ending, a link through a
 Dockerfile matched to a compose or Kubernetes image by its name, a path any other Terraform attribute names
-(``"relation": "names"``), or a jar linked to the build file that makes it is ``weak_inference``. A command whose program is not a project file (``nginx``, a registry image) is listed
-without a link, with the reason. Read-only: no index, claim or file is written.
+(``"relation": "names"``), or a jar linked to the build file that makes it is ``weak_inference``. A command
+whose program is not a project file (``nginx``, a registry image) is listed without a link, with the reason. Read-only: no index, claim or file is written.
 """
 from __future__ import annotations
 
