@@ -402,6 +402,10 @@ class _CodeName:
         self.__name__ = code.co_name
         self.__qualname__ = _qual(code)
         self.__module__ = frame.f_globals.get("__name__", "?")
+        # A wrapper standing in for a library function names it (the runtime-flaws plugin's sqlite3 methods).
+        public = (frame.f_globals.get("VERINODA_EXT_NAMES") or {}).get(code)
+        if public:
+            self.__module__, _, self.__qualname__ = public.partition(".")
 
 
 def _start() -> None:

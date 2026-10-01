@@ -11931,6 +11931,596 @@ across the game's classes; a `.gz` log, a binary log (exit 4) and a failure of u
 `@Desc`-only injector listed as not compared, an inner-class Mixin in a log linked to its pair.
 `tests/jvmfixtures.py` can now write class and method annotations.
 
+## 119. Cross-service edges (D146, 2026-10-01)
+
+### 119.1 Why
+
+A web application is at least two programs that call each other through text: the frontend's
+``fetch(`/api/users/${id}`)`` and the backend's `@app.route("/api/users/<int:user_id>")` name the same endpoint,
+but no import or call joins them, so the graph had two separate parts. `verinoda trace showUser load` from a page
+to the code behind its endpoint answered "no directed path". codebase-memory-mcp, CodeGraph, GitNexus, Bito and CodeSee link a client call to its route
+handler; this decision does the same from the text alone, with the evidence of both ends and without guessing
+when the text does not decide.
+
+### 119.2 Decisions
+
+- A new module, `cross_service.py`, run in the same place as the receiver, Java, Mixin and datapack passes
+  (`index.refresh_receiver_sidecar` after every build; `index.load` adds the stored edges). Per file it reads
+  facts (`file_facts()`); `link()` matches them over the whole graph. The facts are kept in
+  `receiver_calls.json` under `cross_service.files`, keyed by the file's sha256, so an update reads every
+  candidate file but parses only the changed ones. The sidecar version goes from 9 to 10; an older sidecar is
+  recomputed on the first load, as before.
+- Route tables, read from the code:
+  - Python through `ast`: decorators `@app.route(path, methods=[...])` and `@x.get/post/put/patch/delete/head/
+    options(path)` (Flask, Quart, Sanic, FastAPI, aiohttp `RouteTableDef`), `api_route`, `add_url_rule`,
+    `add_api_route`, aiohttp `add_route` / `add_get` ..., Starlette `Route(path, endpoint)`. The prefix of a
+    FastAPI `APIRouter(prefix=)` or Flask `Blueprint(url_prefix=)`, and the prefix it is mounted under with
+    `include_router(x.router, prefix=)` / `register_blueprint(bp, url_prefix=)` in another file (the mounted name
+    resolved through that file's imports, relative ones included; nested mounts followed). Django URLconfs:
+    `path()` and plain `re_path()` / `url()` patterns (named groups become parameters, other regular expressions
+    are skipped), `include("app.urls")` prefixes chained; the view `views.detail` or `Cls.as_view()` resolved in
+    the nearest file of that name.
+  - JavaScript and TypeScript, comments removed (strings, templates and regular expression literals kept):
+    `obj.get/post/put/patch/delete/all('/path', ..., handler)` where `obj` is built by `express()`,
+    `express.Router()`, `Router()`, `new Router({prefix})` (Koa-router), `Fastify()`, `new Hono()`, `polka()`,
+    `restify.createServer()`, or is named `app` / `router` / `server` / `api` / `routes` / `fastify` in a file that
+    imports one of those frameworks; `router.route('/x').get(h).post(h)`; `app.use('/prefix', router)` with the
+    router from `require('./x')` or `import` (resolved to the file, then to its one router object). NestJS
+    `@Controller('cats')` with `@Get(':id')` ... on the next method, under the one `setGlobalPrefix()` of the
+    project. Next.js files: `pages/api/**` (the default export) and `app/**/route.ts` (exported `GET`, `POST`
+    ...), their path from the file's path (`[id]` a parameter, `[...slug]` the rest, `(group)` and `@slot`
+    dropped).
+  - Java and Kotlin, comments removed: Spring `@GetMapping` ... and `@RequestMapping(value, method =
+    RequestMethod.X)` under a class-level `@RequestMapping`; JAX-RS `@GET` ... with `@Path` under a class `@Path`
+    (a method with `@Path` and no HTTP method, a sub-resource locator, is not a route).
+  - A route's handler is the function the decorator or annotation sits on, the function its name resolves to (the
+    same file, then the file's imports, then a file of the module's name), or, for an inline function, the code
+    that encloses it (the file at module level).
+- Client calls, read where the URL is spelled in the text: `fetch(url, {method})` (GET without options; a
+  computed `method` is "any method"), `axios.get/post/...(url)`, `axios({url, method})`, an
+  `axios.create({baseURL})` instance in the same file or imported from another (its base prepended), receivers
+  named like a client (`http`, `this.http`, `api`, `client`, `ky`, `superagent`, ...) or imported from a
+  relative module, when the first argument starts with `/` or `http`, supertest `request(app).get(url)`; in
+  Python `requests.*`, `httpx.*`, `requests.request("GET", url)`, `httpx.Client(base_url=)` /
+  `requests.Session()` / `TestClient(app)` / `app.test_client()` variables (assigned or bound by `with`), and
+  receivers named like a client with a URL-shaped first argument. A receiver that is a property of another object
+  (`store.cache.get`) is not a client. A URL is literal pieces and computed pieces: a string, a template
+  (`${id}`), an f-string, `'/a/' + id`, a same-file string constant. A computed segment (`/users/${id}`) matches a route parameter only, never a literal segment.
+  A URL that starts with a computed value followed by `/...` (`${API}/users`) is taken with that value as the
+  server's origin, and the edge says so (`notes`). The query string and fragment are dropped; an absolute URL's
+  origin is dropped when its host is one of the project's own (`localhost`, an IP address, a name without a dot,
+  `.local`, `.internal`, `.svc`, ...); a public host (`api.github.com`) is another service's and is never linked
+  (`external` in the report).
+- Matching: a route pattern is segments (`:id`, `:id?`, `{id}`, `{id:int}`, `<int:id>`, `<id>`, `[id]`, and rest
+  wildcards `*`, `{*path}`, `{p:path}`, `<path:p>`, `[...slug]`); trailing slashes do not count; `<int:x>` does not
+  match a literal that is not digits. The method must fit (`HEAD` fits a `GET` route; a route without methods, a
+  Django view, a Next.js pages handler, `app.all`, fits any). A catch-all gives way to any route that names the
+  path, and a catch-all that names nothing before its wildcard (an SPA fallback, `app.get('*')`) links nothing.
+- One handler fits: an edge `requests` from the function that holds the call (the file at module level) to the
+  handler, `confidence=INFERRED`, `confidence_score=0.6`, `_origin=verinoda.cross_service` (shown as
+  `derived_by`), located at the call (`source_file`, `source_location`), with `route_at` (the route
+  declaration's `path:line`), `protocol`, `method`, `url`, `route`, `framework`, a readable `context` and
+  `notes` for what was assumed (an origin taken from a variable, a router whose mount point was not found, a
+  computed method). Several handlers fit: no edge; the call is `ambiguous` with every candidate (route, `path:line`
+  and handler). The path fits but no method does: no edge, `method_mismatch` with the routes. Nothing fits:
+  `unmatched`. Two declarations of one handler (two paths on one function) are one handler, not an ambiguity.
+- Other protocols, where the text decides:
+  - tRPC: `t.router({...})` / `router({...})` / `createTRPCRouter({...})` object keys whose value is a
+    procedure (`.query(` / `.mutation(` / `.subscription(`) or another router variable, flattened from the
+    routers no other router nests; a client call `trpc.user.byId.useQuery()` (also `api.`, `client.`, `utils.`
+    roots and `query`, `mutate`, `fetch`, `invalidate` ...) whose key path is a procedure is an `rpc_calls`
+    edge to the code around the procedure key.
+  - gRPC, Python: a class deriving from `*Servicer` serves the service's capitalised methods; a variable built by
+    `*Stub(channel)` calls them; `stub.SayHello(...)` is an `rpc_calls` edge to `Greeter.SayHello`.
+  - GraphQL, JavaScript: `Query: {...}`, `Mutation: {...}`, `Subscription: {...}` resolver maps, and the
+    top-level fields of each operation in a `gql` / `graphql` template (fragments skipped); a field is an
+    `rpc_calls` edge to its resolver.
+  - Events: `.emit('name')` to every `.on/once/addListener('name', handler)` (on any object), NestJS `@OnEvent` /
+    `@EventPattern` / `@MessagePattern`, python-socketio and Flask-SocketIO `@sio.on('name')` with `.emit`: an
+    `emits` edge to each listener (several listeners are fan-out, not an ambiguity; `listeners` says how many).
+    Names every emitter library uses for itself (`error`, `data`, `close`, `connection`, `message`, `click`,
+    ...) are not linked.
+  - Two procedures, methods or resolvers that fit one call are ambiguous, as for HTTP.
+- `trace`: when there is no path, the `registers` edges are followed first (as before), then the cross-service
+  edges, so every path found before is unchanged. A crossing hop has `kind: "cross_service"`, the call in `at`,
+  the declaration in `route_at`, and the result's `note` says the crossing is matched by text, not verified. In
+  `--mode any` a path of calls, callbacks and crossings has `reachability: "cross_service"`. With still no path,
+  an ambiguous call made from the source's reach whose candidate handler is (or reaches) the target is listed in
+  `cross_service_ambiguous`, with the next step. The text output prints the crossing as `(cross-service http: POST
+  /api/users; handler declared at server2/index.js:6)`. `analyze` builds its flow claims with the crossing off, as
+  with callbacks: such a claim states calls.
+- A new command, `verinoda routes [--no-table] [--json]`: the route table, the edges, and the ambiguous,
+  unmatched and method-mismatch calls with their candidates, the URLs not spelled in the text and the calls to
+  public hosts. No MCP tool: the core profile keeps its five, the tool count stays 40; MCP `relation_trace`
+  crosses the edges through the same `trace`.
+- Review round: a review found six faults, each now fixed with a regression test.
+  - Flask's `register_blueprint(bp, url_prefix="/api")` replaces the blueprint's own `url_prefix`; the two were
+    joined, which gave `/api/x/thing` for a route served at `/api/thing`. A mount's prefix now replaces the own one
+    for Flask (a missing `url_prefix` keeps the own one; `""` replaces it with nothing), and still comes before it
+    for FastAPI `include_router` and Express `app.use`.
+  - A JavaScript string constant was read from anywhere in the file, the last one winning, so two functions each
+    with `const url = '...'` both read the second. Only a module-level `const` / `let` / `var` is read now, and only
+    when the file declares the name once and assigns it once; a Python module constant must be bound once in the
+    module.
+  - A base URL was glued to the call's URL: `baseURL: 'http://localhost:3000'` with `api.get('things')` became the
+    host `localhost:3000things` and the path `/`, and an absolute URL got the base in front. They are joined as
+    axios `combineURLs` and httpx do: exactly one `/` between, and an absolute URL (`http://...`, `//...`) keeps
+    no base.
+  - A segment of text and a computed value (`'/api/users' + qs` gave `users{qs}`) matched any parameter, so the
+    call linked to `/api/:id`. Only a wholly computed segment matches a parameter now. A value after the literal
+    text of the last segment is taken for a query string or fragment and dropped (the edge's `notes` says so);
+    anywhere else such a segment matches nothing.
+  - The Spring / JAX-RS class prefix was one value per file and leaked into the next class (two Kotlin
+    controllers) and past a nested class (Java `Outer` / `Inner`). Each method now takes the prefix of the
+    innermost class whose body holds it, or none.
+  - Finding a call's closing bracket scanned from the call to the end of the file, and a regular expression
+    literal was not known there: 679 KB of `api.get('/a/N', s.replace(/'/g, ''));` took 859 s, unterminated
+    templates 296 s, unclosed `api.get('/x', {` 605 s. One linear pass per file (`_Tokens`, the same tokenising as
+    the comment stripper: strings, templates, regular expression literals) now pairs every bracket, and arguments
+    are split by jumping over those pairs; the same three inputs now take under one second each (see Measured), and the JVM
+    reader uses the same table. A damaged `cross_service` block in `receiver_calls.json` loses its malformed
+    entries instead of failing the load.
+- Files over 1,000,000 characters, `*.min.js`, `*.bundle.js` and files with lines over about 400 characters on
+  average are generated code and are not read. Python files are parsed only when their text has a route
+  decorator, a mount, a client library, a URL-shaped first argument, a servicer, a stub or an `emit` (plain
+  substring tests first).
+
+### 119.3 Measured
+
+- Fixtures (`tests/test_cross_service.py`): a JavaScript frontend, a Flask backend and an Express backend: the two
+  calls with one fitting handler are linked (`fetch` -> Flask, `axios.post` -> Express), the call that fits a Flask
+  and an Express route is ambiguous with both, a `DELETE` on a `GET`-only route is a method mismatch, a call to
+  an unknown path stays unmatched also under an `app.get('*')` fallback, a call in a comment is not read;
+  `trace showUser load` crosses to the Flask handler (3 hops). A second fixture links FastAPI with a router prefix
+  and an `include_router` mount, an `httpx.Client(base_url=)` call, Django with `include`, Express with
+  `app.use` and an imported `axios.create({baseURL})` instance, NestJS with a global prefix, Spring with a class
+  `@RequestMapping`, a Next.js `pages/api/hello/[name].ts` file, a named event, a nested tRPC procedure, a
+  Python gRPC method and a GraphQL query field: one edge each, each with the expected call and declaration lines.
+- Verinoda's own repository (928 candidate files: 861 Python, 19 JavaScript/TypeScript, 48 Java/Kotlin;
+  35,809 nodes, 86,557 edges; the full scan took 252 s on this machine): 0 routes, 27 client calls with a URL
+  (real ones: a test frontend's `fetch('/api/session')` and the upstream HTTP tests' `client.post('/mcp')` to a
+  server that has no route table this reads), 0 edges, 0 ambiguous, 24 unmatched, 3 URLs not spelled. The pass
+  reads and extracts every candidate file in 3.5 to 4.2 s the first time (34 of the 861 Python files pass the
+  text gate and are parsed), about 1.5% of the scan, and takes 0.3 s on an update with no file changed (the
+  facts reused by sha256); the cross-service block adds 134 KB to the 2.4 MB `receiver_calls.json`.
+- The first version took about 50 s for the same pass: every Python file was parsed (the gate matched any
+  `.get(`) and walked four times, and one regular expression over all Python text cost 2.8 s by itself. The
+  largest JavaScript file (`verinoda/ui/static/app.js`, 141,761 characters) took 0.153 s; with the patterns
+  starting at the dot and the rare ones behind substring tests, 0.047 s.
+- After the review round (bracket table, per-class JVM prefixes, constant rules), measured again on the same
+  index: the same counts (0 routes, 27 client calls, 0 edges, 24 unmatched, 3 not spelled); the pass took 19.3 s
+  on the first run, with the files not yet in the system's file cache, then 3.6 s, and 0.37 s with every file's
+  facts reused; the cross-service block is 134 KB. `verinoda/ui/static/app.js` (now 148,589 characters) takes
+  0.07 to 0.09 s. The reviewer's odd inputs (`tests/test_cross_service.py` uses smaller ones): 679 KB of
+  `api.get('/a/N', s.replace(/'/g, ''));` 0.76 s, 240 KB of unterminated templates 0.44 s, 320 KB of unclosed
+  `api.get('/x', {` 0.42 s, 893 KB of calls after one unclosed bracket 0.67 s.
+- `trace` between two functions with no path on that graph: 0.50 to 0.52 s with or without the cross-service
+  step. Before the step was skipped for a graph without cross-service edges, the extra edge scan cost 0.3 s.
+- Not measured on a real full-stack repository: no such project was available offline. The precision on real
+  code (how many edges are wrong, how many calls a real frontend spells in a way this reads) is unknown.
+
+### 119.4 Not done
+
+- Matching is by text: a reverse proxy, a gateway, a rewrite, a base URL set at run time, an API version chosen
+  in configuration or a deployment can send a call elsewhere. Every edge is INFERRED, never verified, and the
+  route's mount point, the origin taken from a variable and a computed method are stated in `notes`.
+- A URL the text does not spell is not linked: a variable built elsewhere, a template constant, a helper that
+  builds URLs (`url_for`, `reverse`, a generated API client such as OpenAPI or Orval), `%` formatting,
+  `.format()`, `URL` objects, a constant declared inside a function or assigned twice; they are counted as "not
+  spelled in the text". The same for routes whose path is a
+  constant or computed, routes registered in a loop, a router mounted under a computed prefix, Fastify
+  `route({...})` / `register(plugin, {prefix})`, Hono `basePath`, Koa `router.prefix()`, Django REST framework
+  routers, Flask-RESTful / Flask-RESTX resources, class-based Starlette `Mount`, NestJS module-level
+  `RouterModule` prefixes and versioning, Spring `@RequestMapping` on interfaces, Spring WebFlux router
+  functions, Ktor, Go, Rust, Ruby, PHP and .NET frameworks (no route table is read for them).
+- No client is read in Java, Kotlin, Go or other languages (RestTemplate, WebClient, OkHttp, Retrofit, Feign are
+  not read).
+- A receiver named like a client (`api`, `client`, `http`) whose first argument starts with `/` is taken for an HTTP
+  client; an object of that name that is something else would make a call that can only become an edge if a
+  route of the same path and method exists.
+- A computed path segment matches a parameter, never a literal: `/api/${kind}/list` does not match
+  `/api/users/list`. Two routes that both fit (a literal `/users/me` and `/users/:id`) are ambiguous even where the
+  framework picks one by order or specificity.
+- A URL on a public host is never linked, also when it is the project's own production domain.
+- Events are matched by name alone across the whole project: two unrelated emitters that use one name are linked;
+  the emitter object is not compared. Only `emit` / `on`-style APIs are read (not `dispatchEvent`, Electron
+  `ipcRenderer.send` / `ipcMain.handle`, Redis or Kafka topics, Django signals, Celery tasks).
+- gRPC is read in Python only, through the generated `*Servicer` / `*Stub` names; GraphQL in JavaScript /
+  TypeScript resolver maps only (not schema-first SDL with Python resolvers, graphene, strawberry, ariadne, or
+  code-first NestJS resolvers); tRPC `mergeRouters` and routers defined inline as a key's value are not read.
+- An inline handler (`app.get('/x', (req, res) => ...)`) has no node: the edge ends at the function around it, or
+  at the file. The trace then ends there.
+- Only `trace` (CLI, MCP `relation_trace`, `diagram`, `tour`, named maps), `routes`, `export` and dead-code
+  reachability use the edges. `map --view impact`, `review`, `when`, `butterfly` and `analyze` do not follow them
+  yet: a changed handler does not list the frontend functions that call it.
+- The text gate for Python (substrings) skips a file whose only client call has a URL argument that is neither a
+  literal nor an f-string beginning with a placeholder and a slash and that uses no `requests` / `httpx`.
+
+### 119.5 Tests
+
+`tests/test_cross_service.py` (64 tests): the JavaScript-to-Flask trace with the crossing hop's relation, kind,
+confidence, `derived_by`, `at` and `route_at`; `axios.post` to an Express handler and the text output; no route
+(an unmatched call, also under a catch-all `app.get('*')`); an ambiguous call (Flask and Express both fit: no
+edge, both candidates reported, and `trace` lists it in `cross_service_ambiguous`); a method mismatch (DELETE on
+a GET route); a call in a comment; the sidecar block and the reuse of the facts by sha256 (nothing parsed the
+second time); seven HTTP frameworks (FastAPI with router and mount prefixes, an `httpx` `base_url` client,
+Django `include`, Express `app.use` with an imported axios instance, NestJS with a global prefix, Spring, a
+Next.js API file); `%`-formatted URLs not read; events, tRPC, gRPC and GraphQL edges; a generic event name not
+linked; segment matching (parameters, `int` converters, computed segments, rest wildcards, optional parameters,
+trailing slashes); client URL forms (templates, concatenation, a variable origin, absolute URLs); relative and
+computed URLs; public and internal hosts; an Angular `this.http.get<T>()` call with a field as its origin, and a
+property chain (`store.cache.get`) not taken for a client; route decorators of an app named `api` not taken for
+client calls; minified files; the comment stripper. Review round (a third fixture project and unit tests): a Flask
+`register_blueprint` prefix that replaces the blueprint's and one not given; module-level, function-local,
+redeclared and reassigned constants (JavaScript and Python); base URLs joined with one slash (seven cases) and an
+absolute URL that keeps no base, also through a client of `httpx.Client(base_url=)`; a value after `/api/users`
+taken for a query string (with the note), a segment of text and a value matching nothing; two Kotlin controllers
+and a Java nested class with their own prefixes; four inputs that took minutes, each under one second; bracket
+pairing past strings, templates and regular expressions; a damaged sidecar block.
+
+## 120. Runtime flaws from traces (D147, 2026-10-01)
+
+### 120.1 Why
+
+`verinoda observe` recorded which call site started which function while the tests ran, and nothing about what
+the calls cost. An N+1 query (one `SELECT` per item of a loop), the same rows read again and again, and the
+function a test spends its time in are visible only at runtime, and the test suite already drives that code.
+AppMap and Digma find them in recorded runs. This change records the SQL statements and a sampled stack during
+the same isolated observe run and reports them: `verinoda observe` now lists an N+1 with its call path from the
+test to the statement and the loop it runs in.
+
+### 120.2 Decisions
+
+- **A second plugin beside the call tracer.** `verinoda/runtime/flaws_plugin.py` is standalone like
+  `calltrace_plugin.py` (standard library and pytest only), copied next to the throw-away copy as
+  `verinoda_flaws.py` and loaded with `-p verinoda_flaws` after `-p verinoda_calltrace`. It writes
+  `artifacts/flaws.jsonl` (schema `verinoda.flaws/1`); nothing leaves the machine. It runs only when
+  `trace.observe(..., flaws=True)`: the CLI `observe` turns it on (off with `--no-flaws`); MCP `runtime_observe`,
+  `analyze --observe`, `review --observe`, the debug ledger and the test map keep the old run, so their cost and
+  the MCP surface do not change.
+- **SQL by wrapping the driver, not by tracing C calls.** `sqlite3.connect` and `sqlite3.dbapi2.connect` are
+  replaced at plugin load by a function that passes a `factory`: the recorder's `sqlite3.Connection` subclass
+  when none is given, or, for a user's own factory, a class with the user's class first and the recorder after it
+  (`type(name, (MyConn, recorder), {})`, same name and module), so the user's overrides run first with their own
+  signatures and reach the timing through `super()`. The recorder's `cursor()` hands out a cursor class built the
+  same way (`sqlite3.Cursor` subclass, or the user's cursor class first). A connection's `execute`,
+  `executemany` and `executescript` make a new cursor as sqlite3's own do (since Python 3.11 in C, never through
+  an overridden `cursor()`; 3.10 called `self.cursor()`, and the recorder does the same there), run the statement
+  on it once and return it, so a statement is counted once and a cursor returned by `Connection.execute` keeps
+  recording. A `factory` that is not a sqlite3 class (or `None`) is passed through unchanged, so sqlite3 accepts
+  or refuses it as it would; warnings raised by `sqlite3.connect` are re-emitted at the caller's line. A
+  `sys.setprofile` C-call hook would cost every C call of the run and would not see the time the call took. When
+  SQLAlchemy has been imported by the end of collection (or by a test's setup), its `before_cursor_execute` /
+  `after_cursor_execute` engine events record statements of other drivers; a statement on a sqlite3 cursor of
+  the recorder is left to the recorder.
+- **What is kept per statement.** The text normalised in one tokenising pass, leftmost token first, so a quote
+  inside a comment and a comment marker inside a string are each seen for what they are: string literals (also
+  `E'..'`, `X'..'`, `B'..'`, `N'..'`) become `?`, comments a space, double-quoted names a hash keyed with a salt
+  of the run (stable within the run only), and an opened string, quoted name or comment that never closes ends
+  the statement (`?` for the rest). Numbers and placeholders (`?`, `?1`, `:name`, `%s`, `%(name)s`, `$1`,
+  `@name`) are replaced only between those tokens; `IN (?, ?, ?)` -> `IN (?)`, repeated `VALUES` tuples -> one.
+  The raw text and the parameter values are never written: identical executions are told apart by a hash of text
+  and parameters (64 per key at most). A normalised statement over 2,000 characters is cut with a marker naming
+  its length and a hash of all of it, so two long statements with the same start stay apart. Per (test phase,
+  normalised statement, stack): executions, `executemany` / `executescript` calls, total and longest duration,
+  the repeated hashes, the thread flag; per (test phase, statement), the repeated hashes over all its stacks. The
+  stack is the project frames only (repository files outside `.venv`, `site-packages` and the like), innermost
+  first, 40 at most, each as code and instruction offset; the file holds each frame's line and, on Python 3.11+,
+  the column range of the call.
+- **Code objects by `id`.** The first version keyed frames by the code object; hashing a code object hashes its
+  constants and names on every lookup, and a recorded execute cost about 11 µs over the plain call. Keyed by
+  `id(code)` it costs about 5-6 µs. Project code objects are kept (the file names their frames at the end, and
+  their ids are never reused within the run); any other code object is held by a weak reference and its entry
+  dropped when it dies, so library and generated code is not kept alive.
+- **Slow paths by sampling, not by tracing returns.** A daemon thread reads the main thread's stack every 5 ms
+  (`time.sleep`, the high-resolution timer on Windows; `Event.wait` ticks at about 15.6 ms there) and weighs each
+  sample with the wall time since the previous one, at most a second. PY_RETURN events on every project function
+  would cost every call; the sampler costs about the same whatever the code does. Its effective interval is
+  reported (`effective_sample_ms`), longer than asked when the main thread holds the GIL.
+- **N+1.** One normalised read (`SELECT`, `WITH`) executed at least `--n-plus-one` times (default 5) in one test
+  phase from one stack, with at least two different parameter sets, where a project frame of that stack makes
+  the call inside a loop. The loop is read from the frame's file at the recorded position
+  (`flaws.enclosing_loop`): a `for` repeats its body (not its iterable or `else`), a `while` its test and body, a
+  comprehension its element, conditions and every `for` after the first (not the first iterable), and only
+  inside the frame's own function. The innermost such frame is the loop; the call path runs from the test to the
+  statement. Findings are grouped by (statement, call line in the loop) over the tests; `n_tests` counts tests,
+  not their phases or stacks.
+- **Repeated SQL.** The same text with the same parameters at least `--repeated` times (default 3) in one test
+  phase (reads and writes; transaction statements, DDL and `PRAGMA` are left out), summed over all the stacks of
+  that statement (three functions each running it once are three repeats), cited at the stack that ran it most,
+  with the number of call sites and up to five of them. A repetition of a statement that is also an N+1 carries
+  `also_n_plus_one`.
+- **Slow paths.** A project function that is not test code, whose sampled time in one test phase is at least
+  `--slow-ms` (default 100) and at least `--slow-share` (default 0.2) of that test phase: by self time (the
+  function innermost among the project frames, so the library calls it makes are its own) or by total time. A
+  function whose total time is at least 80% explained by a reported callee on its heaviest path is not reported
+  again. The cited line is the hottest line for self time, the call line on the heaviest path otherwise.
+- **What a finding claims.** Each finding is `status: observed`: run R, test T, statement or function, count,
+  call path, and a `cite` (`file:line` of the call inside the loop, of the repeated call, of the hottest line),
+  with experiment evidence anchored on that line (`meta.kind: runtime_flaw`, run id, test, "existential:
+  observed in this run at this commit; never evidence for 'always'"). The reading is separate: "an N+1 query" and
+  "the same rows were read again" are `interpretation.status: strong_inference` with a fix hint; an N+1 whose
+  loop is in test code, and a repeated write, are `weak_inference`. A slow path has no interpretation.
+- **Where it shows.** `observe(..., flaws=True)` returns a `runtime_flaws` block (findings with evidence) and keeps
+  it, without the evidence records, in the run's header (`runtime_runs.header.runtime_flaws`, with the file's
+  sha256); the run id is chosen before ingest so findings name it (`trace.ingest(run_id=...)`). `verinoda observe
+  --json` carries the block (10 findings per kind, 3 tests per finding); the text output prints each N+1 with its
+  loop, the call path and the inference, then repeated SQL (with its other call sites) and slow paths. The block
+  is `complete: false` when the recording hit a budget or the run stopped early or ran fewer tests than asked;
+  counts are then lower bounds. Exit codes are unchanged (findings are not an error).
+- **Boundary names unchanged.** The call tracer names a library callee by its module and qualified name; the
+  recorder's methods carry sqlite3's (`sqlite3.connect`, `sqlite3.Connection.execute`) and, for the `setprofile`
+  tracer, the plugin exports `VERINODA_EXT_NAMES` (code -> public name), which `calltrace_plugin._CodeName` reads.
+  Because a user's subclass stays first in the class built for it, the call tracer sees the same in-repo edges
+  (`via_subclass -> MyConn.execute`) with and without the flaws plugin.
+- **Budgets.** `VERINODA_FLAWS_MAX_KEYS` (50,000 statement keys) and `VERINODA_FLAWS_MAX_BYTES` (10 MB) make the
+  recording incomplete; the byte budget bounds the whole file: the header (reserved at its widest), the frame
+  table and the context names are counted, and a frame enters the table only with a record that was kept. Each
+  test phase's sampled time is written first, then statements by execution count, then the repeat records, then
+  samples heaviest first; `VERINODA_FLAWS_MAX_SAMPLE_KEYS` (50,000) and the byte budget drop the lightest sampled
+  stacks and say so (`samples_complete: false`). The trace deadline writes a partial file before the runner's
+  hard kill, as the call tracer does.
+- **Review round.** A review of the first version found eight defects, each fixed with a regression test in
+  `tests/test_runtime_flaws.py`: (1) the recorder class sat in front of a user's `Connection` / `Cursor`
+  subclass, so overrides with other signatures (`params=`, `cursor(self)`) raised `TypeError` and a user
+  `execute` that called `self.cursor().execute` recorded one statement twice - the recorder now sits after the
+  user's class; (2) for the same reason the in-repo edge `via_subclass -> MyConn.execute` disappeared with flaws
+  on - a test compares edges and boundary calls of the same test with and without flaws; (3) strings were
+  replaced before comments in two passes, so an apostrophe in a comment dropped SQL (two different statements
+  merged into a false N+1) and leaked a raw literal into the file - one tokenising pass, and a test that no
+  literal of eight tricky statements is ever written; (4) repeated SQL counted repeats per stack only, so three
+  functions running the same statement once each were missed - summed per (test phase, statement); (5)
+  `VERINODA_FLAWS_MAX_BYTES` left the header and frame table outside the budget (300 bytes asked, 963 written)
+  - counted; (6) a cursor returned by `Connection.execute` was a plain `sqlite3.Cursor` and its later
+  statements were lost - the connection's methods run on a recorder cursor and return it; (7) exact-type checks
+  (`type(conn) is sqlite3.Connection`) are false with the plugin on - kept, as a limit below; (8) deprecation
+  warnings from `sqlite3.connect` pointed at the plugin - re-emitted at the caller. Minor fixes from the same
+  review: `factory=None` / `cursor(None)` pass through unchanged, long statements keep a marker and a hash of the
+  full text, context times survive a budget cut, double-quoted literals and quoted numeric names are hashed
+  rather than kept, `n_tests` counts tests, and library code objects are held weakly.
+
+### 120.3 Measured
+
+Windows 11, Python 3.13.14, this machine, `observe` of the whole suite with `graph=False`, median of 5 runs each,
+after the review fixes; `cpu_s` / `wall_s` are the call tracer's own figures (from its load to the end of the
+session), `run` the experiment's duration (copy, process start and ingest included).
+
+| project | configuration | cpu_s | wall_s | run (s) |
+|---|---|---|---|---|
+| `examples/orders_app` (5 tests) | tracer off | 0.297 | 0.331 | 1.637 |
+| | tracer auto (sys.monitoring) | 0.344 | 0.375 | 1.742 |
+| | tracer auto + flaws | 0.422 | 0.447 | 1.773 |
+| SQL fixture (2 tests: 6,024 sqlite3 statements from an N+1 run 20 times; a 2,000,000-step loop) | tracer off | 0.859 | 0.887 | 2.184 |
+| | tracer auto | 0.891 | 0.920 | 2.234 |
+| | tracer auto + flaws | 1.062 | 1.096 | 2.415 |
+
+- The flaws plugin adds 23% CPU and 19% wall time to the traced part of the orders_app run (2% of the whole
+  observe), and 19% CPU and 19% wall time to the SQL fixture (8% of the whole observe). Before the review fixes
+  the same benchmark gave 9% / 19% (orders_app) and 18% / 24% (SQL fixture); orders_app's traced part is a third
+  of a second, so a few tens of milliseconds move its percentages.
+- Per statement, in-process (an in-memory `SELECT` by key through `Connection.execute`, 6,000 times; three runs,
+  each within 0.4 µs): 2.2 µs plain; 3.6-3.7 µs through the recorder with recording off; 8.4-8.7 µs recorded
+  from 2 project frames; 25.5-25.7 µs from 50 project frames (40 kept). Before the review fixes: 3.1, 7.1 and
+  23.9 µs; the difference is the cursor the connection's `execute` now makes in Python (`cursor()` and the
+  cursor's `execute`, two calls instead of one) so that it keeps recording.
+- Before the review fixes (not re-measured): on the SQL fixture the run reported the N+1 (`SELECT title FROM b
+  WHERE a_id = ?`, 6,000 executions from the `for` loop at `app/db.py:15`, call at line 16, path `test_titles ->
+  titles`), the outer `SELECT id, name FROM a` repeated 20 times, and both test functions' callees as slow paths
+  (`titles` about 700 ms, `busy` about 250 ms); the effective sample interval was 6.9 ms with the `setprofile`
+  tracer (5 ms asked); with `Event.wait` it had been about 15.6 ms.
+- `tests/test_runtime_flaws.py`: 50 tests in 26 s (9 real observe runs).
+- Not measured: a large real project's suite, a real SQLAlchemy install (none in this environment; a stand-in
+  package with the same event contract is tested), Python 3.10, Linux or macOS.
+
+### 120.4 Not done
+
+- Run-scoped: a finding says what these tests executed in this run, never that the code always does it; how many
+  queries an N+1 costs in production depends on the data, and the tests' data may be small.
+- Counted per test phase, not per call of the function that holds the loop: two separate calls of a function
+  that each run 3 queries from the same loop count as 6.
+- SQL is seen for sqlite3 connections made through `sqlite3.connect` after the plugin loaded (not
+  `sqlite3.Connection(...)` built directly, not a connection or cursor `factory` that is not a sqlite3 class)
+  and for other drivers only through SQLAlchemy engine events. psycopg, mysqlclient, an ORM's raw connection
+  used without SQLAlchemy, Django's ORM (it does not go through SQLAlchemy) and async drivers are not recorded.
+- With the plugin on, a connection and its cursors are instances of the recorder's subclasses: `isinstance`
+  checks hold, exact-type checks (`type(conn) is sqlite3.Connection`, `type(cur) is MyCursor`) do not, and a
+  user's subclass whose metaclass or layout cannot be combined with the recorder is passed through unrecorded.
+  A connection's `execute` makes its cursor in Python, so on Python 3.10 a `cursor()` override runs as it did
+  under sqlite3 there, and since 3.11 it does not, as under sqlite3.
+- A loop is found only in project frames and only as a Python loop: a loop in library code (an ORM's lazy
+  loading inside a template engine), `map()` / `sorted(key=...)` from C, recursion and callbacks are not loops;
+  such repeated reads are counted in a limit line, not reported. On Python 3.10 (no column positions) a
+  one-line comprehension whose first iterable makes the call is taken as a loop.
+- Statements on other threads are recorded with the main thread's test and the `thread` flag; their stacks hold
+  no test frame. Samples are taken of the main thread only. Child processes and `pytest-xdist` workers are not
+  recorded correctly (each worker would write the same file).
+- Slow-path times are sampled estimates (one sample is the time since the previous one); the self time of a
+  function includes the library and C calls it makes; time spent in collection or between tests is not
+  attributed.
+- `analyze --observe`, `review --observe`, MCP `runtime_observe` and the debug ledger do not record flaws; the
+  findings are not claims in the store (they are kept in the run's header).
+- The normalisation is textual: a statement built with different white space is the same statement only when the
+  normalised text matches; a double-quoted name is a hash, so `"t"` and `t` differ; a `-` before a number stays;
+  a statement whose string or comment never closes keeps only the text before it.
+
+### 120.5 Tests
+
+`tests/test_runtime_flaws.py` (50): a sqlite3 project observed once with the flaws plugin. The N+1 in a loop is
+found with its loop (`app/store.py:20`, `for`), its call line, the innermost statement site and the call path
+`test_n_plus_one (tests/test_app.py:8) -> titles_n_plus_one (app/store.py:21) -> books_of (app/store.py:15)`,
+`observed` with the run id, `strong_inference` with the fix and experiment evidence on the cited line; the
+JOIN version and the one outer query are clean; a loop in the test itself is `weak_inference`; a query repeated
+through a cursor with the same parameters is repeated SQL and not an N+1; the same statement run once by each of
+three functions is repeated SQL from three call sites; five statements that differ only after a line comment
+holding an apostrophe stay apart and no literal reaches the file or the header; a cursor returned by `Connection.execute` keeps
+recording; a user `Connection` subclass with its own `execute` records each statement once and the test's call
+edges and boundary calls are the same with and without flaws; a 0.4 s function is a slow path by self time at its
+hottest line, a quick one and test functions are not; a stand-in SQLAlchemy engine (under a `site-packages`
+folder) driving a non-sqlite3 cursor gives an N+1 in a comprehension; the block is kept in the run's header
+without evidence; thresholds move what is reported; without `flaws` nothing is recorded and the boundary names
+stay sqlite3's (also under `setprofile`, with the same N+1); a run cut short is `complete: false`; the CLI's
+`--json` block, the text output with the N+1's call path, `--no-flaws` and a bad threshold. Units on the plugin
+in-process: user subclasses with other signatures (`params=`, `cursor(self)`, `parameters=None`) run first; a
+cursor from `Connection.execute`, `executescript` and `executemany` record; a bad `factory` and `cursor(None)`
+behave as under sqlite3; `connect` warnings point at the caller; the byte budget bounds the whole file at three
+sizes with no frame of a dropped record; long statements keep a marker and their own hash; library code objects
+are not kept alive. Units: no literal written for eight statements (comments with quotes, unclosed strings and
+comments, double quotes, `E'..'`, `X'..'`), statement normalisation (twelve forms), double-quoted names hashed
+apart, the loop rules (body vs iterable, `else`, `while` test, comprehension element vs first iterable, a nested
+function), threshold checks, slow-path pruning (a callee that explains the time, a function with its own time,
+under the share), repeats summed over stacks with tests counted once, the file parser, the plugin standalone and
+inert when imported inside Verinoda. `tests/test_runtime_trace.py`, `tests/test_trace_import.py`,
+`tests/test_trace_log.py`, `tests/test_mcp.py`, `tests/test_docs.py` and the observe tests of `tests/test_cli.py`
+pass unchanged.
+
+## 121. Derived facts (D148, 2026-10-01)
+
+### 121.1 Why
+
+Glean's derived predicates and jQAssistant's concepts store a computed result under a name so that later queries
+build on it instead of recomputing it. Verinoda had claims, which go stale when their code changes, but nothing
+that kept a result under a name: an agent that established "these are the places that write storage" or "a()
+returns 1, and b() reads it" had to find it again in each session, and nothing told it when the result stopped
+holding.
+
+### 121.2 Decisions
+
+- **`verinoda fact add NAME (--from-claim ID ... [--from-fact NAME ...] | --search PATTERN [-F] [-i]
+  [--path P ...])`**, `fact list [--status S]`, `fact show NAME`, `fact refresh [NAME ...] [--limit N] [--budget S]
+  [--no-verify]`, `fact retire NAME [--reason R]`; all take `--json`. CLI only: no MCP tool is added (the count
+  stays 40). A name is letters, digits, `.`, `_` and `-` (at most 80); a live name is unique, and a retired name
+  can be used again. Exit 2 on a bad name, an unknown or superseded claim, an unknown input fact, a bad pattern or
+  path, or both kinds of input at once; `refresh` exits 1 when a fact or claim could not be processed.
+- **Two kinds.** A `derived` fact rests on claims and on earlier facts, taken together: its statement is theirs
+  joined with "and". A `search` fact is a stored `verinoda search` (the trigram search: a regular expression or a
+  fixed string, optionally under some paths): its result is the matching sites (500 kept, the total always) and it
+  rests on a digest of the content hashes of every file in its scope plus each matched file's hash. A query over
+  the ranked retrieval (`verinoda query`) is not a fact source: its hits are leads chosen by a score, and a result
+  that changes with the ranking is not one a fact can be checked against. The search is exact, so its result can
+  be recomputed and compared.
+- **Status no stronger than the inputs.** A derived fact's status is the weakest of its inputs': `contradicted`
+  first, then `stale`, then the lowest rank in the claim order (`experiment_verified` ... `unknown`). A claim
+  superseded by a correction, or an input fact retired, counts as `stale`: a fact never follows a correction by
+  itself; adding it again from the correction is the user's call, and such a fact (or one resting on it) cannot
+  recover: it is left out of the automatic recomputation and listed as `cannot_recover`. A search fact is
+  `observed` only when the search read every file in its scope; it is `weak_inference` when the search was cut
+  short or when the scope holds files the search never reads (over 2 MB, a NUL byte in the first 8 KiB, not a
+  regular file), which are named (`trigram.skipped_files`, read from the index). Nothing derives a status above
+  its inputs: a fact on a fact is capped by that fact.
+- **Stale with the code it rests on.** At the end of every `scan` and `update` (after the build lock is released,
+  in `workflow`, so the MCP `index_update`, the git hooks' updates and the index refresh inside `verify` and
+  `analyze` do it too) a derived fact whose input is now stale, contradicted or weaker is lowered to that status,
+  and a search fact whose scope digest differs from the tree the update recorded (the working tree when no
+  snapshot was recorded: an index refusal, a `--fast` update) is `stale`, with the matched files that changed
+  named. Each lowering is a `fact_history` row. Between updates the code and the claims change by other paths
+  (an edit, `verify`, critique, a correction): every read (`fact list`, `fact show`, the leads below) re-checks a
+  fact without writing - a derived fact against its inputs as they are now, a search fact against the stat-cached
+  hashes of the files it matched (one that changed or is gone makes it `stale`, and the facts resting on it with
+  it). A new match in a file the search did not match before is seen at the next update only. The lowering is
+  recorded at the next update.
+- **Recomputation is the only way up.** `fact refresh` recomputes, oldest first (an input fact is always older
+  than the facts on it, and a stale input fact is recomputed first), the facts a recomputation can change (or the
+  named ones): a stale search fact is run again (the trigram index refreshed once per run, the files hashed before
+  it); a derived fact whose inputs now allow another status than the recorded one, or that is stale, has its stale
+  claims re-verified with `verify` (static, as `consolidate` does: one index refresh first within the budget,
+  then each verify with `wait=0`) and takes the weakest of its inputs again - raised when they recovered (from
+  `weak_inference` or `contradicted` too), lowered when they did not. A search is not started with less than 1 s
+  left: the queue stops there and the rest is reported as not reached. The update recomputes within 20 facts and
+  10 s, without `verify`: stale searches re-run and derived facts whose inputs changed are re-read (so a fact whose
+  claims `update --consolidate` restored comes back in the same update); a derived fact that waits on a stale
+  claim is not queued and is counted as `waiting`. `facts.refresh_on_update: false` turns that off, and an
+  `update --fast` (which leaves the graph to a background build, as the MCP `index_update` does) only lowers. The
+  facts' own time is reported (`facts.seconds`). A nested update started by a refresh only lowers, so a refresh
+  never re-enters itself.
+- **A changed result says so.** A recomputation reports `was -> now` and, when the result changed, old against
+  new: for a search, the totals and the sites added and removed, compared by file and line text (a line that only
+  moved is counted as `moved`, not a change); for a derived fact, the statement before and after and each input
+  whose status changed. The same is the history row's payload (`fact show`). A fact whose result changed makes
+  the facts resting on it stale and recomputes them in the same run when the budget allows; one whose status
+  changed recomputes them too. A search that did not finish (the time ran out, a file could not be read) never
+  replaces a complete result: the fact stays stale with the result it had, nothing is reported as changed or
+  restored, and the facts resting on it are not touched.
+- **Races.** A search fact's file hashes are read before the search reads the files (once per refresh run), so an
+  edit in between leaves the fact stale at the next update rather than wrongly current. The writes that depend on
+  what they read take the write lock first (`store.tx(immediate=True)`, `BEGIN IMMEDIATE`), so another process
+  cannot change the row in between: adding a fact (the name check, the inputs, the insert), retiring one (a second
+  retire is told there is no such fact, exit 2) and every status write, which also updates only a row that is not
+  retired. A name another process took anyway is caught by the unique live-name index and is the same exit 2.
+- **Other queries use facts as leads, not evidence.** `query` (`--json`: `facts`), MCP `project_query` (text and
+  JSON) and `analyze` (JSON and the MCP view: `facts`; text: a `facts` block before the passages) list up to five
+  facts the question names (its whole name as a word, a word of the name, or two words of its statement, pattern or
+  scope) with their status as re-checked on read, their statement and the lines they rest on (the claims' supporting
+  evidence, or the first sites). They are not evidence for the analysis's claims: a fact's support is its claims'
+  evidence, which an answer should cite directly (counting the fact as well would count the same lines twice, and
+  would let an aggregate checked only at update time support a claim); a search fact's sites are matches of a
+  pattern, which a claim still has to read. A store that cannot be read leaves the answer without facts and says so
+  (`facts_error`).
+- **Review round.** A review found that a search cut short by the time budget was saved as a changed result,
+  counted as restored and made the facts on it stale; that files the search skips (over 2 MB, binary) left it
+  `observed` with no match; that facts which can never recover filled the update's queue so other stale facts were
+  never recomputed, and the update line named the wrong cause; that a search fact read as current after its code
+  changed until the next update; that a status write could land on a fact another process had just retired, two
+  retires ended in a traceback and the add was not atomic across processes; that `update --fast` ran the
+  searches and did not count their time; and that a lead matched a fact's name inside another word (`db` in
+  "feedback"). Each is fixed as described above and covered by a test (the cross-process cases with a second
+  connection in one process, not with two processes); also: the statement says "N match(es)" (the total
+  counts matches, not lines), a fact lowered to `weak_inference` or `contradicted` is recomputed once
+  its inputs recover, and `fact list --status` refuses an unknown status (exit 2).
+- **Storage.** Schema v10: `facts` (the definition, the result, what it rests on, the status and why, when it
+  was computed) and the append-only `fact_history`. Nothing is deleted (a trigger), a fact's name, kind and
+  definition never change, and a retired fact stays retired. An older `atlas.db` is migrated on first open.
+
+### 121.3 Measured
+
+On a copy of `examples/orders_app` (12 files), Windows, three updates after a one-line edit each: 1.69-1.76 s
+without facts, 2.37-2.46 s with five search facts over the whole project (all five lowered and recomputed in each
+update, about 0.14 s per fact). Adding a search fact took 0.39 s on average; the leads for a question took
+0.27 ms with five facts. After the review round (one trigram index refresh per run, the read-time hash check),
+measured again the same way on the same machine (the timings vary with its load; compare within one run): 0.75-0.84
+s without facts, 1.06-1.12 s with five search facts (all five lowered and restored each time; the facts' own
+`seconds` 0.24-0.31); adding a search fact 0.22 s on average; the leads 4.8 ms for a question naming one of the
+five (the read now hashes the files a search fact matched, stat-cached).
+
+### 121.4 Not done
+
+- Between updates a read re-checks only the files a search fact matched: a new match elsewhere waits for the next
+  update.
+- A search fact over a scope with a binary or very large file is `weak_inference` for good (the search cannot
+  read it); limiting it with `--path` avoids that.
+- A search fact's scope is compared over the files a snapshot lists; a match in a file the snapshot leaves out
+  (untracked build output) is found by a refresh but does not make the fact stale.
+- Any change in a search fact's scope makes it stale, also one that cannot change the result; the update's
+  recomputation restores it, at the cost of a search per fact (bounded by 20 facts and 10 s; not after
+  `--fast`).
+- A search fact keeps 500 sites; beyond that the change report compares the totals and the kept sites only.
+- A derived fact is a conjunction of its inputs; there is no rule language (joins, negation): that is a query
+  language, not stored results.
+- Leads are matched by words of the question, not by meaning.
+- A fact whose claim was corrected stays stale until it is added again from the correction.
+
+### 121.5 Tests
+
+`tests/test_derived_facts.py`: a fact on a claim keeps its status when other code changes and goes stale with the
+code it rests on (the update lowers it, says why, records it, and does not run `verify`); `fact refresh` leaves it
+stale while the code differs and restores it when the code is back; a search fact goes stale when a matched file
+changes and refresh restores it unchanged, and a new file in its scope makes it stale; a search limited to a folder
+ignores changes elsewhere; an update recomputes a search fact and the fact resting on it and reports the site added
+and the statements old and new, and a line that only moved is not a change; the status is the weakest input's, a
+fact on a fact is no stronger, a read caps a fact without writing and the next invalidation records it; a superseded
+claim and a retired input fact leave their users stale, a retired name can be used again, deletes and definition
+changes are refused; the CLI (`--json` for add, list, refresh; exit 2 on a bad name and on both kinds of input), the
+`query` lead in JSON and text, its status after an update, and the `update` line; `analyze` lists the fact as a lead
+(JSON, the MCP view, text); a changed result reaches the facts resting on it in the same refresh; template words of
+a search fact's statement do not make it a lead; a v9 store is migrated. After review: an unfinished search keeps
+the old result stale (nothing changed or restored, the fact on it untouched) and less than 1 s left stops the queue
+before a search; a skipped binary file, then a file over 2 MB, make a search fact `weak_inference` with the file
+named (no match found in it), and once they are gone the update raises it and the fact on it; facts that cannot
+recover stay out of a limited queue and are listed, and the update line says so; a read shows a search fact and the
+fact on it stale after a matched file changed, without writing; a status write onto a fact retired by another
+connection is not made, a second retire is a refusal, the write lock is held from the start, a name taken meanwhile
+is a refusal, an unknown `--status` is exit 2; an update with the graph deferred only lowers and the facts' time is
+reported; a lead needs the fact's whole name.
+
 ## Sources
 
 - **Retrieval:**

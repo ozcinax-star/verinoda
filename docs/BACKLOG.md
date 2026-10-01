@@ -49,7 +49,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 3.2 | **Code query language** | A small declarative query language over the graph (nodes, edges, paths) that answers with evidence | CodeQL, Glean Angle, jQAssistant Cypher, NDepend CQLinq, Joern | a query such as "functions that write storage and are reachable from an HTTP handler" returns its sites |
-| 3.3 | **Derived facts** | A verified claim or query result stored as a fact other queries use, recomputed when its evidence goes stale | Glean derived predicates, jQAssistant concepts | a derived fact goes stale with the code it rests on |
 
 ## 4 - Git history mining
 
@@ -88,7 +87,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 10.1 | **Cross-service edges** | HTTP, gRPC, GraphQL and tRPC client calls linked to their route handlers; event emit and listen edges; framework route tables | codebase-memory-mcp, CodeGraph, GitNexus, Bito, CodeSee | `trace` crosses from a frontend fetch to its backend handler |
 | 10.2 | **ORM, DI and database schema (live database opt-in)** | ORM models, dependency-injection bindings, migrations and schema as nodes | agentforge-graph, Graphify, Kodit | the dataflow view reaches a table |
 
 ## 11 - Claim history and memory
@@ -117,7 +115,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 15.1 | **Runtime flaws from traces** | N+1 queries, repeated SQL and slow paths found in recorded test runs | AppMap, Digma | `observe` reports an N+1 with its call path |
 
 ## 16 - Minecraft: vanilla source and mappings
 
