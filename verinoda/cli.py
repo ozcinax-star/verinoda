@@ -897,7 +897,8 @@ def cmd_review(args) -> int:
         res = rv.review(repo, store=st, base=args.base, staged=args.staged, targets=args.target,
                         change=args.change or ("body" if args.target else None), concerns=concerns,
                         run_tests=args.run_tests, observe=args.observe, max_chars=args.max_chars,
-                        coverage_reports=_report_args(repo, args.coverage), findings=args.findings)
+                        coverage_reports=_report_args(repo, args.coverage), findings=args.findings,
+                        since_last=args.since_last)
     finally:
         st.close()
     _emit(args, res, lambda r: _write(rv.render_text(r)))
@@ -3257,6 +3258,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--observe", action="store_true",
                     help="run those tests under the call tracer: which of them reach the changed functions")
     sp.add_argument("--max-chars", type=int, default=6000, help="budget of the read_first list")
+    sp.add_argument("--since-last", action="store_true",
+                    help="leave out the findings the last review of the same base and mode already listed (counted, "
+                         "and the ones gone listed); the changed definitions new since then are named")
     sp.add_argument("--findings", choices=["introduced", "all"], default="introduced",
                     help="introduced (default): list only the findings the change introduced, the preexisting and "
                          "fixed ones under differential; all: list the preexisting ones too")

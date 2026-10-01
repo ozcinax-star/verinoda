@@ -4839,13 +4839,16 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
 def review(repo: Path, *, store=None, graph=None, base: str | None = None, staged: bool = False,
            targets: list[str] | None = None, change: str | None = None, concerns: list[str] | None = None,
            run_tests: bool = False, observe: bool = False, max_chars: int = DEFAULT_MAX_CHARS,
-           record: bool = True, coverage_reports: list[str] | None = None, findings: str = "introduced") -> dict:
+           record: bool = True, coverage_reports: list[str] | None = None, findings: str = "introduced",
+           since_last: bool = False) -> dict:
     """Review the working tree against ``base`` (default HEAD), the staged changes, or a planned change
     (``targets`` as ``file`` or ``file::Qual.name`` with ``change`` body | signature | remove).
     ``coverage_reports``: the coverage reports to read (default: the ones found at the usual paths).
     ``findings``: ``introduced`` (default) lists under ``concerns`` only what the change introduced, the
     preexisting and fixed findings under ``differential``; ``all`` lists the preexisting ones under ``concerns``
-    too (each finding carries ``delta``)."""
+    too (each finding carries ``delta``). ``since_last``: the findings the last recorded review of the same base
+    and mode already listed are left out of ``concerns`` (counted, and the ones gone listed, under
+    ``since_last``); the review is still recorded with all its findings."""
     from verinoda import index, treestate
 
     t0 = time.perf_counter()
@@ -5028,9 +5031,81 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     uncovered_strong = any(u["status"] == "strong_inference" for u in (tests.get("coverage") or {}).get("uncovered")
                            or [])
     res["exit"] = 3 if (n_strong or unknown or uncovered_strong) else 0
+    prev = _last_review(store, res) if since_last and store is not None else None
     if record and store is not None:
         res["review_id"] = _record(store, repo, res)
+    if since_last:
+        _since_last(res, prev, store is not None)
     return res
+
+
+_DIGITS = re.compile(r"\d+")
+
+
+def _finding_key(concern: str, f: dict) -> tuple[str, str, str, str]:
+    """A finding as itself, wherever its lines moved: concern, rule, file and the text with every number masked
+    (line numbers in the text move with an edit above; the words do not)."""
+    file = str(f.get("at") or "").rsplit(":", 1)[0]
+    return (concern or str(f.get("concern") or ""), str(f.get("rule") or ""), file,
+            _DIGITS.sub("#", str(f.get("finding") or "")))
+
+
+def _last_review(store, res: dict) -> dict | None:
+    """The latest recorded review of the same base commit and mode (worktree / staged), or None."""
+    head = (res.get("base") or {}).get("commit")
+    if not head or res.get("mode") == "planned":
+        return None
+    try:
+        return store.one("SELECT id, result, created_at FROM analyses WHERE question LIKE ? "
+                         "ORDER BY created_at DESC, rowid DESC LIMIT 1", (f"review {head[:12]}..{res['mode']} %",))
+    except Exception:  # noqa: BLE001 - an old or busy store: no earlier review to compare with
+        return None
+
+
+def _since_last(res: dict, prev: dict | None, has_store: bool) -> None:
+    """Leave out of ``concerns`` the findings ``prev`` (a recorded review) already listed; say what was left out,
+    which earlier findings are gone, and which changed definitions are new since then."""
+    if prev is None or not isinstance(prev.get("result"), dict):
+        why = ("no store: earlier reviews are not recorded" if not has_store else
+               "a planned change is not compared" if res.get("mode") == "planned" else
+               "no earlier review of this base and mode is recorded: every finding is new")
+        res["since_last"] = {"review_id": None, "note": why}
+        return
+    old = prev["result"]
+    before: dict[tuple, int] = {}
+    for f in old.get("findings") or []:
+        k = _finding_key(str(f.get("concern") or ""), f)
+        before[k] = before.get(k, 0) + 1
+    left = dict(before)
+    repeated = 0
+    for concern, fs in res["concerns"].items():
+        keep = []
+        for f in fs:
+            k = _finding_key(concern, f)
+            if left.get(k, 0) > 0:
+                left[k] -= 1
+                repeated += 1
+            else:
+                keep.append(f)
+        res["concerns"][concern] = keep
+    gone = [{"concern": k[0], "rule": k[1], "file": k[2], "finding": k[3]}
+            for k, n in left.items() for _ in range(n)]
+    old_changes = {(c.get("symbol"), c.get("kind")) for c in old.get("changes") or []}
+    new_changes = [c["symbol"] for c in res["changes"] if (c.get("symbol"), c.get("kind")) not in old_changes]
+    res["since_last"] = {"review_id": prev["id"], "at": prev.get("created_at"), "repeated": repeated,
+                         "gone": gone[:20], "gone_total": len(gone), "new_changes": new_changes[:20],
+                         "new_changes_total": len(new_changes),
+                         "method": "findings matched by concern, rule, file and text with numbers masked; "
+                                   "changes by symbol and kind"}
+    res["counts"]["findings_new"] = sum(len(v) for v in res["concerns"].values())
+    res["counts"]["findings_repeated"] = repeated
+    n_strong = sum(1 for v in res["concerns"].values() for f in v if rr.at_least_strong(f["status"]))
+    uncovered = any(u["status"] == "strong_inference" for u in (res["tests"].get("coverage") or {}).get("uncovered")
+                    or [])
+    res["exit"] = 3 if (n_strong or res["unknown"] or uncovered) else 0
+    res["summary"] = (f"{res['summary']} Since the last review ({str(prev.get('created_at'))[:19]}): "
+                      f"{repeated} finding(s) repeated and left out, {len(gone)} gone, {len(new_changes)} "
+                      f"changed definition(s) new.")
 
 
 def _mark_renames(ctx: _Ctx, changes: list[Change]) -> None:
@@ -5755,6 +5830,17 @@ def render_text(res: dict) -> str:
     from verinoda import reviewers
 
     out += reviewers.render(res.get("reviewers") or {})
+    sl = res.get("since_last")
+    if sl:
+        out.append("")
+        if sl.get("review_id") is None:
+            out.append(f"Since the last review: {sl.get('note')}")
+        else:
+            out.append(f"Since the last review {sl['review_id']} ({str(sl.get('at'))[:19]}): {sl['repeated']} "
+                       f"finding(s) repeated and left out; new changes: "
+                       + (", ".join(sl["new_changes"]) or "none"))
+            for g in sl["gone"]:
+                out.append(f"  gone: [{g['concern']}] {g['file']}: {g['finding'][:140]}")
     from verinoda import risk
 
     out += risk.render(res.get("risk") or {}) if res.get("changes") else []
