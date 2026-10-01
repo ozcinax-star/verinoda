@@ -10563,6 +10563,88 @@ error). Run with the touched modules' tests: `test_review.py`, `test_mcp.py`, `t
 `test_review_since_last.py`, `test_cli.py`, `test_risk.py`, `test_sarif.py`, `test_docs.py`,
 `test_line_endings.py`.
 
+## 107. Background consolidation (D134, 2026-10-01)
+
+### 107.1 Why
+
+Letta's sleep-time agents and Cognee's memify tidy an agent's memory between sessions. Verinoda's claims go stale
+when the code behind them changes and stay stale until someone runs `verify`, even when the change was undone;
+and two analyses can record the same statement twice.
+
+### 107.2 Decisions
+
+- **`verinoda consolidate [--limit N] [--budget S] [--merge] [--dry-run]`**, CLI only. A negative `--limit` or
+  `--budget` exits 2.
+- **Stale claims are re-verified** with `verify` (static: cited lines and the files behind each claim) on the
+  current tree, at most `--limit` (50) within `--budget` seconds (60): one whose code is back as it was, or
+  whose cited lines re-check, is restored up to its recorded ceiling and rebound to the current snapshot; the
+  rest stay stale. No test is run: `verify --run` stays the user's call. One claim failing never stops the
+  others (it is listed, exit 1). `restored` counts a claim back at its status before it went stale (or
+  higher); `changed_status` one that left stale for a lower status or contradicted.
+- **The queue rotates.** Each attempt is recorded in the claim's `spec.consolidate_tried`; claims never tried
+  come first (newest stale first), then the one tried longest ago, so a limit of N reaches every stale claim
+  over a few runs instead of the same N each time. A folded duplicate is not re-verified. The bookkeeping keys
+  (`duplicate_of`, `consolidate_tried`) are never copied into a new claim (a correction copies the spec).
+- **The budget bounds the run.** When the tree changed since the last snapshot the index is refreshed once
+  first, waiting for another build at most the budget (busy: nothing is re-verified, the reason is reported);
+  each `verify` then runs with `wait=0`, so none blocks on a build lock.
+- **Duplicates.** Claims with the same claim key (kind and semantic spec, subjects, else the normalised text),
+  the same project and the same `valid_env`, not superseded, not already folded and neither stale nor
+  contradicted form a group. The snapshot and `valid_version` are not part of the key: they default to the
+  commit at creation, and a claim that is not stale holds on the current tree as far as invalidation knows; a
+  stale claim is folded only once a re-verification restores it. `--merge` keeps the one with the best status,
+  then the latest verification (the time of the snapshot `verified_at` names), and folds each other one into
+  it in one transaction (`store.tx()` now nests: the outermost block commits): its supporting and qualifying
+  evidence is linked to the kept claim (note `merged from`, its evidence group renamed `<duplicate>:<group>`
+  so two claims' groups never merge), its refuting evidence is not carried, and the duplicate keeps its row and
+  status with `spec.duplicate_of` and a history entry naming the kept claim. The kept claim's status is not
+  changed: the next `verify` applies the rules to the union (re-assessing in the fold would lift a claim
+  without verify's change check and rebind). Nothing is deleted, and a folded claim is not marked superseded
+  (that would make it contradicted). `--merge` is not bounded by `--limit` or `--budget`: a fold is a few
+  writes, and only an explicit `--merge` folds.
+- **Conflicts.** A statement (key, project, `valid_env`) that is contradicted in one claim and not in another
+  is reported separately and never folded: folding would hide the refutation.
+- **After an update.** `update --consolidate`, or `claims.consolidate_on_update: true` in
+  `.verinoda/config.json` (off by default), re-verifies up to 20 stale claims within 20 s after a complete
+  update and reports the counts (errors included); it never merges. So the updates the git hooks start re-check
+  stale claims too; `ui --watch` calls the update directly and does not. It is skipped when the update failed
+  or was busy, and when `--fast` left the graph to a background build (no snapshot of the tree yet: each verify
+  would start that build). A failure there never fails the update.
+
+### 107.3 Measured
+
+Tests only.
+
+Review round: two reviews found that a fold re-assessed the kept claim (lifting a stale or changing a
+contradicted one without verify's checks), that the stale queue picked the same newest N claims every run, that
+a contradicted claim could be folded into a supported one with its refutations, that grouping ignored project
+and environment, that evidence groups of two claims could merge, that `update --fast` followed by consolidation
+could wait up to 600 s on the build lock, that the docs claimed `ui --watch` consolidates, that the tiebreak read
+a snapshot id as a time, that a fold was not atomic, and that `restored` counted any non-stale result. Each is
+fixed as described above and covered by a test.
+
+### 107.4 Not done
+
+- Only stale claims are re-verified; a claim that is merely old is not re-checked.
+- Duplicates are exact on the claim key: two wordings of one fact are not found.
+- The one index refresh before re-verifying is not interruptible: the budget bounds its wait for the lock, not
+  the build itself; a tree edited during the run can still make a verify refresh the index (without waiting
+  for a lock).
+- A conflict is only reported; settling it (`verify`, a correction) stays the user's call.
+
+### 107.5 Tests
+
+`tests/test_consolidate.py`: a stale claim stays stale while its code differs and is restored when the code is
+put back (a dry run changes nothing); the limit and the time budget; the queue rotates across runs; two claims
+with one statement are folded (evidence linked, the group renamed, the duplicate marked and not superseded, the
+group gone) and another claim untouched; a fold never changes the kept claim's status; a stale claim is not
+folded; a contradicted claim and a supported one are a conflict, never folded, and refuting evidence is not
+carried; claims of different projects or environments are not grouped; the tiebreak prefers the later
+verification; a fold that fails part-way leaves nothing behind; `update` consolidates only with the setting and
+with `--consolidate` (`restored == 1`), skips after a deferred `--fast` update, and reports an error without
+failing; the CLI (a negative limit or budget exits 2). `tests/test_store.py`: nested transactions commit once
+and roll back together.
+
 ## Sources
 
 - **Retrieval:**
