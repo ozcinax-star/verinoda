@@ -2030,7 +2030,7 @@ GATEWAY_CATALOG: dict[str, str] = {
     "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead|hotspots|sides|repo|"
                 "saved, targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
-                  "their evidence re-checked",
+                  "evidence re-checked",
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {since_last?} after: "
                      "what it touches",
     "decision_check": "decision_check {changed_only?}: tree vs accepted decisions",

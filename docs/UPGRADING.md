@@ -558,10 +558,6 @@ debug-ledger run Verinoda makes now keeps each test's outcome, and runs recorded
 the first time `debug flaky` reads the history. `debug rerun --json` gains `tests_both_outcomes` when a series
 saw a test both pass and fail. No MCP tool added; the tool count is unchanged.
 
-docs/UPGRADING.md must mention **v7** for `tests/test_docs.py::test_schema_version_and_mcp_tool_count_match_the_code`
-to pass (it asserts `v{SCHEMA_VERSION}` appears there); this branch could not edit UPGRADING.md, so that one
-test fails until the upgrading note is merged.
-
 ### D118: Named flow maps
 
 New: `verinoda map save NAME --trace A B` (or `--view V`) keeps a trace or map views in
