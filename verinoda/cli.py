@@ -1031,6 +1031,25 @@ def cmd_review(args) -> int:
     return int(res["exit"])
 
 
+def cmd_affected(args) -> int:
+    from verinoda import affected as aff
+    from verinoda import treestate
+
+    if args.base and args.staged:
+        print("error: give --base or --staged, not both", file=sys.stderr)
+        return 2
+    if args.file and (args.base or args.staged):
+        print("error: --file names the changed files: give no --base / --staged", file=sys.stderr)
+        return 2
+    try:
+        res = aff.run(_repo(args), base=args.base, staged=args.staged, changed=args.file)
+    except (treestate.NotAGitTree, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: _write(aff.render_run(r)))
+    return 0
+
+
 def cmd_coverage(args) -> int:
     from verinoda import coverage_import as ci
 
@@ -3622,6 +3641,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="a coverage report (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON; repeatable): the "
                          "changed lines no test ran (default: the reports found at the usual paths)")
     sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)
+    sp = add("affected", cmd_affected, "the workspace packages of a monorepo a change affects: the packages "
+                                       "holding changed files, then those declaring a dependency on them")
+    sp.add_argument("--base", help="compare the working tree with this commit (default HEAD)")
+    sp.add_argument("--staged", action="store_true", help="the staged changes against HEAD")
+    sp.add_argument("--file", action="append", metavar="PATH",
+                    help="a changed file, repository-relative (repeatable): instead of the git diff")
     sp = add("coverage", cmd_coverage, "coverage reports (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON) read "
                                        "into lines and symbols: what ran, what did not, which tests ran it; with "
                                        "--base-report the indirect coverage changes")
