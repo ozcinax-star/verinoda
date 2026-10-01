@@ -9812,7 +9812,7 @@ rule from above.
   a change that edits the rules it is checked by, so a person reads it. The rules are the change's own once it
   is merged.
 - **Bounded.** At most 50 rules in force run, within a time budget (300 s for `verinoda rules`, 20 s inside
-  `review`); the rest are reported as not checked (exit 3). Regex back-references (``-`\9`) are refused as
+  `review`); the rest are reported as not checked (exit 3). Regex back-references (`\1`-`\9`) are refused as
   "not a rule", since git's matcher backtracks on them.
 - **Only what the change added.** The added lines come from `git diff-index -p -U0` against the base, read by
   walking each hunk's lines (so an added line starting with `++`, a user's `diff.interHunkContext` or a quoted
