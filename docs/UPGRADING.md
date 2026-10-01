@@ -228,7 +228,7 @@ list every node or relation (export, the UI) show them. No MCP change.
 ### Typed questions, batched
 
 New command `verinoda tq` (exit 0 when every answer is decided, 1 when one is `?` or a question is invalid, 2 when the
-batch cannot be read, 3 when a budget cut it) and a new MCP tool `tq`: 41 tools. In the core profile it is reached
+batch cannot be read, 3 when a budget cut it) and a new MCP tool `tq` (the 41st). In the core profile it is reached
 through `run_tool` (not listed in the menu, not named in the server instructions); `--profile full` lists it. The
 run_tool catalog line of `history_search` is shorter (`{text|symbol|message|base, ...}`; its full argument list still
 comes back in an `invalid_arguments` hint) and the gateway's `arguments` description lost its example, so the core
@@ -239,7 +239,7 @@ the asked route (`route=`); its text form and results are unchanged. `testmap.ma
 
 ### D159: Typed questions, batched
 
-New command `verinoda tq` and MCP tool `tq` (41 tools; through `run_tool` in the core profile). The core menu's
+New command `verinoda tq` and MCP tool `tq` (the 41st tool; through `run_tool` in the core profile). The core menu's
 `history_search` catalog line is shorter and run_tool's `arguments` description lost its example. Library callers:
 `graphquery.run` gains `query=`, `ctx=` and `route=` (text calls unchanged), and `testmap.mapping_current` is new.
 Nothing to migrate; tq writes nothing. (Also in docs/UPGRADING.md.)
@@ -275,7 +275,7 @@ and it changes no answer or status; any edit to the engine files hides it until 
 run again. New: `verinoda benchmark tq-audit [--work DIR] [--table PATH] [--report-dir DIR] [--no-write]
 [--json]` (source checkout only), the packaged table `verinoda/data/tq_calibration.json`, the held-out set
 `benchmarks/tq_gold2/` and the report `benchmarks/results/tq-audit-2026-10-02/`. No MCP tool, menu or
-instructions change (41 tools).
+instructions change (the tool count stays 41).
 
 ### D163: Broader language coverage from upstream Graphify
 
@@ -291,6 +291,19 @@ Projects with `.sql`, `.tf`, `.ml`, `.lisp`, `.dm` or `.robot` files and without
 warning; the files were left out before as well. OCaml classes, `.cshtml` `@functions` methods and the
 redaction of more Terraform secret values change those languages' graphs on the rebuild. The query filter
 accepts `lang:cobol`, `lang:erlang`, `lang:r`, `lang:solidity` and `lang:vbnet`.
+
+### Several projects from one server (backlog 1.5)
+
+Nothing to migrate; a single-project server (`mcp serve`, `--repo`, `--repo-of`) lists the same core menu as
+before. Two new MCP tools, `list_projects` and `index_status`: 43 tools. A single-project server lists them only
+in the full profile; a core server over several projects reaches them through `run_tool`. New: `mcp serve
+--projects A,B` / `--all-projects`, `--max-loaded N`, `--transport http` with `--host` / `--port`, `verinoda mcp
+daemon start|status|stop`, `verinoda mcp token [--rotate]` and `verinoda projects add|list|remove`. The user config
+folder gains `projects.json`, `mcp-token`, `mcp-daemon.json` and `mcp-daemon.log`. In a server over several
+projects every tool takes `project`, and a client config that registered one server per project can be replaced
+by one entry with `--projects`. The HTTP transport binds 127.0.0.1:8765 by default and every request needs
+`Authorization: Bearer <token>` from `verinoda mcp token`. `AtlasTools` takes an optional `lock=` and gains
+`drop_caches()`, `graph_loaded`, `list_projects()` and `index_status()`. `build_server` takes `hub=`.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
