@@ -286,9 +286,28 @@ def _sides(v: dict, cap: int) -> list[str]:
     return out
 
 
+def _repo(v: dict, cap: int) -> list[str]:
+    """The map itself: the token budget bounds it, not ``cap``."""
+    from verinoda.architecture_map import repo_map_lines
+
+    out = [f"{v.get('symbols_shown', 0)} of {v.get('symbols_total', 0)} signatures in {len(v.get('files', []))} of "
+           f"{v.get('files_ranked', 0)} files, ~{v.get('tokens', 0)} of {v.get('max_tokens', 0)} tokens; ranked "
+           "by PageRank (strong_inference)"
+           + (f"; files in play (left out): {', '.join(v['focus'][:6])}" if v.get("focus") else "")
+           + (f"; {v['signatures_not_found']} definition lines not found (update the index)"
+              if v.get("signatures_not_found") else "")]
+    if v.get("focus_unresolved"):
+        more = v.get("focus_unresolved_total", 0) - 6
+        out.append(f"   not a file of the graph: {', '.join(v['focus_unresolved'][:6])}"
+                   + (f" ... {more} more" if more > 0 else ""))
+    for r in v.get("files", []):
+        out += repo_map_lines(r)
+    return out
+
+
 RENDERERS = {"hierarchy": _hierarchy, "dependencies": _dependencies, "dataflow": _dataflow,
              "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles,
-             "dead": _dead, "hotspots": _hotspots, "sides": _sides}
+             "dead": _dead, "hotspots": _hotspots, "sides": _sides, "repo": _repo}
 
 
 def render(res: dict, cap: int) -> str:

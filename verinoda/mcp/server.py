@@ -124,7 +124,7 @@ EDGE_CAP = 25
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
 VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline",
-         "dead", "hotspots", "sides")
+         "dead", "hotspots", "sides", "repo")
 DEAD_FIRST_CUT = ("searched.entry_points", "searched.entry_modules")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
@@ -1075,6 +1075,26 @@ class AtlasTools:
                                         "'path/file.py::Name' or a node id; nothing was assumed for it")
                 res.update(freshness.summary(fresh))
                 return res
+            if view == "repo":   # the files in play: the targets, else the working-tree changes
+                focus = tg or am.changed_files_from_git(self.repo)
+                # the budget is lowered until the map fits the response cap, so that no file is cut from it
+                # afterwards and its counts describe what is sent
+                budget, room = am.REPO_MAP_TOKENS, self.max_chars * 3 // 4
+                res = am.repo_map(g, focus, max_tokens=budget)
+                for _ in range(6):
+                    size = _size(res)
+                    if size <= room or budget <= 16:
+                        break
+                    budget = max(16, min(budget - 1, budget * room * 9 // (size * 10)))
+                    res = am.repo_map(g, focus, max_tokens=budget)
+                if budget < am.REPO_MAP_TOKENS:
+                    res["budget_note"] = f"max_tokens lowered from {am.REPO_MAP_TOKENS} to fit the response cap"
+                res["focus_source"] = "argument" if tg else "git working-tree changes (HEAD + untracked)"
+                if tg and res.get("focus_unresolved"):
+                    res["next_step"] = ("a target is not a file of the graph (see focus_unresolved): pass a "
+                                        "repository-relative path; the map was ranked without it")
+                res.update(freshness.summary(fresh))
+                return res
             if view == "outline":  # the wiki page tree; the pages named in targets with their Mermaid diagrams
                 from verinoda import diagrams
 
@@ -1927,9 +1947,9 @@ CORE_DIRECT: tuple[str, ...] = ("project_query", "analyze", "code_check", "index
 GATEWAY = "run_tool"
 # what the gateway's description says of each tool behind it: its arguments and what it returns
 GATEWAY_CATALOG: dict[str, str] = {
-    "node_inspect": "node_inspect {name}: one symbol's definition and edges with file:line",
-    "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between two symbols",
-    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead|hotspots|sides, "
+    "node_inspect": "node_inspect {name}: a symbol's definition and edges with file:line",
+    "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between symbols",
+    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead|hotspots|sides|repo, "
                 "targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
                   "their evidence re-checked",
@@ -2085,7 +2105,8 @@ DESCRIPTIONS: dict[str, str] = {
         "(dependents of targets; default the working-tree changes), cycles (file dependency cycles and the "
         "fewest dependencies to cut), outline (the wiki page tree; targets = page ids for their Mermaid "
         "diagrams), dead (code no entry point reaches, as claims), hotspots (files and functions by changes x "
-        "complexity), or sides (client-only code reachable from server code, each path as a claim). 'coverage' "
+        "complexity), sides (client-only code reachable from server code, each path as a claim), or repo (files "
+        "ranked by PageRank toward the targets, with their signatures, under a token budget). 'coverage' "
         "states the method and its limits."),
     "change_review": (
         "What a change touches, by concern: the working tree vs HEAD (base=REV, staged), or planned targets "
@@ -2489,11 +2510,12 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     @register("map_view")
     def map_view(
         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                "cycles", "outline", "dead", "hotspots", "sides"],
+                                "cycles", "outline", "dead", "hotspots", "sides", "repo"],
                         Field(description="Which architecture view to return.")],
         targets: Annotated[list[str] | None, Field(description="impact view: changed files or symbols (default = "
                                                                "git working-tree changes); outline view: page ids "
-                                                               "whose diagrams to return.")] = None,
+                                                               "whose diagrams to return; repo view: files in "
+                                                               "play (default the same changes).")] = None,
     ) -> dict[str, Any]:
         return emit(t.map_view(view, targets=targets))
 
