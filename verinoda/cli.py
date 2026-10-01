@@ -1414,6 +1414,40 @@ def cmd_docs(args) -> int:
     return res["exit"]
 
 
+def cmd_grep_ast(args) -> int:
+    from verinoda import grep_ast
+
+    if args.max_results < 1:
+        print("error: --max-results must be a positive number", file=sys.stderr)
+        return 2
+    repo = _repo(args)
+    if not repo.is_dir():
+        print(f"error: not a folder: {repo}", file=sys.stderr)
+        return 2
+    pattern, paths = args.pattern, list(args.paths)
+    if args.rule and pattern and (Path(pattern).exists() or (repo / pattern).exists()):
+        pattern, paths = None, [pattern, *paths]   # with --rule, a first argument that names a path is one
+    rels = []
+    for p in paths:
+        # relative to the working directory, else to the project; either way inside the project, normalised
+        tries = [Path(p).resolve()] + ([] if Path(p).is_absolute() else [(repo / p).resolve()])
+        q = next((t for t in tries if t.exists() and t.is_relative_to(repo)), None)
+        if q is None:
+            print(f"error: not a file or folder of the project: {p}", file=sys.stderr)
+            return 2
+        rels.append(q.relative_to(repo).as_posix())
+    try:
+        rules = [r for f in args.rule or () for r in grep_ast.load_rules(Path(f))]
+        langs = [x for v in args.lang or () for x in v.split(",") if x.strip()]
+        res = grep_ast.run(repo, pattern, rules=rules, langs=langs or None, paths=rels,
+                           max_results=args.max_results)
+    except (OSError, ValueError) as exc:   # PatternError is a ValueError
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(grep_ast.render(r)))
+    return 0 if res["status"] == "found" else 1
+
+
 def cmd_context(args) -> int:
     from verinoda import scoped
 
@@ -3677,6 +3711,17 @@ def build_parser() -> argparse.ArgumentParser:
                    help="leave out documents matching this glob (repeatable), e.g. a vendored or template folder")
     c.add_argument("--fix", action="store_true", help="rewrite renamed paths and moved line numbers in place (the "
                                                       "reference's own characters only); the rest stays flagged")
+    sp = add("grep-ast", cmd_grep_ast, "structural search: a code-shaped pattern with metavariables ($A one node, "
+                                       "$$$REST zero or more) matched on the tree-sitter trees of the project's "
+                                       "files (exit 1: no match, 2: a bad pattern or rule file)")
+    sp.add_argument("pattern", nargs="?", help="the pattern, e.g. 'foo($A, $$$REST)' (optional with --rule)")
+    sp.add_argument("paths", nargs="*", help="files or folders to search (default: the project)")
+    sp.add_argument("--lang", action="append", metavar="LANG",
+                    help="only these languages (python, java, typescript, ...; repeatable or a comma list)")
+    sp.add_argument("--rule", action="append", metavar="FILE",
+                    help="a YAML rule file (id, language, pattern or rule.pattern, message; one rule per "
+                         "document); repeatable")
+    sp.add_argument("--max-results", type=int, default=200, help="matches listed at most (default 200)")
     sp = add("context", cmd_context, "what the project says about one file: decision records whose guards name it, "
                                      "your notes on it or on a glob matching it (`scope:` in a note's header), "
                                      "Cursor and Kiro rules for it (what the Read/Edit hook shows an agent)")
