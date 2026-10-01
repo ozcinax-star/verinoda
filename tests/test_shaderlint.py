@@ -157,3 +157,91 @@ def test_glslang_is_opt_in_and_maps_errors_back(pack, monkeypatch):
     assert (pack / f).read_text(encoding="utf-8").split("\n")[int(line) - 1] == unit_line_9
     monkeypatch.setattr(shaderlint.shutil, "which", lambda name: None)
     assert "not found" in shaderlint.lint(pack, files, use_glslang=True)["glslang"]
+
+
+def _lint_one(tmp_path, files):
+    root = _write(tmp_path / "p", files)
+    return _kinds(shaderlint.lint(root)), root
+
+
+def test_comma_lists_and_functions_declare_standard_names(tmp_path):
+    k, _ = _lint_one(tmp_path, {"shaders/composite.fsh":
+                                "#version 330\nuniform float viewWidth, viewHeight;\n"
+                                "uniform sampler2D colortex0 , colortex1;\nvec3 skyColor(vec3 d) { return d; }\n"
+                                "void main(){ gl_FragColor = texture2D(colortex1, vec2(viewHeight)) "
+                                "+ vec4(skyColor(vec3(1.0)), 1.0); }\n"})
+    assert not any(kind == "undeclared_uniform" for kind, *_ in k), k
+
+
+def test_stage_macros_defined_by_sibling_stages_are_defined_in_the_pack(tmp_path):
+    k, _ = _lint_one(tmp_path, {
+        "shaders/gbuffers_basic.fsh": '#version 330\n#define FSH\n#include "/program/basic.glsl"\n',
+        "shaders/gbuffers_basic.vsh": '#version 330\n#define VSH\n#include "/program/basic.glsl"\n',
+        "shaders/program/basic.glsl": "#ifdef FSH\nvoid main(){}\n#endif\n#ifdef VSH\nvoid main(){}\n#endif\n"
+                                      "#ifdef NOWHERE\n#endif\n"})
+    assert {(kind, n) for kind, n, *_ in k} == {("macro_never_defined", "NOWHERE")}
+
+
+def test_a_csh_outside_shaders_is_a_shell_script(tmp_path):
+    root = _write(tmp_path / "p", {"scripts/setup.csh": "#!/bin/csh\n# if the user has no path, set it\n",
+                                   "shaders/compute.csh": "#version 430\nvoid main() {\n"})
+    res = shaderlint.lint(root)
+    assert res["files"] == 1 and {i["at"] for i in res["issues"]} == {"shaders/compute.csh:2"}
+
+
+def test_rooted_include_reads_the_innermost_shaders_directory(tmp_path):
+    root = _write(tmp_path / "p", {"shaders/MyPack/shaders/composite.fsh": '#version 330\n#include "/lib/a.glsl"\n',
+                                   "shaders/MyPack/shaders/lib/a.glsl": "float a() { return 1.0; }\n"})
+    res = shaderlint.lint(root)
+    assert [e["to"] for e in res["edges"]] == ["shaders/MyPack/shaders/lib/a.glsl"] and res["issues"] == []
+
+
+def test_define_continuation_lines_are_not_code(tmp_path):
+    k, _ = _lint_one(tmp_path, {"shaders/composite.fsh": "#version 330\n#define F(x) (x + \\n   1.0)\n"
+                                                         "#define BODY(a) { \\n  a; }\n"
+                                                         "void main(){ gl_FragColor = vec4(F(1.0)); }\n"})
+    assert k == set(), k
+
+
+def test_a_bom_does_not_hide_the_first_directive(tmp_path):
+    root = tmp_path / "p"
+    (root / "shaders/lib").mkdir(parents=True)
+    (root / "shaders/lib/bom.glsl").write_bytes(b"\xef\xbb\xbf#ifdef FOO\n#define FOO\n#endif\n")
+    assert shaderlint.lint(root)["issues"] == []
+
+
+def test_moj_import_outside_the_repository_is_not_resolved(tmp_path):
+    root = _write(tmp_path / "mod", {"assets/m/shaders/core/x.fsh":
+                                     "#version 150\n#moj_import <../../../../../x.ini>\n"})
+    (tmp_path / "x.ini").write_text("[fonts]\n", encoding="utf-8")
+    (e,) = shaderlint.includes(root)
+    assert e["status"] == "missing"
+    unit = shaderlint._expand(root, "assets/m/shaders/core/x.fsh", {(e["from"], e["line"]): e}, {}, set())
+    assert {f for f, *_ in unit} == {"assets/m/shaders/core/x.fsh"} and "[fonts]" not in [r for _f, _k, r, _c in unit]
+    assert "outside the repository" in shaderlint.lint(root)["issues"][0]["why"]
+
+
+def test_a_deep_include_chain_does_not_overflow(tmp_path):
+    edges = [{"from": f"f{i}", "to": f"f{i + 1}", "line": 1, "status": "resolved"} for i in range(3000)]
+    assert shaderlint.cycles(edges + [{"from": "f3000", "to": "f0", "line": 1, "status": "resolved"}])
+    files = {f"shaders/lib/f{i}.glsl": f'#include "f{i + 1}.glsl"\n' for i in range(1500)}
+    root = _write(tmp_path / "p", {**files, "shaders/lib/f1500.glsl": "float z;\n"})
+    by_from = {(e["from"], e["line"]): e for e in shaderlint.includes(root)}
+    unit = shaderlint._expand(root, "shaders/lib/f0.glsl", by_from, {}, set())
+    assert ("shaders/lib/f1500.glsl", 1, "float z;", "float z;") in unit
+
+
+def test_glslang_keeps_errors_on_one_line_and_reads_utf8(pack, monkeypatch):
+    files = shaders._files(pack, shaders.SHADER_SUFFIXES)
+    seen = {}
+
+    class Done:
+        stdout = "ERROR: 0:2: a : undeclared identifier\nERROR: 0:2: b : undeclared identifier\n"
+        stderr = ""
+
+    monkeypatch.setattr(shaderlint.shutil, "which", lambda name: "glslangValidator" if name == "glslangValidator"
+                        else None)
+    monkeypatch.setattr(shaderlint.subprocess, "run", lambda cmd, **kw: seen.update(kw) or Done())
+    err = [i["why"] for i in shaderlint.lint(pack, files, use_glslang=True)["issues"] if i["kind"] == "glsl_error"]
+    assert err == ["a : undeclared identifier", "b : undeclared identifier"]
+    assert seen["encoding"] == "utf-8" and seen["errors"] == "replace"

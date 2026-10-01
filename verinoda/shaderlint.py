@@ -11,8 +11,8 @@ nothing is there, ``external`` for a vanilla ``#moj_import``); :func:`cycles` li
 reads each file and each stage expanded with its includes: brackets that do not balance (the first branch of every
 ``#if`` only, so both halves of an ``#ifdef``/``#else`` pair are not counted together), ``#if`` without
 ``#endif``, ``#version`` not first or written twice or inside an included file, a standard Iris/OptiFine uniform
-used but never declared, a macro tested but never defined (the standard Iris/OptiFine macros and the pack's
-``//#define`` option toggles count as defined). Read from the text, no compiler: what the syntax states is
+used but never declared, a macro tested but never defined (the standard Iris/OptiFine macros and every ``#define``
+or ``//#define`` option toggle of the pack count as defined). Read from the text, no compiler: what the syntax states is
 ``verified``; an undeclared uniform or an undefined macro is ``strong_inference`` (a loader or a properties file can
 define it). ``glslangValidator``, when installed and asked for (``--glslang``), compiles each stage expanded with its
 includes and its errors are mapped back to the file and line they came from.
@@ -66,10 +66,33 @@ STANDARD_UNIFORMS = frozenset((
     *(f"colortex{k}" for k in range(16)),
 ))
 _NOT_A_TYPE = {"return", "else", "case", "in", "out", "inout", "const"}
+_ARR = r"(?:\s*\[[^\]]*\])?"
+_COMMA_DECL = rf"\b([A-Za-z_]\w*)\s+[A-Za-z_]\w*{_ARR}(?:\s*,\s*[A-Za-z_]\w*{_ARR})*\s*,\s*"
 
 
 def _norm(path: str) -> str:
     return posixpath.normpath(path)
+
+
+def _outside(path: str) -> bool:
+    """A normalised include path that leaves the repository (never read)."""
+    return path.startswith("..") or path.startswith("/") or ":" in path.split("/")[0]
+
+
+def _pack_root(f: str) -> str | None:
+    """The pack's ``shaders/`` directory of a file: the innermost one above it (Iris reads ``/``-rooted includes
+    from the pack's own folder, which may itself sit under a ``shaders/`` folder of the repository)."""
+    parts = f.split("/")[:-1]
+    if "shaders" not in parts:
+        return None
+    return "/".join(parts[:len(parts) - parts[::-1].index("shaders")])
+
+
+def shader_files(repo: Path) -> list[str]:
+    """The shader files to lint: :data:`SHADER_SUFFIXES`, plus Iris compute stages (``.csh``) under a ``shaders/``
+    directory only (elsewhere ``.csh`` is a C-shell script)."""
+    return [f for f in _files(repo, SHADER_SUFFIXES + (".csh",))
+            if not f.lower().endswith(".csh") or _pack_root(f) is not None]
 
 
 def _resolve(repo: Path, src: str, kind: str, target: str) -> tuple[str | None, str]:
@@ -81,17 +104,19 @@ def _resolve(repo: Path, src: str, kind: str, target: str) -> tuple[str | None, 
         if "assets" in parts:
             k = parts.index("assets")
             cand = _norm("/".join(parts[:k + 1] + [ns, "shaders", "include", rest]))
+            if _outside(cand):
+                return cand, "missing"
             if (repo / cand).is_file():
                 return cand, "resolved"
             own = parts[k + 1] if len(parts) > k + 1 else None
             return (cand, "missing") if ns == own and ns != "minecraft" else (None, "external")
         return None, "external"
     if target.startswith("/"):
-        root = "/".join(parts[:parts.index("shaders") + 1]) if "shaders" in parts[:-1] else ""
+        root = _pack_root(src) or ""
         cand = _norm(posixpath.join(root, target.lstrip("/"))) if root else _norm(target.lstrip("/"))
     else:
         cand = _norm(posixpath.join(posixpath.dirname(src), target))
-    if cand.startswith(".."):
+    if _outside(cand):
         return cand, "missing"
     return cand, "resolved" if (repo / cand).is_file() else "missing"
 
@@ -99,7 +124,7 @@ def _resolve(repo: Path, src: str, kind: str, target: str) -> tuple[str | None, 
 def _read(repo: Path, f: str, cache: dict) -> tuple[list[str], list[str]] | None:
     if f not in cache:
         try:
-            raw = (repo / f).read_text(encoding="utf-8", errors="replace")
+            raw = (repo / f).read_text(encoding="utf-8-sig", errors="replace")
         except OSError:
             cache[f] = None
         else:
@@ -113,7 +138,7 @@ def includes(repo: Path, files: list[str] | None = None, _cache: dict | None = N
     repo = Path(repo)
     cache = {} if _cache is None else _cache
     out = []
-    for f in files if files is not None else _files(repo, SHADER_SUFFIXES):
+    for f in files if files is not None else shader_files(repo):
         got = _read(repo, f, cache)
         if not got:
             continue
@@ -132,23 +157,29 @@ def cycles(edges: list[dict]) -> list[dict]:
         if e["status"] == "resolved":
             graph.setdefault(e["from"], []).append(e)
     out, seen, done = [], set(), set()
-
-    def walk(node: str, path: list[str]) -> None:
-        for e in graph.get(node, []):
+    for start in sorted(graph):
+        if start in done:
+            continue
+        path, on_path, stack = [start], {start}, [iter(graph[start])]   # iterative: no depth limit
+        while stack:
+            e = next(stack[-1], None)
+            if e is None:
+                stack.pop()
+                node = path.pop()
+                on_path.discard(node)
+                done.add(node)
+                continue
             to = e["to"]
-            if to in path:
+            if to in on_path:
                 cyc = path[path.index(to):] + [to]
                 key = frozenset(cyc)
                 if key not in seen:
                     seen.add(key)
                     out.append({"files": cyc, "at": f"{e['from']}:{e['line']}"})
             elif to not in done:
-                walk(to, path + [to])
-        done.add(node)
-
-    for start in sorted(graph):
-        if start not in done:
-            walk(start, [start])
+                path.append(to)
+                on_path.add(to)
+                stack.append(iter(graph.get(to, [])))
     return out
 
 
@@ -159,9 +190,14 @@ def _brackets(f: str, code: list[str]) -> list[dict]:
     cond_lines: list[int] = []
     stack: list[tuple[str, int]] = []
     conditional = False
+    continued = False              # the line continues a directive (a multi-line #define): not code
     for k, ln in enumerate(code, 1):
+        if continued:
+            continued = ln.rstrip().endswith("\\")
+            continue
         d = _DIRECTIVE.match(ln)
         if d:
+            continued = ln.rstrip().endswith("\\")
             name = d.group(1)
             if name in ("if", "ifdef", "ifndef"):
                 cond.append(True)
@@ -234,14 +270,24 @@ def _expand(repo: Path, f: str, by_from: dict, cache: dict, seen: set) -> list[t
         return []
     seen.add(f)
     out = []
-    for k, (raw, code) in enumerate(zip(*got), 1):
-        e = by_from.get((f, k))
+    stack = [(f, iter(enumerate(zip(*got), 1)))]   # iterative: a deep include chain has no depth limit
+    while stack:
+        cur, lines = stack[-1]
+        nxt = next(lines, None)
+        if nxt is None:
+            stack.pop()
+            continue
+        k, (raw, code) = nxt
+        e = by_from.get((cur, k))
         if e is not None:
             if e["status"] == "resolved" and e["to"] not in seen:
-                out.extend(_expand(repo, e["to"], by_from, cache, seen))
+                sub = _read(repo, e["to"], cache)
+                if sub:
+                    seen.add(e["to"])
+                    stack.append((e["to"], iter(enumerate(zip(*sub), 1))))
             if e["status"] != "external":
                 continue
-        out.append((f, k, raw, code))
+        out.append((cur, k, raw, code))
     return out
 
 
@@ -282,13 +328,15 @@ def _unit_checks(f: str, unit: list[tuple[str, int, str, str]], options: set[str
             n = m.group(0)
             if n != "defined" and n not in defined and not _known_macro(n):
                 out.append(_issue("macro_never_defined", n, src, k, "strong_inference",
-                                  f"#{d.group(1)} tests {n}, which no #define of {f} or its includes, no //#define "
-                                  "option and no standard Iris/OptiFine macro defines"))
+                                  f"#{d.group(1)} tests {n}, which no #define or //#define option of the pack "
+                                  "and no standard Iris/OptiFine macro defines"))
     for n in sorted(STANDARD_UNIFORMS):
         if n not in text:
             continue
-        declared = any(dm.group(1) not in _NOT_A_TYPE
-                       for dm in re.finditer(rf"\b([A-Za-z_]\w*)\s+{n}\s*[;=\[,)]", text)) or n in defined
+        # `<type> n` (a variable, a parameter or a function of that name) or a later name of a comma list
+        # (`uniform float viewWidth, viewHeight;`)
+        pats = (rf"\b([A-Za-z_]\w*)\s+{n}\s*[;=\[,)(]", _COMMA_DECL + rf"{n}\s*[;=\[,]")
+        declared = n in defined or any(dm.group(1) not in _NOT_A_TYPE for pat in pats for dm in re.finditer(pat, text))
         if declared:
             continue
         use = re.compile(rf"(?<![.\w]){n}\b")
@@ -315,7 +363,8 @@ def glslang(f: str, unit: list[tuple[str, int, str, str]], exe: str) -> list[dic
     cmd = [exe, "--stdin", "-S", stage, "-DMC_VERSION=12100", "-DIS_IRIS", "-DMC_GL_VERSION=460",
            "-DMC_GLSL_VERSION=460"]
     try:
-        p = subprocess.run(cmd, input=src, capture_output=True, text=True, timeout=30)
+        p = subprocess.run(cmd, input=src, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=30)
     except (OSError, subprocess.SubprocessError) as exc:
         return [_issue("glsl_error", "glslangValidator", f, 1, "unknown", f"glslangValidator did not run: {exc}")]
     out = []
@@ -335,7 +384,7 @@ def glslang(f: str, unit: list[tuple[str, int, str, str]], exe: str) -> list[dic
 def lint(repo: Path, files: list[str] | None = None, *, use_glslang: bool = False) -> dict:
     """``{"files", "stages", "edges", "cycles", "issues", "glslang"}`` for the shader files of the repository."""
     repo = Path(repo)
-    files = files if files is not None else _files(repo, SHADER_SUFFIXES)
+    files = files if files is not None else shader_files(repo)
     cache: dict = {}
     edges = includes(repo, files, cache)
     cyc = cycles(edges)
@@ -343,7 +392,8 @@ def lint(repo: Path, files: list[str] | None = None, *, use_glslang: bool = Fals
     for e in edges:
         if e["status"] == "missing":
             issues.append(_issue("missing_include", e["target"], e["from"], e["line"], "verified",
-                                 f"#include names {e['to']}, which does not exist"))
+                                 f"#include names {e['to']}, which "
+                                 + ("is outside the repository" if _outside(e["to"]) else "does not exist")))
     for c in cyc:
         issues.append({"kind": "include_cycle", "name": " -> ".join(c["files"]), "at": c["at"], "status": "verified",
                        "why": "the files include each other: " + " -> ".join(c["files"])})
@@ -354,20 +404,29 @@ def lint(repo: Path, files: list[str] | None = None, *, use_glslang: bool = Fals
     included = {e["to"] for e in edges if e["status"] == "resolved"}
     stages = [f for f in files if f not in included and _is_stage(f)]
     by_from = {(e["from"], e["line"]): e for e in edges}
-    options = set()
+    # Per pack, every macro a file of it defines (a `//#define` option toggle or a `#define`): a shared program
+    # file tests the stage macros (`#ifdef VSH`) that each sibling stage defines before including it.
+    pack_macros: dict[str, set[str]] = {}
     for f in files:
         got = _read(repo, f, cache)
-        if got and "shaders" in f.split("/")[:-1]:
-            options.update(_OPTION.findall("\n".join(got[0])))
+        root = _pack_root(f)
+        if got and root is not None:
+            names = pack_macros.setdefault(root, set())
+            names.update(_OPTION.findall("\n".join(got[0])))
+            for ln in got[1]:
+                d = _DIRECTIVE.match(ln)
+                m = _IDENT.match(d.group(2)) if d and d.group(1) == "define" else None
+                if m:
+                    names.add(m.group(0))
     exe = (shutil.which("glslangValidator") or shutil.which("glslang")) if use_glslang else None
     for f in stages:
         unit = _expand(repo, f, by_from, cache, set())
-        issues += _unit_checks(f, unit, options)
+        issues += _unit_checks(f, unit, pack_macros.get(_pack_root(f) or "", set()))
         if exe:
             issues += glslang(f, unit, exe)
     uniq, seen = [], set()
     for i in issues:
-        key = (i["kind"], i["at"], i["name"])
+        key = (i["kind"], i["at"], i["name"], i["why"] if i["kind"] == "glsl_error" else "")
         if key not in seen:
             seen.add(key)
             uniq.append(i)

@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SHADER_SUFFIXES = (".glsl", ".fsh", ".vsh", ".vert", ".frag", ".comp", ".geom", ".gsh", ".csh", ".tcs", ".tes")
+SHADER_SUFFIXES = (".glsl", ".fsh", ".vsh", ".vert", ".frag", ".comp", ".geom", ".gsh", ".tcs", ".tes")
 _SKIP = {"build", ".gradle", "out", "bin", "node_modules", ".git", ".verinoda", "run", ".idea", "graphify-out"}
 _BLOCK = re.compile(r"(?:layout\s*\([^)]*\)\s*)?uniform\s+([A-Za-z_]\w*)\s*\{([^}]*)\}\s*(\w+)?\s*;", re.S)
 _FIELD = re.compile(r"^\s*(?:(?:lowp|mediump|highp|flat)\s+)*([a-z]\w*)\s+([A-Za-z_]\w*)\s*(\[\s*(\w+)\s*\])?\s*;")
