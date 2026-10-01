@@ -47,6 +47,7 @@ GOLD_DISCOUNT_TESTS = ["tests/test_pricing.py::test_compute_total",
 EXPECTED_PARAMS = {
     "project_query": ({"question", "max_items", "format"}, {"question"}),
     "grep_context": ({"pattern", "path"}, {"pattern"}),
+    "read_context": ({"file_path"}, {"file_path"}),
     "node_inspect": ({"name"}, {"name"}),
     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
     "run_when": ({"symbol", "depth"}, {"symbol"}),
@@ -97,7 +98,7 @@ EXPECTED_PARAMS = {
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
              "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask"}
+             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -269,6 +270,7 @@ def _all_calls(t: AtlasTools) -> dict:
         "debug_strategy": lambda: t.debug_strategy("differential"),
         "change_probe": lambda: t.change_probe(symbol="app.py::main"),
         "grep_context": lambda: t.grep_context("main"),
+        "read_context": lambda: t.read_context("main.py"),
     }
 
 
@@ -339,8 +341,9 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     gate = next(t for t in core if t["name"] == GATEWAY)
     behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
     # no decision records in the example: nothing for decision_check or dependency_ask, so run_tool offers neither
-    assert behind == set(CORE_TOOLS) - set(CORE_DIRECT) - {"decision_check", "dependency_ask"} | {"grep_context"}
-    assert all(n in gate["description"] for n in behind - {"grep_context"})  # the hook's own: not advertised
+    hooks = {"grep_context", "read_context"}   # the hooks' own calls: reached through run_tool, not advertised
+    assert behind == set(CORE_TOOLS) - set(CORE_DIRECT) - {"decision_check", "dependency_ask"} | hooks
+    assert all(n in gate["description"] for n in behind - hooks)
     assert gate["annotations"]["readOnlyHint"] is False  # change_review can run tests
     # the core analyze and code_check take the arguments a question or an edit needs
     by = {t["name"]: t["inputSchema"]["properties"] for t in core}
@@ -403,7 +406,7 @@ def test_the_core_profile_names_only_tools_it_serves(repo):
 
     from verinoda.mcp.server import CORE_TOOLS, PLAN_HINT
 
-    others = [n for n in TOOL_NAMES if n not in CORE_TOOLS and n != "grep_context"]  # the hook's, in run_tool
+    others = [n for n in TOOL_NAMES if n not in CORE_TOOLS and n not in ("grep_context", "read_context")]
     srv = mcp_server.build_server(repo)
     listed = json.dumps([t.model_dump(by_alias=True, exclude_none=True, mode="json")
                          for t in anyio.run(srv.list_tools)])
@@ -1363,7 +1366,7 @@ def test_unscanned_repo_returns_structured_error_for_every_tool(tmp_path):
     for name, fn in calls.items():
         if name == "index_update":
             continue
-        if name == "grep_context":  # the Grep hook adds nothing rather than an error
+        if name in ("grep_context", "read_context"):  # a hook adds nothing rather than an error
             assert fn() == {}
             continue
         res = fn()
@@ -1769,15 +1772,18 @@ def test_grep_context_is_a_posttooluse_hook_output_or_nothing(repo):
     assert t.grep_context("no_such_name_anywhere") == {} and t.grep_context("") == {}
 
 
-def test_the_hooks_template_calls_grep_context_through_run_tool():
+def test_the_hooks_template_calls_grep_context_and_read_context_through_run_tool():
     from importlib import resources
 
     tpl = json.loads(resources.files("verinoda.agents").joinpath("templates/claude_hooks.json").read_text("utf-8"))
-    (entry,) = tpl["hooks"]["PostToolUse"]
-    (hook,) = entry["hooks"]
-    assert entry["matcher"] == "Grep" and hook["type"] == "mcp_tool" and hook["server"] == "verinoda"
+    grep, read = tpl["hooks"]["PostToolUse"]
+    (hook,) = grep["hooks"]
+    assert grep["matcher"] == "Grep" and hook["type"] == "mcp_tool" and hook["server"] == "verinoda"
     assert hook["tool"] == mcp_server.GATEWAY and hook["input"]["name"] == "grep_context"
     assert hook["input"]["arguments"] == {"pattern": "${tool_input.pattern}"}
+    (hook,) = read["hooks"]
+    assert read["matcher"] == "Read|Edit|MultiEdit|Write" and hook["tool"] == mcp_server.GATEWAY
+    assert hook["input"] == {"name": "read_context", "arguments": {"file_path": "${tool_input.file_path}"}}
 
 
 def test_a_repeated_query_in_one_session_returns_only_new_passages(fresh_repo):

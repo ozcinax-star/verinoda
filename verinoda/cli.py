@@ -1294,6 +1294,25 @@ def cmd_grep_ast(args) -> int:
     return 0 if res["status"] == "found" else 1
 
 
+def cmd_context(args) -> int:
+    from verinoda import scoped
+
+    repo = _repo(args)
+    if not (repo / ".verinoda").is_dir():
+        print(f"note: {repo} has no .verinoda/ folder: only rules and decision records found by path are read",
+              file=sys.stderr)
+    res = scoped.for_file(repo, args.file)
+
+    def render(r: dict) -> None:
+        if r.get("outside"):
+            print(f"{r['file']} is outside the project {repo}")
+        else:
+            print(scoped.text(r, limit=None) or f"nothing in this project names {r['file']}")
+
+    _emit(args, res, render)
+    return 2 if res.get("outside") else 0
+
+
 def cmd_owners(args) -> int:
     from verinoda import ownership
 
@@ -3473,6 +3492,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="a YAML rule file (id, language, pattern or rule.pattern, message; one rule per "
                          "document); repeatable")
     sp.add_argument("--max-results", type=int, default=200, help="matches listed at most (default 200)")
+    sp = add("context", cmd_context, "what the project says about one file: decision records whose guards name it, "
+                                     "your notes on it or on a glob matching it (`scope:` in a note's header), "
+                                     "Cursor and Kiro rules for it (what the Read/Edit hook shows an agent)")
+    sp.add_argument("file", help="the file (repository-relative or absolute)")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
