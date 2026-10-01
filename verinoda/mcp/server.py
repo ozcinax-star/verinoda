@@ -1163,7 +1163,7 @@ class AtlasTools:
     # -- question understanding -----------------------------------------------------
     def change_review(self, base: str | None = None, staged: bool = False, targets: list[str] | None = None,
                       change: str | None = None, concerns: list[str] | None = None, run_tests: bool = False,
-                      observe: bool = False, max_chars: int = 6000, findings: str = "introduced") -> dict:
+                      observe: bool = False, max_chars: int = 6000, findings: str = "introduced", since_last: bool = False) -> dict:
         def go():
             from verinoda import review as rv
 
@@ -1187,7 +1187,8 @@ class AtlasTools:
                     res = rv.review(self.repo, store=st, graph=self._graph(), base=b, staged=bool(staged),
                                     targets=tg or None, change=ch or ("body" if tg else None), concerns=cs,
                                     run_tests=bool(run_tests), observe=bool(observe),
-                                    max_chars=_clamp(max_chars, 500, 50_000, "max_chars"), findings=fs)
+                                    max_chars=_clamp(max_chars, 500, 50_000, "max_chars"), findings=fs,
+                                    since_last=bool(since_last))
                 except ValueError as exc:
                     raise ToolFailure("invalid_argument", str(exc)[:600], "base is a git revision such as HEAD~1; "
                                       "targets are 'path/file.py' or 'path/file.py::Qual.name'") from None
@@ -1209,7 +1210,7 @@ class AtlasTools:
                          # the findings come before the lists that lead to them: what to read first, the tests,
                          # what ran (concerns_checked) and what went stale are cut before any concern is
                          keep=("summary", "exit", "counts", "risk", "concerns", "unknown", "changes", "api_changes",
-                               "decisions", "differential"),
+                               "decisions", "differential", "since_last"),
                          first=("dependents", "binding_readers", "skipped", "read_first"))
 
     def question_plan_draft(self, question: str) -> dict:
@@ -1997,13 +1998,13 @@ GATEWAY_CATALOG: dict[str, str] = {
                 "targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
                   "their evidence re-checked",
-    "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {} after: what it "
-                     "touches",
+    "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {since_last?} after: "
+                     "what it touches",
     "decision_check": "decision_check {changed_only?: true}: tree vs accepted decisions",
     "dependency_ask": "dependency_ask {source, target}: may source import it",
     "history_search": "history_search {text, regex?, path?}: when text appeared/disappeared; {symbol}: its "
-                      "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: two "
-                      "revisions",
+                      "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: "
+                      "compare",
 }
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
@@ -2582,9 +2583,11 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         findings: Annotated[Literal["introduced", "all"],
                             Field(description="introduced: only what the change introduced (preexisting and fixed "
                                               "under differential); all: preexisting too.")] = "introduced",
+        since_last: Annotated[bool, Field(description="Leave out findings the last review already listed.")] = False,
     ) -> dict[str, Any]:
         return emit(t.change_review(base=base, staged=staged, targets=targets, change=change, concerns=concerns,
-                                    run_tests=run_tests, observe=observe, max_chars=max_chars, findings=findings))
+                                    run_tests=run_tests, observe=observe, max_chars=max_chars, findings=findings,
+                                    since_last=since_last))
 
     @register("question_plan_draft")
     def question_plan_draft(

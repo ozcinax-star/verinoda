@@ -54,7 +54,7 @@ EXPECTED_PARAMS = {
                         "symbol", "limit"}, set()),
     "map_view": ({"view", "targets"}, {"view"}),
     "change_review": ({"base", "staged", "targets", "change", "concerns", "run_tests", "observe", "max_chars",
-                      "findings"}, set()),
+                      "findings", "since_last"}, set()),
     "question_plan_draft": ({"question"}, {"question"}),
     "question_plan_check": ({"plan_json"}, {"plan_json"}),
     "analyze": ({"question", "run_tests", "budget_seconds", "budget_calls", "plan_json", "observe"}, set()),

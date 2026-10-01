@@ -4839,13 +4839,16 @@ def _read_first(ctx: _Ctx, changes: list[Change], dependents: list[dict], concer
 def review(repo: Path, *, store=None, graph=None, base: str | None = None, staged: bool = False,
            targets: list[str] | None = None, change: str | None = None, concerns: list[str] | None = None,
            run_tests: bool = False, observe: bool = False, max_chars: int = DEFAULT_MAX_CHARS,
-           record: bool = True, coverage_reports: list[str] | None = None, findings: str = "introduced") -> dict:
+           record: bool = True, coverage_reports: list[str] | None = None, findings: str = "introduced",
+           since_last: bool = False) -> dict:
     """Review the working tree against ``base`` (default HEAD), the staged changes, or a planned change
     (``targets`` as ``file`` or ``file::Qual.name`` with ``change`` body | signature | remove).
     ``coverage_reports``: the coverage reports to read (default: the ones found at the usual paths).
     ``findings``: ``introduced`` (default) lists under ``concerns`` only what the change introduced, the
     preexisting and fixed findings under ``differential``; ``all`` lists the preexisting ones under ``concerns``
-    too (each finding carries ``delta``)."""
+    too (each finding carries ``delta``). ``since_last``: the findings the last recorded review of the same base
+    and mode already listed are left out of ``concerns`` (counted, and the ones gone listed, under
+    ``since_last``); the review is still recorded with all its findings."""
     from verinoda import index, treestate
 
     t0 = time.perf_counter()
@@ -5028,9 +5031,116 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     uncovered_strong = any(u["status"] == "strong_inference" for u in (tests.get("coverage") or {}).get("uncovered")
                            or [])
     res["exit"] = 3 if (n_strong or unknown or uncovered_strong) else 0
+    # every finding listed (before the per-concern cap) with its place: what the record keeps and what
+    # --since-last compares, so a finding past the cap is neither lost nor taken for gone
+    places = {id(f): _finding_place(ctx, f) for fs in found.values() for f in fs}
+    res["_all"] = {k: [{**f, "place": places[id(f)]} for f in v] for k, v in found.items()}
+    prev = _last_review(store, res) if since_last and store is not None else None
     if record and store is not None:
         res["review_id"] = _record(store, repo, res)
+    if since_last:
+        _since_last(res, prev, store is not None)
+    res.pop("_all", None)
     return res
+
+
+# line numbers in a finding's text move with an edit above it; other numbers (a metric that got worse) do not
+_LINE_NUMS = re.compile(r"(?<=:)\d+(?:-\d+)?\b|\b(?:lines?|at line) \d+(?:-\d+)?\b|@\d+\b")
+
+
+def _finding_place(ctx: _Ctx, f: dict) -> str:
+    """Where a finding is, as text that survives an edit above it: the definition holding its line and that
+    line's code, white space collapsed."""
+    at = str(f.get("at") or "")
+    rel, _, line = at.rpartition(":")
+    if not line.isdigit():
+        return ""
+    n = int(line)
+    enc = anchors.enclosing(ctx.facts(rel), n, n) if ctx.facts(rel) else None
+    sym = enc[1].split("#", 1)[0] if enc and enc[0] == "sym" else ""
+    code = ctx.code(rel)
+    text = " ".join(code[n - 1].split()) if 0 < n <= len(code) else ""
+    return f"{sym}|{text}"[:200]
+
+
+def _finding_key(concern: str, f: dict) -> tuple[str, str, str, str, str]:
+    """A finding as itself, wherever its lines moved: concern, rule, file, its text with line numbers masked, and
+    its place (the definition holding it and its line's code)."""
+    file = str(f.get("at") or "").rsplit(":", 1)[0]
+    return (concern or str(f.get("concern") or ""), str(f.get("rule") or ""), file,
+            _LINE_NUMS.sub("#", str(f.get("finding") or "")), str(f.get("place") or ""))
+
+
+def _scope(res: dict) -> dict:
+    """What a review looked at: its concerns and whether preexisting findings were listed."""
+    return {"concerns": sorted(res.get("concerns_checked") or res.get("concerns") or {}),
+            "findings": (res.get("differential") or {}).get("shown") or "introduced"}
+
+
+def _last_review(store, res: dict) -> dict | None:
+    """The latest recorded review of the same base commit, mode, concerns and findings mode, or None (a review
+    that checked other concerns would make their findings look gone)."""
+    head = (res.get("base") or {}).get("commit")
+    if not head or res.get("mode") == "planned":
+        return None
+    want = _scope(res)
+    try:
+        rows = store.all("SELECT id, result, created_at FROM analyses WHERE question LIKE ? "
+                         "ORDER BY created_at DESC, rowid DESC LIMIT 50", (f"review {head[:12]}..{res['mode']} %",))
+    except Exception:  # noqa: BLE001 - an old or busy store: no earlier review to compare with
+        return None
+    for r in rows:
+        if isinstance(r.get("result"), dict) and r["result"].get("scope") == want:
+            return r
+    return None
+
+
+def _since_last(res: dict, prev: dict | None, has_store: bool) -> None:
+    """List in ``concerns`` only the findings ``prev`` (a recorded review of the same scope) did not have; say
+    what was left out, which earlier findings are gone and which changed definitions are new. The exit code
+    stays the whole review's: findings still there still count."""
+    allf = res.get("_all") or {}
+    total = sum(len(v) for v in allf.values())
+    if prev is None:
+        why = ("no store: earlier reviews are not recorded" if not has_store else
+               "a planned change is not compared" if res.get("mode") == "planned" else
+               "no earlier review of this base, mode, concerns and findings mode is recorded: every finding is new")
+        res["since_last"] = {"review_id": None, "note": why}
+        res["counts"]["findings_new"], res["counts"]["findings_repeated"] = total, 0
+        return
+    old = prev["result"]
+    left: dict[tuple, int] = {}
+    for f in old.get("findings") or []:
+        k = _finding_key(str(f.get("concern") or ""), f)
+        left[k] = left.get(k, 0) + 1
+    repeated = 0
+    new: dict[str, list[dict]] = {}
+    for concern, fs in allf.items():
+        keep = []
+        for f in fs:
+            k = _finding_key(concern, f)
+            if left.get(k, 0) > 0:
+                left[k] -= 1
+                repeated += 1
+            else:
+                keep.append({x: y for x, y in f.items() if x != "place"})
+        new[concern] = keep
+    res["concerns"] = {k: v[:MAX_PER_CONCERN] for k, v in new.items()}
+    res["concerns_truncated"] = {k: len(v) for k, v in new.items() if len(v) > MAX_PER_CONCERN}
+    gone = [{"concern": k[0], "rule": k[1], "file": k[2], "finding": k[3]} for k, n in left.items() for _ in range(n)]
+    old_changes = {(c.get("symbol"), c.get("kind")) for c in old.get("changes") or []}
+    new_changes = [c["symbol"] for c in res["changes"] if (c.get("symbol"), c.get("kind")) not in old_changes]
+    n_new = sum(len(v) for v in new.values())
+    res["since_last"] = {"review_id": prev["id"], "at": prev.get("created_at"), "repeated": repeated,
+                         "gone": gone[:20], "gone_total": len(gone), "new_changes": new_changes[:20],
+                         "new_changes_total": len(new_changes),
+                         "method": "findings matched by concern, rule, file, text with line numbers masked, and "
+                                   "place (the definition holding the line and its code); changes by symbol and kind; "
+                                   "against the last review of the same base, mode, concerns and findings mode"}
+    res["counts"]["findings_new"], res["counts"]["findings_repeated"] = n_new, repeated
+    res["summary"] = (f"{_summary(res)} Since the last review ({str(prev.get('created_at'))[:19]}): {repeated} "
+                      f"finding(s) repeated and left out, {len(gone)} gone, {len(new_changes)} changed "
+                      f"definition(s) new; the exit code counts every finding still there.")
 
 
 def _mark_renames(ctx: _Ctx, changes: list[Change]) -> None:
@@ -5619,8 +5729,10 @@ def _record(store, repo: Path, res: dict) -> str | None:
             "budget": {"max_chars": res["budget"]["max_chars"]},
             "usage": {"seconds": res.get("seconds")},
             "result": {"kind": "review", "summary": res["summary"], "changes": res["changes"],
-                       "findings": [{k: f.get(k) for k in ("concern", "rule", "status", "at", "finding", "delta")}
-                                    for fs in res["concerns"].values() for f in fs],
+                       "findings": [{k: f.get(k) for k in ("concern", "rule", "status", "at", "finding", "delta",
+                                                           "place")}
+                                    for fs in (res.get("_all") or res["concerns"]).values() for f in fs],
+                       "scope": _scope(res),
                        "api_changes": [{k: a.get(k) for k in ("symbol", "verdict", "status", "at", "base_at")}
                                        for a in res.get("api_changes") or []],
                        "unknown": res["unknown"], "tests": {"static": [t["test"] for t in res["tests"]["static"]]},
@@ -5755,6 +5867,17 @@ def render_text(res: dict) -> str:
     from verinoda import reviewers
 
     out += reviewers.render(res.get("reviewers") or {})
+    sl = res.get("since_last")
+    if sl:
+        out.append("")
+        if sl.get("review_id") is None:
+            out.append(f"Since the last review: {sl.get('note')}")
+        else:
+            out.append(f"Since the last review {sl['review_id']} ({str(sl.get('at'))[:19]}): {sl['repeated']} "
+                       f"finding(s) repeated and left out; new changes: "
+                       + (", ".join(sl["new_changes"]) or "none"))
+            for g in sl["gone"]:
+                out.append(f"  gone: [{g['concern']}] {g['file']}: {g['finding'][:140]}")
     from verinoda import risk
 
     out += risk.render(res.get("risk") or {}) if res.get("changes") else []
