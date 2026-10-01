@@ -2984,6 +2984,11 @@ def cmd_probe(args) -> int:
         raise SystemExit("error: give a function or --changed, not both")
     if args.no_base and args.changed:
         raise SystemExit("error: --changed compares with a base; it cannot be used with --no-base")
+    if (args.template or args.inverse or args.test_file) and not (args.template and args.emit_test):
+        raise SystemExit("error: --template names the kind of property test --emit-test writes; --inverse and "
+                         "--test-file go with them")
+    if args.template and args.changed:
+        raise SystemExit("error: a property test is written for one function, not with --changed")
     st = _store(repo, create=True)
     kw = dict(inputs=args.inputs, seed=args.seed, properties=args.property or [], examples=args.example or [],
               scaling=args.scaling, timeout=args.timeout, per_call_timeout=args.per_call_timeout,
@@ -2992,7 +2997,8 @@ def cmd_probe(args) -> int:
         if args.changed:
             res = probe.probe_changed(st, repo, base=args.base or "HEAD", **kw)
         else:
-            res = probe.probe(st, repo, args.symbol, base=args.base or "HEAD", no_base=args.no_base, **kw)
+            res = probe.probe(st, repo, args.symbol, base=args.base or "HEAD", no_base=args.no_base,
+                              template=args.template, inverse=args.inverse, test_file=args.test_file, **kw)
     finally:
         st.close()
     _emit(args, res, _r_probe)
@@ -4238,7 +4244,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="run even when the side-effect gate refuses (the user's decision: writes, network and "
                          "processes then run in the throw-away copy with process isolation only)")
     sp.add_argument("--emit-test", action="store_true", help="print pytest functions that pin the base behaviour "
-                                                             "(nothing is written)")
+                                                             "(nothing is written); with --template, write a "
+                                                             "property test file")
+    sp.add_argument("--template", choices=["roundtrip", "idempotent", "equivalence"],
+                    help="with --emit-test: check this property on the generated inputs and write it as a pytest "
+                         "file (roundtrip: g(f(x)) == x; idempotent: f(f(x)) == f(x); equivalence: same result as "
+                         "the base); never over an existing file")
+    sp.add_argument("--inverse", metavar="FUNCTION", help="g of the roundtrip template (path.py::name)")
+    sp.add_argument("--test-file", metavar="PATH",
+                    help="the file to write (default tests/test_<name>_<template>.py)")
     sp.add_argument("--no-record", action="store_true", help="do not record claims for the findings")
     sp = add("resolve-call", cmd_resolve_call, "precise resolution of one call site: which definition does "
                                                "TARGET on PATH:LINE bind to? (exit 3: no precise answer)")

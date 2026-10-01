@@ -548,14 +548,28 @@ def _properties(spec: dict) -> list:
     return out
 
 
-def _check_properties(props: list, names: list[str], args: list, kwargs: dict, result) -> tuple[list, list]:
+def _check_properties(props: list, names: list[str], args: list, kwargs: dict, result,
+                      refs: dict | None = None) -> tuple[list, list]:
     ns: dict = {}
+    ref_error = None
+    for name, mod in (refs or {}).items():  # functions a property template calls (an inverse, the target)
+        try:
+            ns[name] = getattr(importlib.import_module(mod), name)
+        except _Blocked:
+            raise
+        except BaseException as exc:  # noqa: BLE001
+            ref_error = f"{type(exc).__name__}: {exc}"[:MSG_MAX]
+    if refs:
+        ns["__args__"], ns["__kwargs__"] = tuple(args), dict(kwargs)
     for name, val in zip(names, args):
         ns[name] = val
     ns.update(kwargs)
     ns["result"] = result
     violated, errors = [], []
     for k, code in enumerate(props):
+        if ref_error is not None:
+            errors.append([k, ref_error])
+            continue
         if code is None:
             errors.append([k, "SyntaxError"])
             continue
@@ -603,7 +617,7 @@ def _one_call(target, method, spec, case, props, names, timeout, hang_file) -> t
                 if lazy:
                     out["t"] = f"{lazy} (materialized)"
                 if props:
-                    pv, pe = _check_properties(props, names, args, kwargs, res)
+                    pv, pe = _check_properties(props, names, args, kwargs, res, spec.get("property_refs"))
                     if pv:
                         out["pv"] = pv
                     if pe:

@@ -44,7 +44,9 @@ or a unique bare name; or every function changed against the base with
    sides (else ``inconclusive``). Nothing is judged a bug: a difference is a
    behaviour change, and the agent compares it with what the user asked for.
    ``emit_test`` prints (never writes) pytest functions that pin the base
-   behaviour.
+   behaviour; with a ``template`` (roundtrip, idempotent, equivalence) it
+   writes a property test file instead, never over an existing file
+   (:mod:`verinoda.probe_templates`).
 
 Files: ``.verinoda/runs/<probe id>/corpus.json`` (the inputs) and
 ``probe.json`` (the result); each run's raw output is in its experiment's
@@ -63,6 +65,7 @@ from pathlib import Path
 
 from verinoda import experiments, probe_gate, testcode, treestate
 from verinoda import probe_inputs as pin
+from verinoda import probe_templates as ptpl
 from verinoda.paths import runs_dir
 from verinoda.snapshot import list_files
 from verinoda.store import Store, new_id, now
@@ -1053,14 +1056,23 @@ def probe(store: Store, repo: Path, symbol: str, *, base: str | None = "HEAD", n
           inputs: int = DEFAULT_INPUTS, seed: int = 0, properties: list[str] | tuple = (),
           examples: list[str] | tuple = (), scaling: bool = False, timeout: float | None = None,
           per_call_timeout: float = DEFAULT_PER_CALL_TIMEOUT, allow_side_effects: bool = False,
-          emit_test: bool = False, record: bool = True, files: list[str] | None = None) -> dict:
+          emit_test: bool = False, record: bool = True, files: list[str] | None = None,
+          template: str | None = None, inverse: str | None = None, test_file: str | None = None) -> dict:
     """Probe one function (see the module docstring). Never raises for a probe that cannot run: the result's
     ``status`` says ``unsupported`` / ``refused`` / ``inconclusive`` with the reason; a bad argument (an
-    unknown function, a ref that is not a commit, a property that does not parse) raises ValueError."""
+    unknown function, a ref that is not a commit, a property that does not parse, a template that does not fit
+    the function, a test file that exists) raises ValueError. With ``emit_test`` and ``template``
+    (:mod:`verinoda.probe_templates`) the property is checked on the probe's inputs and a pytest file is written
+    to ``test_file`` (default ``tests/test_<name>_<template>.py``)."""
     t0 = time.monotonic()
     res = _probe(store, repo, symbol, base=base, no_base=no_base, inputs=inputs, seed=seed, properties=properties,
                  examples=examples, scaling=scaling, timeout=timeout, per_call_timeout=per_call_timeout,
-                 allow_side_effects=allow_side_effects, emit_test=emit_test, record=record, files=files, t0=t0)
+                 allow_side_effects=allow_side_effects, emit_test=emit_test, record=record, files=files, t0=t0,
+                 template=template if emit_test else None, inverse=inverse, test_file=test_file)
+    if template and emit_test and "property_test" not in res:
+        res["property_test"] = {"kind": template, "written": False,
+                                "why": f"the probe ended with status {res['status']} before the property was "
+                                       "observed; no file was written"}
     if "duration_s" not in res:  # refused / unsupported before any run: still timed and written
         out_dir = runs_dir(Path(repo).resolve()) / res["probe_id"]
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1069,8 +1081,13 @@ def probe(store: Store, repo: Path, symbol: str, *, base: str | None = "HEAD", n
 
 
 def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed, properties, examples, scaling,
-           timeout, per_call_timeout, allow_side_effects, emit_test, record, files, t0: float) -> dict:
+           timeout, per_call_timeout, allow_side_effects, emit_test, record, files, t0: float, template=None,
+           inverse=None, test_file=None) -> dict:
     repo = Path(repo).resolve()
+    if template and template not in ptpl.KINDS:
+        raise ValueError(f"unknown template {template!r} (one of {', '.join(ptpl.KINDS)})")
+    if inverse and not template:
+        raise ValueError("--inverse names the inverse function of the roundtrip template (--template roundtrip)")
     files = files if files is not None else list_files(repo)
     rel, qual = resolve_target(repo, symbol, files)
     sym = f"{rel}::{qual}"
@@ -1165,6 +1182,24 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
         loc = project.locate(f"{call['recipe']['$new']['m']}.{call['recipe']['$new']['n']}")
         if loc:
             roots.append(loc)
+    tmpl = None
+    if template:
+        inv = None
+        if inverse:
+            grel, gqual = resolve_target(repo, inverse, files)
+            gnode = _defs(_parse(_read(repo, grel)) or ast.Module(body=[], type_ignores=[])).get(gqual)
+            if not grel.endswith(".py") or not isinstance(gnode, ast.FunctionDef):
+                raise ValueError(f"the inverse {grel}::{gqual} is not a Python function in the working tree")
+            if _call_kind(gnode, gqual) == "method":
+                raise ValueError(f"the inverse {gqual} is an instance method: name a function")
+            inv = (pin.module_name(grel, lambda r: (repo / r).is_file())[0], gqual, grel)
+            roots.append((grel, gqual))
+        mod0 = pin.module_name(rel, lambda r: (repo / r).is_file())[0]
+        tmpl = ptpl.plan(template, qual, kind, params, mod0, inv, differential)
+        tmpl["path"] = ptpl.check_path(repo, test_file or ptpl.default_path(repo, qual, template))
+        if tmpl["property"]:
+            tmpl["index"] = len(props)
+            props.append(tmpl["property"])
     gate_res = project.gate.run(roots)
     if gate_res["verdict"] == "refused":
         gate_res["overridden_by_user"] = bool(allow_side_effects)
@@ -1208,6 +1243,8 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
     spec = {"module": mod, "file": rel, "qual": qual, "call": call,
             "params": [p["name"] for p in params if p["kind"] != "kwonly"], "sys_path": sys_path, "cases": cases,
             "repeat": 2, "per_call_timeout": per_call, "block": not allow_side_effects, "properties": props}
+    if tmpl and tmpl["refs"]:
+        spec["property_refs"] = tmpl["refs"]
     scaling_note = None
     if scaling:
         sc = _scaling_spec(params, [td if td.get("k") != "default-only" else {"k": "none"} for td in tds])
@@ -1233,12 +1270,12 @@ def _probe(store: Store, repo: Path, symbol: str, *, base, no_base, inputs, seed
     return _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, meta, info, corpus_sha, bounds,
                     tds, params, sites, project, gate_res, base_sha, head_commit, base_run, head_run, differential,
                     notes, scaling_note, props, record, emit_test, allow_side_effects, run_timeout, t0, common,
-                    out_dir)
+                    out_dir, tmpl=tmpl)
 
 
 def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, meta, info, corpus_sha, bounds, tds,
              params, sites, project, gate_res, base_sha, head_commit, base_run, head_run, differential, notes,
-             scaling_note, props, record, emit_test, allow, run_timeout, t0, common, out_dir) -> dict:
+             scaling_note, props, record, emit_test, allow, run_timeout, t0, common, out_dir, tmpl=None) -> dict:
     label = _callee_label(qual, spec)
     runs = {"head": head_run["experiments"], **({"base": base_run["experiments"]} if base_run else {})}
     trees = {"head": head_run.get("tree"), **({"base": base_run.get("tree")} if base_run else {})}
@@ -1544,7 +1581,10 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
         undeclared_exceptions=und_out, scaling=scaling_res, confirm=confirm if confirm.get("ran") else None,
         timeouts=to_out or None,
         limits=limits, **res_common)
-    if emit_test and differences:
+    if tmpl:
+        res["property_test"] = _property_test(repo, tmpl, cases, rows_h, rows_b, set(not_run) | set(nondet),
+                                              {i for ix in classes.values() for i in ix}, spec, qual, pid, runs)
+    elif emit_test and differences:
         res["regression_test"] = emit_tests(res, cases, rows_b, rows_h, spec, qual, base_sha, pid)
     if record:
         try:
@@ -1554,6 +1594,27 @@ def _analyse(store, repo, pid, sym, rel, qual, head_node, kind, spec, cases, met
             res["claims_error"] = f"{type(exc).__name__}: {exc}"
     res["next_step"] = _next_step(res)
     return _finish(store, repo, res, out_dir, t0)
+
+
+def _property_test(repo, tmpl, cases, rows_h, rows_b, skip, differing, spec, qual, pid, runs) -> dict:
+    """Observe the template's property on the probe's inputs and write the pytest file (never over a file)."""
+    obs, chosen = ptpl.observe(tmpl, tmpl.get("index"), cases, rows_h, rows_b, skip, differing)
+    out = {"kind": tmpl["kind"], "property": tmpl["property"] or "same result as the base", **obs,
+           "path": tmpl["path"], "inputs_in_file": len(chosen), "written": False}
+    if tmpl.get("inverse"):
+        out["inverse"] = tmpl["inverse"]
+    if not chosen:
+        out["why"] = "no input could be written as source (every call raised, or the base result has no plain text)"
+        return out
+    text = ptpl.render(tmpl, obs, chosen, cases, rows_b, qual, spec["module"], pid, runs, MATERIALIZE_MAX)
+    try:
+        ptpl.write(repo, tmpl["path"], text)
+        out["written"] = True
+    except FileExistsError:
+        out["why"] = f"{tmpl['path']} appeared during the probe: not overwritten"
+    except OSError as exc:
+        out["why"] = f"{tmpl['path']} could not be written: {exc}"
+    return out
 
 
 def _stray_text(ev: dict, qual: str) -> tuple[str, str]:
@@ -1985,6 +2046,11 @@ def render(res: dict) -> str:
         lines.append(f"  limit: {lim}")
     if res.get("next_step"):
         lines.append(f"  next: {res['next_step']}")
+    pt = res.get("property_test")
+    if pt:
+        lines.append(f"  property test ({pt['kind']}): " + (f"{pt['observed']}; " if pt.get("observed") else "")
+                     + (f"written to {pt['path']} ({pt['inputs_in_file']} inputs)" if pt["written"] else
+                        f"not written: {pt.get('why')}"))
     if res.get("regression_test"):
         lines += ["", res["regression_test"]]
     return "\n".join(lines)
