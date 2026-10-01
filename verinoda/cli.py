@@ -1507,6 +1507,41 @@ def cmd_context(args) -> int:
     return 2 if res.get("outside") else 0
 
 
+def cmd_monitor(args) -> int:
+    from verinoda import monitors as mon
+
+    repo = _repo(args)
+    act = args.action
+    try:
+        if act in ("add", "accept", "remove", "trend") and not args.id:
+            raise mon.MonitorError(f"`monitor {act}` needs a monitor id")
+        if act == "add":
+            res = mon.add(repo, args.id, regex=args.regex, ast=args.ast, langs=args.lang, paths=args.path,
+                          message=args.message or "")
+            text = f"monitor {res['id']} added to {res['file']} with {res['matches']} match(es) as its baseline"
+        elif act == "accept":
+            res = mon.accept(repo, args.id)
+            text = f"monitor {res['id']}: baseline {res['before']} -> {res['now']} match(es)"
+        elif act == "remove":
+            res = mon.remove(repo, args.id)
+            text = f"monitor {res['id']} removed"
+        elif act == "trend":
+            res = mon.trend(repo, args.id, points=args.points)
+            text = "\n".join([f"{res['id']}: /{res['pattern']}/"] + [f"  {r['date']} {r['commit']} {r['count']}"
+                                                                     for r in res["points"]])
+        else:
+            res = mon.check(repo, args.id)
+            _emit(args, res, lambda r: print(mon.render(r)))
+            return res["exit"]
+    except mon.MonitorError as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(text))
+    return 0
+
+
 def cmd_owners(args) -> int:
     from verinoda import ownership
 
@@ -3778,6 +3813,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--fix", action="store_true", help="with --check: write moved steps' lines back")
     sp.add_argument("--force", action="store_true",
                     help="overwrite a tour file Verinoda did not write, or one edited since it wrote it")
+    sp = add("monitor", cmd_monitor, "saved searches that must not gain matches (verinoda-monitors.json, committed): "
+                                     "check (default; exit 1 on a match the baseline does not have, 3 when a search "
+                                     "did not finish), add ID --regex RE|--ast PATTERN, accept ID, remove ID, trend ID "
+                                     "(a regex monitor's count over the history)")
+    sp.add_argument("action", nargs="?", default="check", choices=["check", "add", "accept", "remove", "trend"])
+    sp.add_argument("id", nargs="?", help="the monitor's id")
+    sp.add_argument("--regex", help="add: git's extended regular expression (git grep -E)")
+    sp.add_argument("--ast", help="add: a structural pattern, as for grep-ast")
+    sp.add_argument("--lang", action="append", help="add with --ast: only these languages")
+    sp.add_argument("--path", action="append", help="add: only under this path (repeatable)")
+    sp.add_argument("--message", help="add: what to say when it gains a match")
+    sp.add_argument("--points", type=int, default=10, help="trend: commits to count at (2-50, default 10)")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
