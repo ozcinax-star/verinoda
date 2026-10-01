@@ -1541,7 +1541,7 @@ def _edge_scan(ctx: _Ctx, kind: str) -> tuple[Scan, set[str] | None]:
         scan.unknown.append(f"{ctx.graph_stale}; an edge a recent edit added is not seen (run `verinoda update`, "
                             "then check again)")
     scan.limit(*EDGE_LIMITS)
-    return scan, {f for _n, f in ctx.graph.G.nodes(data="source_file") if f}
+    return scan, {f for n in ctx.graph.G.nodes if (f := ctx.graph.file(n))}
 
 
 def _edge_hits(ctx: _Ctx, g: dict, scan: Scan, from_files: set[str],
@@ -1568,9 +1568,10 @@ def _edge_hits(ctx: _Ctx, g: dict, scan: Scan, from_files: set[str],
         loc = str(d.get("source_location") or "")
         src = d.get("source_file") or fu
         line = int(loc[1:]) if loc.startswith("L") and loc[1:].isdigit() else None
-        # a file node is labelled with its file name (EmberForgeScreen.kt): the code names its stem
-        target = PurePosixPath(fv).stem if ctx.graph.is_file_node(v) else \
-            (ctx.graph.label(v).strip(".()").rpartition(".")[2] or PurePosixPath(fv).stem)
+        # a file node is labelled with its file name (EmberForgeScreen.kt): the code names its stem. The name is
+        # the one the code has now: a simulated move (verinoda.whatif) changes only what ``graph.file`` says
+        stem = PurePosixPath(ctx.graph.G.nodes[v].get("source_file") or fv).stem
+        target = stem if ctx.graph.is_file_node(v) else (ctx.graph.label(v).strip(".()").rpartition(".")[2] or stem)
         conf = d.get("confidence") or "?"
         rel_name = d.get("relation")
         scan.via.setdefault((src, line or 0), set()).add(fv)  # a changed target file makes the edge new

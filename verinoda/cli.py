@@ -1010,6 +1010,14 @@ def cmd_agent_lint(args) -> int:
     return {"wrong": 3, "no_files": 2}.get(res["status"], 0)
 
 
+def cmd_brief(args) -> int:
+    from verinoda import project_brief
+
+    res = project_brief.brief(_repo(args), max_chars=args.max_chars)
+    _emit(args, res, lambda r: _write(project_brief.render(r)))
+    return 2 if res["status"] == "empty" else 0
+
+
 def cmd_datapack(args) -> int:
     from verinoda import datapack
 
@@ -1178,6 +1186,27 @@ def cmd_history(args) -> int:
     return 0 if res["status"] in ("found", "same") else 2
 
 
+def cmd_docs(args) -> int:
+    from verinoda import docrefs
+
+    repo = _repo(args)
+    try:
+        res = docrefs.check(repo, args.paths or None, exclude=args.exclude or None)
+    except ValueError as exc:   # a document argument that names nothing: never "0 documents, ok"
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.fix and (res["renamed"] or res["moved"]):
+        res["fixed"] = docrefs.fix(repo, res)
+        fixed = {f["at"] + f["from"] for f in res["fixed"]}
+        for key in ("renamed", "moved"):
+            res[key] = [f for f in res[key] if f["at"] + f["ref"] not in fixed]
+        res["exit"] = 1 if res["broken"] or res["changed"] or res["renamed"] or res["moved"] else 0
+    _emit(args, res, lambda r: print(docrefs.render(r)))
+    return res["exit"]
+
+
 def cmd_owners(args) -> int:
     from verinoda import ownership
 
@@ -1208,6 +1237,30 @@ def cmd_rename_preview(args) -> int:
     if res["status"] != "found":
         return 2
     return 3 if res["conflicts"] else 0
+
+
+def cmd_what_if(args) -> int:
+    from verinoda import decisions as dm
+    from verinoda import freshness, index, whatif
+
+    repo = _repo(args)
+    _need_graph(repo)
+    fresh = freshness.check(repo)
+    try:
+        res = whatif.run(index.load(repo), args.move, decisions_dir=args.decisions_dir)
+    except (whatif.WhatIfError, dm.DecisionError) as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    res.update(freshness.summary(fresh))
+
+    def render(r: dict) -> None:
+        print(whatif.render(r))
+        _stale_note(r)
+
+    _emit(args, res, render)
+    return 3 if res["status"] == "adds" else 0
 
 
 # -- question plans (docs/DESIGN.md D1-D9) ----------------------------------------
@@ -1664,10 +1717,44 @@ def _decide_baseline(args, repo: Path) -> int:
     return 0
 
 
+def _decide_ask(args, repo: Path) -> int:
+    """``decide ask SOURCE TARGET``: may SOURCE depend on TARGET under the accepted guards (exit 1 forbidden,
+    3 unknown, 2 an error)."""
+    from verinoda import decisions as dm
+    from verinoda import dependency_ask as da
+
+    try:
+        res = da.ask(repo, args.source, args.target, decisions_dir=getattr(args, "decisions_dir", None))
+    except (da.AskError, dm.DecisionError) as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    def render(r: dict) -> None:
+        tgt = r["target"] + (f" ({r['target_path']})" if r.get("target_path") and r["target_path"] != r["target"]
+                             else "" if r["target_kind"] == "file" else " (package)")
+        print(f"{r['verdict']}: {r['source']} -> {tgt}")
+        for x in r["rules"]:
+            print(f"  [{x['verdict']}] {x['decision']} {x['guard']} {x['spec']}: {x['why']}"
+                  + (f" ({x['evidence']})" if x.get("evidence") else ""))
+        for u in r.get("unknown") or []:
+            print(f"  unknown: {u}")
+        sc = r["scope"]
+        print(f"  read: {sc['decisions']} record(s), {sc['guards']} accepted guard(s), {sc['not_applicable']} "
+              "not applying")
+        print(f"  next: {r['next_step']}")
+
+    _emit(args, res, render)
+    return da.exit_code(res)
+
+
 def cmd_decide(args) -> int:
     from verinoda import decisions as dm
 
     repo = _repo(args)
+    if args.decide_cmd == "ask":  # reads the records only: no store or index needed
+        return _decide_ask(args, repo)
     if args.decide_cmd == "check":
         try:
             return _decide_check(args, repo)
@@ -3121,6 +3208,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-memory", action="store_true",
                     help="leave out Claude Code's memory files for the project (~/.claude/projects/.../memory)")
     sp.add_argument("--all", action="store_true", help="list the checks that passed too")
+    sp = add("brief", cmd_brief, "the project brief: name, build, test and check commands, CI commands, layout and "
+                                 "conventions, read from the files now, each line with file:line, under a character "
+                                 "budget (exit 2 = nothing found). Not the decision brief: that is `decide brief`")
+    sp.add_argument("--max-chars", type=int, default=2000, metavar="N",
+                    help="the character budget of the text (200-20000; default 2000)")
     sp = add("datapack", cmd_datapack, "Minecraft datapacks: entity tags checked but never added, objectives written "
                                        "but never read, objectives, teams and boss bars used but never declared, "
                                        "calls to missing functions (from mcfunction or Java), names that break "
@@ -3210,6 +3302,16 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("base", help="the base revision (branch, tag, sha, HEAD~3)")
     c.add_argument("head", nargs="?", default="HEAD", help="the other revision (default HEAD)")
     c.add_argument("--path", help="only this file or folder")
+    sp = sub.add_parser("docs", help="code references in the repository's documents")
+    dsub_docs = sp.add_subparsers(dest="docs_cmd", required=True)
+    c = add("check", cmd_docs, "check the paths and line references the repository's Markdown, reStructuredText and "
+                               "text documents cite against the working tree (exit 1: a reference is broken, "
+                               "renamed, moved or its lines changed)", parent=dsub_docs)
+    c.add_argument("paths", nargs="*", help="documents or folders to check (default: every tracked document)")
+    c.add_argument("--exclude", action="append", metavar="GLOB",
+                   help="leave out documents matching this glob (repeatable), e.g. a vendored or template folder")
+    c.add_argument("--fix", action="store_true", help="rewrite renamed paths and moved line numbers in place (the "
+                                                      "reference's own characters only); the rest stays flagged")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
@@ -3223,6 +3325,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("symbol", help="the symbol: Class.method, path/file.py::name or a node id")
     sp.add_argument("new_name", help="the new name (an identifier)")
     sp.add_argument("--max-sites", type=int, default=300, help="entries per list (default 300)")
+    sp = add("what-if", cmd_what_if, "simulate moving or renaming files and folders: the edge guards of the "
+                                     "decision records and the dependency cycles re-checked on the new paths, and "
+                                     "the violations and cycles the move would add or remove; edits nothing "
+                                     "(exit 3 = it adds some, 2 = a bad move)")
+    sp.add_argument("--move", action="append", required=True, metavar="OLD=NEW",
+                    help="a file or folder of the index and its new path (NEW/ or an existing folder: into it; "
+                         "onto an existing file: a merge); repeatable")
+    sp.add_argument("--decisions-dir", metavar="DIR", help="the folder of the decision records (as for decide check)")
     sp = add("analyze", cmd_analyze, "answer a question as claims with evidence, critique and unknowns")
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",
@@ -3329,6 +3439,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c.add_argument("--write", metavar="FILE.md", help="write it to this file in the repository (only a file "
                                                       "`decide toc` wrote before is overwritten)")
+    c = add("ask", cmd_decide, "before writing a dependency: may SOURCE depend on TARGET under the accepted guards "
+                               "(allowed / restricted / forbidden with the rule; exit 1 forbidden, 3 unknown)",
+            parent=dsub)
+    c.add_argument("source", help="the project file that would depend (it may not exist yet)")
+    c.add_argument("target", help="a project file, a module (app.db.store) or a package (psycopg)")
+    c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
     c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED; exit 3 when "
                                  "something could not be checked - no record while ADR-like files exist, a guard "
                                  "that checked no file, edge or manifest: usable in CI)", parent=dsub)

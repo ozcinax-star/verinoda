@@ -80,8 +80,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 7.3 | **Ask before writing a dependency** | Check a proposed dependency against the rules before the code exists | Sonargraph MCP `check_proposed_dependency` | an MCP call answers allowed / forbidden with the rule |
-| 7.4 | **What-if refactoring** | Simulate moving or renaming modules and re-check rules and cycles without editing | Sonargraph, Lattix | a simulated move reports the violations it would add or remove |
 | 7.5 | **DSM view and C4 model check** | Dependency structure matrix; a C4 model compared with the real graph | Lattix, NDepend, IntelliJ, Structurizr | the matrix in `ui`; model edges without code edges listed |
 | 7.6 | **Guards written as programs** | A decision record's guard as a small script with graph access; a pre-commit hook | Archgate | a script guard runs in `decide check` |
 
@@ -119,7 +117,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 11.1 | **Bi-temporal claims** | Each claim records when it held (commits) and when it was recorded; invalidated, never deleted | Zep Graphiti, mem0 | "which claims held at v0.2" answered |
 | 11.2 | **Memory event history and expiry** | ADD, UPDATE and DELETE events per learning; a time-to-live | mem0 | `memory history ID` shows the events |
 | 11.3 | **Background consolidation** | Between sessions: re-verify stale claims, merge duplicates | Letta sleep-time agents, Cognee memify | stale claims re-checked by the background update |
-| 11.4 | **Project brief** | A small, bounded, always-current summary built from verified claims (build and test commands, layout, conventions) | Letta memory blocks, Cline Memory Bank, Zencoder repo info | `verinoda brief` under a character budget, each line with evidence |
 | 11.5 | **Typed notes and wikilinks** | Notes with `[category] fact #tag` lines and `[[symbol]]` links; two-way sync with Markdown files | Basic Memory | a note edited in an editor updates the index |
 | 11.6 | **Glob-scoped context** | Decisions, notes and claims attached to globs surface when an agent touches matching files | Kiro steering, Cursor rules | an MCP read of a file returns its scoped notes |
 
@@ -127,7 +124,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 12.1 | **Docs coupled to code, drift check and trivial auto-fix** | Code references in ordinary repo docs checked on each change; renames and moved lines fixed, the rest flagged; a CI check | Swimm | `verinoda docs check` fails on a broken reference and `--fix` repairs a rename |
 | 12.5 | **Undocumented decisions** | Find structural choices no decision record covers (a single storage path, an exclusive library) | Codex ADR workflow | candidates listed as `weak_inference` for the user to record or dismiss |
 | 12.6 | **Specs traced to code and tests** | Requirement criteria (EARS style) linked to code and tests through claims; criteria with no evidence reported | Kiro specs, GitHub spec-kit, Tessl | `verinoda spec check` lists unevidenced criteria |
 | 12.8 | **Issue and chat sources (opt-in)** | PR, issue, Jira and Slack threads as "why" evidence, with contradictions between sources shown | Unblocked, Glean, Tabnine | a why-answer cites a PR discussion |
