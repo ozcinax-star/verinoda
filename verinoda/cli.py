@@ -260,7 +260,18 @@ def _r_trace(res: dict) -> None:
             kind = f" ({h['kind']})" if h.get("kind") and h.get("kind") != "call" else ""
             if h.get("kind") == "callback" and h.get("context"):
                 kind = f" (callback: {h['context']})"
+            if h.get("kind") == "cross_service":
+                what = (f"{h.get('method', '')} {h.get('url', '')}".strip() if h.get("protocol") == "http"
+                        else f"'{h['event']}'" if h.get("event") else h.get("route", ""))
+                kind = f" (cross-service {h.get('protocol', '')}: {what}; handler declared at {h.get('route_at')})"
             print(f"   {h['from']} -{h['relation']}[{h['confidence']}]-> {h['to']}  @{h['at']}{kind}{extra}")
+            for n in h.get("notes") or []:
+                print(f"     assumed: {n}")
+    for a in res.get("cross_service_ambiguous") or []:
+        print(f" ambiguous call at {a['at']}: {a.get('method') or ''} {a.get('url', '')} names several handlers "
+              "(no edge made):")
+        for c in a.get("candidates") or []:
+            print(f"   {c['route']}  {c['at']}")
     if res.get("reachability"):
         print(f" reachability: {res['reachability']}")
     if res.get("note"):
@@ -395,6 +406,11 @@ def _r_update(r: dict) -> None:
 
 
 def _r_derived(r: dict) -> None:
+    from verinoda import facts
+
+    line = facts.update_line(r.get("facts"))
+    if line:
+        print(f"  {line}")
     for name, d in (r.get("derived") or {}).items():
         if isinstance(d, dict) and d.get("error"):
             print(f"  warning: derived {name} not refreshed: {d['error']}")
@@ -721,6 +737,13 @@ def cmd_update(args) -> int:
                     st, repo, limit=consolidate.ON_UPDATE_LIMIT, budget=consolidate.ON_UPDATE_BUDGET_S))
             except Exception as exc:     # the update itself succeeded
                 res["consolidated"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+            if (res.get("consolidated") or {}).get("restored") and isinstance(res.get("facts"), dict):
+                from verinoda import facts   # claims came back: the facts resting on them are recomputed
+
+                try:
+                    res["facts"] = facts.after_consolidate(st, repo, res["facts"])
+                except Exception as exc:  # the update itself succeeded; said, not raised
+                    res["facts"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
     _emit(args, res, _r_update)
     return 1 if res.get("error") else 0
 
@@ -1296,6 +1319,9 @@ def cmd_query(args) -> int:
     except query_filters.FilterError as exc:
         raise SystemExit(f"error: {exc}") from None
     retrieval.attach_freshness(res, g, freshness.check(repo))  # never silently answer from an older tree
+    from verinoda import facts
+
+    facts.attach_leads(res, repo, args.question)  # named facts the question names: leads with their status
     if args.json:
         _write(_dump(res))
     else:  # the skeleton-first plain text a model reads (docs/DESIGN.md D20)
@@ -1359,6 +1385,34 @@ def cmd_trace(args) -> int:
     res.update(freshness.summary(fresh))
     _emit(args, res, _r_trace)
     return 0 if res["status"] == "found" else 2
+
+
+def cmd_routes(args) -> int:
+    """The route table and every client call with a URL: linked, ambiguous, unmatched or a method mismatch."""
+    from verinoda import cross_service, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    g = index.load(repo, augment=False)
+    side = index._read_sidecar(repo) or {}
+    block = side.get("cross_service") or {}
+    old = block.get("files") if block.get("facts_version") == cross_service.FACTS_VERSION else None
+    _files, edges, report, _parsed = cross_service.collect(g, old=old)
+    report["edges"] = [{"from": g.label(u), "from_id": u, "to": g.label(v), "to_id": v, "relation": d["relation"],
+                        "at": f"{d['source_file']}:{d['source_location'][1:]}", "route_at": d.get("route_at"),
+                        "context": d.get("context"), **({"notes": d["notes"]} if d.get("notes") else {})}
+                       for u, v, d in edges]
+    report["derived_by"] = cross_service.ORIGIN
+
+    def render(r: dict) -> None:
+        print(cross_service.render(r, show_routes=not args.no_table))
+        if r["edges"]:
+            print("edges:")
+            for e in r["edges"]:
+                print(f"  {e['from']} -{e['relation']}-> {e['to']}  @{e['at']}  ({e['context']})")
+
+    _emit(args, report, render)
+    return 0
 
 
 def cmd_tour(args) -> int:
@@ -2919,7 +2973,60 @@ def _observe_summary(res: dict, g, symbols: list[str], selected: list[str] | Non
             out[k] = res[k]
     if res.get("logs"):
         out["logs"] = res["logs"].get("stderr")
+    if res.get("runtime_flaws") is not None:
+        out["runtime_flaws"] = _flaws_summary(res["runtime_flaws"])
     return {k: v for k, v in out.items() if v is not None}
+
+
+def _flaws_summary(block: dict) -> dict:
+    """The observe run's ``runtime_flaws`` block, capped, findings without their evidence records."""
+    from verinoda.runtime import flaws as flawmod
+
+    out = flawmod.without_evidence(block)
+    for k in flawmod.FINDING_KEYS:
+        if k in out:
+            out[k] = [{**f, "tests": f["tests"][:3]} if "tests" in f else f for f in out[k][:OBSERVE_LIST_CAP]]
+    return out
+
+
+def _r_flaws(fl: dict) -> None:
+    if not fl.get("recorded"):
+        print(f"  runtime flaws: not recorded - {fl.get('why')}")
+        return
+    n1, rep, slow = fl.get("n_plus_one") or [], fl.get("repeated_sql") or [], fl.get("slow_paths") or []
+    sql = fl.get("sql") or {}
+    print(f"  runtime flaws of run {fl.get('run_id')} (observed in this run, not 'always'): "
+          f"{fl.get('n_plus_one_total', 0)} N+1, {fl.get('repeated_sql_total', 0)} repeated SQL, "
+          f"{fl.get('slow_paths_total', 0)} slow path(s); {sql.get('executions', 0)} SQL execution(s)"
+          + ("" if fl.get("complete") else " - INCOMPLETE recording, counts are lower bounds"))
+
+    def path(f: dict) -> str:
+        p = " -> ".join(f"{x['qual']} ({x['path']}:{x['line']})" for x in f.get("call_path") or [])
+        return p + (" (middle frames cut)" if f.get("call_path_cut") else "")
+
+    for f in n1:
+        it = f["interpretation"]
+        more = f" (+{f['n_tests'] - 1} more test(s))" if f.get("n_tests", 1) > 1 else ""
+        print(f"  N+1: `{f['statement']}` ran {f['executions']} times in {f['test']}{more}, from the "
+              f"{f['loop']['kind']} loop at {f['loop']['path']}:{f['loop']['line']}")
+        print(f"    call path: {path(f)}")
+        print(f"    {it['status']}: {it['text']}" + (f"; fix: {it['fix']}" if it.get("fix") else ""))
+    for f in rep:
+        also = " (the N+1 above)" if f.get("also_n_plus_one") else ""
+        sites = f.get("n_sites") or 1
+        print(f"  repeated SQL{also}: `{f['statement']}` with the same parameters {f['max_repeats']} times in "
+              f"{f['test']}, at {f['cite']}" + (f" and {sites - 1} other call site(s)" if sites > 1 else ""))
+        print(f"    call path: {path(f)}")
+    for f in slow:
+        fn = f["function"]
+        share = f" ({f['share_of_test']:.0%} of the test phase)" if f.get("share_of_test") is not None else ""
+        print(f"  slow path: {fn['qual']} ({fn['path']}:{fn['line']}) ~{f['total_ms']:.0f} ms total, "
+              f"~{f['self_ms']:.0f} ms self{share} in {f['test']}; hottest line {f['cite']}")
+        print(f"    call path: {path(f)}")
+    if not (n1 or rep or slow):
+        th = fl.get("thresholds") or {}
+        print(f"  no N+1 ({th.get('n_plus_one')}+ reads in a loop), repeated SQL ({th.get('repeated')}+ identical) "
+              f"or slow path ({th.get('slow_ms')} ms and {th.get('slow_share')} of a test phase) in this run")
 
 
 def _r_observe(r: dict) -> None:
@@ -2950,6 +3057,8 @@ def _r_observe(r: dict) -> None:
         print(f"  target {t!r} is not a graph symbol (matched by name only)")
     print(f"  recorded: {r.get('edges_total')} in-repo edge(s), {r.get('boundary_total')} boundary call site(s), "
           f"{r.get('evidence_records')} evidence record(s) (not printed; `--json` for the summary)")
+    if r.get("runtime_flaws") is not None:
+        _r_flaws(r["runtime_flaws"])
     cost = r.get("cost") or {}
     print(f"  cost: cpu {cost.get('cpu_s')} s, wall {cost.get('wall_s')} s, run {cost.get('duration_s')} s")
     for lim in r.get("limits") or []:
@@ -2962,6 +3071,7 @@ def _r_observe(r: dict) -> None:
 
 def cmd_observe(args) -> int:
     from verinoda import index
+    from verinoda.runtime import flaws as flawmod
     from verinoda.runtime import trace as rt
 
     repo = _repo(args)
@@ -2983,8 +3093,14 @@ def cmd_observe(args) -> int:
                                 + (" --for " + " ".join(symbols) if symbols else "") + "`"}
             _emit(args, out, _r_observe)
             return 3
+    th = {"n_plus_one": args.n_plus_one, "repeated": args.repeated, "slow_ms": args.slow_ms,
+          "slow_share": args.slow_share}
+    try:
+        flawmod.thresholds(th)
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from None
     res = rt.observe(st, repo, ids, timeout=args.timeout, snapshot=st.latest_snapshot(), graph=g,
-                     targets=symbols, mode=args.mode)
+                     targets=symbols, mode=args.mode, flaws=not args.no_flaws, flaw_thresholds=th)
     summary = _observe_summary(res, g, symbols, selected)
     _emit(args, summary, _r_observe)
     # 3: the run did not establish what was asked (incomplete trace, or reach asked with the tracer off)
@@ -3678,6 +3794,52 @@ def cmd_memory(args) -> int:
     return 0
 
 
+def cmd_fact(args) -> int:
+    """Named derived facts: add, list, show, refresh, retire (verinoda/facts.py)."""
+    import sqlite3
+
+    from verinoda import facts
+
+    repo = _repo(args)
+    sub = args.fact_cmd
+    if sub == "refresh" and (args.limit < 0 or args.budget < 0):
+        print("error: --limit and --budget must be 0 or more", file=sys.stderr)
+        return 2
+    st = _store(repo, create=sub == "add")
+    try:
+        if sub == "add":
+            if bool(args.search) == bool(args.from_claim or args.from_fact):
+                raise facts.FactError("give either --from-claim / --from-fact or --search")
+            if args.search:
+                facts.add_search(st, repo, args.name, args.search, fixed=args.fixed, ignore_case=args.ignore_case,
+                                 paths=args.path or None)
+            else:
+                facts.add_derived(st, repo, args.name, claims=args.from_claim, facts=args.from_fact)
+            res, render = facts.show(st, args.name, repo=repo), facts.render_show
+        elif sub == "list":
+            res, render = facts.listing(st, status=args.status, repo=repo), facts.render_list
+        elif sub == "show":
+            res, render = facts.show(st, args.name, repo=repo), facts.render_show
+        elif sub == "retire":
+            res = facts.retire(st, args.name, reason=args.reason)
+            render = (lambda r: print(f"retired {r['retired']}" + (f"; now stale: {', '.join(r['now_stale'])}"
+                                                                     if r["now_stale"] else "")))
+            facts.invalidate(st, repo, actor="fact retire")   # the facts resting on it go stale now
+        else:
+            res = facts.refresh(st, repo, args.name or None, limit=args.limit, budget=args.budget,
+                                verify_claims=not args.no_verify)
+            render = facts.render_refresh
+    except (facts.FactError, sqlite3.IntegrityError) as exc:   # a constraint another process won: the same refusal
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    finally:
+        st.close()
+    _emit(args, res, (lambda r: _write(render(r))) if sub != "retire" else render)
+    if sub == "refresh":
+        return 1 if res["errors"] else 0
+    return 0
+
+
 def cmd_install(args) -> int:
     from verinoda import agents
 
@@ -4192,6 +4354,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("routes", cmd_routes, "the route table (Flask, FastAPI, Django, Express, NestJS, Next.js, Spring, ...) "
+                                   "and every client call with a URL (fetch, axios, requests, httpx, ...): linked to "
+                                   "one handler, ambiguous, unmatched or a method mismatch; tRPC, gRPC, GraphQL and "
+                                   "event edges counted")
+    sp.add_argument("--no-table", action="store_true", help="leave out the route table (text output)")
     sp = add("export", cmd_export, "the graph for other tools: GraphML (Gephi, yEd), Neo4j Cypher, an Obsidian vault "
                                    "or an SVG drawing; each edge with its location and the status it can carry "
                                    "unchecked, no code, no machine paths")
@@ -4664,6 +4831,38 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--ref")
     sp.add_argument("--topic", required=True)
 
+    sp = sub.add_parser("fact", help="named derived facts: a claim (or several) or a search kept under a name, "
+                                      "with what it rests on; stale when that changes, recomputed on refresh")
+    fsub_facts = sp.add_subparsers(dest="fact_cmd", required=True)
+    c = add("add", cmd_fact, "keep a fact: claims taken together (--from-claim, --from-fact; its status is the "
+                             "weakest of theirs) or a search (--search; its sites and the files it read)",
+            parent=fsub_facts)
+    c.add_argument("name", help="letters, digits, '.', '_' and '-'")
+    c.add_argument("--from-claim", action="append", metavar="ID", help="a claim it rests on (repeatable)")
+    c.add_argument("--from-fact", action="append", metavar="NAME", help="an earlier fact it rests on (repeatable)")
+    c.add_argument("--search", metavar="PATTERN", help="a Python regular expression (a fixed string with --fixed), "
+                                                       "searched as `verinoda search` does")
+    c.add_argument("-F", "--fixed", action="store_true", help="the search pattern is a fixed string")
+    c.add_argument("-i", "--ignore-case", action="store_true", help="the search ignores case")
+    c.add_argument("--path", action="append", metavar="PATH", help="search only under this file or folder "
+                                                                    "(repeatable)")
+    c = add("list", cmd_fact, "the facts with their status now (never stronger than their inputs)", parent=fsub_facts)
+    c.add_argument("--status", help="only the facts with this status")
+    c = add("show", cmd_fact, "a fact: its statement, what it rests on, its sites or evidence, its history",
+            parent=fsub_facts)
+    c.add_argument("name")
+    c = add("refresh", cmd_fact, "recompute stale facts (or the ones named): re-run their search, re-verify their "
+                                 "stale claims (static); a changed result is shown old against new",
+            parent=fsub_facts)
+    c.add_argument("name", nargs="*")
+    c.add_argument("--limit", type=int, default=50, help="facts to recompute at most (default 50)")
+    c.add_argument("--budget", type=float, default=60.0, help="seconds to spend at most (default 60)")
+    c.add_argument("--no-verify", action="store_true", help="read the claims' statuses as they are, run no verify")
+    c = add("retire", cmd_fact, "retire a fact (kept with its history; the facts resting on it go stale)",
+            parent=fsub_facts)
+    c.add_argument("name")
+    c.add_argument("--reason")
+
     sp = sub.add_parser("feedback", help="user critique of earlier claims, processed as hypotheses")
     fsub = sp.add_subparsers(dest="fb_cmd", required=True)
     for name in ("add", "process", "resolve", "show", "list"):
@@ -4813,6 +5012,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--timeout", type=float, help="seconds (default: twice the experiment timeout)")
     sp.add_argument("--mode", choices=TRACE_MODES, default="auto",
                     help="tracer: auto (sys.monitoring, else setprofile), monitoring, setprofile, off (baseline)")
+    sp.add_argument("--no-flaws", action="store_true",
+                    help="do not record SQL statements and sampled stacks (no runtime_flaws block)")
+    sp.add_argument("--n-plus-one", type=int, metavar="N",
+                    help="runtime flaws: a read run N+ times from one loop in a test phase is an N+1 (default 5)")
+    sp.add_argument("--repeated", type=int, metavar="N",
+                    help="runtime flaws: the same statement and parameters N+ times in a test phase (default 3)")
+    sp.add_argument("--slow-ms", type=float, metavar="MS",
+                    help="runtime flaws: a slow path takes MS+ ms of a test phase (default 100) ...")
+    sp.add_argument("--slow-share", type=float, metavar="F",
+                    help="... and at least this share of it, 0..1 (default 0.2)")
     sp = add("probe", cmd_probe, "call one changed Python function on many generated inputs at the base and in the "
                                  "working tree (isolated runs) and report behaviour differences, stated properties "
                                  "that fail and undeclared exceptions (exit 3 unless nothing was found)")

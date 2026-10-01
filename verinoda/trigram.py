@@ -577,6 +577,34 @@ def search(repo: Path, pattern: str, *, ignore_case: bool = False, fixed: bool =
     return res
 
 
+def skipped_files(repo: Path, scope: list[str] | None = None) -> list[str]:
+    """The indexed files under ``scope`` (repository-relative prefixes; none: all) that the index holds no text
+    for because the rules skip them (over :data:`MAX_FILE_BYTES`, a NUL byte in the first 8 KiB, not a regular
+    file): a search never reads them, so a match in one is never found. Read from the index as last refreshed
+    (an empty list when there is no index yet). Raises :class:`SearchError` when the index cannot be read."""
+    repo = Path(repo).resolve()
+    db = db_path(repo)
+    if not db.is_file():
+        return []
+    fold = os.name == "nt"
+    pre = [s.lower() if fold else s for s in scope or []]
+    conn = _connect(db)
+    try:
+        # a text file of 3 bytes or more always has a trigram: an empty set at that size is a skipped file
+        rows = conn.execute("SELECT path FROM files WHERE mtime_ns IS NOT NULL AND size >= 3 AND length(tris) = 0"
+                            " ORDER BY path").fetchall()
+    except sqlite3.Error as exc:
+        raise SearchError(f"the search index could not be read: {exc}") from None
+    finally:
+        conn.close()
+    out = []
+    for (rel,) in rows:
+        g = rel.lower() if fold else rel
+        if not pre or any(g == s or g.startswith(s + "/") for s in pre):
+            out.append(rel)
+    return out
+
+
 def render(res: dict) -> str:
     out = [f"{m['at']}: {m['text']}" for m in res["matches"]]
     tail = (f"{res['total']} match(es) in {res['files_matched']} file(s); read {res['candidates']} of "

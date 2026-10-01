@@ -829,6 +829,9 @@ class AtlasTools:
                         self._query_memo[key] = (deps, res)
                         while len(self._query_memo) > QUERY_MEMO_SIZE:
                             self._query_memo.popitem(last=False)
+            from verinoda import facts
+
+            facts.attach_leads(res, self.repo, q)  # read on every call: facts change without a file changing
             if fmt == "json":
                 return _jsonable(res)
             # the escaped JSON string must still fit the response cap
