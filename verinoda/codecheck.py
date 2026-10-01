@@ -72,7 +72,7 @@ from verinoda.codecheck_facts import Member, Sig, dotted
 
 CHECK_VERSION = "6"   # answers cached by an older rule set are not reused
 PROJECT_CONTENT = Path("<project-content>")   # a cache dependency on the content of every project file
-VERDICTS = ("absent", "not_installed", "unknown", "guarded", "exists")
+VERDICTS = ("absent", "mismatch", "not_installed", "unknown", "guarded", "exists")   # mismatch: --checker
 SITE_KINDS = ("import", "attribute", "kwarg", "dict_key")
 SKIP_DIRS = {".git", ".hg", ".svn", ".verinoda", "__pycache__", "node_modules", ".tox", ".nox", ".mypy_cache",
              ".pytest_cache", ".ruff_cache", ".eggs", "site-packages", *cenv.VENV_DIRS}
@@ -3836,11 +3836,14 @@ def _targets(repo: Path, paths: list[str] | None, diff: str | None
 
 def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None, snippet: str | None = None,
           as_path: str | None = None, env: str | None = "auto", include_exists: bool = False,
-          use_cache: bool = True, budget_s: float | None = None, trust_env: bool = True) -> dict:
+          use_cache: bool = True, budget_s: float | None = None, trust_env: bool = True,
+          checker: str | None = None, checker_timeout: float | None = None) -> dict:
     """Check the names used in files, a diff or a snippet (see the module docstring). ``budget_s``: stop
     starting new files after that many seconds (the result says which were not checked). ``trust_env=False``
     (the MCP server): ``env`` may name only a virtual environment whose base interpreter passes the rule of
-    ``auto`` (ValueError otherwise)."""
+    ``auto`` (ValueError otherwise). ``checker``: also run the project's own type checker (``tsc``, ``pyright``,
+    ``mypy`` or ``auto``; :mod:`verinoda.codecheck_external`), which starts programs of the project - never from
+    the MCP server."""
     from verinoda import precise
 
     t0 = time.perf_counter()
@@ -3862,6 +3865,7 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     ts_targets: list[tuple[str, Path, set[int] | None]] = []     # imports checked by codecheck_ts (D46)
     ts_suffixes = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
     checked_py: list[tuple[Path, str | None, str]] = []   # the Python files checked (a snippet: with its text)
+    py_targets: list[tuple[str, Path, set[int] | None]] = []   # the Python files a type checker is given
     if snippet is not None:
         rel = (as_path or "snippet.py").replace("\\", "/")
         abs_path = (repo / rel).resolve()
@@ -3922,7 +3926,20 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             files.append({"path": rel, "sites": len(got), **({"cached": True} if cached else {}),
                           **({"error": err} if err else {})})
             checked_py.append((f, None, rel))
+            py_targets.append((rel, f, lines))
             sites += got
+    ext_res = None
+    if checker:
+        from verinoda import codecheck_external
+
+        if snippet is not None:
+            notes.append(f"--checker {checker}: a type checker reads files on disk, so a snippet is not given to it")
+            unchecked_why.append("the snippet was not given to the type checker")
+        else:
+            ext_res = codecheck_external.run_checkers(repo, checker, py_targets, ts_targets, env=env,
+                                                      timeout=checker_timeout)
+            notes += ext_res["incomplete"]
+            unchecked_why += ext_res["incomplete"]
     java_res = None
     if java_targets:
         from verinoda import codecheck_java
@@ -3944,14 +3961,18 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
                                                              if k.lower().endswith(ts_suffixes)})
         files += ts_res["files"]
         sites += ts_res["sites"]
-        # only the imports are checked: the rest of such a file (calls, members, types) is never passed
-        read = [f["path"] for f in ts_res["files"] if not f.get("error")]
+        # only the imports are checked: the rest of such a file (calls, members, types) is never passed, unless
+        # the TypeScript compiler type-checked it (--checker)
+        covered = ext_res["covered"] if ext_res is not None else set()
+        read = [f["path"] for f in ts_res["files"] if not f.get("error") and f["path"] not in covered]
         unchecked += [(rel, other_language(rel) or "TypeScript", "imports checked; calls, members and types are "
                        "not (they need the TypeScript compiler)") for rel in read]
         if read:
             what = f"{len(read)} TypeScript/JavaScript file{'s' if len(read) > 1 else ''} checked for imports only"
             notes.append(what + " (calls, members and types are not checked)")
             unchecked_why.append(what)
+    if ext_res is not None:
+        sites = codecheck_external.merge(sites, ext_res["sites"])
     bad = [f for f in files if f.get("error")]
     if bad:   # a requested file that could not be read or parsed was not checked: "0 absent" does not cover it
         notes.append(f"{len(bad)} file{'s' if len(bad) > 1 else ''} not checked: " +
@@ -4003,10 +4024,14 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     # that, but something asked for was not checked (another language, a file that does not parse or cannot be
     # read, the walk limit or the time budget), so "0 absent" does not cover it; 0: all of it was checked
     why_exit = [f"{counts['absent']} absent"] if counts["absent"] else []
+    if counts["mismatch"]:
+        why_exit.append(f"{counts['mismatch']} call or type mismatch{'es' if counts['mismatch'] > 1 else ''} "
+                        "reported by the type checker")
     if mismatches:
         why_exit.append(f"{mismatches} installed package version{'s' if mismatches > 1 else ''} differ from the lock")
     checked = [f for f in files if not f.get("error")]   # a file that does not parse was not checked
-    status = ("absent" if counts["absent"] else "lock_mismatch" if mismatches else
+    status = ("absent" if counts["absent"] else "mismatch" if counts["mismatch"] else
+              "lock_mismatch" if mismatches else
               "unsupported_language" if others and not files else "incomplete" if notes else
               "nothing_to_check" if not checked else "checked")
     nothing = [] if status != "nothing_to_check" else [
@@ -4031,8 +4056,12 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
             "Python, Java and Kotlin: code in other languages is listed under not_checked, never checked",
             *[f"Java: {n}" for n in (java_res or {}).get("notes", [])],
             *[f"TypeScript/JavaScript: {n}" for n in (ts_res or {}).get("notes", [])],
-            *(["TypeScript/JavaScript: imports only (a member's type needs the compiler)"] if ts_res else []),
-            "existence and signature shape only: a real name used wrongly is not detected",
+            *(["TypeScript/JavaScript: imports only (a member's type needs the compiler)"]
+              if ts_res and any(u[2].startswith("imports checked") for u in unchecked) else []),
+            *([*ext_res["notes"], "type checker sites (status observed) are the checker's errors from this run, on "
+               "the lines in scope; its warnings are counted, not listed"] if ext_res is not None else []),
+            "existence and signature shape only: a real name used wrongly is not detected"
+            + (" (except what the type checker reported)" if ext_res is not None else ""),
             "unknown = not checked (open container or receiver type not known), never 'fine'",
             "unknown Python sites are ranked HIGH (likely a mistake), MEDIUM or LOW; LOW ones are counted by cause "
             "in unknown_summary and listed only with --all (include_exists)",
@@ -4042,6 +4071,8 @@ def check(repo: Path, paths: list[str] | None = None, *, diff: str | None = None
     }
     if java_res is not None:
         res["java"] = {"builds": java_res["builds"], "seconds": java_res["seconds"]}
+    if ext_res is not None:
+        res["checker"] = ext_res["runs"]
     if unchecked:
         res["not_checked"] = [{"path": rel, "language": lang, "why": why}
                               for rel, lang, why in unchecked[:NOT_CHECKED_LISTED]]

@@ -38,7 +38,8 @@ LEVEL_ORDER = {"error": 0, "warning": 1, "note": 2, "none": 3}
 # container is the standard library or the project's own code, strong_inference when it is an installed package,
 # a stub, a classpath or the environment's sys.path (what was installed or built here, which CI's may not match);
 # not_installed is the environment checked, which CI's may not be; guarded and exists are not findings
-CHECK_STATUS = {"absent": "statically_verified", "not_installed": "strong_inference", "unknown": "unknown"}
+CHECK_STATUS = {"absent": "statically_verified", "mismatch": "observed", "not_installed": "strong_inference",
+                "unknown": "unknown"}
 SARIF_LEVELS = ("none", "note", "warning", "error")
 MAX_MESSAGE = 300
 MAX_SARIF_BYTES = 100_000_000
@@ -210,8 +211,10 @@ def from_check(res: dict) -> dict:
             continue
         detail = s.get("message") or s.get("why") or ""
         status = CHECK_STATUS[v]
-        if v == "absent" and (s.get("source") not in ("stdlib", "project")
-                              or str(s.get("container") or "").startswith("sys.path")):
+        if s.get("source") == "checker":   # the project's own type checker said so in this run
+            status = "observed" if v != "unknown" else "unknown"
+        elif v == "absent" and (s.get("source") not in ("stdlib", "project")
+                                or str(s.get("container") or "").startswith("sys.path")):
             status = "strong_inference"   # judged against what is installed or built here
         run.add(f"check/{v}/{s.get('kind')}", f"{v} {s.get('kind')}",
                 f"{v} {s.get('kind')} {s.get('expr') or ''}" + (f": {detail}" if detail else ""), status,

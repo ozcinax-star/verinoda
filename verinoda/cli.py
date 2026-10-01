@@ -3472,7 +3472,9 @@ CHECK_UNKNOWN_SHOWN = 20
 
 def _r_check(r: dict) -> None:
     s, env = r["summary"], r["env"]
-    print(f"verinoda check: {s['absent']} absent, {s['not_installed']} not installed, {s['unknown']} unknown, "
+    print(f"verinoda check: {s['absent']} absent, "
+          + (f"{s['mismatch']} mismatch{'es' if s['mismatch'] != 1 else ''}, " if s.get("mismatch") else "")
+          + f"{s['not_installed']} not installed, {s['unknown']} unknown, "
           f"{s['guarded']} guarded, {s['exists']} exist ({s['sites']} sites in {s['files']} "
           f"file{'' if s['files'] == 1 else 's'}; {r['scope']})"
           + (f"; {s['not_checked']} file{'' if s['not_checked'] == 1 else 's'} NOT CHECKED" +
@@ -3488,6 +3490,14 @@ def _r_check(r: dict) -> None:
                                                                   " (not complete: library names are unknown)")
               + f", {b['jars']} jars, {cls.get('jars', 0)} library classes, {cls.get('project', 0)} project types"
               + (f", JDK {b['release']} API" if b.get("jdk") else ", no JDK found"))
+    for run in r.get("checker") or []:
+        print(f"checker: {run['tool']}" + (f" {run['version']}" if run.get("version") else "") + f" - {run['status']}"
+              + (f" ({run['exe']}" + (f", {run['config']}" if run.get("config") else "") + ")" if run.get("exe") else "")
+              + (f", {run['errors']} errors, {run['warnings']} warnings, {run['seconds']} s"
+                 if run["status"] == "ran" else "")
+              + (f": {run['note']}" if run.get("note") else ""))
+        if run.get("next_step") and run["status"] != "ran":
+            print(f"    next: {run['next_step']}")
     for name, text in (env.get("packages_checked") or {}).items():
         print(f"  {name} {text}")
     for m in env.get("lock_mismatches") or []:
@@ -3503,7 +3513,8 @@ def _r_check(r: dict) -> None:
             unknown += 1
             if unknown > CHECK_UNKNOWN_SHOWN:
                 continue
-        label = "ABSENT" if v == "absent" else f"unknown {site['rank'].upper()}" if site.get("rank") else v
+        label = "ABSENT" if v == "absent" else "MISMATCH" if v == "mismatch" else \
+            f"unknown {site['rank'].upper()}" if site.get("rank") else v
         print(f"{site['at']}  {label}  {site['kind']} {site['expr']}")
         if v == "unknown" and site.get("rank") in ("high", "medium") and site.get("rank_why"):
             print(f"    {site['rank_why']}")
@@ -3515,6 +3526,8 @@ def _r_check(r: dict) -> None:
                                          for n in site["nearest"]))
         if site.get("elsewhere"):
             print("    defined elsewhere: " + ", ".join(f"{e['qualname']} ({e['at']})" for e in site["elsewhere"]))
+        if site.get("confirmed_by"):
+            print(f"    confirmed by {site['confirmed_by']}")
         if site.get("next_step") and (v in ("absent", "not_installed") or site.get("rank") in ("high", "medium")):
             print(f"    next: {site['next_step']}")
     if unknown > CHECK_UNKNOWN_SHOWN:
@@ -3541,9 +3554,9 @@ def cmd_check(args) -> int:
     if args.deps:
         from verinoda import depcheck
 
-        if args.paths or args.diff is not None or args.stdin or args.as_path:
-            raise SystemExit("error: --deps checks the whole project's manifests; do not also give PATHs, --diff "
-                             "or --stdin")
+        if args.paths or args.diff is not None or args.stdin or args.as_path or args.checker:
+            raise SystemExit("error: --deps checks the whole project's manifests; do not also give PATHs, --diff, "
+                             "--stdin or --checker")
         try:
             res = depcheck.check_deps(repo, env=args.env)
         except ValueError as exc:
@@ -3562,8 +3575,11 @@ def cmd_check(args) -> int:
         as_path = None
         if args.paths and args.diff is not None:
             raise SystemExit("error: give PATHs or --diff, not both")
+    if args.checker_timeout is not None and (not args.checker or args.checker_timeout <= 0):
+        raise SystemExit("error: --checker-timeout goes with --checker and is a positive number of seconds")
     res = codecheck.check(repo, args.paths or None, diff=args.diff, snippet=snippet, as_path=as_path,
-                          env=args.env, include_exists=args.all, use_cache=not args.no_cache)
+                          env=args.env, include_exists=args.all, use_cache=not args.no_cache,
+                          checker=args.checker, checker_timeout=args.checker_timeout)
     if not _emit_sarif(args, res, "check"):
         _emit(args, res, _r_check)
     return int(res["exit"])
@@ -4855,8 +4871,9 @@ def build_parser() -> argparse.ArgumentParser:
                                  "dict keys Python code uses exist in the project's environment, and the classes, "
                                  "methods (Java: with their number of arguments), fields, properties and Mixin "
                                  "targets Java and Kotlin code uses exist in the project, its classpath or the JDK; "
-                                 "TypeScript/JavaScript: imports only (exit 3: something is "
-                                 "absent, or an installed package version differs from the lock file; exit 4: "
+                                 "TypeScript/JavaScript: imports only, unless --checker runs the project's own "
+                                 "tsc (exit 3: something is absent, the type checker reported an error, or an "
+                                 "installed package version differs from the lock file; exit 4: "
                                  "nothing absent, but a file asked for was not checked - another language, a file "
                                  "that does not parse - it is listed under not_checked, never passed)")
     sp.add_argument("paths", nargs="*", metavar="PATH",
@@ -4871,6 +4888,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "something found; exit 4: no manifest read)")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
+    sp.add_argument("--checker", choices=["tsc", "pyright", "mypy", "auto"],
+                    help="also run the project's own type checker with the project's configuration (tsc from "
+                         "node_modules/.bin or PATH; pyright or mypy from the project's virtual environment or "
+                         "PATH; auto: tsc for TypeScript, the configured or installed one for Python) and report "
+                         "its errors on the lines in scope as sites: names, members, calls, types. Starts that "
+                         "program; never installs or downloads one (not found: exit 4 with the next step)")
+    sp.add_argument("--checker-timeout", type=float, metavar="SECONDS",
+                    help="stop a type checker run after this long (default 300)")
     sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)
     sp.add_argument("--no-cache", action="store_true",
                     help="do not read or write .verinoda/cache/check (the environment's name index, kept per "
