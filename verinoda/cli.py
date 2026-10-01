@@ -3203,6 +3203,32 @@ def cmd_probe(args) -> int:
     return 0 if res.get("status") in PROBE_QUIET else 3
 
 
+MUTATE_QUIET = ("all_killed", "nothing_to_mutate")
+
+
+def cmd_mutate(args) -> int:
+    """Mutation testing scoped to the diff: mutants on the changed lines, the reaching tests run on each."""
+    from verinoda import mutate, treestate
+
+    repo = _repo(args)
+    if args.max_mutants is not None and not 0 <= args.max_mutants <= mutate.MAX_MUTANTS_CAP:
+        raise SystemExit(f"error: --max-mutants must be 0..{mutate.MAX_MUTANTS_CAP}")
+    if args.timeout is not None and args.timeout <= 0:
+        raise SystemExit("error: --timeout must be positive")
+    st = _store(repo, create=True)
+    try:
+        res = mutate.run(st, repo, base=args.base or "HEAD", tests=args.tests or None,
+                         max_mutants=mutate.MAX_MUTANTS if args.max_mutants is None else args.max_mutants,
+                         timeout=args.timeout, files=args.file or None)
+    except (ValueError, treestate.NotAGitTree) as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}"))
+        return 2
+    finally:
+        st.close()
+    _emit(args, res, lambda r: _write(mutate.render(r)))
+    return 0 if res.get("status") in MUTATE_QUIET else 3
+
+
 def cmd_resolve_call(args) -> int:
     from verinoda import precise
     from verinoda.paths import db_path
@@ -4506,6 +4532,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--test-file", metavar="PATH",
                     help="the file to write (default tests/test_<name>_<template>.py)")
     sp.add_argument("--no-record", action="store_true", help="do not record claims for the findings")
+    sp = add("mutate", cmd_mutate, "mutation testing scoped to the diff: small mutants on the Python lines changed "
+                                   "against the base, the tests that reach the change run on each in a throw-away "
+                                   "copy; surviving mutants listed with their line (exit 3 unless every mutant was "
+                                   "killed or none could be made)")
+    sp.add_argument("--base", help="the commit to compare with (default HEAD)")
+    sp.add_argument("--tests", nargs="+", metavar="TEST_ID",
+                    help="the tests to run (default: the ones the change review selects)")
+    sp.add_argument("--file", action="append", metavar="PATH", help="mutate only this changed file (repeatable)")
+    sp.add_argument("--max-mutants", type=int, help="mutants run at most (default 25)")
+    sp.add_argument("--timeout", type=float, help="seconds per run (default: the experiment timeout)")
     sp = add("resolve-call", cmd_resolve_call, "precise resolution of one call site: which definition does "
                                                "TARGET on PATH:LINE bind to? (exit 3: no precise answer)")
     sp.add_argument("site", metavar="PATH:LINE")
