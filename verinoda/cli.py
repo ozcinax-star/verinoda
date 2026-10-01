@@ -4799,7 +4799,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("-i", "--ignore-case", action="store_true", help="ignore case")
     sp.add_argument("--paths", nargs="+", metavar="PATH", help="search only under these files or folders")
     sp.add_argument("--max-groups", type=int, default=50, help="groups listed at most (default 50)")
-    sp.add_argument("--timeout", type=float, default=60.0, help="seconds each search may read files (default 60)")
+    sp.add_argument("--timeout", type=float, default=60.0,
+                    help="seconds each search may read files (default 60; loading the index for symbols is apart)")
     sp = add("search", cmd_search, "exact or regular-expression search over the project's text files, narrowed by "
                                    "a local trigram index that the search keeps up to date (exit 1: no match; 3: no "
                                    "match, but files were left unread)")

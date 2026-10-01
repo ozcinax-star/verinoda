@@ -58,7 +58,9 @@ def test_counts_compare_and_group(proj):
 
 
 @pytest.mark.parametrize("where", ["__import__('os')", "conn.real", "conn[0]", "lambda: 1", "conn + 1 > 0",
-                                   "'x'", "1.5 < conn", "nope and conn", "conn if close else 1"])
+                                   "'x'", "1.5 < conn", "nope and conn", "conn if close else 1",
+                                   "not " * 3000 + "conn", "not " * 200 + "conn", "(conn or close) >= 2",
+                                   "conn " + "and conn " * 1000])
 def test_the_condition_is_data_never_code(proj, where):
     with pytest.raises(inventory.InventoryError):
         inventory.run(proj, SEARCHES, where=where)
@@ -116,3 +118,38 @@ def test_the_cli(proj, capsys):
     capsys.readouterr()
     assert cli.main(["inventory", "--repo", str(proj), "x", "--where", "os.system"]) == 2
     assert "--where" in capsys.readouterr().err
+
+
+def test_names_that_cannot_be_used_in_a_condition_are_refused(proj):
+    for bad in ("True", "if", "\ufb01le"):
+        with pytest.raises(inventory.InventoryError):
+            inventory.run(proj, [(bad, "x")])
+
+
+def test_a_condition_that_a_lost_hit_can_turn_true_is_not_called_a_lower_bound(tmp_path, monkeypatch):
+    (tmp_path / "a.py").write_text("x.close()\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("c = connect()\nc.close()\n", encoding="utf-8")
+    monkeypatch.setattr(inventory, "MAX_HITS", 1)
+    res = inventory.run(tmp_path, [("conn", r"connect\("), ("close", r"\.close\(")], where="conn and not close")
+    assert res["status"] == "incomplete" and not res["lower_bound"] and "not bounded" in res["note"]
+    assert inventory.render(res).startswith("incomplete: ")
+    res = inventory.run(tmp_path, [("conn", r"connect\("), ("close", r"\.close\(")], where="conn and close >= 1")
+    assert res["lower_bound"]
+
+
+def test_symbol_units_are_not_merged_by_label_and_file_units_are_not_grouped_by_symbol(tmp_path):
+    from verinoda import workflow
+    from verinoda.store import open_store
+
+    (tmp_path / "m.py").write_text("class A:\n    def run(self):\n        return 1\n\n\nclass B:\n"
+                                   "    def run(self):\n        return 2\n", encoding="utf-8")
+    workflow.init(tmp_path)
+    st = open_store(tmp_path)
+    try:
+        workflow.scan(st, tmp_path)
+    finally:
+        st.close()
+    res = inventory.run(tmp_path, [("ret", "return")], unit="symbol", group_by="symbol")
+    assert res["units"] == 2 and len(res["groups"]) == 2
+    with pytest.raises(inventory.InventoryError):
+        inventory.run(tmp_path, [("ret", "return")], unit="file", group_by="symbol")

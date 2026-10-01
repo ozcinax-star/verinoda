@@ -18,7 +18,9 @@ kept every hit; otherwise the result is ``incomplete`` and the counts are lower 
 from __future__ import annotations
 
 import ast
+import keyword
 import time
+import unicodedata
 from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath
 
@@ -26,6 +28,8 @@ MAX_HITS = 20_000          # hits kept per search; beyond it the counts are lowe
 SITES_PER_GROUP = 5
 MAX_GROUPS = 50
 UNITS = ("file", "line", "symbol")
+MAX_WHERE_CHARS = 2000
+MAX_WHERE_DEPTH = 40       # nesting of the condition's tree
 MODULE = "(module level)"
 
 
@@ -42,16 +46,29 @@ _CMP = {ast.Gt: lambda a, b: a > b, ast.GtE: lambda a, b: a >= b, ast.Lt: lambda
 def parse_where(text: str, names: set[str]) -> ast.Expression:
     """The condition as a checked syntax tree; :class:`InventoryError` for anything but names of the searches,
     whole numbers, ``and`` / ``or`` / ``not``, comparisons and parentheses."""
+    if len(text) > MAX_WHERE_CHARS:
+        raise InventoryError(f"--where is over {MAX_WHERE_CHARS} characters")
     try:
         tree = ast.parse(text, mode="eval")
     except SyntaxError as exc:
         raise InventoryError(f"--where is not an expression: {exc.msg}") from None
+    except (RecursionError, MemoryError, ValueError):
+        raise InventoryError("--where is nested too deeply") from None
+    stack = [(tree, 0)]
+    while stack:   # depth first, iteratively: the tree's depth is checked before anything recurses over it
+        node, d = stack.pop()
+        if d > MAX_WHERE_DEPTH:
+            raise InventoryError(f"--where is nested more than {MAX_WHERE_DEPTH} levels")
+        stack.extend((c, d + 1) for c in ast.iter_child_nodes(node))
     for node in ast.walk(tree):
         if isinstance(node, (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Not, ast.Load)):
             continue
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
             continue
         if isinstance(node, ast.Compare) and all(type(op) in _CMP for op in node.ops):
+            if not all(isinstance(x, (ast.Name, ast.Constant)) for x in (node.left, *node.comparators)):
+                raise InventoryError("--where compares counts and whole numbers only: a name or a number on each "
+                                     "side of a comparison (and/or/not give true or false, not a count)")
             continue
         if isinstance(node, tuple(_CMP)):
             continue
@@ -92,6 +109,26 @@ def evaluate(tree: ast.Expression, counts: Counter) -> bool:
     return bool(_eval(tree, counts))
 
 
+def monotone(tree: ast.Expression | None) -> bool:
+    """Whether a lost hit can only make the condition false, never true: no ``not``, and every comparison a
+    count at least a number (``a >= 2``, ``2 <= a``). Only then are incomplete counts lower bounds."""
+    if tree is None:
+        return True
+    for node in ast.walk(tree):
+        if isinstance(node, ast.UnaryOp):
+            return False
+        if isinstance(node, ast.Compare):
+            if len(node.ops) != 1:
+                return False
+            op, left, right = node.ops[0], node.left, node.comparators[0]
+            if not ((isinstance(op, (ast.Gt, ast.GtE)) and isinstance(left, ast.Name)
+                     and isinstance(right, ast.Constant))
+                    or (isinstance(op, (ast.Lt, ast.LtE)) and isinstance(left, ast.Constant)
+                        and isinstance(right, ast.Name))):
+                return False
+    return True
+
+
 # -- the inventory ---------------------------------------------------------------------------------
 
 def _group_of(how: str, rel: str, symbol: str | None) -> str:
@@ -129,18 +166,24 @@ def run(repo: Path, searches: list[tuple[str, str]], *, where: str | None = None
     if not searches:
         raise InventoryError("give at least one search")
     names = [n for n, _p in searches]
-    bad = [n for n in names if not n.isidentifier() or n in ("and", "or", "not")]
+    bad = [n for n in names if not n.isidentifier() or keyword.iskeyword(n) or n in ("True", "False", "None")
+           or unicodedata.normalize("NFKC", n) != n]
     if bad:
-        raise InventoryError(f"a search name must be a word (letters, digits, _): {', '.join(bad)}")
+        raise InventoryError(f"a search name must be a plain word (letters, digits, _; no Python keyword): "
+                             f"{', '.join(bad)}")
     if len(set(names)) != len(names):
         raise InventoryError("two searches have the same name")
     if unit not in UNITS:
         raise InventoryError(f"--unit must be one of {', '.join(UNITS)}")
     group_by = check_group_by(group_by)
+    if group_by == "symbol" and unit == "file":
+        raise InventoryError("--group-by symbol needs --unit symbol or line: a file unit holds hits of several "
+                             "symbols")
     if max_groups < 1:
         raise InventoryError("--max-groups must be at least 1")
     tree = parse_where(where, set(names)) if where else None
 
+    t0 = time.perf_counter()
     g = None
     if unit == "symbol" or group_by == "symbol":
         from verinoda import index
@@ -150,7 +193,6 @@ def run(repo: Path, searches: list[tuple[str, str]], *, where: str | None = None
             raise InventoryError("--unit symbol and --group-by symbol read the index: run `verinoda scan` first")
         g = index.load(repo)
 
-    t0 = time.perf_counter()
     per_search = {}
     hits: list[tuple[str, str, int, str]] = []   # (search, file, line, text)
     complete = True
@@ -172,12 +214,12 @@ def run(repo: Path, searches: list[tuple[str, str]], *, where: str | None = None
     unit_sites: dict[tuple, list[tuple[str, int, str, str]]] = defaultdict(list)
     unit_symbol: dict[tuple, str | None] = {}
     for name, rel, line, text in hits:
-        sym = None
+        sym, nid = None, None
         if g is not None:
             nid = g.symbol_at(rel, line)
-            sym = g.label(nid) if nid else None
-            sym = f"{rel}::{sym}" if sym else None
-        key = (rel,) if unit == "file" else (rel, line) if unit == "line" else (rel, sym or MODULE)
+            if nid:   # a label repeats (every __exit__ is `.__exit__()`): the definition line tells them apart
+                sym = f"{rel}::{g.label(nid).strip('.')} (line {g.line(nid)})"
+        key = (rel,) if unit == "file" else (rel, line) if unit == "line" else (rel, nid or MODULE)
         unit_counts[key][name] += 1
         unit_symbol.setdefault(key, sym)
         unit_sites[key].append((rel, line, name, text.strip()[:120]))
@@ -204,9 +246,11 @@ def run(repo: Path, searches: list[tuple[str, str]], *, where: str | None = None
         limits.append("symbols are the index's: a file changed since the index may place a hit in the wrong symbol "
                       "(run `verinoda update`)")
     status = "observed" if complete else "incomplete"
+    bounded = complete or monotone(tree)
     res = {
         "status": status,
         "exact": complete,
+        "lower_bound": not complete and bounded,
         "searches": per_search,
         "where": where, "unit": unit, "group_by": group_by,
         "units": len(kept), "units_with_hits": len(unit_counts),
@@ -215,7 +259,9 @@ def run(repo: Path, searches: list[tuple[str, str]], *, where: str | None = None
         "limits": limits,
     }
     if not complete:
-        res["note"] = ("the counts are lower bounds: " + "; ".join(
+        res["note"] = (("the counts are lower bounds: " if bounded else
+                        "the counts are not bounded either way (the condition has `not` or a comparison that a lost "
+                        "hit can turn true): ") + "; ".join(
             f"{n}: {i['total']} hits, {i['kept']} kept" + (" (time limit or unreadable files)"
                                                            if i["status"] != "observed" else "")
             for n, i in per_search.items() if i["truncated"] or i["status"] != "observed"))
@@ -225,7 +271,7 @@ def run(repo: Path, searches: list[tuple[str, str]], *, where: str | None = None
 
 
 def render(res: dict) -> str:
-    at_least = "" if res["exact"] else "at least "
+    at_least = "" if res["exact"] else "at least " if res.get("lower_bound") else "incomplete: "
     head = (f"{at_least}{res['units']} {res['unit']}(s)" + (f" where {res['where']}" if res["where"] else "")
             + f" ({res['status']}); searches: "
             + ", ".join(f"{n} = {i['pattern']!r} {i['total']} hit(s)" for n, i in res["searches"].items()))
@@ -236,7 +282,7 @@ def render(res: dict) -> str:
         for s in r["sites"]:
             out.append(f"          {s}")
         if r["sites_total"] > len(r["sites"]):
-            out.append(f"          ... {r['sites_total'] - len(r['sites'])} more line(s) (--json)")
+            out.append(f"          ... {r['sites_total'] - len(r['sites'])} more hit(s)")
     if res["truncated"]:
         out.append(f"  ... {res['groups_total'] - len(res['groups'])} more group(s) (--max-groups)")
     if res.get("note"):
