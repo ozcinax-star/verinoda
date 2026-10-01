@@ -1304,11 +1304,13 @@ def _dataflow_paths(ctx: _Ctx, sub: _Sub, src: list[str], *, mechanism: bool = F
         if not ctx.budget.ok:
             ctx.rec.skipped["flow"] += 1
             continue
-        if p["hops"]:
-            chain = " -> ".join([p["hops"][0]["from"]] + [h["to"] for h in p["hops"]])
+        # the claim is the path to the sink; a last hop on to a table (verinoda.dataschema) is not a call
+        hops = p["hops"][:-1] if p.get("table") else p["hops"]
+        if hops:
+            chain = " -> ".join([hops[0]["from"]] + [h["to"] for h in hops])
         else:  # the entry point itself writes to the sink
             chain = next((e["symbol"] for e in df["entries"] if e["at"] == p["entry"]), p["entry"])
-        if _path_claim(ctx, p["hops"], f"Data path {chain} reaches persistence ({', '.join(p['sink_kinds'])}) "
+        if _path_claim(ctx, hops, f"Data path {chain} reaches persistence ({', '.join(p['sink_kinds'])}) "
                                        f"at {p['sink']}", sink_lines=p["sink_lines"],
                        extra_spec={"sink_kinds": p["sink_kinds"]},
                        subjects=[p["entry"].rpartition(":")[0], p["sink"].rpartition(":")[0]],

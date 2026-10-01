@@ -101,7 +101,9 @@ def _read(root: Path, rel: str) -> list[str]:
 
 
 def _files(g: Graph) -> list[str]:
-    return sorted({d["source_file"] for _, d in g.G.nodes(data=True) if d.get("source_file")})
+    # a table node (verinoda.dataschema) names the file that defines it; that file is not code it adds
+    return sorted({d["source_file"] for _, d in g.G.nodes(data=True)
+                   if d.get("source_file") and d.get("file_type") != "schema"})
 
 
 def _symbol_at(g: Graph, rel: str, line: int) -> str | None:
@@ -211,17 +213,22 @@ def _sinks(g: Graph) -> dict[str, list[dict]]:
                         out.setdefault(sym, []).append({"kind": kind, "at": f"{f}:{i}", "line": text.strip()[:120]})
         if f.endswith(JVM_SUFFIXES):
             _jvm_sinks(g, f, lines, out)
-    for n in _tables_used(g):   # a table the code reads or writes (verinoda.dataschema) is where a flow ends
-        out[n] = [{"kind": "table", "at": _loc(g, n), "line": f"table {g.label(n)}"}]
+    # a function that writes or reads a table (verinoda.dataschema) and matches no sink pattern (an ORM-only one) is
+    # a sink too; the table itself is one hop past it, never the sink
+    regex_sinks = set(out)
+    for u, v, d in g.edges(TABLE_RELATIONS):
+        f = g.file(u)
+        if not f or u in regex_sinks or is_test_file(f) or g.G.nodes[v].get("kind") != "table":
+            continue
+        kind = "table-write" if d.get("relation") == "writes_table" else "table-read"
+        verb = "writes" if kind == "table-write" else "reads"
+        how = f" ({d['context']})" if d.get("context") else ""
+        out.setdefault(u, []).append({"kind": kind, "at": _edge_loc(d) or _loc(g, u),
+                                      "line": f"{verb} table {g.label(v)}{how}"})
     return out
 
 
 TABLE_RELATIONS = {"writes_table", "reads_table"}
-
-
-def _tables_used(g: Graph) -> list[str]:
-    return sorted(n for n, d in g.G.nodes(data=True) if d.get("kind") == "table" and d.get("file_type") == "schema"
-                  and any(True for _ in g.in_edges(n, TABLE_RELATIONS)))
 
 
 def _table_hops(g: Graph, n: str) -> list[str]:
@@ -455,9 +462,9 @@ def _render_path(g: Graph, p: list[str], sinks: dict, roots: tuple[str, ...] = (
     entry = _loc(g, p[0])
     # a path that ends at a table: the sink is the function that reads or writes it, the table is said apart
     table = p[-1] if len(p) > 1 and g.G.nodes[p[-1]].get("kind") == "table" else None
-    sink = p[-2] if table and p[-2] in sinks else p[-1]
-    return {"entry": entry, "sink": _loc(g, sink), "sink_kinds": sorted({s["kind"] for s in sinks[sink]}),
-            "sink_lines": [s["at"] for s in sinks[sink]][:4], "hops": hops,
+    sink = p[-2] if table else p[-1]
+    return {"entry": entry, "sink": _loc(g, sink), "sink_kinds": sorted({s["kind"] for s in sinks.get(sink, [])}),
+            "sink_lines": [s["at"] for s in sinks.get(sink, [])][:4], "hops": hops,
             **({"table": g.label(table), "table_at": _loc(g, table)} if table else {}),
             **({"in": ASIDE} if roots and (entry or "").startswith(roots) else {})}
 
@@ -540,7 +547,7 @@ def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
             path = q.popleft()
             cur = path[-1]
             if cur in sinks and len(path) > 1 or (cur in sinks and cur == e["id"]):
-                tables = [] if g.G.nodes[cur].get("kind") == "table" else _table_hops(g, cur)
+                tables = _table_hops(g, cur)
                 if tables:   # one more hop: the table the sink writes (or reads)
                     paths.append(path + [tables[0]])
                 else:
@@ -548,7 +555,7 @@ def dataflow(g: Graph, max_depth: int = 6, max_paths: int = 20) -> dict:
                 continue
             if len(path) > max_depth:
                 continue
-            nxt = [v for v, _ in g.out_edges(cur, FLOW_RELATIONS | TABLE_RELATIONS | {"injects"})]
+            nxt = [v for v, _ in g.out_edges(cur, FLOW_RELATIONS | {"injects"})]
             # Constructing a class runs its __init__ - the only class->method
             # step that is a real control-flow edge.
             if g.G.nodes[cur].get("_callable_class"):

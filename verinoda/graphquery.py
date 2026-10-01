@@ -56,7 +56,7 @@ KNOWN_RELATIONS = {"calls", "contains", "rationale_for", "references", "imports"
                    "indirect_call", "uses", "inherits", "defines", "re_exports", "implements", "case_of", "embeds",
                    "listened_by", "references_constant", "bound_to", "mixes_in", "uses_config", "uses_static_prop",
                    "extends", "instantiates", "dispatches_to", "registers", "requests", "rpc_calls", "emits",
-                   "mixin_target", "runs_function"}
+                   "mixin_target", "runs_function", "maps_to", "writes_table", "reads_table", "migrates", "injects"}
 MAX_QUERY_CHARS = 4000
 MAX_REGEX_CHARS = 300
 MAX_HOPS = 10
