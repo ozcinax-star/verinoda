@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D160)
+## Upgrading from 0.4.0 (D137-D161)
 
 ### D137: Trigram regex index
 
@@ -252,6 +252,17 @@ only; `--profile full` or `mcp.profile` "full") take one of the plan intents (`l
 `performance`, `architecture`, `usage`, `decide`). It is used only when the rule reading of the question agrees;
 the result then has `intent_check` with both readings. Not with `--plan` / `plan_json`. The core profile's
 `analyze` is unchanged, and the MCP tool count stays 40.
+
+### D161: Real-world benchmark on pinned popular repositories
+
+This adds no change to Verinoda itself. There are new files under `benchmarks/realworld/`, new
+results under `benchmarks/results/realworld-<date>/` and a new test module. Three things to know
+before running:
+
+- **Clone folder.** By default, running it clones into `C:/vbench`, which took 30 MB for the two
+  small repositories (clones and their `.verinoda/`) and a few hundred MB for all ten.
+- **Network.** Cloning needs the network. The tests do not.
+- **Python.** The runner needs Python 3.11 or later (`python -P`) and refuses an older one.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
