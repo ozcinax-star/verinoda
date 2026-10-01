@@ -397,6 +397,21 @@ def test_the_page_redraws_when_the_index_changes(page, site, glow):
     page.wait("document.querySelector('#note h1') !== window.__before && document.querySelector('#note h1').textContent.includes('spawn')")
 
 
+def test_the_dependency_matrix_page_shows_cells_and_their_lines(page, site):
+    _open(page, site + "#/")
+    page.wait("document.querySelector('#note .home a[href=\"#/m\"]')")
+    page.js("document.querySelector('#note .home a[href=\"#/m\"]').click()")
+    page.wait("document.querySelector('#note table.dsm td.hit')")
+    info = page.js("({rows: document.querySelectorAll('#note table.dsm tr').length,"
+                   " title: document.title, model: !!document.querySelector('#sec-model')})")
+    assert info["rows"] > 2 and info["title"].startswith("Dependency matrix") and info["model"]
+    page.js("document.querySelector('#note table.dsm td.hit').click()")
+    page.wait("document.querySelector('#note .dsm-detail strong')")
+    page.js("document.querySelector('#note .dsm-ctl input').value = '1';"
+            " document.querySelector('#note .dsm-ctl input').dispatchEvent(new Event('change'))")
+    page.wait("location.hash === '#/m?by=folder&depth=1' && document.querySelector('#note table.dsm')")
+
+
 def test_the_exported_file_works_from_disk(page, glow, tmp_path):
     out = export.write(glow, tmp_path / "glow-graph.html")
     _open(page, Path(out["path"]).as_uri())  # it opens on the graph view
@@ -410,6 +425,8 @@ def test_the_exported_file_works_from_disk(page, glow, tmp_path):
     _search_open(page, "Wisp", "Wisp")  # a symbol opens the note of its file
     page.wait("document.querySelector('#note h2.sec')")
     assert page.js("document.querySelectorAll('#note .code').length") == 0  # no code in the file
+    page.js("location.hash = '#/m'")   # the matrix by folder is in the file
+    page.wait("document.querySelector('#note table.dsm') && !document.querySelector('#note .dsm-ctl')")
 
 
 # -- the graph in three dimensions, the command bar, the tour ------------------------------------------

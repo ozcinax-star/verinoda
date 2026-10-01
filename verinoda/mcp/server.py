@@ -126,7 +126,7 @@ RATIONALE_CAP = 5   # rationale comments node_inspect quotes (each at most 200 c
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
 VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline",
-         "dead", "hotspots", "sides", "repo", "saved")
+         "dead", "hotspots", "sides", "repo", "dsm", "model", "saved")
 DEAD_FIRST_CUT = ("searched.entry_points", "searched.entry_modules")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
@@ -1175,6 +1175,16 @@ class AtlasTools:
                     res["next_step"] = "targets=[page id] for a page's Mermaid diagrams and their evidence"
                 res.update(freshness.summary(fresh))
                 return res
+            if view in ("dsm", "model"):
+                from verinoda import dsm
+
+                if len(tg) > 1 or (view == "dsm" and tg and tg[0] not in ("tag", "folder")):
+                    raise ToolFailure("invalid_argument", f"the {view} view takes one target at most",
+                                      "dsm: targets=['tag'] or ['folder']; model: targets=['path/to/workspace.dsl']")
+                res = (dsm.dsm(g, by=tg[0] if tg else "folder") if view == "dsm"
+                       else dsm.model_check(g, model=tg[0] if tg else None))
+                res.update(freshness.summary(fresh))
+                return res
             res = am.VIEWS[view](g)
             if tg:
                 res["note"] = f"targets are only used by the impact view; ignored for {view}"
@@ -2056,8 +2066,8 @@ GATEWAY_CATALOG: dict[str, str] = {
     "node_inspect": "node_inspect {name}: a symbol's definition and edges with file:line",
     "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between symbols",
     "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead|hotspots|sides|repo|"
-                "saved, targets?}",
-    "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
+                "dsm|model|saved, targets?}",
+    "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: claims, "
                   "evidence re-checked",
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {since_last?} after: "
                      "what it touches",
@@ -2214,7 +2224,9 @@ DESCRIPTIONS: dict[str, str] = {
         "fewest dependencies to cut), outline (the wiki page tree; targets = page ids for their Mermaid "
         "diagrams), dead (code no entry point reaches, as claims), hotspots (files and functions by changes x "
         "complexity), sides (client-only code reachable from server code, each path as a claim), or repo (files "
-        "ranked by PageRank toward the targets, with their signatures, under a token budget), or saved (a map "
+        "ranked by PageRank toward the targets, with their signatures, under a token budget), dsm (the dependency "
+        "structure matrix between folders; targets=['tag'] groups by [architecture.tags]), model (a C4 model "
+        "against the code: targets=[a Structurizr DSL path], default [architecture.model]), or saved (a map "
         "kept with `verinoda map save`: targets=[name]; status current, or stale when a file it cites changed; "
         "no targets: the list). 'coverage' states the method and its limits."),
     "change_review": (
@@ -2623,13 +2635,15 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     @register("map_view")
     def map_view(
         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                "cycles", "outline", "dead", "hotspots", "sides", "repo", "saved"],
+                                "cycles", "outline", "dead", "hotspots", "sides", "repo", "dsm", "model",
+                                "saved"],
                         Field(description="Which architecture view to return.")],
         targets: Annotated[list[str] | None, Field(description="impact view: changed files or symbols (default = "
                                                                "git working-tree changes); outline view: page ids "
                                                                "whose diagrams to return; repo view: files in "
                                                                "play (default the same changes); saved view: "
-                                                               "the map's name.")] = None,
+                                                               "the map's name; dsm: ['tag'] to group by tags; "
+                                                               "model: a Structurizr DSL path.")] = None,
     ) -> dict[str, Any]:
         return emit(t.map_view(view, targets=targets))
 

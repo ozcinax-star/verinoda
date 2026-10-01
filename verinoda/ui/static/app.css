@@ -257,3 +257,17 @@ ol.timeline { list-style: none; margin: 0 0 16px; padding: 0 0 0 14px; border-le
 .bfly-side { min-width: 0; }
 ul.bfly-tree ul.bfly-tree { flex-basis: 100%; padding-left: 14px; border-left: 1px solid var(--border); }
 @media (max-width: 900px) { .bfly { grid-template-columns: 1fr; } }
+.dsm-wrap { overflow-x: auto; margin: 8px 0; }
+table.dsm { border-collapse: collapse; font-size: 12px; }
+table.dsm th, table.dsm td { border: 1px solid var(--muted); padding: 2px 5px; text-align: right; min-width: 22px; }
+table.dsm th.dsm-name { text-align: left; white-space: nowrap; font-weight: normal; }
+table.dsm td.dia { background: var(--muted); opacity: .35; }
+table.dsm td.hit { cursor: pointer; }
+table.dsm td.h1 { background: rgba(80, 140, 220, .12); }
+table.dsm td.h2 { background: rgba(80, 140, 220, .25); }
+table.dsm td.h3 { background: rgba(80, 140, 220, .42); }
+table.dsm td.h4 { background: rgba(80, 140, 220, .6); }
+table.dsm td.back { outline: 2px solid #d9534f; outline-offset: -2px; }
+.dsm-ctl { margin: 6px 0; }
+.dsm-ctl input { width: 80px; }
+.dsm-detail { margin: 6px 0 14px; }

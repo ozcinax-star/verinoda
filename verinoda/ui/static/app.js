@@ -90,7 +90,11 @@
         names_data: "Names (resource ids)", named_by: "Named by", other_out: "Other links", other_in: "Other backlinks",
         claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes", answerMore: "Also relevant",
         wiki: "Wiki", diagrams: "Diagrams", wikiFiles: "Files", problems: "Problems", decisions: "Decision records",
+        matrix: "Dependency matrix", model: "Architecture model", undeclared: "Undeclared dependencies",
       },
+      dsmNote: "Row uses column: the number is the references from the row's files to the column's. Groups are ordered so that a group comes before what it uses; a marked cell below the diagonal points back inside a cycle of groups. Edges are what the index extracted, never verified.",
+      dsmBy: "Group by", dsmFolder: "folder", dsmTag: "architecture tag", dsmDepth: "depth", dsmCycle: "cycle of groups", dsmPick: "Pick a cell to see its reference lines.",
+      modelNone: "No committed model: [architecture.model] in verinoda.toml, or verinoda map --view model --model workspace.dsl.",
       wikiMermaid: "Mermaid text: paste it into a Mermaid viewer (GitHub, GitLab, Obsidian, mermaid.live) to draw it. A dashed arrow comes from an inferred edge.",
       copy: "Copy", copied: "Copied", evidence: "Evidence", wikiNone: "No page named so.",
       decNote: "By the date each record states. Superseding and links as each record writes them; a dashed relation is stated by one record only.", decNone: "No decision records (verinoda decide record).", undated: "no date", oneSided: "stated by one record only", notEnforced: "not enforced", chosen: "chosen",
@@ -180,7 +184,11 @@
         other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
         myNotes: "Notlarım", answerMore: "Ayrıca ilgili", wiki: "Wiki", diagrams: "Diyagramlar", wikiFiles: "Dosyalar",
         problems: "Sorunlar", decisions: "Karar kayıtları",
+        matrix: "Bağımlılık matrisi", model: "Mimari model", undeclared: "Modelde olmayan bağımlılıklar",
       },
+      dsmNote: "Satır sütunu kullanır: sayı, satırdaki dosyalardan sütundakilere yapılan başvurulardır. Gruplar, bir grup kullandıklarından önce gelecek şekilde sıralıdır; köşegenin altındaki işaretli hücre bir grup döngüsünün içinde geriye bakar. Bağlantılar indeksin çıkardıklarıdır, doğrulanmış değildir.",
+      dsmBy: "Gruplama", dsmFolder: "klasör", dsmTag: "mimari etiket", dsmDepth: "derinlik", dsmCycle: "grup döngüsü", dsmPick: "Başvuru satırlarını görmek için bir hücre seçin.",
+      modelNone: "Kayıtlı model yok: verinoda.toml içinde [architecture.model] ya da verinoda map --view model --model workspace.dsl.",
       wikiMermaid: "Mermaid metni: çizmek için bir Mermaid görüntüleyicisine (GitHub, GitLab, Obsidian, mermaid.live) yapıştırın. Kesikli ok çıkarım yapılmış bir bağlantıdan gelir.",
       copy: "Kopyala", copied: "Kopyalandı", evidence: "Kanıt", wikiNone: "Bu adda sayfa yok.",
       decNote: "Her kaydın belirttiği tarihe göre. Yerine geçme ve bağlantılar her kaydın yazdığı gibi; kesikli ilişkiyi yalnızca bir kayıt belirtir.", decNone: "Karar kaydı yok (verinoda decide record).", undated: "tarih yok", oneSided: "yalnızca bir kayıt belirtiyor", notEnforced: "uygulanmıyor", chosen: "seçilen",
@@ -672,7 +680,7 @@
   }
 
   // the start page is what the address shows when it names nothing else
-  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h === "#/d" || h.startsWith("#/n/") || h.startsWith("#/w/") || (h.startsWith("#/q/") && !OFFLINE)); };
+  const onHome = () => { const h = location.hash || "#/"; return !(h === "#/graph" || h === "#/d" || h.startsWith("#/m") || h.startsWith("#/n/") || h.startsWith("#/w/") || (h.startsWith("#/q/") && !OFFLINE)); };
   async function renderHome() {
     current = null;
     document.title = "Verinoda";
@@ -710,9 +718,10 @@
     const decs = dec && (dec.records || []).length ? el("div", {}, sectionHeader("decisions", dec.records.length),
       el("ul", { class: "links" }, el("li", {}, el("a", { href: "#/d" }, t("sec.decisions")),
         el("span", { class: "at", text: dec.records.slice(-3).map((r) => r.id).join(", ") })))) : null;
+    const matrix = el("ul", { class: "links" }, el("li", {}, el("a", { href: "#/m" }, t("sec.matrix"))));
     setMain(el("div", { class: "home" }, el("h1", { text: s.project }), el("p", { class: "muted", text: t("welcome") }),
       OFFLINE ? el("p", { class: "muted small", text: `${t("offlineHome")} ${OFFLINE.generated || ""}` }) : null,
-      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs, wiki, decs));
+      cards, sectionHeader("myNotes", mine.length), notesList, sectionHeader("hubs", (s.hubs || []).length), hubs, wiki, decs, matrix));
     $("#outline").replaceChildren();
     local.setData([], []);
   }
@@ -774,6 +783,67 @@
     const ds = p.diagrams || [];
     if (ds.length) parts.push(sectionHeader("diagrams", ds.length), el("p", { class: "muted small", text: t("wikiMermaid") }), ...ds.map(diagramBlock));
     if ((w.problems || []).length) parts.push(sectionHeader("problems", w.problems.length), el("ul", { class: "links" }, w.problems.map((x) => el("li", { text: x }))));
+    setMain(el("div", { class: "wiki" }, parts));
+  }
+
+  // -- the dependency structure matrix and the architecture model against the code ------------------
+  async function renderMatrix(h) {
+    current = null;
+    setMain(el("div", { class: "empty", text: t("loading") }));
+    $("#outline").replaceChildren(); local.setData([], []); markTree(null);
+    const q = new URLSearchParams(h.slice(3).replace(/^\?/, "")), by = q.get("by") === "tag" ? "tag" : "folder";
+    const depth = /^\d+$/.test(q.get("depth") || "") ? q.get("depth") : "";
+    let m, model = null;
+    try {
+      m = await api(`/api/dsm?by=${by}${depth ? "&depth=" + depth : ""}`);
+      model = await api("/api/model").catch(() => null);
+    } catch (e) { showError(e); return; }
+    if (location.hash !== h) return; // another page was opened meanwhile
+    document.title = `${t("sec.matrix")} · Verinoda`;
+    const parts = [el("div", { class: "crumbs" }, el("a", { href: "#/" }, t("cmd.home"))), el("h1", { text: t("sec.matrix") }),
+      el("p", { class: "muted small", text: `${t("dsmNote")} (${m.basis || ""})` })];
+    if (!OFFLINE) { // an exported file holds the matrix by folder only
+      const sel = el("select", {}, el("option", { value: "folder", text: t("dsmFolder") }), el("option", { value: "tag", text: t("dsmTag") }));
+      sel.value = by;
+      const dep = el("input", { type: "number", min: "1", max: "8", value: depth || "", placeholder: t("dsmDepth"), class: "small" });
+      const go = () => { location.hash = `#/m?by=${sel.value}${sel.value === "folder" && dep.value ? "&depth=" + dep.value : ""}`; };
+      sel.addEventListener("change", go); dep.addEventListener("change", go);
+      parts.push(el("div", { class: "dsm-ctl" }, t("dsmBy"), " ", sel, " ", dep));
+    }
+    const groups = m.groups || [], cell = new Map((m.cells || []).map((c) => [c.from + "\u0000" + c.to, c]));
+    const detail = el("div", { class: "dsm-detail muted small", text: t("dsmPick") });
+    const showCell = (c) => detail.replaceChildren(el("div", {}, el("strong", { text: `${c.from} → ${c.to}` }), " ",
+      el("span", { class: "status st-" + c.status, text: `${c.references} · ${c.status.replace(/_/g, " ")}` }), " ",
+      el("span", { text: Object.entries(c.relations || {}).map(([k, v]) => `${k} ${v}`).join(", ") })),
+      el("ul", { class: "links" }, (c.sites || []).map((s) => el("li", {}, atLink(s)))));
+    const head = el("tr", {}, el("th", {}), el("th", {}), groups.map((g) => el("th", { class: "mono", title: g.name, text: String(g.index) })));
+    const rows = groups.map((g) => el("tr", {}, el("th", { class: "mono", text: String(g.index) }),
+      el("th", { class: "dsm-name", title: `${g.files} ${t("filesN")}`, text: g.name }),
+      groups.map((x) => {
+        if (x === g) return el("td", { class: "dia" });
+        const c = cell.get(g.name + "\u0000" + x.name);
+        if (!c) return el("td", {});
+        const heat = c.references >= 100 ? 4 : c.references >= 20 ? 3 : c.references >= 5 ? 2 : 1;
+        const td = el("td", { class: `hit h${heat}${c.against_order ? " back" : ""}`, title: `${c.from} → ${c.to}: ${c.references}`, text: String(c.references) });
+        td.addEventListener("click", () => showCell(c));
+        return td;
+      })));
+    parts.push(el("div", { class: "dsm-wrap" }, el("table", { class: "dsm" }, head, rows)), detail);
+    for (const cyc of m.cycles || []) parts.push(el("p", { class: "small warn", text: `${t("dsmCycle")}: ${cyc.join(", ")}` }));
+    if ((m.problems || []).length) parts.push(sectionHeader("problems", m.problems.length), el("ul", { class: "links" }, m.problems.map((x) => el("li", { text: x }))));
+    parts.push(sectionHeader("model", model && model.summary ? model.summary.relations || 0 : 0));
+    if (!model || model.status === "no_model") parts.push(el("p", { class: "muted small", text: t("modelNone") }));
+    else {
+      parts.push(el("p", { class: "small", text: `${model.status} · ${(model.sources || []).join(", ")}` }));
+      parts.push(el("ul", { class: "links" }, (model.relations || []).map((r) => el("li", {},
+        el("span", { class: "status st-" + (r.result === "matched" ? r.status : r.result === "model_only" ? "contradicted" : "unknown"), text: r.result.replace(/_/g, " ") }),
+        el("span", { text: ` ${r.from} → ${r.to} ` }), el("span", { class: "muted small", text: r.why || "" }), " ",
+        ...(r.sites || []).slice(0, 1).map(atLink)))));
+      const und = model.undeclared || [];
+      if (und.length) parts.push(sectionHeader("undeclared", und.length), el("ul", { class: "links" }, und.map((u) => el("li", {},
+        el("span", { text: `${u.from} → ${u.to}: ${u.references} ` }), ...(u.sites || []).map(atLink)))));
+      if ((model.problems || []).length) parts.push(el("ul", { class: "links" }, model.problems.map((x) => el("li", { class: "warn small", text: x }))));
+    }
     setMain(el("div", { class: "wiki" }, parts));
   }
 
@@ -1966,6 +2036,8 @@
       case "/api/search": return { results: offlineSearch(p.get("q") || "") };
       case "/api/wiki": return D.wiki || { pages: [] }; // every page with its diagrams
       case "/api/decisions": return D.decisions || { records: [], relations: [], mermaid: "" };
+      case "/api/dsm": if (!D.dsm) throw notFound(t("offlineMissing")); return D.dsm;
+      case "/api/model": return D.model || { status: "no_model" };
       case "/api/global": return offlineGlobal(flag("tests"), flag("data"));
       case "/api/impact": return offlineImpact(p.get("id") || "", flag("tests"));
       case "/api/path": return offlinePath(p.get("from") || "", p.get("to") || "");
@@ -2195,6 +2267,7 @@
     else if (h.startsWith("#/q/") && !OFFLINE) renderAnswer(decodeURIComponent(h.slice(4)));
     else if (h.startsWith("#/w/")) renderWiki(decodeURIComponent(h.slice(4)));
     else if (h === "#/d") renderDecisions();
+    else if (h === "#/m" || h.startsWith("#/m?")) renderMatrix(h);
     else renderHome();
   }
   window.addEventListener("hashchange", route);

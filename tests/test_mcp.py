@@ -584,6 +584,16 @@ def test_map_view_impact_and_errors(repo, tools):
     assert bad["error"] == "invalid_argument" and set(bad["valid"]) == set(mcp_server.VIEWS)
 
 
+def test_map_view_dsm_and_model(repo, tools):
+    from verinoda import dsm, index
+
+    res, core = tools.map_view("dsm"), _norm(dsm.dsm(index.load(repo)))
+    assert res["view"] == "dsm" and res["groups"] == core["groups"] and res["cells"] == core["cells"]
+    assert tools.map_view("dsm", targets=["tag"])["problems"]   # orders_app has no [architecture.tags]
+    assert tools.map_view("dsm", targets=["x", "y"])["error"] == "invalid_argument"
+    assert tools.map_view("model")["status"] == "no_model"
+
+
 def test_map_view_respects_small_response_cap(repo, tools):
     from verinoda import architecture_map as am
     from verinoda import index

@@ -932,6 +932,12 @@ MAP_ACTIONS = ("save", "show", "list")  # `map save NAME`: a project folder with
 def cmd_map(args) -> int:
     if args.path in MAP_ACTIONS:
         return _cmd_named_map(args)
+    stray = [f for f, v, views in (("--group-by", args.group_by, ("dsm",)), ("--depth", args.depth, ("dsm",)),
+                                    ("--model", args.model, ("model",))) if v is not None and args.view not in views]
+    if stray and args.path not in MAP_ACTIONS:
+        print(f"error: {', '.join(stray)}: --group-by and --depth go with --view dsm, --model with --view model",
+              file=sys.stderr)
+        return 2
     if args.name is not None or args.trace:
         print("error: a second argument and --trace go with `map save NAME` (saved maps: map save|show|list)",
               file=sys.stderr)
@@ -1068,6 +1074,18 @@ def _map_result(args, repo: Path):
         res = {"repo": am.repo_map(g, focus, max_tokens=budget)}
         # like the impact view: a --target that names no file of the graph is an error, not a silent fallback
         failed = bool(args.target and res["repo"].get("focus_unresolved"))
+    elif args.view == "dsm":
+        from verinoda import dsm
+
+        try:
+            res = {"dsm": dsm.dsm(g, by=args.group_by or "folder", depth=args.depth)}
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    elif args.view == "model":
+        from verinoda import dsm
+
+        res = {"model": dsm.model_check(g, model=args.model)}
     elif args.view:
         res = {args.view: am.VIEWS[args.view](g)}
     else:
@@ -3957,12 +3975,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--mode", choices=["flow", "any"], default="flow", help="with --trace: as for trace")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                       "cycles", "dead", "hotspots", "sides", "repo"],
+                                       "cycles", "dead", "hotspots", "sides", "repo", "dsm", "model"],
                     help="cycles: dependency cycles between files and the fewest file dependencies to cut; "
                          "dead: code no entry point reaches; hotspots: files and functions by changes x "
                          "complexity; sides: client-only code (Minecraft) reachable from server code, with the "
                          "path; repo: the files to read first (PageRank toward the files in play) and their "
-                         "signatures under --max-tokens (dead, hotspots, sides and repo are asked for by name)")
+                         "signatures under --max-tokens; dsm: the dependency structure matrix between folders "
+                         "(--depth) or architecture tags (--group-by tag); model: a C4 model (--model "
+                         "workspace.dsl, or [architecture.model] in verinoda.toml) against the code's "
+                         "dependencies (dead, hotspots, sides, repo, dsm and model are asked for by name)")
     sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); repo view: a file "
                                                       "in play; default: git changes")
     sp.add_argument("--base", help="impact and repo views: diff base (default HEAD + untracked)")
@@ -3970,6 +3991,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="repo view: the map's budget in estimated tokens (default 1024)")
     sp.add_argument("--max-lines", type=int, default=None,
                     help="summary lines per view (default 12 for all views, 40 for one --view)")
+    sp.add_argument("--group-by", choices=["folder", "tag"], default=None,
+                    help="dsm view: the groups (default folder; tag: [architecture.tags] of verinoda.toml)")
+    sp.add_argument("--depth", type=int, default=None,
+                    help="dsm view by folder: the folder depth (default: the deepest with at most 30 groups)")
+    sp.add_argument("--model", metavar="PATH",
+                    help="model view: a Structurizr DSL file (default: [architecture.model] of verinoda.toml)")
     sp = add("review", cmd_review, "what a change touches, by concern: changed symbols, dependents, persistence, "
                                    "security, performance, public API, config, entry points, tests, unknowns "
                                    "(exit 3 = findings or unknowns to report)", repo=False)

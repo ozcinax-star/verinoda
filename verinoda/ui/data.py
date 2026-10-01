@@ -200,6 +200,23 @@ class Atlas:
     def user_notes(self) -> dict:
         return {"notes": self.snapshot().user_notes()}
 
+    def dsm(self, by: str = "folder", depth: int | None = None) -> dict:
+        """The dependency structure matrix of the map's dsm view (:mod:`verinoda.dsm`), kept per snapshot."""
+        from verinoda import dsm
+
+        snap = self.snapshot()
+        with snap._lock:   # one computation per grouping, however many requests ask at once
+            memo = snap.__dict__.setdefault("_dsm", {})
+            if (by, depth) not in memo:
+                memo[(by, depth)] = dsm.dsm(snap.g, by=by, depth=depth)
+            return memo[(by, depth)]
+
+    def model(self) -> dict:
+        """The committed C4 model (``[architecture.model]``) against the code, as the map's model view."""
+        from verinoda import dsm
+
+        return dsm.model_check(self.snapshot().g)
+
     def decisions(self) -> dict:
         """The decision records by date with their relations and a Mermaid graph (read from the files; the
         index is not needed)."""
