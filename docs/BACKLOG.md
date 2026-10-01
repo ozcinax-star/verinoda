@@ -99,6 +99,9 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
+| 13.6 | **Typed questions, batched** | `verinoda tq` and run_tool `tq`: up to 20 typed questions (exists, which, calls, reaches, route, writes/reads, callers, taint, tested, q) per call; each answer one typed value, its status, `file:line` and why/next, from graphquery, naming, entail, taint, dataschema and the test map; no model, no network, no new analysis | TypeSafe Jev (hosted model; the idea only) | a frozen held-out gold set gives 0 wrong answers at verified or observed status; answers are byte-identical across runs; the core menu stays under its limits; 20 questions answer in under 10 s; every unknown has a next step |
+| 13.7 | **Measured frequencies for typed answers** | `verinoda benchmark tq-audit`: a held-out calibration table keyed by gold and engine hashes; an answer shows `measured: k/n` only for cells with n of 30 or more; a reliability report for the claim confidence caps (no cap changed) | TypeSafe Jev (calibrated outputs) | the report and its table are committed; a changed engine hides `measured` (test); the report lists observed precision against each cap |
+| 13.8 | **Host intent on analyze (full profile)** | optional `intent` on full-profile analyze and `--intent`, checked against the rule reading; a disagreement is reported and the rule reading is used | TypeSafe Jev (typed task framing) | it never changes a status (test); the core analyze schema is unchanged; measured on the verdict audit and fastbench before any promotion to core |
 
 ## 14 - Outputs and views
 
