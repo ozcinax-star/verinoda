@@ -3546,6 +3546,26 @@ def cmd_inventory(args) -> int:
     return 0 if res["units"] else 1
 
 
+def cmd_q(args) -> int:
+    """A query in the graph query language: rows with their evidence (exit 1: no row, 2: a bad query, 3: cut by a
+    budget)."""
+    from verinoda import graphquery
+
+    repo = _repo(args)
+    _need_graph(repo)
+    try:
+        res = graphquery.run(repo, args.query, max_rows=args.max_rows, max_expansions=args.max_expansions,
+                             timeout=args.timeout, verify=args.verify)
+    except graphquery.QueryError as exc:
+        _emit(args, {"status": "error", "error": exc.message, "position": exc.where()},
+              lambda r: print(f"error: {exc.render()}", file=sys.stderr))
+        return 2
+    _emit(args, res, lambda r: _write(graphquery.render(r)))
+    if not res["complete"]:
+        return 3
+    return 0 if any(r.get("bindings") for r in res["rows"]) else 1
+
+
 def cmd_slice(args) -> int:
     """A backward (default) or forward slice of a Python line, across callers for a backward one."""
     from verinoda import slicing
@@ -5171,6 +5191,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-groups", type=int, default=50, help="groups listed at most (default 50)")
     sp.add_argument("--timeout", type=float, default=60.0,
                     help="seconds each search may read files (default 60; loading the index for symbols is apart)")
+    sp = add("q", cmd_q, "a declarative query over the graph - node patterns, edges and bounded paths, WHERE with "
+                         "not/exists, RETURN with count, LIMIT - answered with rows citing their file:line evidence, "
+                         "e.g. 'match (h:handler)-[calls*1..4]->(f:function) where f.text ~ \"INSERT\" return f, h' "
+                         "(exit 1: no row; 2: a bad query; 3: cut by a budget)")
+    sp.add_argument("query", metavar="QUERY", help="the query (MATCH pattern [WHERE ...] [RETURN ...] [LIMIT n])")
+    sp.add_argument("--max-rows", type=int, default=200, help="rows (or groups) returned at most (default 200)")
+    sp.add_argument("--max-expansions", type=int, default=1_000_000,
+                    help="edges and nodes visited at most before the answer is cut (default 1,000,000)")
+    sp.add_argument("--timeout", type=float, default=30.0, help="seconds of evaluation at most (default 30)")
+    sp.add_argument("--verify", action="store_true",
+                    help="re-read the cited call sites and definitions; a row whose every part is confirmed in "
+                         "Python code becomes statically_verified")
     sp = add("slice", cmd_slice, "where a Python line's values come from (backward slice: data and control "
                                  "dependence inside the function, then the arguments its callers pass, from the "
                                  "index) or what a definition there can affect (--forward)")
