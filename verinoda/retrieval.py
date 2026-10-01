@@ -606,9 +606,11 @@ def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[
                 returned: list[tuple[str, int, int]] | None = None) -> str:
     """Plain text for a model, skeleton first, packed to ``budget_chars``.
 
-    ``seen`` (file -> spans): items an earlier answer of the same session already printed with their passages;
-    they are not printed again, only listed by location at the end, so the budget goes to new passages.
-    ``returned`` collects ``(file, a, b)`` of each item printed here with its passages.
+    ``seen`` (file -> line windows): the lines earlier answers of the same session printed. An item whose whole
+    span they cover is not printed again: it is listed by location near the top (before any item, so the list is
+    never what the budget drops), and the budget goes to new passages; within a long item, a window printed
+    before is not printed again either. ``returned`` collects ``(file, x, y)`` of each window this answer
+    printed and still holds at the end (a block the budget note pushed out is not one).
 
     Works on the result of :func:`retrieve`. A result that went through JSON
     (no ranking attached) is rendered from its items alone.
@@ -653,10 +655,30 @@ def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[
     rest: list[str] = []
     outlined = False
     sig_back: dict[int, tuple[int, str]] = {}  # passage block -> (its short header block, header with signature)
-    repeated: list[str] = []
+    printed: list[tuple[int, str, str, int, int]] = []   # (block index, block, file, x, y) of each window added
+
+    def covered(f: str, x: int, y: int) -> bool:
+        """Lines x-y of f were all printed earlier in the session (one window or several adjacent ones)."""
+        spans = sorted((sx, sy) for sx, sy in (seen or {}).get(f, ()) if sy >= x and sx <= y)
+        at = x
+        for sx, sy in spans:
+            if sx > at:
+                return False
+            at = max(at, sy + 1)
+            if at > y:
+                return True
+        return at > y
+
+    repeated = {id(h) for h in rd.ranking.hits if seen and covered(h.file, h.a, h.b)}
+    if repeated:
+        by_file: dict[str, list[str]] = defaultdict(list)
+        for h in rd.ranking.hits:
+            if id(h) in repeated:
+                by_file[h.file].append(f"{h.a}-{h.b}")
+        listed = "; ".join(f"{f}:{','.join(spans)}" for f, spans in by_file.items())
+        add(_clip(f"already returned earlier in this session, not repeated ({len(repeated)}): {listed}", 700))
     for i, h in enumerate(rd.ranking.hits):
-        if seen and any(x <= h.a and h.b <= y for x, y in seen.get(h.file, ())):
-            repeated.append(f"{h.file}:{h.a}-{h.b}")
+        if id(h) in repeated:
             continue
         if h.file.lower().endswith(PROSE_SUFFIXES):
             if prose >= TEXT_MAX_PROSE:
@@ -713,6 +735,11 @@ def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[
                 wins.append((pa, min(pb, pa + TEXT_PASSAGE_LINES - 1)))
                 if len(wins) >= k:
                     break
+        if seen and wins:   # windows printed earlier in the session are not printed again
+            new_wins = [w for w in wins if not covered(h.file, w[0], w[1])]
+            if not new_wins:
+                parts[0] += " [its passages were returned earlier in this session]"
+            wins = new_wins
         # A passage that starts at the item's first line prints the signature itself: the header only
         # names the item (it gets the signature back below if that passage does not fit).
         short = bool(wins) and min(wins)[0] == a and bool(h.sig)
@@ -729,6 +756,8 @@ def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[
             body = numbered_lines(textwrap.dedent("\n".join(_clip(lines[j - 1], TEXT_LINE_CHARS)
                                                        for j in range(x, min(y, len(lines)) + 1))), x)
             added = add((f"  {h.file}:{x}-{y}\n" if (x, y) != (a, b) else "") + body)
+            if added:
+                printed.append((len(out) - 1, out[-1], h.file, x, min(y, len(lines))))
             if short and x == a:
                 with_sig = "\n".join([f"## {h.file}:{a}-{b} {sig}{ref_tag}", *parts[1:]])
                 if added:  # should the note at the end push this passage out, the header takes it back
@@ -742,17 +771,12 @@ def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[
         # the lines printed, not the whole span: a method of a long class whose section showed two
         # other passages still gets its own section (with its callers)
         shown[h.file].extend(wins)
-        if returned is not None:
-            returned.append((h.file, a, b))
     if handle is not None:
         missing, n_missing = search_index.unindexed_matching(handle, rd.ranking.query)
         if missing:
             add(_clip(f"not indexed, and the path matches your words ({n_missing}): "
                       + "; ".join(f"{f} ({why})" for f, why in missing)
                       + ("; ..." if n_missing > len(missing) else ""), 400))
-    if repeated:
-        add(_clip("already returned earlier in this session, not repeated (read them there, or open the file): "
-                  + "; ".join(repeated[:12]) + (f"; +{len(repeated) - 12} more" if len(repeated) > 12 else ""), 500))
     more = len(rest) + max(0, rd.ranking.candidates - len(rd.ranking.hits))
     if outlined:
         add("(calls / called by: static call graph, '?' = inferred edge; may be incomplete)")
@@ -789,6 +813,8 @@ def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[
         add(tail if tail is not None else _clip(_tail_forms(more, [], nxt, 0, False)[-1], max(1, budget_chars - 1)))
     if not out:
         add("no candidate locations to show for this question")
+    if returned is not None:   # only the windows still in the answer: the note at the end may have pushed some out
+        returned.extend((f, x, y) for k, block, f, x, y in printed if k < len(out) and out[k] is block)
     return "\n".join(out)
 
 

@@ -867,8 +867,15 @@ class AtlasTools:
         return out
 
     def _note_returned(self, returned: list[tuple[str, int, int]]) -> None:
+        """Remember the windows an answer printed, with each file's stat; a file modified within the racy window
+        is not remembered (a same-size edit in the same clock tick would keep its stamp)."""
         for rel, a, b in returned:
-            stamp, spans = self._session_seen.get(rel, (self._stat_key(rel), []))
+            stamp = self._stat_key(rel)
+            if stamp is None or self._racy(stamp):
+                continue
+            old_stamp, spans = self._session_seen.get(rel, (stamp, []))
+            if old_stamp != stamp:
+                spans = []
             if (a, b) not in spans:
                 spans.append((a, b))
             self._session_seen[rel] = (stamp, spans)

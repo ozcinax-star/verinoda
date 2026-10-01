@@ -1799,3 +1799,31 @@ def test_a_repeated_query_in_one_session_returns_only_new_passages(fresh_repo):
     assert any(ln.startswith(f"## {rel}:") for ln in third.splitlines())
     # json answers are not deduplicated: they are data, not text an agent reads once
     assert t.project_query(QUESTION, max_items=5, format="json")["items"]
+
+
+def test_session_dedup_remembers_only_what_was_printed(fresh_repo):
+    from verinoda import index, retrieval
+
+    g = index.load(fresh_repo)
+    res = retrieval.retrieve(g, QUESTION, retrieval.Budget(max_items=8, max_chars=6000))
+    hits = res.render.ranking.hits
+    # a small budget: the note at the end pushes sections out; only windows still in the text are returned
+    returned: list = []
+    text = retrieval.render_text(res, 900, returned=returned)
+    assert returned
+    for f, x, y in returned:
+        assert f"## {f}:" in text or f"  {f}:{x}-{y}" in text, (f, x, y)
+    # what the first answer printed is listed in the second one before any section
+    seen: dict = {}
+    for f, x, y in returned:
+        seen.setdefault(f, []).append((x, y))
+    again = retrieval.render_text(res, 900, seen=seen).splitlines()
+    covered = [h for h in hits if any(x <= h.a and h.b <= y for x, y in seen.get(h.file, ()))]
+    first_section = next(i for i, ln in enumerate(again) if ln.startswith("## "))
+    listed = next(i for i, ln in enumerate(again) if ln.startswith("already returned earlier in this session"))
+    assert covered and listed < first_section
+    assert all(not ln.startswith(f"## {h.file}:{h.a}-{h.b}") for h in covered for ln in again)
+    # a long item printed only in part is not hidden as a whole
+    long_ = next(h for h in hits if h.b - h.a >= 3)
+    part = retrieval.render_text(res, 6000, seen={long_.file: [(long_.a, long_.a)]})
+    assert "already returned earlier" not in part and f"## {long_.file}:{long_.a}-{long_.b}" in part
