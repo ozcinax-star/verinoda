@@ -631,16 +631,12 @@ changed and the run ids on both sides. `experiments.run` takes `replay=` for tha
 
 ### D130: Persistent test-to-code map and affected tests
 
-Schema v9 (after v8, a memory's `expires_at`): `atlas.db` gains `test_map` and `test_map_tests` (migrated on first open; an older Verinoda refuses
-the database as written by a newer one). Every traced run (`observe`, `analyze --observe`, `review --observe`,
+Schema v9 (after v8, a memory's `expires_at`): `atlas.db` gains `test_map` and `test_map_tests`
+(migrated on first open; an older Verinoda refuses the database as written by a newer one). Every traced run (`observe`, `analyze --observe`, `review --observe`,
 the debug ledger's traced attempts) now updates the test-to-code map; `review` lists the affected tests (observed
 first, static reach as the fallback, each labelled) and prints one pytest command that runs them (`review --json`:
 `tests.affected`); `observe --json` gains `test_map` (tests and functions recorded); MCP `change_review` gains
 the compact `affected_tests` key. No MCP tool added; the tool count is unchanged.
-
-docs/UPGRADING.md must mention **v9** for `tests/test_docs.py::test_schema_version_and_mcp_tool_count_match_the_code`
-to pass (it asserts `v{SCHEMA_VERSION}` appears there); this branch could not edit UPGRADING.md, so that one
-test fails until the upgrading note is merged.
 
 ### D60-D62
 
