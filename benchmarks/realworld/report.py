@@ -46,9 +46,9 @@ def table_rows(results: dict) -> list[list[str]]:
 
 
 def render(results: dict) -> str:
-    envs = []
-    for run in results.get("runs") or []:
-        line = _env_line(run.get("environment") or results.get("environment"))
+    envs = []                   # the environments of the repositories listed (not of runs they replaced)
+    for r in results.get("repos", []):
+        line = _env_line(r.get("environment") or results.get("environment"))
         if line not in envs:
             envs.append(line)
     if not envs:
