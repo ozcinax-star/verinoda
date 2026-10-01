@@ -53,7 +53,10 @@ is quoted; a backslash is kept as written (``allowed=orders\\repository.py``, ``
   breaks it); test files among them are left out unless ``scope=all``;
 * ``public module=GLOB api=GLOB[,...] [relations=...] [scope=product|all]``: code outside the module
   reaches it only through its public files; test code outside it is left out unless ``scope=all``;
-* ``dependency absent=NAME`` / ``dependency present=NAME``: a declared dependency must (not) exist.
+* ``dependency absent=NAME`` / ``dependency present=NAME``: a declared dependency must (not) exist;
+* ``script path=FILE.py [timeout=SECONDS]``: a rule written as a Python program in the repository that
+  defines ``check(guard)`` (:mod:`verinoda.script_guard`); it runs only from the CLI's ``decide check`` /
+  ``decide baseline``, in a project the user trusts, and is never recorded through MCP.
 
 A glob of an edge guard may be ``tag:NAME``: the globs listed under that name in a committed
 ``verinoda.toml`` (``[architecture.tags]``: ``ui = ["src/ui/**", "src/widgets/**"]``) or ``pyproject.toml``
@@ -84,7 +87,7 @@ DEFAULT_DIR = ".verinoda/decisions"
 # where the folder comes from when nothing names it (decisions_dir_source): a missing folder is no error then
 DEFAULT_SOURCE = "the default (nothing configured)"
 STATUSES = ("proposed", "accepted", "superseded", "rejected", "deprecated")
-GUARD_KINDS = ("only_in", "no_edge", "layers", "allow_edges", "public", "dependency")
+GUARD_KINDS = ("only_in", "no_edge", "layers", "allow_edges", "public", "dependency", "script")
 # the guards that read graph edges: the index is loaded (and refreshed first) for them
 EDGE_KINDS = ("no_edge", "layers", "allow_edges", "public")
 # the guards whose default scope leaves test code out (scope=all takes it in)
@@ -622,6 +625,15 @@ def _texts(g: dict, key: str, *, paths: bool = False) -> list[str]:
     return v
 
 
+def refuse_script_guards(specs: list[str] | None) -> None:
+    """Raise :class:`DecisionError` when a guard spec is a ``script`` guard: one runs code, so it is added with
+    the CLI (``verinoda decide record`` / ``decide guard``), never through MCP."""
+    for spec in specs or []:
+        if (str(spec).split() or [""])[0].strip("\"'").lower() == "script":
+            raise DecisionError("a script guard runs the project's code: the user adds it with `verinoda decide "
+                                "guard ID --guard \"script path=...\"` in a terminal, not through MCP")
+
+
 def validate_guard(g: dict) -> dict:
     """Raise :class:`DecisionError` unless ``g`` is a guard this version can check."""
     kind = g.get("kind")
@@ -629,7 +641,7 @@ def validate_guard(g: dict) -> dict:
         raise DecisionError(f"guard kind {kind!r} is not one of {', '.join(GUARD_KINDS)}")
     if g.get("status", "accepted") not in ("proposed", "accepted"):
         raise DecisionError(f"guard status {g.get('status')!r} is not proposed/accepted")
-    for key in ("pattern", "sink", "from", "to", "module", "absent", "present", "scope"):
+    for key in ("pattern", "sink", "from", "to", "module", "absent", "present", "scope", "path"):
         if g.get(key) is not None and not isinstance(g[key], str):
             raise DecisionError(f"{key} must be a string")
     _texts(g, "calls")
@@ -674,6 +686,13 @@ def validate_guard(g: dict) -> dict:
     elif kind == "public":
         if not g.get("module") or not g.get("api"):
             raise DecisionError("public needs module=GLOB and api=GLOB[,...] (the module's public files)")
+    elif kind == "script":
+        q = str(g.get("path") or "").strip().replace("\\", "/")
+        if not q.lower().endswith(".py") or q.startswith("/") or re.match(r"^[A-Za-z]:", q) or ".." in q.split("/"):
+            raise DecisionError("script needs path=FILE.py, a Python file inside the repository (relative, no '..')")
+        t = g.get("timeout", 60)
+        if isinstance(t, bool) or not isinstance(t, int) or not 1 <= t <= 600:
+            raise DecisionError("script timeout must be a whole number of seconds from 1 to 600")
     else:
         which = [k for k in ("absent", "present") if g.get(k)]
         if len(which) != 1 or not _NAME.match(str(g[which[0]])):
@@ -713,6 +732,15 @@ def parse_guard(spec: str, repo: Path, gid: str, *, status: str = "accepted") ->
         for k in ("absent", "present"):
             if k in kv:
                 g[k] = kv.pop(k).strip()
+    elif kind == "script":
+        g["path"] = rel_path(repo, kv.pop("path", ""), "path")
+        t = kv.pop("timeout", "60").strip()
+        if not t.isdigit():
+            raise DecisionError(f"guard {spec!r}: timeout={t!r} is not a whole number of seconds")
+        g["timeout"] = int(t)
+        validate_guard(g)
+        if not (Path(repo) / g["path"]).is_file():
+            raise DecisionError(f"guard {spec!r}: {g['path']} is not a file of the repository")
     if kv:
         raise DecisionError(f"guard {spec!r}: unknown key(s) {', '.join(sorted(kv))}")
     return validate_guard(g)

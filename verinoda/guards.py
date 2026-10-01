@@ -64,8 +64,15 @@ package.json of the workspace packages the root declares, plus the root Gradle/M
 subprojects it includes (with ``gradle/*.versions.toml`` catalogs); build files under test, sample,
 fixture or vendor folders are not read, and a build the root does not include only gives POSSIBLE.
 
-Nothing here imports, runs or evaluates code of the analysed repository: files are read as text and
-parsed (``ast``, tree-sitter). ``git`` gets validated refs only (``rev-parse --verify
+``script path=FILE.py [timeout=SECONDS]`` - a rule written as a Python program in the repository; it runs
+in a child process (:mod:`verinoda.script_guard`, which says what that keeps out and what it does not), only
+when the caller asks for it (``run_scripts``: the CLI's ``decide check`` and ``decide baseline``) and the user
+trusts the project (``verinoda trust``). Each finding it reports must cite a line of a repository file; a
+VIOLATED one is strong_inference (the script's logic is not verified here). A script that raises, times out,
+exits or cites no real line is ``unknown``, never ok.
+
+Apart from script guards, nothing here imports, runs or evaluates code of the analysed repository: files are
+read as text and parsed (``ast``, tree-sitter). ``git`` gets validated refs only (``rev-parse --verify
 --end-of-options``) and ``--`` before paths.
 """
 
@@ -1344,8 +1351,9 @@ def _targets(g: dict) -> tuple[dict[str, str], str]:
 
 class _Ctx:
     def __init__(self, repo: Path, all_files: list[str], graph=None, decisions: Path | None = None,
-                 graph_stale: str | None = None):
+                 graph_stale: str | None = None, run_scripts: bool = False):
         self.repo = Path(repo)
+        self.run_scripts = run_scripts  # script guards run only when the caller says so (the CLI)
         self.all_files = all_files
         self.graph = graph
         self.decisions = decisions  # the decisions folder in use (None: decisions.decisions_dir)
@@ -2173,10 +2181,54 @@ def check_dependency(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]
     return out, scan, what
 
 
+def check_script(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], Scan, str]:
+    """Run a ``script`` guard (:mod:`verinoda.script_guard`): only when ``ctx.run_scripts`` and the project is
+    trusted; anything that is not a clean run with real ``file:line`` findings is ``unknown``."""
+    from verinoda import script_guard as sg
+    from verinoda.paths import is_trusted
+
+    scan = Scan()
+    what = f"script {g.get('path')}"
+    if not ctx.run_scripts:
+        scan.unknown.append("a script guard runs only from the CLI (`verinoda decide check` or `decide baseline`), "
+                            "never here: run that to check it")
+        return [], scan, what
+    if not is_trusted(ctx.repo):
+        scan.unknown.append("not run: a script guard runs the project's own code, and this project is not trusted. "
+                            "Ask the user: if they trust this project's code, they run `verinoda trust "
+                            f"{ctx.repo.resolve()}` themselves in a terminal; an agent must never run it for them")
+        return [], scan, what
+    r = sg.run(ctx.repo, g.get("path") or "", timeout=g.get("timeout") or sg.DEFAULT_TIMEOUT,
+               spec=_guard_desc(g))
+    scan.limit(*sg.LIMITS)
+    if ctx.graph_stale:
+        scan.limit(f"the graph the script read may be older than the working tree: {ctx.graph_stale}")
+    if r.get("output"):
+        scan.limit(f"the script printed: {r['output'][-400:]}")
+    if r["status"] != "ok":
+        scan.unknown.append(f"the script did not run to its end ({r['status']}): {r.get('error') or '?'}"[:500])
+    else:
+        scan.count("script_runs")
+    if r.get("cut"):
+        scan.unknown.append(f"the script reported {r['cut']} finding(s) past the first {sg.MAX_FINDINGS}: not listed")
+    out = []
+    for f in r.get("findings") or []:
+        level = f.get("level") if f.get("level") in (VIOLATED, POSSIBLE) else POSSIBLE
+        at = sg.cited_line(ctx.repo, f)
+        if isinstance(at, str):
+            scan.unknown.append(f"the script {at}: {str(f.get('why') or '')[:160]}")
+            continue
+        rel, line = at
+        scan.via.setdefault((rel, line), set()).add(str(g.get("path")))  # a changed script makes its findings new
+        out.append((level, rel, line, f"{str(f.get('why') or 'reported by the script')[:300]} (script {g.get('path')})"))
+    return out, scan, what
+
+
 # -- governs and revisit ------------------------------------------------------------------------------
 
 CHECKS = {"only_in": check_only_in, "no_edge": check_no_edge, "layers": check_layers,
-          "allow_edges": check_allow_edges, "public": check_public, "dependency": check_dependency}
+          "allow_edges": check_allow_edges, "public": check_public, "dependency": check_dependency,
+          "script": check_script}
 
 
 def check_governs(repo: Path, v: dict) -> tuple[str, str]:
@@ -2261,7 +2313,7 @@ def stale_graph_note(update_result: dict) -> str:
 
 def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool = False,
           records=None, decisions_dir: str | None = None, graph_stale: str | None = None,
-          use_baseline: bool = True) -> dict:
+          use_baseline: bool = True, run_scripts: bool = False) -> dict:
     """Run every accepted guard of every enforced decision on the working tree.
 
     ``base`` (a git revision) or ``changed_only`` (= base HEAD) labels each finding ``new/touched since
@@ -2280,6 +2332,9 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
 
     ``use_baseline``: the findings the decisions folder's ``baseline.json`` lists are moved to ``baselined`` and
     do not fail the check; its entries nothing matched are ``baseline_fixed`` (:mod:`verinoda.baseline`).
+
+    ``run_scripts``: run ``script`` guards (in a trusted project; :func:`check_script`). Without it they are
+    ``unknown``: only the CLI's ``decide check`` and ``decide baseline`` pass it.
     """
     from verinoda import decisions as dm
     from verinoda.snapshot import list_files
@@ -2298,7 +2353,7 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
         base_sha = validate_ref(repo, base_label)
         changed = changed_since(repo, base_sha)
         res["base"] = {"ref": base_label, "commit": base_sha, "changed_files": len(changed)}
-    ctx = _Ctx(repo, list_files(repo), graph, ddir, graph_stale)
+    ctx = _Ctx(repo, list_files(repo), graph, ddir, graph_stale, run_scripts)
     if graph_stale:
         res["graph_stale"] = graph_stale
     today = dm._today()
@@ -2348,7 +2403,8 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
             for level, rel, line, why in hits:
                 f = Finding(d.id, g["id"], g["kind"], level, f"{rel}:{line}" if line else rel, why,
                             line=_line(repo, rel, line) if line else None,
-                            status="statically_verified" if level == VIOLATED else "weak_inference")
+                            status="weak_inference" if level != VIOLATED else
+                            "strong_inference" if g["kind"] == "script" else "statically_verified")
                 if changed is not None:
                     via = scan.via.get((rel, line)) or set()
                     touched = sorted(p for p in {rel, *via} if p in changed)

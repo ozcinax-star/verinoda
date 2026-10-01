@@ -1738,6 +1738,8 @@ class AtlasTools:
                         except ValueError as exc:
                             raise ToolFailure("invalid_argument", str(exc)[:600],
                                               "question ids are listed in the brief's questions_for_human") from None
+                    if act in ("record", "guard"):  # a script guard runs code: the CLI only
+                        dm.refuse_script_guards(_str_list(guards, "guards"))
                     if act == "record":
                         g = self._graph() if governs and graph_path(self.repo).exists() else None
                         return dm.record(st, self.repo, chosen=_text(chosen, "chosen"),

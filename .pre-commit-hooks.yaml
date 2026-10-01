@@ -1,0 +1,13 @@
+# For the pre-commit framework (https://pre-commit.com): in a project's .pre-commit-config.yaml
+#   - repo: <this repository's URL>
+#     rev: <a tag>
+#     hooks: [{id: verinoda-decide-check}]
+# It checks the decision records' guards (script guards too, in a project the user trusts) against the
+# working tree; only violations new or touched since HEAD stop the commit (exit 1), and a guard that could
+# not be checked stops it too (exit 3).
+- id: verinoda-decide-check
+  name: verinoda decide check
+  entry: verinoda decide check --changed
+  language: python
+  pass_filenames: false
+  always_run: true

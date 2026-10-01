@@ -2086,14 +2086,15 @@ def _r_brief(b: dict, indent: str = "") -> None:
 
 
 def _decide_graph(args, repo: Path, recs) -> tuple:
-    """(graph, note, stale_graph) for a decision check: the index refreshed first when an edge guard needs it."""
+    """(graph, note, stale_graph) for a decision check: the index refreshed first when an edge guard needs it
+    (or a script guard, which reads the graph file itself)."""
     from verinoda import decisions as dm
     from verinoda import guards
     from verinoda.paths import db_path, graph_path
 
     graph, note, stale_graph = None, None, None
-    if any(d.enforced and g.get("kind") in dm.EDGE_KINDS and g.get("status") == "accepted"
-           for d in recs for g in d.guards):
+    kinds = {g.get("kind") for d in recs if d.enforced for g in d.guards if g.get("status") == "accepted"}
+    if kinds & {*dm.EDGE_KINDS, "script"}:
         if not args.no_refresh and db_path(repo).is_file():
             from verinoda import buildlock, workflow
             from verinoda.snapshot import current_state
@@ -2111,7 +2112,7 @@ def _decide_graph(args, repo: Path, recs) -> tuple:
                         stale_graph = guards.stale_graph_note(up)
             finally:
                 st.close()
-        if graph_path(repo).exists():
+        if kinds & set(dm.EDGE_KINDS) and graph_path(repo).exists():
             from verinoda import index
 
             graph = index.load(repo)
@@ -2127,7 +2128,7 @@ def _decide_check(args, repo: Path) -> int:
     graph, note, stale_graph = _decide_graph(args, repo, recs)
     try:
         res = guards.check(repo, graph=graph, base=args.base, changed_only=args.changed, records=recs,
-                           decisions_dir=ddir, graph_stale=stale_graph)
+                           decisions_dir=ddir, graph_stale=stale_graph, run_scripts=True)
     except ValueError as exc:
         if getattr(args, "json", False):  # like every other error of decide check: JSON on stdout too
             print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
@@ -2156,7 +2157,7 @@ def _decide_baseline(args, repo: Path) -> int:
         ddir = dm.decisions_dir_source(repo, ddir_arg)[0]
         graph, _note, stale_graph = _decide_graph(args, repo, recs)
         res = guards.check(repo, graph=graph, records=recs, decisions_dir=ddir_arg, graph_stale=stale_graph,
-                           use_baseline=not args.record)
+                           use_baseline=not args.record, run_scripts=True)
         if args.record:
             out = bl.record(ddir, res, statement=args.said, replace=args.replace, today=dm._today())
         elif args.shrink:
