@@ -4254,6 +4254,55 @@ def cmd_projects(args) -> int:
     return 0
 
 
+def cmd_group(args) -> int:
+    """``verinoda group create|list|show|remove|link|trace|query``: several repositories, each with its own
+    index, and the calls from one into another (:mod:`verinoda.repo_group`)."""
+    from verinoda import repo_group as G
+
+    cmd = args.group_cmd
+    try:
+        if cmd == "create":
+            res = G.create(args.name, args.members, links_dir=args.links_dir)
+        elif cmd == "remove":
+            res = G.remove(args.name)
+        elif cmd == "list":
+            res = {"groups_file": str(G.groups_path()), "groups": G.groups()}
+        elif cmd == "link":
+            res = G.link(args.name)
+        elif cmd == "show":
+            res = G.show(args.name)
+        elif cmd == "trace":
+            res = G.trace(args.name, args.source, args.target)
+        else:
+            res = G.query(args.name, args.question, max_items=args.max_items)
+    except G.GroupError as exc:
+        raise SystemExit(f"error: {exc}") from None
+
+    def render(r):
+        if cmd == "create":
+            print(f"group {r['name']}: " + ", ".join(f"{m['name']} ({m['path']})" for m in r["members"]))
+            print(f"next: `verinoda group link {r['name']}` (the members' indexes are read, never rebuilt)")
+        elif cmd == "remove":
+            print(f"removed group {r['removed']}")
+        elif cmd == "list":
+            print(f"groups: {r['groups_file']}")
+            for g in r["groups"]:
+                print(f"  {g['name']}: " + ", ".join(m.get("name", "?") for m in g["members"]))
+            if not r["groups"]:
+                print("  (no group: `verinoda group create NAME A B`)")
+        elif cmd in ("link", "show"):
+            _write(G.render_show(G.show(args.name) if cmd == "link" else r))
+            if cmd == "link":
+                print(f"  linked in {r['seconds']['total']}s ({r['counts'].get('imports', 0)} import(s) of another "
+                      f"member, {r['counts'].get('unresolved', 0)} call(s) through them with no definition found)")
+        elif cmd == "trace":
+            _write(G.render_trace(r))
+        else:
+            _write(G.render_query(r))
+    _emit(args, res, render)
+    return 2 if cmd == "trace" and res.get("status") != "found" else 0
+
+
 def cmd_mcp_prompts(args) -> int:
     """``verinoda mcp prompts [NAME] [--arg K=V]``: the MCP server's ready workflows, listed or filled in."""
     from verinoda.mcp import prompts as P
@@ -4607,6 +4656,32 @@ def build_parser() -> argparse.ArgumentParser:
     c = add("remove", cmd_projects, "unregister a project (its folder and index are not touched)", repo=False,
             parent=psub)
     c.add_argument("spec", help="its name or path")
+    sp = sub.add_parser("group", help="several repositories, each indexed on its own, with the calls from one "
+                                      "into another (kept in the user config folder)")
+    gsub = sp.add_subparsers(dest="group_cmd", required=True)
+    c = add("create", cmd_group, "a group of project folders (registered names, NAME=PATH or folders)", repo=False,
+            parent=gsub)
+    c.add_argument("name")
+    c.add_argument("members", nargs="+", metavar="MEMBER")
+    c.add_argument("--links-dir", help="keep the links file here instead of the user config folder (never inside "
+                                       "a member)")
+    add("list", cmd_group, "list the groups", repo=False, parent=gsub)
+    for name, help_ in (("show", "a group's members, links, ambiguous imports and stale members"),
+                        ("remove", "forget a group and its links (the members are not touched)"),
+                        ("link", "find the calls from one member into another from the members' indexes "
+                                 "(never rebuilt) and keep them")):
+        c = add(name, cmd_group, help_, repo=False, parent=gsub)
+        c.add_argument("name")
+    c = add("trace", cmd_group, "a call path from a symbol in one member to a symbol in another (MEMBER:SYMBOL "
+                                "when a name is in several)", repo=False, parent=gsub)
+    c.add_argument("name")
+    c.add_argument("source")
+    c.add_argument("target")
+    c = add("query", cmd_group, "ask every member's index; each hit is labelled with its member", repo=False,
+            parent=gsub)
+    c.add_argument("name")
+    c.add_argument("question")
+    c.add_argument("--max-items", type=int, default=5, help="hits per member (default 5)")
     sp = add("scan", cmd_scan, "index a repository (AST, no LLM) and record a snapshot", repo=False)
     sp.add_argument("path", nargs="?")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

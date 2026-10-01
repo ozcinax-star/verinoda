@@ -106,6 +106,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "index_update",
     "list_projects",
     "index_status",
+    "group_view",
     "decision_record",
     "decision_check",
     "dependency_ask",
@@ -1938,6 +1939,23 @@ class AtlasTools:
             return out
         return self._run("index_status", go, need="none", keep=("state", "stale_count", "hint"))
 
+    def group_view(self, group: str, action: str = "show", source: str | None = None, target: str | None = None,
+                   question: str | None = None, max_items: int = 5, *, served: set[Path] | None = None) -> dict:
+        """A group of repositories (`verinoda group`): its links, a call path across members, or a question asked
+        of each member. Every member must be a project this server serves (``served``; here the one project, so
+        a group is answered only by a server over several projects)."""
+        def go():
+            from verinoda import repo_group
+
+            try:
+                return repo_group.view(group, action, source=source, target=target, question=question,
+                                       max_items=max_items, served=served if served is not None else {self.repo})
+            except repo_group.GroupError as exc:
+                raise ToolFailure("group_unavailable", str(exc),
+                                  "groups are made with `verinoda group create NAME A B` and linked with "
+                                  "`verinoda group link NAME`") from None
+        return self._run("group_view", go, need="none", keep=("status", "stale_members", "hint"))
+
     def index_update(self) -> dict:
         if not atlas_dir(self.repo).is_dir():
             return self._first_scan()
@@ -2191,6 +2209,7 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - grep_context: what the Grep hook adds (definition, callers, callees of a searched symbol).
 - read_context: what the Read/Edit hook adds (decision records, notes and rules about the file).
 - list_projects / index_status: the projects served; an index's state and the files changed since it.
+- group_view: a group of served projects (`verinoda group`): calls from one into another, a path across them.
 - change_probe: after editing a Python function, its base and working-tree versions on generated inputs. A
   difference is a behaviour change, not a bug; say "no difference found in N inputs", never "verified"; a refusal,
   inconclusive or incomplete is not a pass."""
@@ -2416,6 +2435,10 @@ DESCRIPTIONS: dict[str, str] = {
     "index_status": (
         "A project's index: not_scanned | initialised | indexed, when the graph was written, the files changed "
         "since (stale_count), whether a build is running. Read-only; index_update re-indexes."),
+    "group_view": (
+        "A group of repositories this server serves (`verinoda group create/link`). action: show (calls from one "
+        "member into another: call site and definition file:line, status, ambiguous imports, stale members) | "
+        "trace (source to target across members; MEMBER:SYMBOL) | query (question asked of each member)."),
     "decision_record": (
         "Decision records (Markdown with front matter in decisions.dir, logged append-only). action: list | "
         "record (chosen + rationale; optional brief_id, guards, governs, revisit_when, supersedes) | import (a "
@@ -2486,7 +2509,7 @@ DESCRIPTIONS: dict[str, str] = {
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
               "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
               "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq",
-              "list_projects", "index_status"}
+              "list_projects", "index_status", "group_view"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -3045,6 +3068,19 @@ def build_server(repo: Path | str | None, tools: AtlasTools | None = None, *, pr
     @register("index_status")
     def index_status() -> dict[str, Any]:
         return emit(t.index_status())
+
+    @register("group_view")
+    def group_view(
+        group: Annotated[str, Field(description="The group's name (`verinoda group list`).")],
+        action: Annotated[Literal["show", "trace", "query"], Field(description="What to return.")] = "show",
+        source: Annotated[OptStr, Field(description="trace: the symbol the path starts at.")] = None,
+        target: Annotated[OptStr, Field(description="trace: the symbol it ends at.")] = None,
+        question: Annotated[OptStr, Field(description="query: what to look up.")] = None,
+        max_items: Annotated[int, Field(description="query: hits per member (1-25).")] = 5,
+    ) -> dict[str, Any]:
+        if hub is not None:
+            return emit(hub.group_view(group, action, source, target, question, max_items))
+        return emit(t.group_view(group, action, source, target, question, max_items))
 
     StrList = list[str] | None
 
