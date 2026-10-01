@@ -1170,6 +1170,46 @@ def cmd_trace(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_tour(args) -> int:
+    from verinoda import tours
+
+    repo = _repo(args)
+    try:
+        if args.check:
+            res = tours.check(repo, args.check, fix=args.fix)
+            _emit(args, res, lambda r: print(tours.render_check(r)))
+            return res["exit"]
+        if args.fix:
+            raise tours.TourError("--fix goes with --check FILE")
+        if not (args.source and args.target):
+            raise tours.TourError("give SOURCE and TARGET (or --check FILE)")
+        from verinoda import freshness, index
+
+        _need_graph(repo)
+        fresh = freshness.check(repo)
+        tour = tours.build(repo, index.load(repo), args.source, args.target, mode=args.mode, title=args.title,
+                           stale=fresh["files"])
+        path, notes = tours.write(repo, tour, args.out, force=args.force)
+    except tours.TourError as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    res = {"tour": str(path), "steps": len(tour["steps"]), "ref": tour.get("ref"), "title": tour["title"],
+           **({"unpinned": tour["verinoda"]["unpinned"]} if tour["verinoda"].get("unpinned") else {}),
+           **({"notes": notes} if notes else {})}
+
+    def render(r: dict) -> None:
+        print(f"wrote {r['tour']}: {r['steps']} step(s), "
+              + (f"pinned to {r['ref'][:12]}" if r.get("ref") else r.get("unpinned", "not pinned"))
+              + " (open it with the CodeTour extension)")
+        for n in r.get("notes") or []:
+            print(f"  note: {n}")
+
+    _emit(args, res, render)
+    return 0
+
+
 def cmd_export(args) -> int:
     from verinoda import graph_export
 
@@ -3726,6 +3766,18 @@ def build_parser() -> argparse.ArgumentParser:
                                      "your notes on it or on a glob matching it (`scope:` in a note's header), "
                                      "Cursor and Kiro rules for it (what the Read/Edit hook shows an agent)")
     sp.add_argument("file", help="the file (repository-relative or absolute)")
+    sp = add("tour", cmd_tour, "a CodeTour file (.tours/NAME.tour) from a trace path: a step per definition and call "
+                               "site, each quoting its line, pinned to the commit; --check FILE finds moved steps "
+                               "again (--fix writes them back)")
+    sp.add_argument("source", nargs="?", help="where the tour starts (a symbol, as for trace)")
+    sp.add_argument("target", nargs="?", help="where it ends")
+    sp.add_argument("--mode", choices=["flow", "any"], default="flow", help="as for trace (default flow)")
+    sp.add_argument("--title", help="the tour's title (default 'SOURCE -> TARGET')")
+    sp.add_argument("--out", help="the file to write (default .tours/<title>.tour)")
+    sp.add_argument("--check", metavar="FILE", help="check a tour Verinoda wrote against the code as it is now")
+    sp.add_argument("--fix", action="store_true", help="with --check: write moved steps' lines back")
+    sp.add_argument("--force", action="store_true",
+                    help="overwrite a tour file Verinoda did not write, or one edited since it wrote it")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
