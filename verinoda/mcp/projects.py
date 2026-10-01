@@ -344,6 +344,14 @@ class ProjectHub:
         return {"projects": [{"name": n, **self._get(n).index_status()} for n in self.projects],
                 "count": len(self.projects)}
 
+    def group_view(self, group: str, action: str = "show", source: str | None = None, target: str | None = None,
+                   question: str | None = None, max_items: int = 5) -> dict:
+        """``group_view`` over the served projects whose own profile serves it: a group with a member outside
+        them is refused (a core project's code is not read through a full-profile tool)."""
+        served = {p for n, p in self.projects.items() if "group_view" in self.served[n]}
+        name = next(iter(self.projects))
+        return self._get(name).group_view(group, action, source, target, question, max_items, served=served)
+
     def status(self) -> dict:
         """What the HTTP status route and ``verinoda mcp daemon status`` report."""
         with self.lock:
@@ -355,7 +363,7 @@ class ProjectHub:
     def wrap(self, name: str, fn: Callable, emit: Callable[[dict], Any]) -> Callable:
         """``fn`` with an optional ``project`` argument: the call is tied to a project (or refused) and runs
         with that project's tools as ``t``."""
-        if name == "list_projects":
+        if name in ("list_projects", "group_view"):  # about the served projects together, never one of them
             return fn
         from pydantic import Field
 
