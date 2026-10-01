@@ -10,6 +10,8 @@ Design rules enforced here (and tested in tests/test_store.py):
   upgrade path for existing databases.
 * A claim's ``text`` and ``created_at`` never change (v4 trigger); derived
   caches (``file_facts``, ``resolutions``, ``file_stat``, ``test_map``) may be recomputed.
+* A named fact (``facts``, v10) is retired, never deleted; its definition never changes and every change of
+  its status or result is a ``fact_history`` row (append-only).
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 class SchemaTooNew(RuntimeError):
@@ -580,9 +582,54 @@ CREATE TABLE IF NOT EXISTS test_map (
 CREATE INDEX IF NOT EXISTS idx_test_map_path ON test_map(path, qual);
 """
 
+# v10: named derived facts (verinoda/facts.py): a result Verinoda keeps under a name - the claims or facts it rests
+# on, or a stored search and the content hashes of the files it read - with its own status, never stronger than
+# what it rests on. A fact is retired, never deleted; its definition is immutable; every status or result change
+# is a fact_history row (append-only).
+_SCHEMA_V10 = """
+CREATE TABLE IF NOT EXISTS facts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('derived','search')),
+    definition TEXT NOT NULL DEFAULT '{}',
+    result TEXT NOT NULL DEFAULT '{}',
+    inputs TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL,
+    reason TEXT,
+    computed_at TEXT NOT NULL,
+    retired_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_live_name ON facts(name) WHERE retired_at IS NULL;
+CREATE TABLE IF NOT EXISTS fact_history (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    fact_id TEXT NOT NULL REFERENCES facts(id),
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fact_history_fact ON fact_history(fact_id, seq);
+CREATE TRIGGER IF NOT EXISTS no_delete_facts BEFORE DELETE ON facts
+BEGIN SELECT RAISE(ABORT, 'facts are never deleted; retire them'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_fact_definition
+BEFORE UPDATE OF name, kind, definition, created_at ON facts
+BEGIN SELECT RAISE(ABORT, 'a fact''s name and definition are immutable; retire it and add a new one'); END;
+CREATE TRIGGER IF NOT EXISTS no_unretire_facts
+BEFORE UPDATE OF retired_at ON facts WHEN OLD.retired_at IS NOT NULL
+BEGIN SELECT RAISE(ABORT, 'a retired fact stays retired; add it again'); END;
+CREATE TRIGGER IF NOT EXISTS no_delete_fact_history BEFORE DELETE ON fact_history
+BEGIN SELECT RAISE(ABORT, 'fact history is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS no_update_fact_history BEFORE UPDATE ON fact_history
+BEGIN SELECT RAISE(ABORT, 'fact history is append-only'); END;
+"""
+
 _MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5,
                                6: _SCHEMA_V6, 7: _SCHEMA_V7, 8: _SCHEMA_V8,
-                               9: _SCHEMA_V9}
+                               9: _SCHEMA_V9, 10: _SCHEMA_V10}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",
@@ -591,6 +638,8 @@ _JSON_COLS = {
     # debug ledger (v6)
     "settings", "hypothesis_terms", "copy_source", "tree_files", "touched", "signature", "findings", "trace",
     "strategies",
+    # facts (v10)
+    "definition", "inputs",
 }
 
 
@@ -656,12 +705,17 @@ class Store:
         self.conn.close()
 
     @contextmanager
-    def tx(self) -> Iterator[sqlite3.Connection]:
+    def tx(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
         """One transaction. Nested ``tx()`` blocks join the outermost one, which alone commits (or rolls
-        everything back when an exception leaves it), so several store calls can be made atomic together."""
+        everything back when an exception leaves it), so several store calls can be made atomic together.
+
+        ``immediate`` (outermost block only): take the write lock at the start (``BEGIN IMMEDIATE``), so what the
+        block reads cannot be changed by another process before it writes (a check-then-write across processes)."""
         depth = getattr(self, "_tx_depth", 0)
         self._tx_depth = depth + 1
         try:
+            if depth == 0 and immediate and not self.conn.in_transaction:
+                self.conn.execute("BEGIN IMMEDIATE")
             yield self.conn
             if depth == 0:
                 self.conn.commit()

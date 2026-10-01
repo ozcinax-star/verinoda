@@ -26,6 +26,7 @@ from importlib import resources
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from verinoda.fswatch import Watcher  # re-exported: `ui --watch` and its tests
 from verinoda.ui.data import GRAPH_RELATIONS, Atlas
 
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
@@ -55,87 +56,6 @@ def _relations(qs: dict) -> set[str] | None:
 MAX_BODY = 128 * 1024
 MAX_DRAIN = 1024 * 1024   # a refused body up to this size is read before the answer
 TOKEN_META = '<meta name="verinoda-token" content="">'
-
-
-class Watcher(threading.Thread):
-    """``verinoda ui --watch``: run ``verinoda update`` when the project's files change.
-
-    Every ``interval`` seconds the tree's signature (each listed file's size and modification
-    time, ``snapshot.list_files``: tracked and untracked-not-ignored files, never ``.verinoda``) is
-    compared with the last one; once it has stopped changing for one more look (a save that writes
-    several files is one update), ``update`` runs, one at a time. A slow listing slows the looks down.
-    """
-
-    def __init__(self, repo: Path, *, interval: float = 2.0, run_update=None):
-        super().__init__(name="verinoda-ui-watch", daemon=True)
-        self.repo, self.interval = Path(repo).resolve(), interval
-        self.run_update = run_update or self._update
-        self.stop = threading.Event()
-        self.running, self.updates, self.error = False, 0, None
-
-    def signature(self) -> tuple:
-        from verinoda.snapshot import list_files
-
-        sig = []
-        for f in list_files(self.repo):
-            try:
-                st = (self.repo / f).stat()
-            except OSError:
-                continue
-            sig.append((f, st.st_size, st.st_mtime_ns))
-        return tuple(sig)
-
-    def _update(self) -> None:
-        from verinoda import workflow
-        from verinoda.store import open_store
-
-        st = open_store(self.repo)
-        try:
-            return workflow.update(st, self.repo, wait=0, purpose="ui --watch")
-        finally:
-            st.close()
-
-    def run(self) -> None:
-        wait = self.interval
-        try:
-            last = self.signature()
-        except Exception as exc:  # noqa: BLE001 - no listing, no watching; the page still works
-            self.error = f"{type(exc).__name__}: {exc}"[:300]
-            return
-        pending = None
-        while not self.stop.wait(wait):
-            t0 = time.perf_counter()
-            try:
-                now = self.signature()
-            except Exception as exc:  # noqa: BLE001 - try again next time
-                self.error = f"{type(exc).__name__}: {exc}"[:300]
-                continue
-            wait = max(self.interval, 10 * (time.perf_counter() - t0))  # a large tree is looked at less often
-            if now == last:
-                pending = None
-                continue
-            if now != pending:  # still being written: look once more before updating
-                pending = now
-                continue
-            self.running = True
-            try:
-                res = self.run_update()
-                if isinstance(res, dict) and res.get("mode") == "busy":
-                    # another build is running: nothing was done; the change is picked up next time
-                    self.error = res.get("error")
-                    last = None
-                    continue
-                self.updates += 1
-                self.error = None
-            except Exception as exc:  # noqa: BLE001 - reported on the page; the next change tries again
-                self.error = f"{type(exc).__name__}: {exc}"[:300]
-            finally:
-                self.running = False
-            try:
-                last = self.signature()
-            except Exception:  # noqa: BLE001
-                last = now
-            pending = None
 
 
 def make_handler(atlas: Atlas, port: list[int], token: str = "", watcher: Watcher | None = None):
@@ -303,8 +223,7 @@ def make_handler(atlas: Atlas, port: list[int], token: str = "", watcher: Watche
                     obj = atlas.butterfly(nid, (qs.get("mode") or [""])[0] or None,
                                           int((qs.get("depth") or ["2"])[0] or 2), tests=_flag(qs, "tests", True))
                 elif route == "version":
-                    obj = {"key": atlas.version(), "watch": None if watcher is None else
-                           {"running": watcher.running, "updates": watcher.updates, "error": watcher.error}}
+                    obj = {"key": atlas.version(), "watch": None if watcher is None else watcher.status()}
                 elif route == "changes":
                     obj = atlas.changes()
                 elif route == "answer":

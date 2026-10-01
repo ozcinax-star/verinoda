@@ -47,6 +47,7 @@ from typing import Iterable
 
 from verinoda import evidence as evmod
 from verinoda import testcode
+from verinoda.runtime import flaws as flawmod
 from verinoda.store import Store, new_id, now
 
 # test code and test support, by the one rule of verinoda.testcode (tests/, test_x.py, x_test.py, conftest.py
@@ -334,13 +335,13 @@ class _Mapper:
 
 def ingest(store: Store, trace: dict, *, experiment_id: str | None, snapshot_id: str | None,
            commit: str | None, trace_sha256: str | None, extra_header: dict | None = None,
-           flags: dict[int, dict] | None = None) -> str:
-    """Record a parsed trace; returns the ``runtime_runs`` id."""
+           flags: dict[int, dict] | None = None, run_id: str | None = None) -> str:
+    """Record a parsed trace; returns the ``runtime_runs`` id (``run_id`` when given)."""
     header = dict(trace["header"])
     header.pop("contexts", None)
     header["tests_outcomes"] = trace["tests"]
     header.update(extra_header or {})
-    rid = new_id("rtr")
+    rid = run_id or new_id("rtr")
     rows = []
     for i, e in enumerate(trace["edges"]):
         (cp, cl, cq), (tp, tl, tq) = e["caller"], e["callee"]
@@ -521,7 +522,8 @@ def _resolve_targets(g, targets: Iterable[str]) -> list[tuple[str, str | None, s
 
 def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float | None = None,
             snapshot=None, graph=None, targets: Iterable[str] = (), mode: str = "auto",
-            limits: dict | None = None, max_evidence: int = MAX_EVIDENCE) -> dict:
+            limits: dict | None = None, max_evidence: int = MAX_EVIDENCE, flaws: bool = False,
+            flaw_thresholds: dict | None = None) -> dict:
     """Run ``test_ids`` (<= 50; empty = the whole suite) under the call tracer and ingest the trace.
 
     Returns ``run_id``, ``complete`` (+ ``completeness`` details), observed
@@ -529,6 +531,12 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     ``reach`` sets, ``boundary`` calls and ``evidence`` - ``call_trace``
     evidence dicts (not inserted: attach the relevant ones with
     ``Claims.attach``), edges into ``targets`` first.
+
+    ``flaws``: also load the runtime-flaws plugin (SQL statements and sampled
+    stacks, :mod:`verinoda.runtime.flaws`) and add a ``runtime_flaws`` block:
+    N+1 queries, repeated SQL and slow paths of this run, by
+    ``flaw_thresholds`` (:data:`verinoda.runtime.flaws.DEFAULTS`). The block is
+    also kept in the run's header (without evidence).
     """
     from verinoda import experiments
     from verinoda.paths import load_config
@@ -544,6 +552,7 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     timeout = float(timeout or 2 * float(cfg["default_timeout"]))
     grace = max(2.0, min(30.0, 0.15 * timeout))
     lim = {**DEFAULT_LIMITS, **(limits or {})}
+    flaw_th = flawmod.thresholds(flaw_thresholds) if flaws else None
     snap = _snapshot_row(store, snapshot)
     # The commit that is checked out now is what runs (the copy is made from the working tree);
     # edits since the snapshot are reported per traced file (files_changed_since_snapshot).
@@ -553,15 +562,20 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
            "VERINODA_TRACE_MAX_PY_START": str(int(lim["max_py_start"])),
            "VERINODA_TRACE_MAX_EDGES": str(int(lim["max_edges"])),
            "VERINODA_TRACE_MAX_BYTES": str(int(lim["max_bytes"]))}
-    argv = [experiments.python_for(repo), "-m", "pytest", "-q", "-p", PLUGIN_MODULE, "-p", "no:cacheprovider",
-            *ids]
+    plugins = {f"{PLUGIN_MODULE}.py": plugin_source()}
+    extra_p: list[str] = []
+    if flaws:
+        plugins[f"{flawmod.PLUGIN_MODULE}.py"] = flawmod.plugin_source()
+        extra_p = ["-p", flawmod.PLUGIN_MODULE]
+    argv = [experiments.python_for(repo), "-m", "pytest", "-q", "-p", PLUGIN_MODULE, *extra_p,
+            "-p", "no:cacheprovider", *ids]
     scope = f"{len(ids)} selected test id(s)" if ids else "whole test suite"
     base = {"run_id": None, "complete": False, "scope": scope, "tests_requested": ids,
             "truncated_ids": truncated, "limits": list(LIMITS_TEXT)}
     file_ids: dict[str, str] = {}   # content ids of the copy that ran: the test map's fingerprints
     try:
         exp = experiments.run(store, repo, argv, hypothesis=f"observe calls made by {scope}", commit=commit,
-                              timeout=timeout, plugins={f"{PLUGIN_MODULE}.py": plugin_source()}, env_extra=env,
+                              timeout=timeout, plugins=plugins, env_extra=env,
                               file_ids=file_ids)
     except experiments.ExperimentRefused as exc:
         return {**base, "error": f"refused: {exc}",
@@ -595,8 +609,13 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
              "complete_trace": bool(h.get("complete")), "experiment_outcome": exp["outcome"],
              "files_changed_since_snapshot": changed, "trace_path": trace_path}
     trace["header"] = {**h, "complete": complete}
+    rid = new_id("rtr")
+    flaw_block = None
+    if flaws:
+        flaw_block = _flaws(exp, src, rid, flaw_th, repo, commit, run_complete=session_complete and not truncated)
+        extra["runtime_flaws"] = flawmod.without_evidence(flaw_block)
     rid = ingest(store, trace, experiment_id=exp["id"], snapshot_id=snap_id, commit=commit, trace_sha256=sha,
-                 extra_header=extra, flags=flags)
+                 extra_header=extra, flags=flags, run_id=rid)
     from verinoda import testmap
 
     mapped = testmap.update(store, rid, file_ids)
@@ -604,7 +623,31 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     g = (graph if graph is not None else _load_graph(repo)) or None  # graph=False: skip node mapping
     mapper = _Mapper(g, src)
     tset = _resolve_targets(g, targets) if targets else []
-    return {**_result(repo, run, trace, flags, mapper, src, tset, exp, base, max_evidence), "test_map": mapped}
+    out = {**_result(repo, run, trace, flags, mapper, src, tset, exp, base, max_evidence), "test_map": mapped}
+    if flaw_block is not None:
+        out["runtime_flaws"] = flaw_block
+    return out
+
+
+def _flaws(exp: dict, src: _Sources, rid: str, th: dict, repo: Path, commit: str | None, *,
+           run_complete: bool) -> dict:
+    """The ``runtime_flaws`` block from the flaws plugin's file in the run's artifacts."""
+    path = (exp.get("artifacts") or {}).get(flawmod.FLAWS_FILE)
+    if not path or not Path(path).is_file():
+        return flawmod.report(None, src, rid, th, why_missing=f"the flaws plugin wrote no file (test run "
+                                                               f"{exp.get('outcome')})")
+    data = Path(path).read_bytes()
+    try:
+        parsed = flawmod.parse(data)
+    except ValueError as exc:
+        return flawmod.report(None, src, rid, th, why_missing=str(exc))
+    block = flawmod.report(parsed, src, rid, th, repo=repo, commit=commit)
+    block["file_sha256"] = hashlib.sha256(data).hexdigest()
+    if not run_complete and block["complete"]:
+        block["complete"] = False
+        block["limits"].append("the test run stopped early or ran fewer tests than asked: counts cover the tests "
+                               "that ran")
+    return block
 
 
 def _changed_since_snapshot(store: Store, repo: Path, snap: dict | None, edges: list[dict]) -> list[str]:

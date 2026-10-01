@@ -212,6 +212,9 @@ def lean(res: dict, *, shown_by: list[str] | None = None) -> dict:
     exhausted = (res.get("usage") or {}).get("exhausted")
     if exhausted:
         out["budget_exhausted"] = exhausted
+    for k in ("facts", "facts_error"):
+        if res.get(k):
+            out[k] = res[k]
     if res.get("passages"):
         out["passages"] = res["passages"]
     return out
@@ -384,6 +387,10 @@ def render_text(res: dict) -> str:
     exhausted = (res.get("usage") or {}).get("exhausted")
     if exhausted:
         out.append(f"budget exhausted: {exhausted} (what was not reached is listed as unknown)")
+    if res.get("facts"):
+        from verinoda.facts import lead_lines
+
+        out += lead_lines(res["facts"])
     if res.get("passages"):
         out.append("passages (what `verinoda query` gives for the question; search results, not claims):")
         out += res["passages"]

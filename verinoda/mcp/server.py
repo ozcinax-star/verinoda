@@ -830,6 +830,9 @@ class AtlasTools:
                         self._query_memo[key] = (deps, res)
                         while len(self._query_memo) > QUERY_MEMO_SIZE:
                             self._query_memo.popitem(last=False)
+            from verinoda import facts
+
+            facts.attach_leads(res, self.repo, q)  # read on every call: facts change without a file changing
             if fmt == "json":
                 return _jsonable(res)
             # the escaped JSON string must still fit the response cap
@@ -3274,8 +3277,11 @@ def repo_of_config(start: Path, rel: str) -> Path:
     return default_repo(here)
 
 
-def serve(repo: Path, profile: str | None = None) -> None:
-    """Serve the Verinoda tools for ``repo`` over stdio (``verinoda mcp serve [--profile core|full]``)."""
+def serve(repo: Path, profile: str | None = None, *, watch: bool = False) -> None:
+    """Serve the Verinoda tools for ``repo`` over stdio (``verinoda mcp serve [--profile core|full] [--watch]``).
+
+    ``watch``: also run a fast ``update`` when the project's files change (:class:`verinoda.fswatch.Watcher`,
+    woken by file events), so the next tool call answers from the edited code without ``index_update``."""
     repo = Path(repo).resolve()
     try:
         srv = build_server(repo, profile=profile)
@@ -3301,7 +3307,19 @@ def serve(repo: Path, profile: str | None = None) -> None:
     note = ignored_settings_note(repo)
     if note:
         print(f"verinoda mcp: {note}", file=sys.stderr, flush=True)
+    watcher = None
+    if watch and graph_path(repo).exists():
+        from verinoda.fswatch import Watcher
+
+        watcher = Watcher(repo, purpose="mcp serve --watch", fast=True)
+        watcher.start()
+    elif watch:
+        print("verinoda mcp: --watch needs an index: run index_update, then restart the server to watch",
+              file=sys.stderr, flush=True)
     try:
         srv.run("stdio")
     except KeyboardInterrupt:  # pragma: no cover - interactive stop
         pass
+    finally:
+        if watcher is not None:
+            watcher.stop.set()

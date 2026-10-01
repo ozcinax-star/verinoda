@@ -157,7 +157,7 @@ def test_a_v8_store_gains_the_map_tables(tmp_path):
     conn.commit()
     conn.close()
     st = Store(p)
-    assert st.one("SELECT value FROM meta WHERE key = 'schema_version'")["value"] == str(SCHEMA_VERSION) == "9"
+    assert st.one("SELECT value FROM meta WHERE key = 'schema_version'")["value"] == str(SCHEMA_VERSION)
     assert st.all("SELECT * FROM test_map") == [] and st.all("SELECT * FROM test_map_tests") == []
     st.close()
 

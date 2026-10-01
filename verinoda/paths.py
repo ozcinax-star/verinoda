@@ -86,6 +86,9 @@ DEFAULT_CONFIG: dict = {
     # `verinoda update` also re-verifies stale claims and lists duplicate claims (verinoda.consolidate), as
     # `update --consolidate` does; so the git hooks' background updates do it too (`ui --watch` does not)
     "claims": {"consolidate_on_update": False},
+    # `scan` / `update` recompute the stale named facts (verinoda.facts) within 10 s: searches re-run, input
+    # statuses re-read, never `verify`
+    "facts": {"refresh_on_update": True},
 }
 
 NETWORK_MODES = ("off", "cache", "on")

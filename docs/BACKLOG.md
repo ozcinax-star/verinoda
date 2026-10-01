@@ -29,7 +29,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 1.1 | **Update proportional to the change** | Per-file hashes, re-extract only changed files and patch their nodes and edges into the graph, no whole-corpus rebuild; branch switch detected | claude-context, narsil-mcp, codebase-memory-mcp, CodeGraph, GitHub Stack Graphs | an update of one edited file on Verinoda's own repository takes seconds, and its graph equals a full scan's node for node and edge for edge |
-| 1.2 | **Native file watcher** | OS file events drive the incremental update instead of polling | narsil-mcp, codebase-memory-mcp | `ui --watch` and the MCP server pick up an edit without a manual `update` |
 | 1.4 | **Broader language coverage** | Pull the grammars upstream Graphify added after the fork (COBOL, R, Solidity, Erlang, OCaml, Terraform attributes, Razor and others) | Graphify, codebase-memory-mcp | each new language has an extraction fixture test |
 | 1.5 | **Daemon and multi-project server** | One MCP server over several indexed projects; HTTP transport with a token; `list_projects`, `index_status` | Graphify, codebase-memory-mcp, Codanna, Kodit | two projects answered from one server process |
 | 1.6 | **Multi-repository index** | Index several local repositories as one group with cross-repo symbol links | Sourcegraph, Graphify merge-graphs, GitNexus | a call from repo A to a function in repo B is an edge with its call site |
@@ -49,7 +48,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 3.2 | **Code query language** | A small declarative query language over the graph (nodes, edges, paths) that answers with evidence | CodeQL, Glean Angle, jQAssistant Cypher, NDepend CQLinq, Joern | a query such as "functions that write storage and are reachable from an HTTP handler" returns its sites |
-| 3.3 | **Derived facts** | A verified claim or query result stored as a fact other queries use, recomputed when its evidence goes stale | Glean derived predicates, jQAssistant concepts | a derived fact goes stale with the code it rests on |
 
 ## 4 - Git history mining
 
@@ -88,7 +86,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 10.1 | **Cross-service edges** | HTTP, gRPC, GraphQL and tRPC client calls linked to their route handlers; event emit and listen edges; framework route tables | codebase-memory-mcp, CodeGraph, GitNexus, Bito, CodeSee | `trace` crosses from a frontend fetch to its backend handler |
 | 10.2 | **ORM, DI and database schema (live database opt-in)** | ORM models, dependency-injection bindings, migrations and schema as nodes | agentforge-graph, Graphify, Kodit | the dataflow view reaches a table |
 
 ## 11 - Claim history and memory
@@ -117,7 +114,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 15.1 | **Runtime flaws from traces** | N+1 queries, repeated SQL and slow paths found in recorded test runs | AppMap, Digma | `observe` reports an N+1 with its call path |
 
 ## 16 - Minecraft: vanilla source and mappings
 
@@ -141,7 +137,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 18.1 | **Control and data dependence** | Control-flow and program-dependence graphs, reaching definitions, backward and forward slices | Joern, GitNexus pdg_query, narsil-mcp, CodePrism, Understand | a slice answers "where does this argument's value come from" with its lines |
 | 18.2 | **Taint analysis** | User-declared sources, sinks and sanitizers; library behaviour as data; each result with its full path; SARIF | CodeQL, Semgrep Pro, Pysa, Joern, Code Pathfinder | a source-to-sink path reported with every hop |
 
 ## 19 - Behaviour probes and test generation
