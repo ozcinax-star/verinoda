@@ -455,20 +455,21 @@ def _untracked_citations(store: Store, files: dict[str, str]) -> list[str]:
     return sorted(out)
 
 
-def _current_snapshot(store: Store, repo: Path) -> tuple[dict | None, dict | None]:
+def _current_snapshot(store: Store, repo: Path, *,
+                      wait: float = buildlock.DEFAULT_WAIT_SECONDS) -> tuple[dict | None, dict | None]:
     """A snapshot of the working tree as it is now (refreshing the index if needed).
 
     Returns ``(snapshot, refresh)`` where ``refresh`` summarises the update
     that had to run, or None when the latest snapshot already matched. When
-    the index refused to rebuild, ``refresh`` carries ``error``/``hint`` and
-    the snapshot returned is the previous one, which does NOT describe the
-    current tree.
+    the index refused to rebuild (or another build held the lock longer than
+    ``wait`` seconds), ``refresh`` carries ``error``/``hint`` and the snapshot
+    returned is the previous one, which does NOT describe the current tree.
     """
     snap = store.latest_snapshot()
     if snap is not None and snap["tree_hash"] == current_state(repo, store=store)["tree_hash"]:
         return snap, None
     if graph_path(repo).exists():
-        res = update(store, repo)
+        res = update(store, repo, wait=wait)
         refresh = {"mode": res["mode"], "changed_count": res["changed_count"],
                    "stale": [s["id"] for s in res["stale"]]}
         if res.get("error"):
@@ -481,8 +482,12 @@ def _current_snapshot(store: Store, repo: Path) -> tuple[dict | None, dict | Non
     return snap, {"mode": "snapshot_only", "changed_count": None, "stale": [s["id"] for s in stale]}
 
 
-def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict:
+def verify(store: Store, repo: Path, cid: str, *, run: bool = False,
+           wait: float = buildlock.DEFAULT_WAIT_SECONDS) -> dict:
     """Re-check a claim's evidence against the current tree; optionally re-run its experiment.
+
+    ``wait``: how long a refresh of the index may wait for another build (then the claim is compared with the
+    working tree and not rebound).
 
     A claim is restored (up to its recorded ceiling) and re-bound to a snapshot
     of the current tree only when every file behind it is either unchanged
@@ -494,7 +499,7 @@ def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict:
     cl = Claims(store, repo)
     c = cl.get(cid)
     before = {"status": c["status"], "confidence": c["confidence"]}
-    snap, refresh = _current_snapshot(store, repo)
+    snap, refresh = _current_snapshot(store, repo, wait=wait)
     # A refused index rebuild leaves no snapshot of the current tree: compare
     # against the working tree directly and do not re-bind the claim.
     current = not (refresh and refresh.get("error"))
