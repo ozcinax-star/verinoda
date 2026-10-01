@@ -40,7 +40,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 2.1 | **LSP-backed navigation (opt-in)** | Definition, references, hover, diagnostics, call and type hierarchy, implementations from an installed language server; the answer is verification, not extraction | Serena, mcp-language-server, Octocode, JetBrains IDE MCP | a Java or TypeScript call edge confirmed by the language server is `statically_verified` |
 | 2.2 | **SCIP indexers run by Verinoda (opt-in)** | Detect the build and run scip-java, scip-typescript, scip-python and others instead of asking the user for a SCIP file | Sourcegraph auto-indexing | `scan --precise` on a Gradle project produces and adopts a SCIP index |
 | 2.3 | **Compiler frontends (opt-in)** | javac/JDT, Roslyn, go/types, libclang as resolvers where no language server is installed | code-graph-rag, Eclipse JDT | one non-Python language resolved without an LSP |
-| 2.6 | **Import JVM checker findings** | Error Prone and NullAway results, and jdeps' JDK-internal API use, read as evidence | Error Prone, NullAway, jdeps | their findings appear as claims with the tool named |
 
 ## 3 - Structural search and query language
 

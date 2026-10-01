@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D155)
+## Upgrading from 0.4.0 (D137-D156)
 
 ### D137: Trigram regex index
 
@@ -193,6 +193,14 @@ New command `verinoda q "QUERY"`: a declarative query over the graph (node patte
 relation, a direction and a bounded length, joins on shared variables, `WHERE` with `not` and `exists`, `RETURN`
 with `count`, `LIMIT`) answered with rows that cite their evidence; `--verify` re-reads the cited call sites;
 `--max-rows`, `--max-expansions` and `--timeout` bound it. Nothing to migrate; the MCP tools are unchanged (40).
+
+### D156: Import JVM checker findings
+
+New command `verinoda import-findings FILE ...` reads Error Prone and NullAway diagnostics from javac, Gradle,
+Maven and Ant logs, `jdeps -jdkinternals` output and SARIF files as claims with the tool named (`--tool
+auto|errorprone|nullaway|jdeps`, `--path`, `--limit`, `--json`; exit 4 when no file was read). New module
+`verinoda/jvm_findings.py`. Nothing is run and nothing is written. Nothing to migrate; the MCP tools are unchanged
+(40).
 
 ## Upgrading from 0.3.2 (D60-D136)
 

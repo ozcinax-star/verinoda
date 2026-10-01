@@ -13457,6 +13457,164 @@ query errors (exit 2); the caret of `count(g)`; a failed `and` branch cites no `
 and `--verify` follow the branch that kept the row; classes with and without methods and a nested function's
 lines; 30 nested parentheses are read and 31 refused.
 
+## 129. Import JVM checker findings (D156, 2026-10-01)
+
+### 129.1 Why
+
+A Java project's strongest static findings often come from checkers that run inside its own build: Error Prone's
+bug patterns and NullAway's null checks are javac plugins, and `jdeps -jdkinternals` lists the classes that use
+JDK-internal APIs a newer JDK removes or hides. Their output is already on disk (a Gradle or Maven log, a CI log, a
+jdeps report) but Verinoda could read it only when the project had turned it into SARIF, which Error Prone and
+jdeps do not write by themselves. An agent asked "is this dereference safe?" or "will this build on JDK 21?" had
+to read the log by hand, and nothing tied a line of the log to the file and symbol it is about.
+
+### 129.2 Decisions
+
+- New command `verinoda import-findings FILE ... [--tool auto|errorprone|nullaway|jdeps] [--path P] [--limit N]`,
+  module `jvm_findings.py`, next to `verinoda sarif` (the other "a tool's findings as evidence" reader) rather than
+  inside it: `sarif` reads one format, this reads build logs whose shape is a convention of javac and jdeps. No MCP
+  tool (the tools stay at 40). Exit 4 when no file could be read, 2 for a bad `--limit`; a file read with no
+  finding is a note on that file, not an error (a clean build has none).
+- Nothing is run. javac, Gradle, Maven and jdeps are never started from the repository: the files are what the
+  build already wrote. This keeps the command outside the trust gate `codecheck_external` needs for running the
+  project's own checkers.
+- javac diagnostics: `PATH.java:LINE: severity: [Check] message` and Maven's `PATH.java:[LINE,COL] [Check]
+  message` (the level from `[WARNING]` / `[ERROR]` when the line has none). The severity word may be in javac's
+  locale (`Warnung:`, `Fehler:`, `警告:`, `エラー:`, `错误：`); a word not in the list is a warning. Before
+  matching, a line loses a CI timestamp (`2026-09-30T10:00:00.1234567Z`, Jenkins' `[2026-09-30T10:00:00.123Z]`),
+  ANSI colours and a Maven or Ant (`[javac]`) tag with the one space after each, so the same reader takes a plain
+  javac run, a Gradle console, a Maven log, an Ant log and a GitHub Actions or Jenkins log, and the quoted line
+  keeps its indentation. The lines after a diagnostic, up to the next one, a count (`2 warnings`) or a Gradle
+  marker, or a blank line when no caret follows it, give the quoted source line (the line before the caret), the
+  column (the caret's position, or Maven's), more message lines, the `(see URL)` link and Error Prone's "Did you
+  mean ...?" fix (several lines when it quotes several lines of code). Log lines end at `\n` only, so a lone `\r`
+  in progress output does not shift the numbers.
+- Which tool: the check name in brackets. `[NullAway]` is NullAway; any other CamelCase check is an Error Prone bug
+  pattern (Error Prone's and its plugins' checks are CamelCase); a lower-case one (`[unchecked]`, `[removal]`,
+  `[this-escape]`) is javac's own `-Xlint` category and a message with no check is a compile error: both counted
+  (`javac_other`), not listed. `--tool errorprone` keeps NullAway's findings too (it is an Error Prone plugin);
+  `--tool nullaway` only those. The tool's version is named when the log names its artifact
+  (`error_prone_core-2.36.0.jar`, `com.uber.nullaway:nullaway:0.12.3`, a Maven repository path), with that log
+  line as evidence; javac's diagnostics never print it.
+- jdeps: JDK 9 and later print one line per use (`com.ex.Foo -> sun.misc.Unsafe  JDK internal API
+  (jdk.unsupported)`) under an `archive -> module` header; JDK 8 prints the class with its archive and the `->`
+  lines under it. Both are read, and the "JDK Internal API / Suggested Replacement" table is attached to each use
+  (the API's own row, its top-level class's, else the longest package row). A dependence that does not say "JDK
+  internal API" (plain `jdeps -verbose` output) is counted (`not_internal`). A use of an API in the "JDK removed
+  internal API" group is an `error`, any other a `warning`.
+- Files: a printed path is tied to the repository as an absolute path under the root (exact), a path relative to
+  the root (exact), else by suffix: for an absolute path from another machine (a CI runner's checkout) the
+  longest suffix that is a repository file, as `verinoda sarif` does; for a relative path that is not a repository
+  file (javac run in a sub-project folder) the one repository file ending with it, `ambiguous` when several do.
+  An absolute path that exists on this machine outside the repository, or one inside it that is not a file now,
+  is not tied to another file. Maven's `/C:/...` and Windows backslashes are read.
+- Classes (jdeps names classes, not files): the top-level class's package path (`com.ex.Foo$1` ->
+  `.../com/ex/Foo.java`; `.kt` too, and Kotlin's file facade `UtilKt` -> `Util.kt`), unique in the repository
+  among the files that declare the class's package (a default-package class needs a file with no `package`
+  line). The line is the first code line naming the internal API, with `//` and `/* ... */` comments (javadoc
+  lines with or without a leading `*`) removed: its qualified name (an import, a qualified use, a `Class.forName`
+  string) or an import of its package (`import sun.misc.*`) give `strong_inference`; else its simple name outside
+  strings is a guess (`weak_inference`), not tried when the file imports another class of that simple name
+  (`import java.lang.ref.Cleaner` for `jdk.internal.ref.Cleaner`); with none, the claim cites the file alone
+  (`weak_inference`). An inner or anonymous class's use is the same line of the same
+  file as its top-level class's and is dropped as a repeat. A class with no source file here (a dependency's jar,
+  shaded code) is counted and named (`unknown_classes`).
+- Status, as for SARIF: a log is the named tool's statement about the tree it compiled, not checked here, so
+  `strong_inference` at most. javac quotes the source line it reports on, which is better evidence of position
+  than file times: when the current file still has that text at that line the finding is `strong_inference` even
+  if the file changed after the log or was tied only by a path suffix (the code the tool saw is still there, and
+  the text confirms the suffix guess); when the text moved to one other line the finding moves there,
+  `weak_inference`; when it is gone, it stays at its line, `weak_inference` (the finding may be fixed). Without a
+  quote (Maven, jdeps) the file's age decides: `weak_inference` when it changed after the log or was tied by
+  suffix. Not `observed`: Verinoda did not see the run, unlike `check --checker`, which runs the checker itself.
+- Each claim: `subject` `Tool/Check` (`jdeps/<api>`), `stated_by` the tool, `tool_version` when known, `rule`,
+  `level`, `at` the repository `file:line`, `column`, `quoted`, `suggestion`, `see`, the enclosing `symbol`
+  (`treestate.symbol_at`), and `evidence_at` the file line, the log line it came from (`build.log:5`) and the log
+  line naming the version. jdeps claims add `class`, `internal_api`, `module`, `archive` and `replacement`. Errors
+  first, then by file and line number; a diagnostic printed twice (Maven repeats compile errors in its failure
+  summary, an incremental build may compile a file twice) is listed once (`duplicates`), while two findings at two
+  columns of one line are two.
+- A file whose text starts with `{` is read by `sarif.report` (a build that already writes Error Prone's findings
+  as SARIF); its tools are named by the file and `--tool` does not filter it. A log that starts with a UTF-16
+  byte-order mark is decoded as UTF-16 (PowerShell 5.1's `>` writes it), and so is such a SARIF file; a log that
+  is not UTF-8 is decoded in this machine's ANSI code page, else cp1252, when it decodes whole; else the bytes
+  that do not decode are replaced.
+  A line that looks like a diagnostic but does not parse (a broken line number) is counted (`unreadable`).
+- The claims are printed (text, `--json`), not written to the project's claim store, as `verinoda sarif` and
+  `verinoda coverage` do: a log is re-read when it changes, and the store's claims are what an agent or a user
+  asserted.
+- A path from a log is never checked on disk when it is a UNC or device path (`\\host\share`, `\\?\`,
+  `\\.\`): on Windows a file check on it contacts the host over SMB and can send the user's NTLM hash. It is
+  tied by suffix only. `verinoda sarif` has the same guard.
+- Review round: the jdeps line was `strong_inference` on a match of the simple name alone (a public class of the
+  same name: `java.lang.ref.Cleaner` for `jdk.internal.ref.Cleaner`) and on javadoc lines without a leading `*`;
+  now only a qualified name or a package import on a code line is strong, comments are tracked over lines, and
+  the simple name is a guess. Ant's `[javac]` tag and a timestamp took the source line's indentation with them
+  (every Ant column was 1). A localized severity word (`Warnung:`) dropped the finding as javac's own. A blank
+  line inside an Error Prone message lost the quoted line, column and link. A default-package class of a
+  dependency was tied to a repository file of the same name in another package. A UNC path in a log was checked
+  on disk. Two findings at two columns of one line were merged as a repeat. Smaller: log lines are split at
+  `\n` only, Jenkins timestamps are stripped, a non-UTF-8 log is decoded in the ANSI code page, claims sort by
+  line number, the log is cleaned once for both readers, an `a -> b c` line outside a jdeps archive header is not
+  counted as a jdeps dependence, and a UTF-16 SARIF file is read. The first version of this draft said comment
+  lines were skipped and a reflection use cited the file only; both were false for javadoc lines without a
+  leading `*`.
+
+### 129.3 Measured
+
+Windows 11, Python 3.13.14, while a benchmark ran on the same machine:
+
+- A synthetic Gradle-style log of 50,000 lines (5,000 NullAway diagnostics with quoted line and caret, each from a
+  CI runner path tied by suffix, and 30,000 `> Task` lines) read in 1.34 s and 1.37 s (two runs), 5,000 claims.
+- `tests/test_jvm_findings.py`: 19 tests in about 3 s.
+
+No real project's log was measured: none of Verinoda's test corpora is built with Error Prone, NullAway or jdeps
+on this machine, and the command does not run builds.
+
+### 129.4 Not done
+
+- A finding is the named tool's statement on the tree it compiled; Verinoda does not check it, and a log from
+  another branch is read as if it were this tree's unless the quoted lines disagree.
+- The formats are javac's and jdeps' as documented and as their current versions print them; a build tool that
+  rewrites diagnostics differently (an IDE's export, a custom Gradle reporter) is not read, and its lines are not
+  even counted unless they keep `File.java:` and a `[Check]`. Kotlin compiler messages (`w: file.kt:...`) are not
+  read.
+- A class's file is found by package path: a non-public top-level Java class may live in a file of another name,
+  and a Kotlin class in any file of its package; such classes are `unknown_class`. A use of an internal API
+  through reflection with a computed name has no line that names it. String literals are removed only for the
+  simple-name guess: a string holding the qualified name (`Class.forName("sun.misc.Unsafe")`) is a use.
+- A relative path that is a file at the repository root is taken as that file, even when javac ran in a
+  sub-project folder with the same relative layout (a multi-module repository with identical layouts); the log
+  does not say which folder javac ran in.
+- A log of up to 200 MB is read whole and held as cleaned lines (cleaned once for both readers): a log near the
+  cap takes a few GB of memory. It is not streamed.
+- The column comes from the caret and is off when the quoted line has tabs.
+- Error Prone's and NullAway's versions are known only when the log names their artifacts; jdeps' never.
+- javac's own `-Xlint` warnings and compile errors are counted, not listed.
+- The claims are not stored in the claim store and do not feed `review` or `check`.
+
+### 129.5 Tests
+
+`tests/test_jvm_findings.py` (19): javac output with a NullAway warning and an Error Prone error (tool, check,
+level, column from the caret, quoted line, link, "Did you mean" fix, enclosing method, the log line as evidence,
+errors first) and javac's own `-Xlint` warning and compile error counted; a GitHub Actions Gradle log with
+timestamps and ANSI colours, a CI runner path tied by suffix and confirmed by the quoted line, and the versions of
+Error Prone and NullAway from the artifacts it downloaded; a Maven log with `/C:/` paths, `[line,col]`, the level
+from the tag and a repeated error dropped, and a Windows backslash path; a file changed after the log (a finding
+moved with its quoted line, one whose line is gone, one without a quote by file age); JDK 11 jdeps output (removed
+API an error, the replacement table, the import line, Kotlin's `UtilKt` and a package import, an anonymous class
+dropped as a repeat, a shaded class unknown, a dependence on no internal API counted); JDK 8 jdeps output;
+malformed lines, an Ant `[javac]` line and the parsers' odd input; files elsewhere on this machine, a deleted file
+inside the repository, a path matching two modules, a missing file, an empty and a binary file; `--tool` and
+`--path`; a UTF-16 log from PowerShell with a path relative to the repository; Error Prone SARIF and a broken SARIF
+file; the CLI's text, JSON, `--tool`, `--limit` and exit codes 0, 2 and 4. Review round: the jdeps line is
+`strong_inference` only when named (another imported `Cleaner`, a javadoc line without `*`, a computed reflection
+name, the simple name only, a default-package class in the repository and one from a jar); an Ant log and GitHub
+and Jenkins timestamps keep the caret's column; German, Japanese and Chinese severity words; a blank line inside
+an Error Prone message; UNC and device paths never checked (logs and SARIF); two columns on one line; line
+numbers with a lone `\r` and a form feed, numeric order, a cp1252 log, a UTF-16 SARIF file and a quoted lambda
+not counted as a jdeps dependence.
+
 ## Sources
 
 - **Retrieval:**
