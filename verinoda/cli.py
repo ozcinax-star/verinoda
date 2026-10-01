@@ -1595,7 +1595,16 @@ def cmd_mixin_check(args) -> int:
     missing = [p for p in args.paths if not (Path(p).is_file() or (repo / p).is_file())]
     if missing:
         raise SystemExit(f"error: not a file: {', '.join(missing)}")
-    res = mixincheck.lookup(repo, [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths])
+    paths = [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths]
+    if args.conflicts or args.log or args.with_paths:
+        from verinoda import mixinconflicts
+
+        if args.log and not Path(args.log).is_file():
+            raise SystemExit(f"error: not a file: {args.log}")
+        res = mixinconflicts.lookup(repo, paths or None, args.with_paths, Path(args.log) if args.log else None)
+        _emit(args, res, lambda r: print(mixinconflicts.render(r)))
+        return mixinconflicts.exit_code(res)
+    res = mixincheck.lookup(repo, paths)
     _emit(args, res, lambda r: print(mixincheck.render(r)))
     if res["status"] == "no_mixins":
         return 2
@@ -4231,6 +4240,17 @@ def build_parser() -> argparse.ArgumentParser:
                                              "exists, is absent (with the nearest real ones) or unknown, with its "
                                              "line (exit 3: absent; 4: something unknown; 2: no Mixin)")
     sp.add_argument("paths", nargs="*", help="Java files to check instead of every file with a @Mixin")
+    sp.add_argument("--conflicts", action="store_true",
+                    help="instead: Mixins of several mods on the same target method (the project's and those of the "
+                         "mod jars found: classpath, Loom's remapped mods, run/mods, mods, --with), each pair a "
+                         "conflict, order-dependent or compatible with both Mixins (exit 3: a clash, or a failure "
+                         "in the log named with its mod; 4: no other mod's Mixins read, a failure's mod not found, "
+                         "or a log that is not text; 2: no Mixin)")
+    sp.add_argument("--with", dest="with_paths", action="append", metavar="PATH",
+                    help="a mod jar or a folder of jars to compare with (repeatable; implies --conflicts)")
+    sp.add_argument("--log", metavar="PATH", help="a game log or crash report (.gz too): each Mixin failure in it "
+                                                  "named with its mod, by the config that lists it (implies "
+                                                  "--conflicts)")
     sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")
