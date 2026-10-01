@@ -112,3 +112,76 @@ def test_memory_of_an_unverified_claim_can_be_learned_and_recalled(env):
     assert c["status"] not in ("statically_verified",)
     mem.learn("orders.db", "postgres?", source_claim_id=c["id"])
     assert [m["value"] for m in mem.recall("orders.db")] == ["postgres?"]
+
+
+def test_events_add_update_delete_and_readd(env):
+    st, cl, mem, claim, repo = env
+    mem.learn("k", "a")
+    mem.learn("k", "b")
+    gone = mem.forget("k", reason="moved to the wiki")
+    assert gone["valid"] == 0 and gone["invalidation_reason"] == "forgotten: moved to the wiki"
+    assert mem.recall("k") == []
+    with pytest.raises(ValueError, match="no current memory"):
+        mem.forget("k")
+    mem.learn("k", "c")
+    ev = mem.events("k")
+    assert [(e["event"], e["version"], e["value"]) for e in ev] == [
+        ("ADD", 1, "a"), ("UPDATE", 2, "b"), ("DELETE", 2, "b"), ("ADD", 3, "c")]
+    assert ev[2]["reason"] == "forgotten: moved to the wiki"
+    assert [m["value"] for m in mem.recall("k")] == ["c"]
+
+
+def test_ttl_expires_never_deletes(env):
+    from datetime import timedelta
+
+    from verinoda.memory import parse_ttl
+
+    st, cl, mem, claim, repo = env
+    assert parse_ttl("30d") == timedelta(days=30) and parse_ttl(" 12h ") == timedelta(hours=12)
+    for bad in ("0d", "3", "1y", "-2d", ""):
+        with pytest.raises(ValueError):
+            parse_ttl(bad)
+    m = mem.learn("cache.ttl", "short", ttl=timedelta(hours=1))
+    assert m["expires_at"] > m["created_at"] and [r["id"] for r in mem.recall("cache.ttl")] == [m["id"]]
+    # the same fact again with no time-to-live is a new version that never expires
+    m2 = mem.learn("cache.ttl", "short")
+    assert m2["version"] == 2 and m2["expires_at"] is None
+    st.update("memory", m2["id"], {"expires_at": "2000-01-01T00:00:00+00:00"})   # its time is up
+    assert mem.recall() == [] and mem.recall("cache.ttl") == []
+    row = st.get("memory", m2["id"])
+    assert row["valid"] == 0 and row["invalidation_reason"] == "expired" and row["value"] == "short"
+    assert row["invalidated_at"] == row["created_at"]          # never dated before the learning itself
+    assert [e["event"] for e in mem.events("cache.ttl")] == ["ADD", "UPDATE", "EXPIRE"]
+    with pytest.raises(ValueError):
+        mem.learn("x", "y", ttl=timedelta(0))
+
+
+def test_claim_fall_is_an_invalidate_event(env):
+    st, cl, mem, claim, repo = env
+    c = claim()
+    mem.learn("owner.fn", "m.py::owner", source_claim_id=c["id"])
+    cl.set_status(c["id"], "stale", reason="test", downgrade=False)
+    ev = mem.events("owner.fn")
+    assert [e["event"] for e in ev] == ["ADD", "INVALIDATE"] and ev[1]["reason"] == "source claim became stale"
+
+
+def test_v7_database_gains_expiry(tmp_path):
+    from verinoda import store as S
+
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    for v in range(1, 8):
+        conn.executescript(S._MIGRATIONS[v])
+    conn.execute("INSERT INTO meta VALUES ('schema_version', '7')")
+    conn.execute("INSERT INTO memory (id, key, value, version, valid, created_at) "
+                 "VALUES ('mem_old', 'k', 'v', 1, 1, '2026-01-01T00:00:00+00:00')")
+    conn.commit()
+    conn.close()
+    st = Store(db)
+    try:
+        mem = Memory(st)
+        assert [r["id"] for r in mem.recall("k")] == ["mem_old"] and mem.recall("k")[0]["expires_at"] is None
+        assert [e["event"] for e in mem.events("k")] == ["ADD"]
+    finally:
+        st.close()

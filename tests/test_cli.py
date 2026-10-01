@@ -314,7 +314,7 @@ def test_claim_add_show_list_verify_challenge_memory(repo):
     listed = ok_json("memory", "list", "--repo", str(repo), cwd=repo)
     assert [m["key"] for m in listed] == ["pricing.entry"]
     hist = ok_json("memory", "history", "pricing.entry", "--repo", str(repo), cwd=repo)
-    assert len(hist) == 1
+    assert len(hist["versions"]) == 1 and [e["event"] for e in hist["events"]] == ["ADD"]
 
     for args in (("claim", "show", "clm_nope"), ("verify", "clm_nope"), ("challenge", "clm_nope")):
         r = ra(*args, "--repo", str(repo), cwd=repo)

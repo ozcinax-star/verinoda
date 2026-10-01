@@ -3136,7 +3136,7 @@ def cmd_api(args) -> int:
 
 
 def cmd_memory(args) -> int:
-    from verinoda.memory import Memory
+    from verinoda.memory import Memory, parse_ttl
 
     repo = _repo(args)
     st = _store(repo)
@@ -3144,12 +3144,18 @@ def cmd_memory(args) -> int:
     if args.mem_cmd == "learn":
         src = st.claim(args.claim) if args.claim else None
         try:
+            ttl = parse_ttl(args.ttl) if args.ttl is not None else None
             res = m.learn(args.key, args.value, source_claim_id=args.claim,
-                          snapshot_id=(src or {}).get("snapshot_id"))
+                          snapshot_id=(src or {}).get("snapshot_id"), ttl=ttl)
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}")
+    elif args.mem_cmd == "forget":
+        try:
+            res = m.forget(args.key, args.reason)
         except ValueError as exc:
             raise SystemExit(f"error: {exc}")
     elif args.mem_cmd == "history":
-        res = m.history(args.key)
+        res = {"key": args.key, "events": m.events(args.key), "versions": m.history(args.key)}
     else:
         res = m.recall(args.key)
     _write(_dump(res))
@@ -4231,7 +4237,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("memory", help="versioned learnings tied to claims")
     msub = sp.add_subparsers(dest="mem_cmd", required=True)
-    for name in ("list", "learn", "history"):
+    for name in ("list", "learn", "forget", "history"):
         c = msub.add_parser(name)
         c.set_defaults(fn=cmd_memory)
         c.add_argument("--repo")
@@ -4239,6 +4245,11 @@ def build_parser() -> argparse.ArgumentParser:
             c.add_argument("key")
             c.add_argument("value")
             c.add_argument("--claim")
+            c.add_argument("--ttl", help="a time-to-live (30d, 12h, 90m, 2w): past it the learning is invalidated "
+                                         "as expired, never deleted")
+        elif name == "forget":
+            c.add_argument("key")
+            c.add_argument("--reason", help="why, kept with the DELETE event")
         elif name == "history":
             c.add_argument("key")
         else:
