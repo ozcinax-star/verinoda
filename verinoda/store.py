@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 class SchemaTooNew(RuntimeError):
@@ -549,8 +549,13 @@ CREATE TRIGGER IF NOT EXISTS no_update_test_quarantine BEFORE UPDATE ON test_qua
 BEGIN SELECT RAISE(ABORT, 'the quarantine log is append-only'); END;
 """
 
+# v8: a learning's time-to-live. NULL = never expires; a memory past it is invalidated ("expired"), never deleted.
+_SCHEMA_V8 = """
+ALTER TABLE memory ADD COLUMN expires_at TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5,
-                               6: _SCHEMA_V6, 7: _SCHEMA_V7}
+                               6: _SCHEMA_V6, 7: _SCHEMA_V7, 8: _SCHEMA_V8}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",

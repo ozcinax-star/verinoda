@@ -9611,6 +9611,173 @@ hole compared, a rule's language checked, a quoted value with ` #` and a BOM, `.
 budget count, PHP, blank and comment-only patterns and no files to search, CLI paths outside the project, `./web`
 from another folder and a missing `--repo`.
 
+## 95. Evidence-backed code tours (D122, 2026-10-01)
+
+### 95.1 Why
+
+A new contributor (or an agent handing over to a person) needs to walk a flow: where a request enters, which
+calls it goes through, where it is stored. `trace` finds that path with every hop's site; CodeTour, a VS Code
+extension, plays such a walk step by step. Writing the trace as a tour gives a guided reading that cites the code,
+and keeps it honest when the code moves.
+
+### 95.2 Decisions
+
+- **`verinoda tour SOURCE TARGET [--mode flow|any] [--title T] [--out FILE]`** writes CodeTour JSON (default
+  `.tours/<title>.tour`, the folder CodeTour reads) from the first path `trace` finds: a step at the source's
+  definition, one at each hop's site (the line the graph edge was read from), one at the target's definition.
+  No path: an error with trace's status, nothing written.
+- **Steps are leads, said as such.** Each description says what the hop is (calls, constructs, imports,
+  refers to, ...), the graph relation and its confidence, "read the line to confirm", and quotes the line with
+  `path:line`. The tour's description names the trace command and how many paths it had.
+- **Never from a stale index.** A file the tour would open that changed since the index is refused (its line
+  numbers would be the old file's): run `verinoda update` first. A hop with no location gets no step and is
+  counted in the description, with the trace's own note (a structural path, a callback).
+- **Pinned only when true.** `ref` is HEAD only when every file the tour opens is as HEAD has it (CodeTour opens
+  the files at `ref` when HEAD differs); otherwise the tour has no `ref` and says why. `--check --fix` re-pins
+  the same way after writing moved lines back.
+- **Re-anchored.** Each step keeps its
+  line's text under a `verinoda` key, which CodeTour ignores; `verinoda tour --check FILE` finds each line again
+  (the same line, or the nearest equal one in the file), reports `moved` and `gone` steps (exit 1), and `--fix`
+  writes the moved lines back. A step whose line text is gone is never moved to a guess.
+- **Never overwrites someone else's work.** The tour records a hash of itself; a `.tour` file without it, or one
+  edited since Verinoda wrote it, is left alone (exit 2) unless `--force`. `--out` must be a `.tour` file inside
+  the project and outside `.git`; one outside CodeTour's folders (`.tours`, `.vscode/tours`, `.github/tours`), or
+  a project that is a folder of its repository, gets a note on how to open it. Malformed tour files are an error
+  (exit 2), never a crash; with `--json` errors are JSON too.
+- CLI only; no MCP tool (a tour is a file for a person's editor).
+
+### 95.3 Measured
+
+Tests on the orders example: `create_order_handler -> save` gives a tour whose every step's line holds the quoted
+text; after two lines are added on top of each file all steps are reported moved by two and `--fix` repairs them;
+a rewritten line is reported gone.
+
+Review round (two reviewers): fixed steps taken from a stale index (and locked in as their anchors), `ref`
+pinned to HEAD while files differed and left stale after `--fix`, the trace's structural or callback note dropped,
+one line given two steps, hops without a location dropped silently, edited tours overwritten, `--out` anywhere,
+malformed tours crashing `--check`, and the CLI's error output with `--json`.
+
+### 95.4 Not done
+
+- One path (the first `trace` returns); the dataflow view is not turned into tours yet.
+- A line whose text appears several times in a file is re-anchored to the nearest occurrence (said in a note).
+- Descriptions are short; the reader opens the file for the code around each step.
+
+### 95.5 Tests
+
+`tests/test_tours.py`: a tour's steps follow the trace, each quoting its line with `path:line`, the hops naming
+their confidence, `ref` pinned and the default path; no path is an error; a file changed since the index refused and a dirty
+tree not pinned; moved steps found again, fixed and re-pinned; a rewritten line reported gone; tours not written
+by Verinoda or edited since kept unless `--force`; `--out` outside the project refused; malformed tours; a
+structural path's note and one step per line; the CLI's JSON errors; in a project path with a space and
+non-ASCII.
+
+## 96. Pattern trends and code monitors (D123, 2026-10-01)
+
+### 96.1 Why
+
+A migration ("move off the old API", "no new `print(`") is a pattern whose count should only go down, and a rule
+that no one should add a new instance. Sourcegraph's Code Insights draw the count over time and Code Monitors alert
+on new matches. Locally, a committed list of saved searches with their known matches lets CI fail on a new one and
+shows the migration's progress.
+
+### 96.2 Decisions
+
+- **`verinoda monitor`** (`check`, the default), `monitor add ID --regex RE | --ast PATTERN [--lang L] [--path P]
+  [--message M]`, `monitor accept ID`, `monitor remove ID`, `monitor trend ID [--points N]`. CLI only (a CI
+  gate); no MCP tool.
+- **Where.** `verinoda-monitors.json` at the project's top, committed, so CI reads the same monitors and
+  baselines. Adding a monitor records its current matches as its baseline (an incomplete search records nothing).
+- **Patterns.** `--regex` is git's extended regular expression run by `git grep -E` over the files git tracks and
+  the untracked ones it does not ignore: the same reading in the working tree and in history, and no backtracking
+  engine in this process. Its exit code tells "no match" (1) from an error (a bad pattern is an incomplete
+  search, never "no match"). `--ast` is a `grep-ast` structural pattern (D121), on the files as they are now.
+- **Paths.** `--path` is relative to the folder the command runs in, stored as a project-relative POSIX path that
+  must exist, and read literally by both searches (no globs, no pathspec magic), so a monitor added on Windows
+  means the same on Linux CI. The monitors file is never searched: it holds the patterns and the baselines'
+  text. `git grep` runs with `-z --no-column`, so a user's `grep.column` or a `:` in a file name cannot change
+  the keys.
+- **Matches are keyed by what they are.** File and line text (white space collapsed), counted per key: a line moved
+  by an edit above it is the same match; an added or changed line is new. `check` lists new matches (each
+  `statically_verified` at its `file:line`) and the baseline's matches gone; exit 1 on a new match, 3 when a
+  search did not finish (more than 5,000 matches, a timeout, a file grep-ast skipped for its time budget, size
+  or a read error, a path that no longer exists, a git error), else 0. A gate never passes on a search it did
+  not complete, and nothing is reported gone from one.
+- **The file is checked.** CI reads `verinoda-monitors.json`, so a field of the wrong shape (a string where a list
+  is expected, a baseline entry without its tab, a bad path) is an error (exit 2), never a quietly wider or
+  narrower search. It is written whole or not at all.
+- **The baseline moves only by hand.** `accept ID` takes the current matches as the baseline (the user's call,
+  dated in the file); nothing shrinks or grows it on its own.
+- **Trend.** `trend ID` counts a regex monitor's matches with `git grep -c` at up to 50 commits spread evenly over
+  HEAD's first-parent history (nothing checked out). AST monitors have no trend: every file would be parsed at
+  every commit.
+
+### 96.3 Measured
+
+Tests only.
+
+### 96.4 Not done
+
+- A match's key is its line text: two identical lines in one file are told apart by count, not by place.
+- Regex monitors read text, not code: a match in a comment or a string counts.
+- Trends sample commits; a burst between two samples is not seen.
+- The baselines are in the repository: a commit can widen them or remove a monitor. Review changes to
+  `verinoda-monitors.json` (CODEOWNERS) like any CI configuration.
+
+### 96.5 Tests
+
+`tests/test_monitors.py`: a new match fails, a moved line does not, gone matches are listed and `accept`
+re-baselines; an AST monitor across a multi-line call; a bad regex is an incomplete search (exit 3), never "no
+match"; ids, duplicate monitors and a malformed file; a trend over four commits; the CLI (add, check, `--json`,
+accept, remove, a missing id), in a repository path with a space and non-ASCII. After review: a monitor with no
+`--path` does not match its own file and `accept` settles; `grep.column` and `grep.fullName` do not change the
+keys; an AST search with a file too large or the time budget spent is exit 3; a cut regex search is exit 3;
+paths refused, normalised from the current folder and a vanished path exit 3; nine malformed files refused
+(exit 2 from the CLI); gone matches printed.
+
+## 97. Memory event history and expiry (D124, 2026-10-01)
+
+### 97.1 Why
+
+mem0 records each memory's ADD, UPDATE and DELETE events and lets a memory expire. Verinoda's learnings were
+versioned and invalidated with their source claim, but a user could neither retire one nor give it a lifetime,
+and `memory history` listed rows, not what happened to the key.
+
+### 97.2 Decisions
+
+- **Events are derived, not stored.** A version gives ADD when the key had no current value and UPDATE when it
+  replaced one (the previous row's `superseded_by`); an invalidation other than "superseded" gives DELETE
+  (`forget`), EXPIRE (the time-to-live ran out) or INVALIDATE (the source claim went stale or was contradicted),
+  with its reason and date. Rows stay the only record, so a database written before this change has its events
+  too, and nothing new can disagree with them.
+- **`memory forget KEY [--reason R]`** invalidates the current version as `forgotten[: reason]`. The row and its
+  value are kept (memory rows are never deleted); learning the key again is an ADD with the next version number.
+- **`memory learn ... --ttl 30d`** (m, h, d or w) sets `expires_at`. A memory past it is invalidated as `expired`
+  when it is next read (`recall`, `history`, `learn`, `forget`), dated when it ran out (never before it was
+  learned), so it is never recalled late; a claim falling records the expiry first when the time-to-live ran out
+  before it. At most 100 years. Re-learning the same fact with no time-to-live writes a new version
+  that never expires; with no time-to-live on either, it is still a no-op.
+- **Schema v8**: one nullable column, `memory.expires_at`. An older Verinoda refuses the database, as for every
+  schema change.
+- **`memory history KEY`** prints `{"key", "events", "versions"}` instead of the bare list of versions.
+
+### 97.3 Measured
+
+Tests only.
+
+### 97.4 Not done
+
+- Expiry is noticed on read, not by a timer: a database no one reads keeps the row valid until it is read.
+- The time-to-live is wall-clock time, not commits.
+
+### 97.5 Tests
+
+`tests/test_memory.py`: ADD, UPDATE, DELETE and a new ADD after `forget` (with its reason; forgetting nothing is
+an error); a time-to-live parsed and refused when malformed, an expired memory not recalled, kept and dated no
+earlier than it was learned, and its EXPIRE event; a fallen claim as an INVALIDATE event; a schema v7 database
+migrated with its memories intact. After review: a time-to-live over 100 years refused; a memory that expired
+before its claim fell has EXPIRE, not INVALIDATE; `recall("")` hides expired memories. `tests/test_cli.py`: `memory history` lists the events.
+
 ## Sources
 
 - **Retrieval:**

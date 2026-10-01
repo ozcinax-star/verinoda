@@ -57,7 +57,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 4.6 | **Pattern trends and code monitors** | A search pattern's count over history (migration progress); a saved pattern that fails CI when new matches appear | Sourcegraph Code Insights and Code Monitoring | `verinoda monitor` exits 1 on a new match |
 
 ## 5 - Retrieval and token economy
 
@@ -106,7 +105,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 11.1 | **Bi-temporal claims** | Each claim records when it held (commits) and when it was recorded; invalidated, never deleted | Zep Graphiti, mem0 | "which claims held at v0.2" answered |
-| 11.2 | **Memory event history and expiry** | ADD, UPDATE and DELETE events per learning; a time-to-live | mem0 | `memory history ID` shows the events |
 | 11.3 | **Background consolidation** | Between sessions: re-verify stale claims, merge duplicates | Letta sleep-time agents, Cognee memify | stale claims re-checked by the background update |
 | 11.5 | **Typed notes and wikilinks** | Notes with `[category] fact #tag` lines and `[[symbol]]` links; two-way sync with Markdown files | Basic Memory | a note edited in an editor updates the index |
 
@@ -130,7 +128,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 14.1 | **Evidence-backed code tours** | A tour built from `trace` or the dataflow view, pinned to a commit, re-anchored when code moves; CodeTour format | CodeTour | `verinoda tour` writes a `.tour` file that opens in VS Code |
 
 ## 15 - Runtime evidence import
 
