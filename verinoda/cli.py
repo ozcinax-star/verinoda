@@ -3274,6 +3274,24 @@ def cmd_probe(args) -> int:
     return 0 if res.get("status") in PROBE_QUIET else 3
 
 
+def cmd_search(args) -> int:
+    """Exact and regular-expression search over the project's text files through the trigram index."""
+    from verinoda import trigram
+
+    repo = _repo(args)
+    try:
+        res = trigram.search(repo, args.pattern, ignore_case=args.ignore_case, fixed=args.fixed,
+                             paths=args.paths or None, max_results=args.max_results, timeout=args.timeout,
+                             rebuild=args.rebuild)
+    except ValueError as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    _emit(args, res, lambda r: _write(trigram.render(r)))
+    if res["total"]:
+        return 0
+    return 3 if res["status"] == "incomplete" else 1   # no match among the files read is no proof of absence
+
+
 def cmd_resolve_call(args) -> int:
     from verinoda import precise
     from verinoda.paths import db_path
@@ -4593,6 +4611,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--test-file", metavar="PATH",
                     help="the file to write (default tests/test_<name>_<template>.py)")
     sp.add_argument("--no-record", action="store_true", help="do not record claims for the findings")
+    sp = add("search", cmd_search, "exact or regular-expression search over the project's text files, narrowed by "
+                                   "a local trigram index that the search keeps up to date (exit 1: no match; 3: no "
+                                   "match, but files were left unread)")
+    sp.add_argument("pattern", metavar="PATTERN", help="a Python regular expression (a fixed string with --fixed)")
+    sp.add_argument("paths", nargs="*", metavar="PATH", help="search only under these files or folders")
+    sp.add_argument("-i", "--ignore-case", action="store_true", help="ignore case")
+    sp.add_argument("-F", "--fixed", action="store_true", help="the pattern is a fixed string")
+    sp.add_argument("--max-results", type=int, default=200, help="matches listed at most (default 200)")
+    sp.add_argument("--rebuild", action="store_true", help="rebuild the index from scratch first")
+    sp.add_argument("--timeout", type=float, default=60.0,
+                    help="seconds spent reading files at most, checked between files (default 60)")
     sp = add("resolve-call", cmd_resolve_call, "precise resolution of one call site: which definition does "
                                                "TARGET on PATH:LINE bind to? (exit 3: no precise answer)")
     sp.add_argument("site", metavar="PATH:LINE")
