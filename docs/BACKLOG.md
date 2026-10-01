@@ -96,7 +96,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 10.1 | **Cross-service edges** | HTTP, gRPC, GraphQL and tRPC client calls linked to their route handlers; event emit and listen edges; framework route tables | codebase-memory-mcp, CodeGraph, GitNexus, Bito, CodeSee | `trace` crosses from a frontend fetch to its backend handler |
 | 10.2 | **ORM, DI and database schema (live database opt-in)** | ORM models, dependency-injection bindings, migrations and schema as nodes | agentforge-graph, Graphify, Kodit | the dataflow view reaches a table |
-| 10.3 | **Infrastructure-as-code nodes** | Dockerfile, Kubernetes and Terraform resources linked to the code they run | codebase-memory-mcp, Graphify | a service's entry point is linked to its container |
 
 ## 11 - Claim history and memory
 

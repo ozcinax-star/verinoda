@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D131)
+## Upgrading from 0.3.2 (D60-D132)
 
 ### D63: Running a project's own tests safely
 
@@ -645,6 +645,13 @@ the compact `affected_tests` key. No MCP tool added; the tool count is unchanged
 tests, and the result has a `property_test` entry (`status`, `observed`, `evaluated`, `counterexamples`,
 `claim_status`, `path`, `written`, and `hash_order_dropped` when inputs were left out). The probe plugin's spec
 accepts `property_refs`; `experiments.run` accepts `PYTHONHASHSEED` in `env_extra`. No MCP tool or argument changes.
+
+### D132: Infrastructure-as-code nodes
+
+New command `verinoda infra [--file FILE] [--json]`: Dockerfiles, compose services, Kubernetes containers and
+Terraform resources, each linked to the project file its command runs (statically_verified commands;
+strong_inference links through `COPY` lines, weak_inference by name). Read-only; nothing to migrate. The MCP tool
+count is unchanged (no new tool), so UPGRADING's tool count needs no change.
 
 ### D60-D62
 

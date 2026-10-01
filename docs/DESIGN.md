@@ -10324,6 +10324,133 @@ raises is a counterexample and an import failure is not evaluated; `holds_at_bas
 whose outcome changes with the hash seed are left out (unit, and end to end under seeds 0, 4, 5); hidden folders
 and names that are not identifiers are refused; the file imports from other roots run from `tests/`.
 
+## 105. Infrastructure-as-code nodes (D132, 2026-10-01)
+
+### 105.1 Why
+
+A service is started by a manifest, not by the code: a Dockerfile's `CMD`, a compose service's `command`, a
+Kubernetes container's `args`, a Terraform Lambda's `handler`. Asking "what runs `app/main.py`, and how?" (or
+"what does this container run?") needed reading those files by hand. codebase-memory-mcp and Graphify put such
+resources in their graphs; here they are linked to the project file their command runs, with the manifest line as
+evidence, so a service's entry point is linked to its container.
+
+### 105.2 Decisions
+
+- **`verinoda infra [--file FILE] [--json]`**, a new module `verinoda/infra.py`. CLI only; no MCP tool (the core
+  menu and the full profile are unchanged), no change to graph.json or the index: the manifests are read when
+  the command runs, from the files `snapshot.listed_files` lists. Exit 1 when no node is found (with `--file`:
+  no node runs or names that file), 2 on a `--file` that is not a file of the project (repository-relative
+  first, then relative to the working folder).
+- **Read as data, nothing run.** No docker, kubectl, helm or terraform is called and nothing is built.
+  - Dockerfile (`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, `Containerfile`): stages (`FROM ... AS name`,
+    a stage built on an earlier one inherits its working folder and command), `WORKDIR`, `COPY`/`ADD`
+    (`--from` a stage followed into that stage), `ENV PYTHONPATH`, `ENTRYPOINT` and `CMD` (exec or shell form;
+    an `ENTRYPOINT` clears a `CMD` inherited from the base stage, as Docker does). The image's command is the
+    last stage's `ENTRYPOINT` + `CMD`. Continuation lines are joined and cited at their first line.
+  - Compose (`docker-compose*.yml`, `compose*.yml`): `build` (string or context + dockerfile), `image`,
+    `command`, `entrypoint`, `working_dir`, over the Dockerfile the service builds (Compose's override rules).
+  - Kubernetes (any other YAML document with `apiVersion` and `kind`): every `containers` / `initContainers`
+    item's `image`, `command` (replaces `ENTRYPOINT`), `args` (replaces `CMD`), `workingDir`.
+  - Terraform (`*.tf`): every `resource` and `data` block (brace counting outside strings and `#`, `//` and
+    `/* */` comments), its string attributes that name a project file or folder (`${path.module}/` removed), a
+    `command`/`args` list, and a Lambda-style `handler = "mod.func"`. A code attribute (`source_dir`,
+    `source_file`, `filename`, `source`, `context`, ...) of a code-running type (a function, an archive, a
+    container, a job) is a run; any other attribute whose value is a path (it has a `/` or a file extension) only
+    names it (`"relation": "names"`); a bare word (`name = "api"`) and name attributes are not paths.
+  - Files are read as UTF-8 with a byte order mark dropped; BuildKit's `Dockerfile.dockerignore` is not a
+    Dockerfile.
+  - YAML is read by a small subset reader that keeps line numbers (block and flow sequences, mappings, quoted
+    and block scalars, flow mappings and sequences with quoted brackets, `---` documents; Helm `{{ ... }}` lines
+    skipped). PyYAML is not a dependency and loses
+    lines.
+- **What a command runs.** `python -m pkg.mod` and `python file.py`; uvicorn/gunicorn/hypercorn/daphne
+  `pkg.mod:app`; `celery -A pkg`; `flask --app`; `streamlit`/`fastapi run file`; node/bun/deno/ts-node
+  `file.js`; `java -jar x.jar` and `java pkg.Main`; `go run ./cmd/x`; `sh -c "a && b"` (each part); wrappers
+  (`exec`, `tini --`, `dumb-init`, `VAR=1`) dropped; a script named by path, and the command it is given (an
+  entrypoint script ending in `exec "$@"`, or the command after its `--`, as `wait-for-it.sh db:5432 -- python
+  app.py`); `poetry`/`uv`/`pipenv`/`pdm`/`hatch`/`rye run CMD` read as CMD. Anything else is an installed program (`nginx`, `alembic`): listed,
+  no link.
+- **Linking.** The image path (relative to `WORKDIR`, plus `PYTHONPATH` folders for modules; `pkg/mod.py`,
+  `pkg/mod/__main__.py`, `pkg/mod/__init__.py`) is mapped back through the stage's `COPY` lines, newest first,
+  to the build context. A `COPY` source is a file or a folder as the project has it (a trailing `/` or a dot
+  in the name only when the source is not a project path), so `COPY Procfile app.py ./` and `COPY my.pkg/ /srv/`
+  map their contents. A folder `COPY` that would bring a file the folder does not hold (`COPY config/ ./` after
+  `COPY . .`) is passed over for an older one, as Docker overwrites only the files a folder contains. The link's
+  line is the app object's or function's definition (`app = FastAPI()` for `app.main:app`) or the import that
+  brings it; with no object named, the `__main__` guard; else 1. A server's app is never cited at the guard.
+- **Statuses.** The node and its command are `statically_verified` (the manifest line says it). A link through
+  `COPY` lines, or a path a Terraform attribute names, is `strong_inference`: the image could still run
+  something else (a package installed under the same name, a volume mounted over the folder). `weak_inference`:
+  a file found only by its path's ending (nearest the manifest first, the number of other matches said), a
+  Kubernetes container or compose service whose image was matched to a project Dockerfile by name (the folder's
+  name, a `Dockerfile.NAME` suffix, a compose service's name or `image`; the node says so in `image_built_by`), a
+  path a non-code Terraform attribute names, a jar that is a build output linked to the
+  nearest build file (`pom.xml`, `build.gradle(.kts)`, `build.sbt`, `package.json`), a Lambda handler's module.
+  No link: the reason (`an installed program`, `X maps to Y, which is not in the project`, `copied from the
+  image Z`, `no project file found for it`).
+- **Evidence.** Each link lists the command's lines (`Dockerfile:6 CMD [...]`, `docker-compose.yml:5 command:
+  ...`) and then the `COPY` lines that put the file in the image, in the order they were followed.
+- `--file FILE` keeps only the nodes whose command runs (or that name) that file, each once (the reverse
+  question). A program run twice by one command is one entry.
+
+### 105.3 Measured
+
+Tests only: the fixture project (a Python API image, a Node image, a two-stage Java image, a compose file with
+three services, a Kubernetes Deployment with two containers and a Service, a Terraform Lambda and archive)
+gives each expected link and status. Verinoda's own repository has no Dockerfile, compose, Kubernetes or
+Terraform file: `verinoda infra` reports none (exit 1) in 1.3 s.
+
+Review round: a compose service whose image was matched to a Dockerfile by name kept strong_inference (now weak,
+with `image_built_by`, as Kubernetes); any Terraform string equal to a project folder's name (`name = "api"`) was a
+strong run (now only code attributes of code-running types run; other paths are weak `names`); `//` and `/* */`
+comments with a brace swallowed later resources; an overlay `COPY config/ ./` hid the `COPY . .` that brought the
+file; extensionless files (`Procfile`, `scripts/start`) and dotted folders (`my.pkg/`) were mistaken for each other;
+`build: {context: ., ...}` was read as text; a quoted `[` swallowed the rest of a YAML document; a BOM dropped a
+Dockerfile's `FROM`, a compose `services` and a Kubernetes `apiVersion`; `Dockerfile.dockerignore` was a node; a
+uvicorn app was cited at the `__main__` guard; `wait-for-it.sh ... -- python app.py` and `poetry run` lost the
+command; `--file` tried the working folder before the repository, exited 1 on a missing file and said there was no
+Dockerfile, and listed a node twice. Each has a test. Folders and file names are now looked up in sets built once:
+500 Terraform resources against 100,000 listed files went from 14.1 s to 0.5 s. Rejected: none.
+
+### 105.4 Not done
+
+- Text, not evaluation: build `ARG`s and `${VAR}` substitution, compose `extends`, profiles and `.env`
+  interpolation, Kustomize overlays, Helm values, Terraform variables, modules and `locals` are not resolved; a
+  value built from them is left as text.
+- The last stage is the image; a compose `build.target` naming an earlier stage is not followed.
+- Image-to-Dockerfile matching is by name only (no registry, no tag), hence `weak_inference`.
+- `npm start` / `npm run X` and Makefile targets are installed programs here; the `package.json` script they run
+  is not followed. `poetry`/`uv`/`pipenv run` are followed to the command they run, but a `[tool.poetry.scripts]`
+  entry point name run that way is an installed program.
+- The path-ending search (when `COPY` gives no project file) tries the last three path endings of the reference,
+  never a bare file name for a deeper path.
+- Terraform code attributes and code-running types are fixed lists; a provider's own attribute names (say a
+  `code_dir`) are read as names, weak.
+- The nodes are not added to graph.json, `map`, `impact` or `review`, and there is no MCP tool: a later step
+  could add an `infra` map view or a `run_tool` entry. A YAML document is recognised as Kubernetes by
+  `apiVersion` + `kind` only; CRDs with `containers` lists are read the same way.
+- The YAML subset reader does not support anchors/aliases, multi-line plain scalars or complex keys; such
+  values are read as text.
+
+### 105.5 Tests
+
+`tests/test_infra.py`: a Dockerfile's uvicorn `CMD` (continuation lines) linked to `app/main.py` at `app = ...`
+through its `COPY` line; a Node image; a two-stage Java image whose jar is a build output linked weakly to
+`pom.xml` through `COPY --from`; compose services overriding the command (`python -m` linked at the `__main__`
+guard), a service whose folder is never copied found by its path's ending only (weak), a service with no
+command; a Kubernetes container using the image a compose service builds (weak) and one with a registry image
+(no link), a Service skipped; Terraform resource and data blocks (a folder named by `${path.module}/..`, a Lambda
+handler, a `command` list); what nine command shapes run (`python -u -m`, gunicorn options, `sh -c` chains, tini,
+`java -cp`, an entrypoint script with arguments, deno, nginx); `ENTRYPOINT` clearing an inherited `CMD`; a file
+copied into a folder not standing for its siblings; the YAML reader's lines; the CLI's JSON, `--file`, text and
+exit codes; a project path with a space and non-ASCII. Review round: a compose image matched by name is weak with
+`image_built_by`; Terraform `name`/`tags` values are not runs and a `local_file.filename` is a weak `names`;
+Terraform `//` and `/* */` comments; an overlay folder `COPY`; `Procfile`, `my.pkg/` and `scripts/start` sources;
+a compose `build` flow mapping; a quoted `[` in a flow sequence; BOM-prefixed manifests and a
+`Dockerfile.dockerignore`; a uvicorn app cited at its import, not the guard; `wait-for-it.sh --` and `poetry`/`uv
+run`; a program run twice listed once; `--file` repository-relative first, a missing file exit 2, an unrun file
+exit 1 with "no node runs or names".
+
 ## Sources
 
 - **Retrieval:**
