@@ -660,7 +660,7 @@ workspace packages the change affects (the packages holding changed files, then 
 dependency on them, each with its manifest line and status; compact in MCP), else
 `{"packages_total": N, "not_checked": [...]}` (MCP: `{"packages_total": N}`). The review summary adds a
 "Workspace packages affected" sentence when there are some. New command `verinoda affected`. No MCP tool
-was added, so the tool count in UPGRADING does not change.
+was added.
 
 ### D60-D62
 
