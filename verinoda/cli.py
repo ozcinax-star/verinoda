@@ -1541,6 +1541,30 @@ def cmd_grep_ast(args) -> int:
     return 0 if res["status"] == "found" else 1
 
 
+def cmd_infra(args) -> int:
+    from verinoda import infra
+
+    repo = _repo(args)
+    if not repo.is_dir():
+        print(f"error: not a folder: {repo}", file=sys.stderr)
+        return 2
+    res = infra.run(repo)
+    if args.file:
+        p = Path(args.file)     # repository-relative first, then relative to the working folder (as _rel_in_repo)
+        q = (p if p.is_absolute() else (Path.cwd() / p if not (repo / p).exists() and (Path.cwd() / p).exists()
+                                        else repo / p)).resolve()
+        if not q.is_relative_to(repo.resolve()) or not q.exists():
+            print(f"error: not a file of the project: {args.file}", file=sys.stderr)
+            return 2
+        rel = q.relative_to(repo.resolve()).as_posix()
+        res["nodes"] = infra.links_for(res, rel)
+        res["file"], res["count"] = rel, len(res["nodes"])
+        res["linked"] = res["count"]
+        res["status"] = "found" if res["nodes"] else "none"
+    _emit(args, res, lambda r: print(infra.render(r)))
+    return 0 if res["status"] == "found" else 1
+
+
 def cmd_context(args) -> int:
     from verinoda import scoped
 
@@ -3926,6 +3950,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="a YAML rule file (id, language, pattern or rule.pattern, message; one rule per "
                          "document); repeatable")
     sp.add_argument("--max-results", type=int, default=200, help="matches listed at most (default 200)")
+    sp = add("infra", cmd_infra, "infrastructure as code: Dockerfiles, compose services, Kubernetes containers and "
+                                 "Terraform resources, each linked to the project file its command runs, with the "
+                                 "manifest and COPY lines as evidence (read as text; exit 1: none found)")
+    sp.add_argument("--file", help="only the nodes whose command runs this project file")
     sp = add("context", cmd_context, "what the project says about one file: decision records whose guards name it, "
                                      "your notes on it or on a glob matching it (`scope:` in a note's header), "
                                      "Cursor and Kiro rules for it (what the Read/Edit hook shows an agent)")
