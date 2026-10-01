@@ -52,7 +52,7 @@ def test_decisions_notes_and_rules_that_name_a_file(tmp_path):
     note = next(i for i in res["items"] if i["kind"] == "scoped note")
     assert note["text"].startswith("Every write goes through save()") and note["at"] == ".verinoda/notes/db-rules.md:5"
     rule = next(i for i in res["items"] if i["kind"] == "cursor rule")
-    assert rule["text"] == "Database" and rule["glob"] == "app/db/**"
+    assert rule["text"] == "Use parameterised SQL only." and rule["glob"] == "app/db/**"
     text = scoped.text(res)
     assert text.startswith("verinoda: what this project says about app/db/store.py:") and "only_in" in text
     # a file nothing names: nothing (the hook adds nothing)
@@ -82,3 +82,48 @@ def test_mcp_hook_output_and_cli(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["items"][0]["kind"] == "scoped note"
     assert cli.main(["context", "other/x.py", "--repo", str(r)]) == 0
     assert "nothing in this project names other/x.py" in capsys.readouterr().out
+
+
+def test_globs_as_editors_read_them():
+    assert scoped.rule_match("src/a.ts", "src/**/*.ts") and scoped.rule_match("a.ts", "**/*.ts")
+    assert scoped.rule_match("src/x/y/b.tsx", "src/**/*.{ts,tsx}") and not scoped.rule_match("src/a.js", "src/**/*.{ts,tsx}")
+    assert scoped.rule_match("app/db/x.py", "app/db/**") and not scoped.rule_match("app/dbx/x.py", "app/db/*")
+    assert scoped._globs('["src/**/*.{ts,tsx}", lib/**]') == ["src/**/*.{ts,tsx}", "lib/**"]
+    meta, body, line = scoped._front("---\nglobs:\n  - a/**\n  - \"b/**\"\n--- \nText\n")
+    assert scoped._globs(meta["globs"]) == ["a/**", "b/**"] and body.strip() == "Text" and line == 6
+    assert scoped._front("---\nglobs: a\n---")[0] == {"globs": "a"}
+
+
+def test_rule_variants_and_workspace_rules(tmp_path):
+    import subprocess
+
+    top = tmp_path / "ws"
+    r = top / "sub proj"
+    _write(r, "app/db/store.py", "x = 1\n")
+    subprocess.run(["git", "init", "-q", str(top)], check=True, capture_output=True)
+    _write(r, ".kiro/steering/q.md", '---\ninclusion: "fileMatch"\nfileMatchPattern: "app/**/*.py"\n---\nQuoted.\n')
+    _write(r, ".cursor/rules/both.mdc", "---\nalwaysApply: true\nglobs: app/**\n---\nAlways.\n")
+    _write(r, ".verinoda/notes/both.md", "---\nsubject: x\nfile: other.py\nscope: app/db/*\n---\nBoth headers.\n")
+    _write(top, ".cursor/rules/root.mdc", "---\nglobs: sub proj/app/**\n---\n# Root\nFrom the workspace.\n")
+    res = scoped.for_file(r, "app/db/store.py")
+    got = {i["kind"]: i["text"] for i in res["items"]}
+    assert got == {"kiro steering": "Quoted.", "scoped note": "Both headers.", "cursor rule": "From the workspace."}
+
+
+def test_sources_are_kept_until_a_file_changes(tmp_path, monkeypatch):
+    r = tmp_path / "cache"
+    _write(r, ".verinoda/notes/n.md", "---\nscope: **\n---\nFirst.\n")
+    assert scoped.for_file(r, "a.py")["items"][0]["text"] == "First."
+    calls = []
+    real = scoped._front
+    monkeypatch.setattr(scoped, "_front", lambda t: calls.append(1) or real(t))
+    scoped.for_file(r, "a.py")
+    assert calls == []                      # nothing changed: nothing re-read
+    import os
+    import time
+
+    _write(r, ".verinoda/notes/n.md", "---\nscope: **\n---\nSecond, longer.\n")
+    st = (r / ".verinoda/notes/n.md").stat()
+    os.utime(r / ".verinoda/notes/n.md", ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000))
+    time.sleep(0.01)
+    assert scoped.for_file(r, "a.py")["items"][0]["text"] == "Second, longer."

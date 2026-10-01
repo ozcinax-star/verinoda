@@ -238,7 +238,7 @@ edge's location matter.
   text and, when HEAD has none, the one that last removed it, each a claim with the commit as evidence),
   `history commits [--message RE] [--author RE] [--path P] [--since D] [--until D] [--diff RE] [--limit N]`,
   `history compare BASE [HEAD] [--path P]`. Read only; exit 2 when nothing is found.
-- `history_search` is new (one more MCP tool; the server has 40 tools since the Read/Edit hook's `read_context`), served by the core profile
+- `history_search` is new (one more MCP tool; `dependency_ask` of D105 is the latest), served by the core profile
   behind `run_tool` and by the full profile. Reinstalled skills allow `verinoda history` and mention it.
 
 ### D77: Mermaid diagrams and a wiki outline
@@ -472,7 +472,7 @@ MCP tool count is unchanged.
 ### D105: Ask before writing a dependency
 
 - New: `verinoda decide ask SOURCE TARGET` and the MCP tool `dependency_ask` (core, behind `run_tool` in a
-  project with decision records; listed in the full profile). The MCP server has one more tool.
+  project with decision records; listed in the full profile). The MCP server now has a 39th tool.
 - The core instructions of a project with decision records now name `dependency_ask`.
 
 ### D106: What-if refactoring

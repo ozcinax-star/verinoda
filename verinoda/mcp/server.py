@@ -887,15 +887,14 @@ class AtlasTools:
         held up)."""
         from verinoda import scoped
 
-        with self._lock:
-            try:
-                with contextlib.redirect_stdout(sys.stderr):
-                    text = scoped.text(scoped.for_file(self.repo, str(file_path or "")))
-                    if not text:
-                        return {}
-                    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
-            except Exception:  # noqa: BLE001 - a hook never breaks the agent's Read
-                return {}
+        # no server lock: it reads files only (its own cache has its own lock), so a Read never waits for an analyze
+        try:
+            text = scoped.text(scoped.for_file(self.repo, str(file_path or ""))) if file_path else ""
+        except Exception:  # noqa: BLE001 - a hook never breaks the agent's Read
+            return {}
+        if not text:
+            return {}
+        return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
 
     def grep_context(self, pattern: str, path: str | None = None) -> dict:
         """What the static graph says about the symbols a Grep searched for, as a Claude Code PostToolUse hook

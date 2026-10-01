@@ -1264,8 +1264,18 @@ def cmd_context(args) -> int:
     from verinoda import scoped
 
     repo = _repo(args)
+    if not (repo / ".verinoda").is_dir():
+        print(f"note: {repo} has no .verinoda/ folder: only rules and decision records found by path are read",
+              file=sys.stderr)
     res = scoped.for_file(repo, args.file)
-    _emit(args, res, lambda r: print(scoped.text(r, limit=10_000) or f"nothing in this project names {r['file']}"))
+
+    def render(r: dict) -> None:
+        if r.get("outside"):
+            print(f"{r['file']} is outside the project {repo}")
+        else:
+            print(scoped.text(r, limit=None) or f"nothing in this project names {r['file']}")
+
+    _emit(args, res, render)
     return 2 if res.get("outside") else 0
 
 
