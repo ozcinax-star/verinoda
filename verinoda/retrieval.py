@@ -93,7 +93,8 @@ IMPACT_RX = re.compile(r"\b(affect\w*|impact\w*|retest\w*|breaks?|if .* chang\w+
                        r"depend\w*|etkile\w*|kim kullan\w*|kullanan\w*|bagiml\w*)\b", re.I)
 _KIND_OF = {"calls": "call", "method": "containment", "contains": "containment", "uses": "reference",
             "references": "reference", "imports": "import", "imports_from": "import", "inherits": "inheritance",
-            "implements": "inheritance", "extends": "inheritance", "registers": "callback"}
+            "implements": "inheritance", "extends": "inheritance", "registers": "callback",
+            "requests": "cross_service", "rpc_calls": "cross_service", "emits": "cross_service"}
 
 
 def _cost(obj) -> int:
@@ -900,6 +901,12 @@ CALLBACK_RELATIONS = {"registers"}
 CALLBACK_NOTE = ("a path includes a callback hop (registers): the method is handed over there (a method "
                  "reference passed on); what receives it calls it later (an event, a ticker, a command) or at once "
                  "(forEach, map, filter) - it is not a call written at that line")
+# a client call linked to the handler that serves it (verinoda.cross_service): followed only when no path exists
+# without it, like a callback
+CROSS_SERVICE_RELATIONS = {"requests", "rpc_calls", "emits"}
+CROSS_SERVICE_NOTE = ("a path crosses a service boundary (requests / rpc_calls / emits): the client call's URL, "
+                      "procedure or event name was matched to the handler's route declaration (route_at) by text; "
+                      "it is inferred, not verified - a base URL, proxy or deployment can route the call elsewhere")
 
 
 def _hints(g: Graph, text: str) -> list[dict]:
@@ -972,7 +979,7 @@ def _code_written(text: str) -> bool:
 
 
 def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int = 8,
-          mode: str = "flow", stale=(), callbacks: bool = True) -> dict:
+          mode: str = "flow", stale=(), callbacks: bool = True, cross_service: bool = True) -> dict:
     """Directed paths between two symbols/files, each hop with its edge location.
 
     ``mode="flow"`` follows only ``calls`` edges (plus class construction ->
@@ -997,6 +1004,11 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
     With ``callbacks`` (the default), when there is no path, ``registers`` edges (a method handed over
     as a callback) are followed too; such a hop is ``relation="registers"``, ``kind="callback"`` and the
     result carries a ``note``.
+    With ``cross_service`` (the default), when there is still no path, the cross-service edges are followed too
+    (a client call linked by text to the route, procedure or event handler it names); such a hop is
+    ``kind="cross_service"`` with the call's location in ``at`` and the handler's declaration in ``route_at``.
+    When no path is found and a call on the way names several handlers (no edge is made for it), the result
+    lists it in ``cross_service_ambiguous`` with every candidate.
     """
     from verinoda import naming
 
@@ -1051,18 +1063,36 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
         return found
 
     paths = all_paths(D)
+    widest = D
     if not paths and callbacks:
         D2 = _with_callbacks(g, D)
         if D2 is not None:
+            widest = D2
             paths = all_paths(D2)
             if paths:
                 D = D2
+    if not paths and cross_service and g.__dict__.get("_has_cross_service", True):
+        D3 = _with_relations(g, widest, CROSS_SERVICE_RELATIONS)
+        if D3 is not None:
+            widest = D3
+            paths = all_paths(D3)
+            if paths:
+                D = D3
     if not paths:
         try:
             p = nx.shortest_path(D.to_undirected(as_view=True), s, t)
             out["undirected_hint"] = [g.label(n) for n in p]
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             pass
+        if cross_service and g.__dict__.get("_cross_ambiguous"):
+            from verinoda import cross_service as xs
+
+            reach = {s} | (nx.descendants(widest, s) if s in widest else set())
+            amb = xs.ambiguous_on_way(g, reach, t, widest)
+            if amb:
+                out["cross_service_ambiguous"] = amb
+                out["next_step"] = ("a call on the way names several handlers, so no edge was made "
+                                    "(cross_service_ambiguous lists them): `verinoda routes` shows the route table")
         out["status"] = "no directed path"
         return out
     kinds_seen: set[str] = set()
@@ -1076,21 +1106,26 @@ def trace(g: Graph, source: str, target: str, *, max_paths: int = 3, cutoff: int
             hops.append({"from": g.label(a), "from_id": a, "to": g.label(b), "to_id": b,
                          "relation": rel, "kind": kind, "confidence": d.get("confidence"), "at": _at(d),
                          **({"derived_by": d["_origin"]} if str(d.get("_origin", "")).startswith("verinoda") else {}),
-                         **({"context": d.get("context")} if kind == "callback" and d.get("context") else {})})
+                         **({"context": d.get("context")} if kind == "callback" and d.get("context") else {}),
+                         **({k: d[k] for k in ("protocol", "method", "url", "route", "event", "route_at", "framework",
+                                               "notes", "context") if d.get(k)} if kind == "cross_service" else {})})
         out["paths"].append(hops)
     out["status"] = "found"
     if mode == "any":
         execution = kinds_seen <= {"call"}
         out["reachability"] = "execution" if execution else \
-            "callback" if kinds_seen <= {"call", "callback"} else "structural"
+            "callback" if kinds_seen <= {"call", "callback"} else \
+            "cross_service" if kinds_seen <= {"call", "callback", "cross_service"} else "structural"
         if "containment" in kinds_seen:
             out["note"] = ("a path includes containment hops (a class/module defines the next symbol): it shows "
                            "how the symbols are related, not that execution reaches the target; "
                            "use mode='flow' for call paths")
-        elif not execution and "callback" not in kinds_seen:
+        elif not execution and not kinds_seen & {"callback", "cross_service"}:
             out["note"] = "a path includes non-call hops: a structural relation, not execution reachability"
     if "callback" in kinds_seen:
         out["note"] = CALLBACK_NOTE + (f"; {out['note']}" if out.get("note") else "")
+    if "cross_service" in kinds_seen:
+        out["note"] = CROSS_SERVICE_NOTE + (f"; {out['note']}" if out.get("note") else "")
     return out
 
 
@@ -1110,7 +1145,12 @@ def _simple_paths(D: nx.DiGraph, s: str, t: str, cutoff: int, max_paths: int) ->
 
 def _with_callbacks(g: Graph, D: nx.DiGraph) -> nx.DiGraph | None:
     """``D`` plus the ``registers`` edges between nodes it has no edge between; None when there are none."""
-    extra = [(u, v, d) for u, v, d in g.edges(CALLBACK_RELATIONS) if not D.has_edge(u, v)]
+    return _with_relations(g, D, CALLBACK_RELATIONS)
+
+
+def _with_relations(g: Graph, D: nx.DiGraph, relations: set[str]) -> nx.DiGraph | None:
+    """``D`` plus the edges of ``relations`` between nodes it has no edge between; None when there are none."""
+    extra = [(u, v, d) for u, v, d in g.edges(relations) if not D.has_edge(u, v)]
     if not extra:
         return None
     D2 = D.copy()

@@ -49,7 +49,7 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
-RECEIVER_SIDECAR_VERSION = 9   # 9: Java calls into datapack functions (D71); 8: Java overloads bound by argument count; 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
+RECEIVER_SIDECAR_VERSION = 10  # 10: cross-service edges (verinoda.cross_service); 9: Java calls into datapack functions (D71); 8: Java overloads bound by argument count; 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc",
                   ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: their text view (doctext.py)
@@ -2511,7 +2511,29 @@ def augment_python_receiver_calls(g: Graph) -> int:
 
     added = _apply_edges(g, receiver_call_edges(g) + java_call_edges(g))
     _apply_edges(g, java_registers_edges(g) + jvm_mixins.mixin_edges(g) + datapack_java.graph_edges(g))
+    _apply_cross_service(g, _cross_service(g))
     return added
+
+
+def _cross_service(g: Graph, old: dict | None = None) -> dict:
+    """The cross-service block of the sidecar: per-file facts (reused from ``old`` by sha256), edges, ambiguous
+    calls and counts (:mod:`verinoda.cross_service`)."""
+    from verinoda import cross_service
+
+    reuse = (old or {}).get("files") if (old or {}).get("facts_version") == cross_service.FACTS_VERSION else None
+    files, edges, report, _parsed = cross_service.collect(g, old=reuse)
+    return {"facts_version": cross_service.FACTS_VERSION, "files": files,
+            "edges": [[u, v, d] for u, v, d in edges], "ambiguous": report["ambiguous"],
+            "counts": {k: report[k] for k in ("routes", "clients", "linked", "unresolved_urls", "external")}
+            | {"ambiguous": len(report["ambiguous"]), "unmatched": len(report["unmatched"]),
+               "method_mismatch": len(report["method_mismatch"])}}
+
+
+def _apply_cross_service(g: Graph, block: dict | None) -> None:
+    block = block or {}
+    _apply_edges(g, [(u, v, d) for u, v, d in block.get("edges") or []])
+    g.__dict__["_cross_ambiguous"] = block.get("ambiguous") or []
+    g.__dict__["_has_cross_service"] = bool(block.get("edges"))  # trace skips its edge scan when there are none
 
 
 _SIDECAR_FACTS_SINCE = 2   # the per-file facts have this shape since v2 (v3 changed only how edges are made)
@@ -2572,11 +2594,14 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
     functions = datapack_java.graph_edges(g)  # Java into datapack functions (D71)
     sidecar = {"version": RECEIVER_SIDECAR_VERSION, "graph": graph_identity(g.path),
                "files": files, "edges": [[u, v, d] for u, v, d in edges], "registers": [[u, v, d] for u, v, d in regs],
-               "mixins": [[u, v, d] for u, v, d in mixins], "datapack": [[u, v, d] for u, v, d in functions]}
+               "mixins": [[u, v, d] for u, v, d in mixins], "datapack": [[u, v, d] for u, v, d in functions],
+               "cross_service": _cross_service(g, old.get("cross_service"))}
     write_json_atomic(receiver_calls_path(repo), sidecar)
+    cross = sidecar["cross_service"]["counts"]
     return {"edges": len(edges), "files_parsed": parsed, "files_reused": len(files) - parsed,
             **({"registers": len(regs)} if regs else {}), **({"mixins": len(mixins)} if mixins else {}),
-            **({"datapack": len(functions)} if functions else {})}
+            **({"datapack": len(functions)} if functions else {}),
+            **({"cross_service": cross} if cross["routes"] or cross["clients"] else {})}
 
 
 def apply_receiver_calls(g: Graph) -> int:
@@ -2600,10 +2625,12 @@ def apply_receiver_calls(g: Graph) -> int:
 
 
 def _apply_sidecar(g: Graph, side: dict) -> int:
-    """Add a sidecar's call edges (counted), its ``registers``, Mixin and datapack edges (not counted)."""
+    """Add a sidecar's call edges (counted), its ``registers``, Mixin, datapack and cross-service edges (not
+    counted)."""
     added = _apply_edges(g, [(u, v, d) for u, v, d in side.get("edges") or []])
     _apply_edges(g, [(u, v, d) for u, v, d in (side.get("registers") or []) + (side.get("mixins") or [])
                      + (side.get("datapack") or [])])
+    _apply_cross_service(g, side.get("cross_service"))
     return added
 
 
