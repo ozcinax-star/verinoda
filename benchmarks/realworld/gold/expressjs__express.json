@@ -64,6 +64,8 @@
       "fact": "Content negotiation on the request (req.accepts and friends) is in lib/request.js (req.accepts at line 131)",
       "source": "lib/request.js:131",
       "check": {"kind": "query", "question": "how does the request check which content types the client accepts", "top_k": 8, "expect_file": "lib/request.js"}
-    }
+    },
+    {"id": "route-posts@v2", "v": 2, "replaces": "route-posts", "added": "2026-10-02", "why": "v1's handler check looked for the file path 'route-separation/post.js' in the route row, but a row's handler is a graph node id (underscores, no file extension), so the check could never hit even on a right answer. The fact is unchanged; v2 names the handler's node id, examples/route-separation/post.js `exports.list`, and still requires the full path /posts.", "fact": "The route-separation example registers GET /posts with post.list (examples/route-separation/index.js:49; handler `exports.list = function(req, res)` at examples/route-separation/post.js:11)", "source": "examples/route-separation/index.js:49, examples/route-separation/post.js:11", "check": {"kind": "routes", "path": "/posts", "handler": "examples_route_separation_post_list"}},
+    {"id": "route-user-edit-put@v2", "v": 2, "replaces": "route-user-edit-put", "added": "2026-10-02", "why": "Same as route-posts@v2: v1 looked for a file path in a field that holds a node id. v2 names the node id of examples/route-separation/user.js `exports.update`, which only the PUT row has (the GET row on the same path is user.edit).", "fact": "The route-separation example registers PUT /user/:id/edit with user.update (examples/route-separation/index.js:45; handler `exports.update = function(req, res)` at examples/route-separation/user.js:40)", "source": "examples/route-separation/index.js:45, examples/route-separation/user.js:40", "check": {"kind": "routes", "path": "/user/:id/edit", "handler": "examples_route_separation_user_update"}}
   ]
 }
