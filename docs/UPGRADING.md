@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D128)
+## Upgrading from 0.3.2 (D60-D129)
 
 ### D63: Running a project's own tests safely
 
@@ -621,6 +621,13 @@ unchanged.
 undeclared Iris/OptiFine uniforms, undefined macros), so a project whose check passed may now exit 3; the issues
 carry a `status`. New `shader --includes` lists the include edges; `shader --check --glslang` also compiles each
 pack stage with `glslangValidator` when installed (off by default). The MCP tool count does not change.
+
+### D129: Bisect over the debug ledger's attempts
+
+`verinoda debug bisect --attempts` finds the first attempt of a debug session (agent-reported steps
+included) whose tree fails the repro: each recorded tree is rebuilt from the session base and the blob
+store in a throw-away copy and run by Verinoda; the answer names the attempt, its hypothesis, the files it
+changed and the run ids on both sides. `experiments.run` takes `replay=` for that. No tool count change.
 
 ### D60-D62
 

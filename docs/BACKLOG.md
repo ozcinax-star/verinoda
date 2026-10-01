@@ -119,7 +119,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 13.1 | **Hooks on the agent's own tool calls** | PreToolUse and PostToolUse hooks add graph context to the agent's Grep and Read in Claude Code, Codex and Cursor | GitNexus, Codanna, CodeGraph | a Grep in Claude Code returns the matching symbols' callers without a Verinoda call |
 | 13.3 | **Installers for more agents** | Cursor, Gemini CLI, GitHub Copilot, Kiro, Aider, Continue and others | Graphify | `setup --agents all` registers each one found |
 | 13.4 | **Package existence and slopsquatting check (opt-in)** | A new dependency checked against its registry: exists, age, downloads, malware signals | Socket MCP, Endor Labs | `check` flags a dependency name the registry does not have |
-| 13.5 | **Bisect over the debug ledger's attempts** | Find which recorded attempt or agent step broke the tests | agent-blackbox, culprit | `debug bisect --attempts` |
 
 ## 14 - Outputs and views
 

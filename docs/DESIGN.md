@@ -10050,6 +10050,85 @@ a BOM, `#moj_import` outside the repository, a deep chain, two glslang errors on
 line, `--includes --json`); `--glslang` off by default, errors mapped back, "not found" when absent.
 `tests/test_shaders.py` unchanged and passing (its fixture lints clean).
 
+## 102. Bisect over the debug ledger's attempts (D129, 2026-10-01)
+
+### 102.1 Why
+
+`verinoda debug bisect` searches commits. An agent's session breaks things between commits: it edits the
+working tree step after step, often reports its own runs (`--observed-output`), and only notices much later
+that the repro fails. The ledger already holds every step's tree (changes vs the session base, contents in
+the blob store), so the question "which of my steps broke it" can be answered by running the repro on those
+trees, without touching the user's tree.
+
+### 102.2 Decisions
+
+- `verinoda debug bisect --attempts [--good N] [--bad N] [--max-runs N] [--json]`: `--good` / `--bad` are
+  attempt numbers; `--overlay` is refused with `--attempts`. Python: `debug.bisect_attempts`.
+- Steps are the session's attempts on the working tree (`baseline`, `fix`, `probe`, `rerun`; Verinoda's and
+  agent-reported alike), oldest first; consecutive attempts on one tree are one step, named by its first
+  attempt. Strategy runs (differential, bisect, replays) are not steps.
+- A step is judged only by a run Verinoda made of the session's repro on that tree: a recorded one (same
+  tree hash on the working tree, or an earlier replay of the step), else a new one. An agent's report is
+  never used as the outcome; when the first failing step was agent-reported its reported outcome is shown
+  next to the replay's.
+- A replay is an ordinary recorded attempt (`kind = "bisect"`, `copy_source = {"kind": "attempt", "attempt":
+  N, "commit": <base>, "recorded_tree", "replayed"}`): `experiments.run` copies the session base and writes
+  the step's recorded files over it (`replay={path: bytes | None}`, None leaves the file out), with the same
+  policy and isolation as every run. A step whose changed file's content is not in the blob store is
+  skipped, said so.
+- Both ends are established first, as in the commit bisect: the bad end (default: the latest step) must
+  fail; the symptom is that run's failing tests and coarse signature, and the other steps are judged against
+  it with `judge_at` (a step that fails only other tests passes; a different failure is skipped). The good
+  end (default: the latest earlier step with a passing Verinoda run, else the first step) must pass; when it
+  fails only some of the symptom's tests, the symptom becomes the ones that passed there (what the steps
+  broke); if none passed, the answer is `unknown` and points to the commit bisect.
+- Bounded by `debug.bisect_max_runs` (default 12); recorded runs cost nothing.
+- Output: `status` found / range / unknown, `runs` (step, outcome, the attempt that ran it, experiment and
+  evidence ids, `recorded`, `tree_differs` when a rebuilt tree's hash is not the recorded one),
+  `first_bad_attempt` (attempt, run_by, hypothesis, the files and symbols changed since the passing step,
+  `fail_run` and `previous.pass_run` with their run ids), `conclusion`, `limits`, `cost`. CLI exit 3 when not
+  found, like the commit bisect.
+- No MCP change: the full profile's `debug_strategy` keeps its arguments (EXPECTED_PARAMS unchanged).
+
+### 102.3 Measured
+
+- One end-to-end test on `examples/orders_app`: baseline passes, three agent-reported steps (a deleted file,
+  the break reported as passing, an unrelated edit), then a failing Verinoda run. The search named the
+  break (attempt 2) with 2 runs, the rebuilt trees had the recorded hashes (the deletion included), the
+  user's tree was byte-identical afterwards, and a second search ran nothing (all recorded). About 11 s on
+  this machine.
+- Review round: a session that starts on a failure still there at the end judged its baseline "part"
+  against the bad end's failing tests and stopped with a false "the failure predates these attempts"; the
+  search now narrows the symptom to the bad end's failing tests that passed at the good end (reported as
+  `symptom`, said in the conclusion) and names the step that broke them. Replays no longer mark the commit
+  bisect done in `debug status`, and status shows a replay row as "tree of attempt N" (`replay_of`), not
+  the base commit. An inverted `--good`/`--bad` pair is refused before anything runs. A skipped step always
+  carries a reason (a timeout said "None"). A step that turned a directory into a file (or back) is rebuilt
+  (deletions first, the path in the way removed); a copy that still cannot hold a tree skips the step
+  instead of raising. Tests: the failing-baseline session, `range` with skipped steps (timeout, lost blob)
+  and the run budget, and the file/directory replay.
+
+### 102.4 Not done
+
+- One run per tree: a flaky test can move the boundary (`debug rerun` on the tree).
+- Bisect assumes one boundary; an edit reverted and made again between steps can hide an earlier break.
+- Replayed files have the line endings of the blob store (LF); a rebuilt tree differs from the recorded one
+  when files outside the recorded changes (untracked, skipped by the commit copy) mattered - flagged as
+  `tree_differs` in the run and in `limits`.
+- Steps are only what the ledger recorded: an edit made and undone between two attempts is invisible.
+- Not exposed over MCP.
+
+### 102.5 Tests
+
+- `tests/test_debug.py::test_bisect_over_attempts_names_the_agent_step_that_broke_the_repro` (search,
+  deletion replay, user tree untouched, recorded reuse, bad `--good`, unknown when the good end fails, CLI
+  text and the `--attempts` number check).
+- `tests/test_debug.py::test_bisect_over_attempts_in_a_session_that_started_on_a_failure` (narrowed
+  symptom, `--good 0`, inverted pair refused before a run, status strategies and replay rows).
+- `tests/test_debug.py::test_bisect_over_attempts_skips_steps_it_cannot_run_and_says_why` (`range`, skip
+  reasons, `--max-runs`, CLI exit 3).
+- `tests/test_debug.py::test_a_replay_can_put_a_file_where_the_base_has_a_directory_and_back`.
+
 ## Sources
 
 - **Retrieval:**
