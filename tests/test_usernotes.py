@@ -403,3 +403,60 @@ def test_facts_and_links_from_the_cli(shop, capsys):
                     encoding="utf-8")
     assert cli.main(["notes", str(shop), "--links"]) == 0
     assert "[[refund()]]" in capsys.readouterr().out
+
+
+TRICKY = """- [özellik] Türkçe kategori #önemli #tamam
+- [idea] use `#not-a-tag` and [docs](#install) and http://x.io/a?b=#frag #real
+- [long] #""" + "a" * 70 + """ is not a tag
+```
+- [inside] a code line
+```python
+- [still-inside] an info string does not close a fence
+```
+- [after] read again
+    ```
+- [indented-fence] four spaces: not a fence opener
+![[diagram.png]] `[[InCode]]` [[Name\\|alias]] [[billing]] [[src/billing.py]] [[src/billing.py::refund()]]
+"""
+
+
+def test_tricky_markdown(shop):
+    subject, a, b = _charge(shop)
+    n = usernotes.save(shop, subject, "src/billing.py", a, b, TRICKY)
+    obs = {o["category"]: o["tags"] for o in usernotes.observations(n)}
+    assert obs == {"özellik": ["tamam", "önemli"], "idea": ["real"], "long": [], "after": [],
+                   "indented-fence": []}
+    names = [lk["name"] for lk in usernotes.links(n)]
+    assert names == ["Name", "billing", "src/billing.py", "src/billing.py::refund()"]
+    snap = uidata.Atlas(shop).snapshot()
+    own = usernotes.load_all(shop)
+    got = {x: usernotes.resolve_link(x, own, snap, shop)["to"] for x in names[1:]}
+    assert got == {"billing": "code", "src/billing.py": "code", "src/billing.py::refund()": "code"}
+
+
+def test_links_not_checked_ambiguous_and_flags(shop, capsys):
+    from verinoda import cli
+
+    (shop / "src" / "store.py").write_text("class A:\n    def get(self):\n        return 1\n\n\n"
+                                           "class B:\n    def get(self):\n        return 2\n", encoding="utf-8")
+    _scan(shop)
+    subject, a, b = _charge(shop)
+    usernotes.save(shop, subject, "src/billing.py", a, b, "See [[get]] and [[refund]].\n")
+    snap = uidata.Atlas(shop).snapshot()
+    own = usernotes.load_all(shop)
+    r = usernotes.resolve_link("get", own, snap, shop)
+    assert r["to"] == "code" and r["also"] == 1 and r["ambiguous"]
+    # the file the link found changed since the index: not checked (exit 3), never "it resolves"
+    src = (shop / "src" / "billing.py").read_text(encoding="utf-8")
+    (shop / "src" / "billing.py").write_text(src.replace("def refund", "def give_back"), encoding="utf-8")
+    assert usernotes.resolve_link("refund", own, uidata.Atlas(shop).snapshot(), shop)["to"] == "unknown"
+    capsys.readouterr()
+    assert cli.main(["notes", str(shop), "--links"]) == 3
+    assert "NOT CHECKED" in capsys.readouterr().out
+    assert usernotes.resolve_link("get", own, None)["to"] == "unknown"        # no index: not checked
+    assert cli.main(["notes", str(shop), "--facts", "--links"]) == 2
+    assert cli.main(["notes", str(shop), "--links", "--changed"]) == 2
+    capsys.readouterr()
+    assert cli.main(["notes", str(shop), "--facts", "--json"]) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert res["kept"] == [] and res["deleted"] == [] and "not claims" in res["note"]

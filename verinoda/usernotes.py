@@ -49,10 +49,13 @@ MAX_TEXT = 64_000
 NOTE_SUFFIX = ".md"
 STATUSES = ("fresh", "changed", "gone")
 REGION_TABLES = (("sym", "symbols", "full"), ("mod", "module", "h"), ("sec", "sections", "h"))
-_OBS = re.compile(r"^\s*(?:[-*+]\s+)?\[([A-Za-z][\w -]{0,39}?)\]\s+(\S.*?)\s*$")
-_TAG = re.compile(r"(?<![\w&/#])#([A-Za-z][\w/-]{0,59})")
-_WIKI = re.compile(r"\[\[([^\]|#\n]+)(?:[|#][^\]\n]*)?\]\]")
-_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+_OBS = re.compile(r"^\s*(?:[-*+]\s+)?\[([^\W\d_][\w -]{0,39}?)\]\s+(\S.*?)\s*$")
+_TAG = re.compile(r"(?:(?<=\s)|^)#([^\W\d_][\w/-]{0,59})(?![\w/-])")
+_WIKI = re.compile(r"(?<!!)\[\[([^\]|#\n]+?)\\?(?:[|#][^\]\n]*)?\]\]")     # ![[embed]] is not a link
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*$")
+_CODE = re.compile(r"(`+)(?!`).+?(?<!`)\1")               # an inline code span
+_TARGET = re.compile(r"\]\([^)\s]*\)")                     # a Markdown link's target
 
 
 @dataclass
@@ -130,16 +133,22 @@ def _body_lines(note: UserNote) -> list[tuple[int, str]]:
         rows = [(k + 1, lines[k]) for k in range(end + 1, len(lines))]
     out, fence = [], None
     for n, line in rows:
-        m = _FENCE.match(line)
-        if m:
-            if fence is None:
-                fence = m.group(1)
-            elif m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
-                fence = None
-            continue
         if fence is None:
-            out.append((n, line))
+            m = _FENCE_OPEN.match(line)
+            if m:
+                fence = m.group(1)
+            else:
+                out.append((n, line))
+            continue
+        m = _FENCE_CLOSE.match(line)       # CommonMark: the same character, at least as many, nothing after
+        if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+            fence = None
     return out
+
+
+def _prose(line: str) -> str:
+    """A line with its inline code spans and link targets blanked (neither holds tags or links)."""
+    return _TARGET.sub(lambda m: " " * len(m.group(0)), _CODE.sub(lambda m: " " * len(m.group(0)), line))
 
 
 def observations(note: UserNote) -> list[dict]:
@@ -151,7 +160,7 @@ def observations(note: UserNote) -> list[dict]:
             continue
         text = m.group(2)
         out.append({"category": " ".join(m.group(1).lower().split()), "text": text,
-                    "tags": sorted({t.lower() for t in _TAG.findall(text)}), "line": n})
+                    "tags": sorted({t.lower() for t in _TAG.findall(_prose(text))}), "line": n})
     return out
 
 
@@ -159,7 +168,7 @@ def links(note: UserNote) -> list[dict]:
     """The note's ``[[Name]]`` links, each with the line it is on (once per name)."""
     seen, out = set(), []
     for n, line in _body_lines(note):
-        for m in _WIKI.finditer(line):
+        for m in _WIKI.finditer(_prose(line)):
             name = m.group(1).strip()
             if name and name not in seen:
                 seen.add(name)
@@ -171,24 +180,51 @@ def _bare(name: str) -> str:
     return name.strip().removesuffix("()").lower()
 
 
-def resolve_link(name: str, notes: list[UserNote], snap=None) -> dict:
-    """Where ``[[name]]`` leads: a note of yours (its subject, or the name after ``::``), else a symbol, file or
-    section of the index whose name is ``name`` (exactly or after a module prefix, ignoring ``()`` and case), else
-    nothing."""
+def resolve_link(name: str, notes: list[UserNote], snap=None, repo: Path | None = None) -> dict:
+    """Where ``[[name]]`` leads: a note of yours (its subject, or the name after ``::``); else, in the index, the
+    subject ``file::Name`` or ``file`` it names, or the symbol, section or file whose name is ``name`` (exactly or
+    after a module prefix, ignoring ``()`` and case; a file also by its path or its name without the suffix);
+    else nowhere. ``to`` is ``note``, ``code``, ``None`` (nowhere) or ``unknown`` (no index, or the file it found
+    changed since the index was built). Several matches: the first, with ``also`` (how many others) and
+    ``ambiguous`` unless one has exactly that name."""
     want = _bare(name)
     for n in notes:
         if _bare(n.subject) == want or _bare(n.subject.rpartition("::")[2]) == want:
             return {"to": "note", "subject": n.subject, "at": f"{n.file}:{n.start}"}
     if snap is None:
-        return {"to": None, "why": "no index to look the name up in (run `verinoda scan`)"}
-    hits = [h for h in (snap.search(name.strip().removesuffix("()")).get("results") or [])
-            if _bare(h.get("title") or "") == want or _bare(h.get("title") or "").endswith("." + want)]
+        return {"to": "unknown", "why": "no index to look the name up in (run `verinoda scan`)"}
+    hits: list[dict] = []
+    if "/" in name or "::" in name:
+        nid = snap.note_for_subject(name.strip())
+        if nid is not None:
+            hits = [snap.brief(nid)]
+    if not hits:
+        def named(h: dict) -> bool:
+            t, f = _bare(h.get("title") or ""), (h.get("file") or "").lower()
+            if t == want or t.endswith("." + want):
+                return True
+            return h.get("kind") in ("file", "doc") and bool(f) and (f == want or Path(f).stem == want)
+
+        hits = [h for h in (snap.search(Path(name.strip()).stem if "/" in name else name.strip().removesuffix("()"),
+                                        limit=200).get("results") or []) if named(h)]
     if not hits:
         return {"to": None, "why": "no note of yours and no name in the index is called that"}
-    h = hits[0]
+    exact = [h for h in hits if (h.get("title") or "").removesuffix("()") == name.strip().removesuffix("()")]
+    h = (exact or hits)[0]
     at = f"{h['file']}:{h['line']}" if h.get("file") and h.get("line") else h.get("file")
+    if repo is not None and h.get("file"):
+        from verinoda import search_index
+
+        try:
+            stale = search_index.stale_files(snap.h, Path(repo), [h["file"]])
+        except Exception:
+            stale = [h["file"]]
+        if stale:
+            return {"to": "unknown", "title": h["title"], "at": at,
+                    "why": f"{h['file']} changed since the index was built: run `verinoda update`"}
     return {"to": "code", "title": h["title"], "kind": h.get("kind"), "at": at,
-            **({"also": len(hits) - 1} if len(hits) > 1 else {})}
+            **({"also": len(hits) - 1} if len(hits) > 1 else {}),
+            **({"ambiguous": True} if len(hits) > 1 and len(exact) != 1 else {})}
 
 
 def load_all(repo: Path) -> list[UserNote]:
