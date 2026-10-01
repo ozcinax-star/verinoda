@@ -13,7 +13,7 @@ os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 from verinoda import index, naming, retrieval  # noqa: E402
 from verinoda.case_ids import split_case_collisions  # noqa: E402
 from verinoda.paths import graph_path  # noqa: E402
-from verinoda.project_index.extractors.engine import _distinct_def_id  # noqa: E402
+from verinoda.project_index.extractors.engine import _def_symbol_name, _distinct_def_id  # noqa: E402
 
 # the shape of axios lib/core/Axios.js: a public method and its private twin
 AXIOS = """\
@@ -257,3 +257,117 @@ def test_a_code_name_matched_only_case_insensitively_is_labelled_and_never_exact
     assert naming.resolve(g, "getX").node == "lib_response_getx"
     assert naming.resolve(g, "getx").node == f"lib_response_getx_{_h('getx')}"
     assert naming.resolve(g, "getx").exact and naming.resolve(g, "getX").exact
+
+
+# a private const declared before the public function of its name (review round): the public one keeps the id
+STORE = """\
+const _config = {};
+export function config() {
+  return _config;
+}
+
+export function useIt() {
+  return config();
+}
+
+function __a() { return _a(); }
+function _a() { return a(); }
+function a() { return 1; }
+"""
+STORE_USER = """\
+import { config } from './store';
+import {
+  _a,
+  useIt,
+} from './store';
+
+export function go() {
+  return config() + _a() + useIt();
+}
+"""
+
+
+def test_the_public_name_keeps_the_plain_id_whichever_is_declared_first(tmp_path):
+    _write(tmp_path, "src/store.ts", STORE)
+    _write(tmp_path, "src/user.ts", STORE_USER)
+    assert index.build(tmp_path, force=True)["ok"]
+    by_id, edges = _graph(tmp_path)
+    cfg, cfg_priv = "src_store_config", f"src_store_config_{_h('_config')}"
+    # before the review round the const met first held `src_store_config` and the function moved to a salted id
+    assert by_id[cfg] == ("config()", "L2") and by_id[cfg_priv] == ("_config", "L1")
+    assert ("src_store_useit", "calls", cfg, "L7") in edges
+    assert ("src_user", "imports", cfg, "L1") in edges and ("src_user_go", "calls", cfg, "L8") in edges
+    a, a1, a2 = "src_store_a", f"src_store_a_{_h('_a')}", f"src_store_a_{_h('__a')}"
+    assert by_id[a] == ("a()", "L12") and by_id[a1] == ("_a()", "L11") and by_id[a2] == ("__a()", "L10")
+    assert (a2, "calls", a1, "L10") in edges and (a1, "calls", a, "L11") in edges
+    # a multi-line import of the private twin: its edge, and no copy on the public twin
+    assert ("src_user", "imports", a1, "L2") in edges
+    assert not any(s == "src_user" and t == a and r == "imports" for s, r, t, _l in edges)
+    assert ("src_user_go", "calls", a1, "L8") in edges
+    g = index.load(tmp_path)
+    assert naming.resolve(g, "src/store.ts::config").node == cfg
+    assert naming.resolve(g, "src/store.ts::_config").node == cfg_priv
+
+
+# Java: before, `_fetch` already had its own node through the overload numbering (`fetch_3`, `fetch_4`), in
+# the public name's family; now it is salted, and its own overloads are numbered from the salted id
+SVC_JAVA = """\
+class Svc {
+  public int fetch(int a) { return _fetch(a); }
+  public int fetch(int a, int b) { return a; }
+  private int _fetch(int a) { return a; }
+  private int _fetch(int a, int b) { return fetch(a); }
+}
+"""
+REV_JAVA = """\
+class Rev {
+  private int _fetch(int a) { return a; }
+  private int _fetch(int a, int b) { return fetch(a); }
+  public int fetch(int a) { return _fetch(a); }
+  public int fetch(int a, int b) { return a; }
+}
+"""
+
+
+def test_java_overloads_of_a_salted_method_are_numbered_from_its_own_id(tmp_path):
+    _write(tmp_path, "src/Svc.java", SVC_JAVA)
+    _write(tmp_path, "src/Rev.java", REV_JAVA)
+    assert index.build(tmp_path, force=True)["ok"]
+    by_id, edges = _graph(tmp_path)
+    for cls, (pub, pub2, priv, priv2) in (("src_svc_svc", (2, 3, 4, 5)), ("src_rev_rev", (4, 5, 2, 3))):
+        f, fp = f"{cls}_fetch", f"{cls}_fetch_{_h('_fetch')}"
+        assert by_id[f] == (".fetch()", f"L{pub}") and by_id[f"{f}_2"] == (".fetch()", f"L{pub2}")
+        assert by_id[fp] == ("._fetch()", f"L{priv}") and by_id[f"{fp}_2"] == ("._fetch()", f"L{priv2}")
+        assert not any(k.startswith(f"{f}_") and k[len(f) + 1:].isdigit() and k != f"{f}_2" for k in by_id)
+        # the calls bind to the name written and, among its overloads, to the one the argument count fits
+        assert (f, "calls", fp, f"L{pub}") in edges
+        assert {(s, t) for s, r, t, _l in edges if s == f"{fp}_2" and r == "calls"} == {(f"{fp}_2", f)}
+
+
+def test_the_build_net_reads_an_import_across_its_lines(tmp_path):
+    _write(tmp_path, "g.js", "import {\n  _helper,\n  other,\n} from './f';\n")
+    priv = f"f_helper_{_h('_helper')}"
+    nodes = [{"id": "f_helper", "label": "helper()", "source_file": "f.js", "source_location": "L1"},
+             {"id": priv, "label": "_helper()", "source_file": "f.js", "source_location": "L5"}]
+    edges = [{"source": "g", "target": "f_helper", "relation": "imports", "source_file": "g.js",
+              "source_location": "L1"}]
+    split_case_collisions(nodes, edges, tmp_path)
+    assert edges[0]["target"] == priv
+    # a line that names neither twin, beside the extractor's own edge to the other one: the copy goes
+    _write(tmp_path, "h.js", "const m = require('./f');\n")
+    edges = [{"source": "h", "target": priv, "relation": "imports", "source_file": "h.js", "source_location": "L1"},
+             {"source": "h", "target": "f_helper", "relation": "imports", "source_file": "h.js",
+              "source_location": "L1"}]
+    split_case_collisions(nodes, edges, tmp_path)
+    assert [e["target"] for e in edges] == [priv]
+    # alone, such an edge stays on the twin that kept the id
+    edges = [{"source": "h", "target": "f_helper", "relation": "imports", "source_file": "h.js",
+              "source_location": "L1"}]
+    split_case_collisions(nodes, edges, tmp_path)
+    assert [e["target"] for e in edges] == ["f_helper"]
+
+
+def test_a_label_that_is_no_qualified_name_is_its_own_symbol_name():
+    assert _def_symbol_name("{ _helper: priv }") == "{ _helper: priv }"
+    assert _def_symbol_name("Foo::bar()") == "bar" and _def_symbol_name("M:foo()") == "foo"
+    assert _def_symbol_name("._request()") == "_request"

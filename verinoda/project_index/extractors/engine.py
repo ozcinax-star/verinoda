@@ -925,8 +925,78 @@ def _def_symbol_name(label: str) -> str:
     if s.endswith("()"):
         s = s[:-2]
     s = s.lstrip(".")
+    if not re.fullmatch(r"[\w$#.:]+", s):
+        return s  # not a qualified name (an object-literal label, a string key): the label itself
     parts = re.split(r"::|[.:]", s)
     return parts[-1] or s
+
+
+def _leading_underscores(name: str) -> int:
+    return len(name) - len(name.lstrip("_"))
+
+
+def _public_def_swaps(salted: dict[str, list[str]], id_names: dict[str, str], seen_ids: set[str],
+                      overloads: dict[str, list[str]]) -> dict[str, str]:
+    """The id swaps that give each plain id to its public name (Verinoda patch).
+
+    ``salted``: plain id -> the salted ids :func:`_distinct_def_id` gave other names of it, in the order
+    met. The definition met first holds the plain id; when a later one has fewer leading underscores
+    (``const _config`` then ``function config``), the public name takes the plain id and the earlier
+    holder gets the salted id of its own name, so the plain id names the public symbol however the file
+    is ordered (the rule of Python's pre-scan and of ``verinoda.case_ids``). Java overload groups move
+    with their first member (``x_2`` follows ``x``). Returns {old id: new id}; a swap whose ids would
+    meet another symbol's is skipped."""
+    swaps: dict[str, str] = {}
+    for nid, others in salted.items():
+        holder = id_names.get(nid)
+        if holder is None:
+            continue
+        cands = [s for s in others if s in seen_ids and s in id_names]
+        if not cands:
+            continue
+        win = min(cands, key=lambda s: _leading_underscores(id_names[s]))
+        if _leading_underscores(id_names[win]) >= _leading_underscores(holder):
+            continue
+        digest = hashlib.sha1(holder.encode("utf-8"), usedforsecurity=False).hexdigest()
+        holder_new = None
+        for n in (6, 10, 16, 40):
+            c = _make_id(nid, digest[:n])
+            if c not in seen_ids:
+                holder_new = c
+                break
+        if holder_new is None:
+            continue
+        hold_group = [x for x in overloads.get(nid, [nid]) if x != nid]
+        win_group = [x for x in overloads.get(win, [win]) if x != win]
+        moves = {nid: holder_new, win: nid}
+        moves.update({x: _make_id(holder_new, str(i)) for i, x in enumerate(hold_group, 2)})
+        moves.update({x: _make_id(nid, str(i)) for i, x in enumerate(win_group, 2)})
+        freed = set(moves)
+        if len(set(moves.values())) != len(moves) or any(
+                v in seen_ids and v not in freed for v in moves.values()) or freed & set(swaps):
+            continue
+        swaps.update(moves)
+    return swaps
+
+
+def _apply_id_swaps(result: dict, swaps: dict[str, str]) -> None:
+    """Rename ids in an extraction result, in place (Verinoda patch): node ids, edge ends and the id
+    fields of the records that ride along (``raw_calls``' caller, Swift extensions)."""
+    if not swaps:
+        return
+    for n in result.get("nodes") or ():
+        if n.get("id") in swaps:
+            n["id"] = swaps[n["id"]]
+    for e in result.get("edges") or ():
+        for end in ("source", "target"):
+            if e.get(end) in swaps:
+                e[end] = swaps[e[end]]
+    for key in ("raw_calls", "swift_extensions"):
+        for rec in result.get(key) or ():
+            if isinstance(rec, dict):
+                for k, v in list(rec.items()):
+                    if isinstance(v, str) and v in swaps and k.endswith("nid"):
+                        rec[k] = swaps[v]
 
 
 def _distinct_def_id(nid: str, name: str, id_names: dict[str, str], fold_case: bool) -> str:
@@ -936,8 +1006,8 @@ def _distinct_def_id(nid: str, name: str, id_names: dict[str, str], fold_case: b
     ``getx``) of one class mint one id, and ``add_node`` kept only the definition seen first: the other
     vanished, and the calls in its body were read as the first one's. When another name already holds
     ``nid``, this name gets ``<nid>_<6 hex of sha1(name)>`` (longer when that is taken by a third name),
-    the form the Python and Go salts above and Verinoda's case split use. The definition seen first keeps
-    ``nid``, the id earlier builds gave it. The same name again (an overload, a getter and its setter,
+    the form the Python and Go salts above and Verinoda's case split use. The definition seen first holds
+    ``nid`` during the walk; :func:`_public_def_swaps` then gives it to the public name. The same name again (an overload, a getter and its setter,
     ``def self.x`` beside ``def x``) is the same id, as before; names that differ only in case are one
     symbol where the language folds case (``fold_case``: PHP)."""
     held = id_names.get(nid)
@@ -3827,8 +3897,13 @@ def _extract_generic(
             node["metadata"] = sanitize_metadata(merged)
         nodes.append(node)
 
+    salted_defs: dict[str, list[str]] = {}  # Verinoda patch: plain id -> the salted ids of other names
+
     def distinct_def_id(nid: str, name: str) -> str:
-        return _distinct_def_id(nid, name, id_names, fold_case)
+        got = _distinct_def_id(nid, name, id_names, fold_case)
+        if got != nid and got not in salted_defs.setdefault(nid, []):
+            salted_defs[nid].append(got)
+        return got
 
     add_node.distinct_def_id = distinct_def_id  # Verinoda patch: for the helpers handed add_node
 
@@ -5160,6 +5235,7 @@ def _extract_generic(
                     func_nid = _python_underscore_salted_nid(
                         func_nid, sanitized_name, python_underscore_groups
                     )
+                plain_func_nid = func_nid
                 func_nid = distinct_def_id(func_nid, func_name)  # Verinoda patch
                 java_overload_meta = None
                 if config.ts_module == "tree_sitter_java":
@@ -5168,10 +5244,18 @@ def _extract_generic(
                         # an overload gets its own node (same label): add_node would drop it, and its
                         # body's calls would land on the first overload, its lines outside that span
                         first = func_nid
+                        # Verinoda patch: a salted name's overloads are numbered from its salted id
+                        # (`_fetch` -> `fetch_<hash>_2`), never in the family of the public name
+                        if func_nid != plain_func_nid:
+                            def _overload_nid(k: int) -> str:
+                                return _make_id(first, str(k))
+                        else:
+                            def _overload_nid(k: int) -> str:
+                                return _make_id(parent_class_nid, f"{sanitized_name}_{k}")
                         k = 2
-                        while _make_id(parent_class_nid, f"{sanitized_name}_{k}") in seen_ids:
+                        while _overload_nid(k) in seen_ids:
                             k += 1
-                        func_nid = _make_id(parent_class_nid, f"{sanitized_name}_{k}")
+                        func_nid = _overload_nid(k)
                         group = java_overloads.setdefault(first, [first])
                         group.append(func_nid)
                         java_overloads[func_nid] = group
@@ -7375,6 +7459,8 @@ def _extract_generic(
             result["ts_type_table"] = {"path": str_path, "table": type_table}
         elif config.ts_module == "tree_sitter_cpp":
             result["cpp_type_table"] = {"path": str_path, "table": type_table}
+    # Verinoda patch: the plain id goes to the public name of each pair split by distinct_def_id
+    _apply_id_swaps(result, _public_def_swaps(salted_defs, id_names, seen_ids, java_overloads))
     return result
 
 def _python_decorator_name(deco_node, source: bytes) -> str | None:

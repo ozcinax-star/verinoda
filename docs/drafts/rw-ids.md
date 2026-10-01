@@ -45,10 +45,14 @@ Verinoda already had guards against this. They missed both cases:
   - Names are compared by their last part (`Foo::bar` against `bar`), so a C++ out-of-class
     definition still meets its declaration.
   - In PHP, `fold_case` makes names that differ only in case one symbol.
-- **Who keeps the plain id:** the definition the walk meets first, which is declaration order. In
-  every earlier build that definition already had this id, because `add_node` kept the first one.
-  So no id that existed before changes. Only new ids appear, for the definitions that used to
-  vanish. Python keeps its upstream rule, which runs first: the one public name keeps the id.
+- **Who keeps the plain id:** the name with the fewest leading underscores (the public name), in
+  any declaration order. During the walk the definition met first holds the plain id. When the file
+  is done, `_public_def_swaps` gives the plain id to a later definition with fewer leading
+  underscores, and the earlier holder gets the salted id of its own name. All of the file's nodes,
+  edges and `raw_calls` callers are renamed together. A Java overload group moves with its first
+  member. Names with the same number of underscores, such as a case pair (`getX` / `getx`) or a
+  class `Foo` beside a function `foo`, keep declaration order. This is the rule of Python's upstream
+  pre-scan and of the `case_ids` net (see the review round below).
 - **The net in `case_ids` is widened** to names that mint one id. That means names that differ in
   case or underscores. A label that is not an identifier (a heading `Foo bar` beside `Foo-bar`)
   still needs case alone to be split.
@@ -71,9 +75,42 @@ Verinoda already had guards against this. They missed both cases:
     note under `fuzzy`.
   - Several nodes: the result is `ambiguous`, with the same note.
   - An exact-case node, when one exists, still wins as before.
-- **The AST cache schema goes from 8 to 9** (`project_index/cache.py`), so cached extractions made
-  by the old code are not reused.
+- **The AST cache schema goes from 8 to 10** (`project_index/cache.py`), so cached extractions made
+  by the old code are not reused. 9 was the first version of this branch.
 - The vendored changes are marked "Verinoda patch". docs/UPSTREAM.md lists them.
+- **Review round.** A reviewer found three defects in the first version. Each is fixed and has a
+  regression test in tests/test_distinct_ids.py.
+  1. *A public function lost its id to an earlier private const.* In `const _config = {}` followed
+     by `export function config()`, the walk met the const first, so the const kept
+     `src_store_config` and the function moved to a salted id. The base graph had the function on
+     that id. The claim that "no id that existed before changes" was false. Now the public name
+     takes the plain id in any order (see "Who keeps the plain id"). The extractor and the
+     `case_ids` net now follow one rule. Test:
+     `test_the_public_name_keeps_the_plain_id_whichever_is_declared_first` (also `__a` / `_a` / `a`
+     declared in that order).
+  2. *Java ids that already existed changed, and a numbered overload id named a different method.*
+     The base graph already kept Java `_fetch` as its own node through overload numbering
+     (`..._fetch_3`), in the family of the public name. The first version salted `_fetch` but
+     still numbered its second overload in that family, so `fetch_3` changed from `_fetch(int)` to
+     `_fetch(int,int)`. Now a salted method's overloads are numbered from its own salted id
+     (`..._fetch_<hash>_2`). Java `_x` ids therefore change (see the upgrading note). The calls
+     also improve: in the base graph, `fetch(a)` inside `_fetch(int,int)` also bound to
+     `_fetch(int)`, because both took one argument. Now it binds only to `fetch`. Test:
+     `test_java_overloads_of_a_salted_method_are_numbered_from_its_own_id` (both declaration
+     orders).
+  3. *A multi-line ES import of the private twin left a false import edge on the public twin.* For
+     `import {` / `_helper,` / `} from './h'`, the edge's own line names neither twin. `case_ids`
+     now reads an import whose `{` opens a list on to its `}`. An edge that nothing places is
+     dropped when its source already reaches another member of the pair, through the same
+     relation and from the same line. Tests:
+     `test_the_build_net_reads_an_import_across_its_lines` and the multi-line import in the
+     public-name test.
+
+  Of the minor findings, one is fixed: `_def_symbol_name` now splits only a qualified name. A
+  label such as `{ _helper: priv }` is its own name, which
+  `test_a_label_that_is_no_qualified_name_is_its_own_symbol_name` checks. The other minor findings
+  are listed under Limits. The AST cache schema went to 10, so caches made by the first version of
+  this branch are not reused.
 
 ## Measured
 
@@ -86,6 +123,9 @@ On Windows 11 with Python 3.13.14, one process at a time.
   |---|---:|---:|---:|---:|---:|---|
   | axios/axios v1.20.0 | 7/10 | 9/10 | - | - | 0 | yes |
   | expressjs/express v5.2.1 | 4/10 | 4/10 | 2/2 | 2/2 | 0 | yes |
+
+  After the review round, both repositories were run again, one at a time. The gold, crashes and
+  clean results are the same as in the table.
 
   - axios: `request-calls-private` and `private-request-merges-config` now hit.
     `request-reaches-adapter` still misses, for a different reason than before. Before, the source
@@ -111,18 +151,25 @@ On Windows 11 with Python 3.13.14, one process at a time.
     | express | 11.1 s | 13.6 s | 9.1 s | 10.1 s |
 
     The development run measured axios at 25.8 s / 20.6 s and express at 14.1 s / 11.2 s. The
-    spread between the two runs of the same code is as large as the before/after differences, so I
-    do not attribute the times to this change.
-- **Split pairs in the axios graph after the final run: 5** (3,889 nodes). Each one checked by
-  hand:
+    review-round run measured axios at 29.3 s / 22.9 s and express at 11.4 s / 9.4 s. The spread
+    between runs of the same code is as large as the before/after differences, so I do not
+    attribute the times to this change.
+- **Split pairs in the axios graph after the review-round run: 5** (3,889 nodes). Each one
+  checked by hand:
   - `.request()` / `._request()` (lib/core/Axios.js);
-  - `.__transform()` / `._transform()` (lib/helpers/ZlibHeaderTransformStream.js:6/:11);
+  - `._transform()` (:11) keeps the plain id and `.__transform()` (:6) is salted
+    (lib/helpers/ZlibHeaderTransformStream.js). Before the review round it was the other way
+    round, because `__transform` comes first. By the base extractor's rule (it kept the definition
+    met first), the base graph had `__transform` on the plain id and no node for `_transform`. I
+    did not rebuild axios with the base package to confirm this. If it holds,
+    this plain id now names a different method;
   - `setProxy()` / `__setProxy`, `isNodeEnvProxyEnabled()` / `__isNodeEnvProxyEnabled` and
     `isSameOriginRedirect()` / `__isSameOriginRedirect` (lib/adapters/http.js:1488-1490,
     `export const __setProxy = setProxy`). Before, each pair minted one id. I did not check
     whether the old graph merged or dropped the const.
 
-  The express graph has 0 split pairs (441 nodes).
+  In the http.js pairs the plain id stays on the function. The express graph has 0 split pairs
+  (441 nodes).
 - **Upgrade without a file change** (fixture of 6 files):
   1. Build with the unmodified competitor-backlog package (`git archive`): the graph has
      `.request()` only, and the call at line 7 is read as `request`'s.
@@ -131,10 +178,17 @@ On Windows 11 with Python 3.13.14, one process at a time.
      `"index_mode": "full"`.
   3. The graph then had `lib_axios_axios_request_ee5c95` (`._request()`), the edge
      `request -calls-> _request`, and the call to mergeConfig on `_request`.
+
+  Review round, with the reviewer's `const _config` / `function config` fixture: `verinoda scan .`
+  with the unmodified package gave one node `src_store_config` (`config`, L13). `verinoda update`
+  with the new code reported `"extraction": {"was": "s8-0b3160ad868f", "now":
+  "s10-7fb9bff7fd72"}` and `"index_mode": "full"`. The graph then had `src_store_config`
+  (`config()`, L13, still the id of the importer's and the callers' edges) and
+  `src_store_config_7e810b` (`_config`, L12).
 - **The new tests against the old code:** all 5 tests of tests/test_distinct_ids.py fail on the
   unmodified package (missing node `..._request_ee5c95`, missing nested `_step`, no split in the
   net, `exact` instead of `similar`; the unit test cannot import `_distinct_def_id`). All 5 pass
-  with the change.
+  with the change. The 4 review-round tests fail on the branch's first version and pass now.
 
 ## Limits
 
@@ -144,17 +198,32 @@ On Windows 11 with Python 3.13.14, one process at a time.
   nodes with one id, the widened `case_ids` net splits them. When they drop one themselves, nothing
   recovers it.
 - **Class-like nodes are not checked.** Classes, properties, fields and object-literal owners still
-  go through `add_node` without the check. Two classes `Foo` and `_Foo` in one file still merge.
-- **Declaration order decides** which definition keeps the plain id, except in Python (public name)
-  and in the `case_ids` net (fewest leading underscores). Moving `_request` above `request` swaps
-  their ids on the next build.
+  go through `add_node` without the check. Two classes `Q` and `_Q` in one file still merge into one
+  node. The methods of the second class are minted under the shared id, so `class _Q { run() }`
+  after `class Q` gives `src_k_q_run`, which reads as a method of `Q`. That is worse than a plain
+  merge.
+- **Declaration order decides only between names with the same number of leading underscores**: a
+  case pair (`getX` / `getx`), or a class `Foo` beside a function `foo`. In the extractor the one
+  declared first keeps the plain id. The `case_ids` net, for the nodes that still arrive with one
+  id, takes the first by code point. Moving `getx` above `getX` swaps their ids on the next build.
+- **C++ out-of-line twins.** Take a class that declares `int area(); int _area();` and defines
+  `int Shape::_area()` out of line. The node it gets (`Shape::_area()`,
+  `src_shape_shape_area_<hash>`) cannot be named: `_area`, `Shape._area`, `Shape::_area` and
+  `src/shape.cpp::_area` all return `not_a_symbol` or `not_found`. `Shape::area` gets no `calls`
+  edge to it, and the in-class declaration's `defines` edge still lands on `area`. This was
+  already so before this change, so C++ is covered only for in-class definitions.
 - **Import edges.** A cross-file import or call that upstream mints as `make_id(stem, name)` lands
   on the plain id, which belongs to the twin. Only the `case_ids` line-text routing moves it, and
   only when the edge's line names exactly one of the two. Two examples it cannot move:
   `import { helper, _helper }` on one line, and a call whose line writes neither name.
-- **Java overloads of a salted method.** `_foo` overloaded is numbered `..._foo_2` from its own
-  salted id. That number is based on the name, not the salt, so it can meet `foo`'s second
-  overload. This existed before and is not changed.
+- **Multi-line imports are read only across braces.** An import edge whose line names neither
+  twin is placed by reading on to the closing `}`. Otherwise it is dropped when the same source
+  already has an edge of that relation and line to the other twin. With no such edge, it stays on
+  the twin that kept the id. A single-line `import { helper, _helper }` names both, and its edges
+  are left as they are.
+- **Case-folded matching applies only to text read as code.** A plain capitalised word such as
+  `Area` still resolves `exact` to `area` in a .cpp file. That is by design: a plain word is
+  matched loosely.
 - **Owners and module paths still match case-insensitively.** `axios.request` names
   `Axios.request`. Only the last name has to match its case. `q` (`f.name = "..."`) compares
   exactly, as before.
@@ -172,10 +241,20 @@ On Windows 11 with Python 3.13.14, one process at a time.
   even when no file changed. The old AST cache entries are not reused: they live under
   `cache/ast/v<version>-s8/`, which is swept.
 - `verinoda scan` rebuilds everything too.
-- No id that existed before changes. The definitions that used to vanish get new
-  `<id>_<6 hex>` ids. So saved claims, anchors and other records keyed by node ids still point at
-  the same symbols. The exception is records about the merged node: those were already about a mix
-  of two symbols. After the rebuild they stay on the definition that kept the id.
+- Most ids stay. The definitions that used to vanish get new `<id>_<6 hex>` ids. Some ids that
+  existed before change, or now name a different symbol:
+  - When a private twin was declared before its public twin (`__transform` before `_transform` in
+    axios, `_Q` before `function q`), the old graph gave the plain id to the private one. Now it
+    goes to the public one, and the private one gets `<id>_<hash>`.
+  - Java `_x` methods that share an id with `x` were numbered in `x`'s overload family
+    (`..._x_2`, `..._x_3`). They now have `<id>_<hash>` and `<id>_<hash>_2`. `x`'s own overloads
+    keep `..._x_2` and so on, but a number that used to belong to `_x` can now belong to an
+    overload of `x`.
+
+  A record keyed by such a node id (a claim's subject id, a saved selector that is a node id) names
+  the other symbol after the rebuild. Evidence anchors pin cited lines by symbol name and
+  fingerprint (`verinoda/anchors.py`), not by node id. Records about a merged node were already
+  about a mix of two symbols. After the rebuild they stay on the public definition.
 - The rebuild record (`rebuild_record.json`) is keyed by a stamp of project_index and index.py, and
   both changed, so it is not reused.
 - `python_facts.json` and the Python cross-file cache are keyed by their own code stamps, which did
@@ -192,7 +271,7 @@ On Windows 11 with Python 3.13.14, one process at a time.
 
 ## Tests
 
-tests/test_distinct_ids.py (new, 5 tests, all with small fixtures):
+tests/test_distinct_ids.py (new, 9 tests, all with small fixtures):
 
 - `test_javascript_definitions_that_mint_one_id_are_two_nodes_with_their_own_calls`: the axios
   shape is one class with `request` and `_request`, plus `getX` and `getx` at module level, plus an
@@ -214,6 +293,14 @@ tests/test_distinct_ids.py (new, 5 tests, all with small fixtures):
   `case_ids` net in either line order; PHP folds case but not underscores; ids shared by another
   route (`b` / `a_b`, `Foo bar` / `Foo-bar`) are left alone; an `import { _helper }` edge minted
   with the plain id moves to `_helper`.
+- Review round:
+  - `test_the_public_name_keeps_the_plain_id_whichever_is_declared_first`: `const _config` before
+    `function config`, `__a` / `_a` / `a` in that order, and a multi-line import of `_a`;
+  - `test_java_overloads_of_a_salted_method_are_numbered_from_its_own_id`: `fetch` / `_fetch`, two
+    overloads each, in both declaration orders;
+  - `test_the_build_net_reads_an_import_across_its_lines`: the `case_ids` routing of a multi-line
+    import, and the copy that is dropped;
+  - `test_a_label_that_is_no_qualified_name_is_its_own_symbol_name`.
 - `test_a_code_name_matched_only_case_insensitively_is_labelled_and_never_exact`: the express
   shape. `lib/response.js::sendFile` is `similar` with the note, and the exact-case selector and
   the plain word stay `exact`. The `trace` status and `fuzzy.source` match the express output. When

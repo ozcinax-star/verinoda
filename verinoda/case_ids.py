@@ -8,8 +8,8 @@ colliding ids apart only across files. ``class OrderService`` and ``export const
 OrderService()`` in one TypeScript file were therefore ONE node: the graph merged their attributes (the
 class's kind, the const's label and line), and every edge to either landed on it - ``new OrderApi()`` read
 as a call of the instance ``orderApi`` (senior evaluation, web persona). The extractor of the common
-languages now keeps two such definitions apart itself (``extractors.engine._distinct_def_id``: the one
-declared first keeps the id); this pass is the net for the nodes that still arrive with one id.
+languages now keeps two such definitions apart itself (``extractors.engine._distinct_def_id``: the name
+with the fewest leading underscores keeps the id, as here); this pass is the net for the nodes that still arrive with one id.
 
 Verinoda splits such a group before the graph is built. Names that differ only in case are two symbols in
 case-sensitive languages only (in SQL, Pascal, Fortran, PHP function names ... the two spellings are one
@@ -25,7 +25,9 @@ symbol, and one node is right); names that differ in their underscores are two s
 * an edge that ends at the id: a ``contains`` edge on a member's own line is that member's; otherwise the
   line the edge was read from decides when exactly one member's name is written on it, case and all
   (``new OrderService(`` names the class, ``import { orderService }`` the const; for a call, a name
-  followed by ``(`` counts first); otherwise the edge stays on the member that kept the id.
+  followed by ``(`` counts first; an import whose ``{`` opens a list is read on to its ``}``); otherwise
+  the edge is dropped when its source already reaches another member from that line (the extractor's
+  own edge beside a copy minted with the plain id), and stays on the member that kept the id when not.
 
 An update re-extracts only changed files and keeps the rest of the last graph: an importer's new edge
 then ends at the kept id with no collision in sight; and the extractor's own import edges name the plain
@@ -54,6 +56,8 @@ CASE_SENSITIVE_SUFFIXES = frozenset({
 # edges whose line is the definition of their target
 _DEFINING = frozenset({"contains", "defines", "declares"})
 _CALLING = frozenset({"calls", "instantiates", "indirect_call"})
+_IMPORTING = frozenset({"imports", "imports_from", "re_exports"})
+_IMPORT_SPAN = 200   # the most lines an import's braces are read across
 _LOC = re.compile(r"^L(\d+)")
 _SPLIT_ID = re.compile(r"^(.+)_([0-9a-f]{6,40})$")
 
@@ -212,26 +216,44 @@ def _written(name: str, text: str, call: bool) -> bool:
     return re.search(r"(?<![\w$])" + re.escape(name) + tail, text) is not None
 
 
-def _route(plan: _Plan, edge: dict, end: str, root: Path | None, lines: _Lines) -> str:
+def _statement(lines: _Lines, source_file, ln: int | None, first: str) -> str:
+    """An import's text from its line on: ``import {`` ... ``} from './h'`` spans lines when formatted."""
+    parts = [first]
+    if "{" in first and "}" not in first and ln:
+        for k in range(ln + 1, ln + _IMPORT_SPAN):
+            nxt = lines.at(source_file, k)
+            if nxt is None:
+                break
+            parts.append(nxt)
+            if "}" in nxt:
+                break
+    return " ".join(parts)
+
+
+def _route(plan: _Plan, edge: dict, end: str, root: Path | None, lines: _Lines) -> tuple[str, bool]:
+    """(the member the edge's ``end`` belongs to, whether anything placed it there; when nothing did, the
+    member that kept the id)."""
     ln = _line(edge)
     same_file = _file_key(edge.get("source_file"), root) == plan.file
     if same_file and ln is not None:
         if end == "source":
             before = [m for m in plan.members if m.line is not None and m.line <= ln]
             if before:
-                return max(before, key=lambda m: m.line).nid
+                return max(before, key=lambda m: m.line).nid, True
         elif edge.get("relation") in _DEFINING:
             own = [m for m in plan.members if m.line == ln]
             if len(own) == 1:
-                return own[0].nid
+                return own[0].nid, True
     text = lines.at(edge.get("source_file"), ln)
     if text:
+        if edge.get("relation") in _IMPORTING:
+            text = _statement(lines, edge.get("source_file"), ln, text)
         passes = [True, False] if edge.get("relation") in _CALLING else [False]
         for call in passes:
             named = [m for m in plan.members if _written(m.name, text, call)]
             if len(named) == 1:
-                return named[0].nid
-    return plan.members[0].nid
+                return named[0].nid, True
+    return plan.members[0].nid, False
 
 
 def split_case_collisions(nodes: list, edges: list, root: Path | str | None = None) -> dict[str, list[str]]:
@@ -244,11 +266,24 @@ def split_case_collisions(nodes: list, edges: list, root: Path | str | None = No
     if not plans:
         return {}
     lines = _Lines(root_path)
-    for e in edges:
+    sites = {(e.get("source"), e.get("relation"), e.get("source_location"), e.get("target"))
+             for e in edges if isinstance(e, dict)}
+    drop: list[int] = []
+    for i, e in enumerate(edges):
         if not isinstance(e, dict):
             continue
         for end in ("source", "target"):
             plan = plans.get(e.get(end))
-            if plan is not None:
-                e[end] = _route(plan, e, end, root_path, lines)
+            if plan is None:
+                continue
+            e[end], placed = _route(plan, e, end, root_path, lines)
+            if not placed and end == "target" and _line(e) is not None and any(
+                    (e.get("source"), e.get("relation"), e.get("source_location"), m.nid) in sites
+                    for m in plan.members[1:]):
+                # nothing placed it, and the same source already reaches another member from that line
+                # (the extractor's own edge beside the one minted with the plain id): a copy, not a fact
+                drop.append(i)
+    if drop:
+        gone = set(drop)
+        edges[:] = [e for i, e in enumerate(edges) if i not in gone]
     return {nid: [m.nid for m in plans[nid].members[1:]] for nid in sorted(split_now)}
