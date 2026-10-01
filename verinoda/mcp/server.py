@@ -329,7 +329,8 @@ def check_site_line(s: dict) -> str:
     ... | swallowed by ... | optional dependency | elsewhere: qualname (at) | nearest: names | next: step``.
     Unknown sites are labelled by their rank (HIGH, MEDIUM, LOW)."""
     v = s.get("verdict")
-    tag = {"absent": "ABSENT", "not_installed": "NOT_INSTALLED", "guarded": "GUARDED", "exists": "EXISTS"}.get(
+    tag = {"absent": "ABSENT", "mismatch": "MISMATCH", "not_installed": "NOT_INSTALLED", "guarded": "GUARDED",
+           "exists": "EXISTS"}.get(
         str(v)) or str(s.get("rank") or "unknown").upper()
     parts = [f"{tag} {s.get('at')} {s.get('kind')} {_clip(str(s.get('expr') or ''), 80)}"]
     if v == "unknown":
