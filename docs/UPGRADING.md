@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D149)
+## Upgrading from 0.4.0 (D137-D150)
 
 ### D137: Trigram regex index
 
@@ -142,6 +142,11 @@ could not be read). No MCP tool added; the tool count is unchanged.
 `watch` block says which (`backend`, `note`). New: `verinoda mcp serve --watch` runs a fast update when the project's files
 change; add `--watch` to the server's arguments in the agent's MCP configuration to use it. `ui.server.Watcher`
 moved to `verinoda.fswatch.Watcher` (still importable from the old place).
+
+### D150: Control and data dependence
+
+New command `verinoda slice PATH:LINE` (`--var`, `--arg`, `--forward`, `--depth`): a backward slice of a Python
+line inside its function, across callers' arguments via the index, or a forward slice. Nothing to migrate.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
