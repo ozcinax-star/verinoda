@@ -287,7 +287,8 @@ def test_stale_sidecar_is_recomputed_and_matches_the_in_memory_pass(built):
     assert key(g) == key(plain)
     assert json.loads(sc.read_text(encoding="utf-8"))["edges"]  # rewritten for the current graph
     stats = index.refresh_receiver_sidecar(repo)
-    assert stats == {"edges": 2, "files_parsed": 0, "files_reused": stats["files_reused"]}
+    assert stats == {"edges": 2, "files_parsed": 0, "files_reused": stats["files_reused"],
+                     "data_schema": {"tables": 1, "defined": 1, "models": 0, "edges": 3, "injections": 0}}
 
 
 def test_the_sidecar_parse_is_the_one_the_span_lookups_reuse(built, monkeypatch):

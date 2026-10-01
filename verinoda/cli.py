@@ -1388,6 +1388,36 @@ def cmd_trace(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_schema(args) -> int:
+    """Tables, models, migrations and injection read from the code; with --db, a local SQLite file compared."""
+    from verinoda import dataschema, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    db = None
+    if args.db:
+        db = Path(args.db)
+        if not db.is_absolute():
+            db = Path.cwd() / db if (Path.cwd() / db).exists() else repo / db
+    g = index.load(repo, augment=False)
+    try:
+        res = dataschema.report(g, db=db, table=args.table)
+    except (FileNotFoundError, OSError) as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    except Exception as exc:  # noqa: BLE001 - a file that is not a SQLite database
+        import sqlite3
+
+        if isinstance(exc, sqlite3.DatabaseError):
+            _emit(args, {"status": "error", "error": f"{args.db}: {exc}"},
+                  lambda r: print(f"error: {r['error']}", file=sys.stderr))
+            return 2
+        raise
+    _emit(args, res, lambda r: _write(dataschema.render(r)))
+    live = res.get("live") or {}
+    return 3 if live.get("only_in_code") or live.get("only_in_database") or live.get("columns") else 0
+
+
 def cmd_routes(args) -> int:
     """The route table and every client call with a URL: linked, ambiguous, unmatched or a method mismatch."""
     from verinoda import cross_service, index
@@ -4499,6 +4529,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("schema", cmd_schema, "database tables, ORM models (SQLAlchemy, SQLModel, Django, JPA), migrations (Alembic, "
+                                   "Django, SQL files) and dependency injection (FastAPI Depends, Spring) read from the "
+                                   "code, with the functions that read and write each table; --db compares a local "
+                                   "SQLite file (read only; exit 3 when they differ)")
+    sp.add_argument("--table", help="only this table")
+    sp.add_argument("--db", metavar="FILE", help="a local SQLite database file to compare with (opened read only)")
     sp = add("routes", cmd_routes, "the route table (Flask, FastAPI, Django, Express, NestJS, Next.js, Spring, ...) "
                                    "and every client call with a URL (fetch, axios, requests, httpx, ...): linked to "
                                    "one handler, ambiguous, unmatched or a method mismatch; tRPC, gRPC, GraphQL and "
