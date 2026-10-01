@@ -287,7 +287,7 @@ class _Ctx:
             anchors._mem_put(sha, scheme, f)
             if self.store is not None:
                 try:
-                    self.store.put_file_facts(sha, scheme, f)
+                    self.store.put_file_facts(sha, anchors.cache_scheme(scheme), f)
                 except Exception:  # noqa: BLE001 - a read-only or busy store: the review still runs
                     pass
         return f

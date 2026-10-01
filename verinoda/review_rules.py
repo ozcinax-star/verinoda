@@ -1195,11 +1195,19 @@ def ts_branch_span(tree, line: int) -> tuple[int, int, int | None, int | None] |
     return None
 
 
+def _defined_on(n, def_line: int) -> bool:
+    """Is ``n`` the definition cited at ``def_line``: its name line (anchors' ``def``) or, for facts and graphs
+    made before that, its first line (an annotation above a Java method)."""
+    from verinoda.anchors import ts_name_line
+
+    return def_line in (n.start_point[0] + 1, ts_name_line(n))
+
+
 def _ts_def_at(tree, def_line: int):
     from verinoda.anchors import TS_DEF_TYPES
 
     for n in ts_walk(tree.root_node) if tree is not None else ():
-        if n.type in TS_DEF_TYPES and n.start_point[0] + 1 == def_line:
+        if n.type in TS_DEF_TYPES and _defined_on(n, def_line):
             return n
     return None
 
@@ -1272,7 +1280,7 @@ def ts_header(tree, def_line: int) -> str | None:
     from verinoda.anchors import TS_DEF_TYPES
 
     for n in ts_walk(tree.root_node):
-        if n.type in TS_DEF_TYPES and n.start_point[0] + 1 == def_line:
+        if n.type in TS_DEF_TYPES and _defined_on(n, def_line):
             body = n.child_by_field_name("body") or next((c for c in n.children if c.type in _TS_BODY), None)
             if body is None:
                 return None
@@ -1292,7 +1300,7 @@ def ts_param_count(tree, def_line: int) -> tuple[int, int, bool] | None:
         return None
     for n in ts_walk(tree.root_node):
         if n.type in ("method_declaration", "function_declaration", "constructor_declaration") and \
-                n.start_point[0] + 1 == def_line:
+                _defined_on(n, def_line):
             for c in n.children:
                 if c.type == "formal_parameters":
                     ps = [p for p in c.children if p.type in ("formal_parameter", "spread_parameter")]

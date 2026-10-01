@@ -1149,8 +1149,12 @@ class Graph:
                 end = _py_end_line(p, start)
                 how = "ast" if end is not None else None
             elif suffix in _TS_LANGS:
-                end = _ts_def_ends(p).get(start)
+                ends, heads = _ts_def_info(p)
+                end = ends.get(start)
                 how = "tree-sitter" if end is not None else None
+                if end is not None and heads.get(start, start) < start:
+                    # cited at its name line, spanning its annotations above it
+                    start = heads[start]
             if end is None:
                 nxt = [self.line(s) for s in self.symbols_in(f)]
                 later = sorted(x for x in nxt if x and x > start)
@@ -1483,12 +1487,22 @@ def _ts_parser(suffix: str):
 
 
 def ts_def_ends(source: bytes, suffix: str) -> dict[int, int]:
-    """Start line -> end line of the outermost definition-like node starting there."""
+    """Start line -> end line of the outermost definition-like node starting there (a definition whose
+    name is on a later line, below its annotations, is also found from its name line)."""
+    return ts_def_info(source, suffix)[0]
+
+
+def ts_def_info(source: bytes, suffix: str) -> tuple[dict[int, int], dict[int, int]]:
+    """``(ends, heads)``: :func:`ts_def_ends`, and name line -> first line of a definition whose name is
+    below its first line (a Java/Kotlin method under ``@Override``, a C# method under ``[HttpGet]``). The
+    graph cites such a definition at its name line, the line a decorated Python ``def`` is cited at; its
+    span still starts at the annotation."""
     parser = _ts_parser(suffix)
     if parser is None:
-        return {}
+        return {}, {}
     tree = parser.parse(source)
     ends: dict[int, int] = {}
+    heads: dict[int, int] = {}
     cursor = tree.walk()
     while True:
         node = cursor.node
@@ -1497,18 +1511,30 @@ def ts_def_ends(source: bytes, suffix: str) -> dict[int, int]:
             a, b = node.start_point[0] + 1, node.end_point[0] + 1
             if b > ends.get(a, 0):
                 ends[a] = b
+            name = node.child_by_field_name("name")
+            if name is not None and node.start_byte <= name.start_byte < node.end_byte:
+                n = name.start_point[0] + 1
+                if n > a:
+                    if b > ends.get(n, 0):
+                        ends[n] = b
+                    if a < heads.get(n, n):
+                        heads[n] = a
         if cursor.goto_first_child():
             continue
         while not cursor.goto_next_sibling():
             if not cursor.goto_parent():
-                return ends
+                return ends, heads
+
+
+def _ts_def_info(p: Path) -> tuple[dict[int, int], dict[int, int]]:
+    try:
+        return _cached(_TS_CACHE, _stat_key(p), lambda: ts_def_info(p.read_bytes(), p.suffix.lower()))
+    except (OSError, ValueError):
+        return {}, {}
 
 
 def _ts_def_ends(p: Path) -> dict[int, int]:
-    try:
-        return _cached(_TS_CACHE, _stat_key(p), lambda: ts_def_ends(p.read_bytes(), p.suffix.lower()))
-    except (OSError, ValueError):
-        return {}
+    return _ts_def_info(p)[0]
 
 
 # -- load ---------------------------------------------------------------------------------------
