@@ -15188,6 +15188,935 @@ Counts on the final commit:
 
 One pytest process ran these three files. Afterwards no server process remained.
 
+## 138. Definition lines: overload implementations and annotated declarations (D165, 2026-10-01)
+
+### 138.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md) found two ways
+Verinoda cited the wrong line for a definition:
+
+- **D4.** A Python function declared with `@overload` stubs was cited at the first stub. sqlmodel's
+  `Field` was reported at sqlmodel/main.py:242, an empty `...` body, instead of the implementation
+  at :388. A trace or a "what does Field call" question started from the stub.
+- **D8.** A Java method with an annotation was cited at the annotation line, while a decorated
+  Python def is cited at its `def` line. gson's `doPeek` was reported at JsonReader.java:581
+  (`@SuppressWarnings("fallthrough")`) instead of :582 (`int doPeek()`). `@Override` is on almost
+  every Java method, so these answers were often one line off.
+
+Both come from the vendored extractor (verinoda/project_index/extractors/engine.py). For every
+tree-sitter language except Python, it took the line where the declaration node starts. In Java,
+Kotlin and C#, that node starts with its modifiers, so its annotations or attributes come first.
+For Python, the first definition of a name won: a redefinition with the same id was dropped, and
+its call edges were merged into the first node.
+
+### 138.2 Decisions
+
+- **The cited line is the line of the name.** `_declaration_line` (engine) and `ts_name_line`
+  (anchors) give the line of the node's `name` field when that field is inside the node, and the
+  node's first line otherwise. C/C++ declarators and synthesized names (Swift `deinit`) keep the
+  first line. The rule is the same for every grammar, not a Java-only special case:
+  - Python gets the same answer as before.
+  - TS methods and exported classes keep their line: a method decorator is a sibling node in the
+    class body, and the decorator of an `export class` sits in the `export_statement`. A decorated
+    class without `export` moves to its name line (`@Injectable()` / `class U {}`: from the
+    decorator's line to the class line), because its decorator is inside `class_declaration`.
+  - Java, Kotlin and C# methods and classes move to their name line. So do PHP and Swift attributes
+    that sit inside the node; I did not test those two.
+- **The span still starts at the annotation.** `index.ts_def_info` returns the old
+  `start -> end` map unchanged. Apart from it, it lists the definitions named on each line, with
+  their name, first line, end and whether they are callable (`named`). `Graph.span` takes from
+  `named` only the definition whose name matches the node's label (a method for a `name()` label,
+  the innermost on a tie), and only when that definition starts above the name line. Every other
+  node gets `ends.get(start)` as before, so a member declared on the name line of an annotated type
+  keeps its own span. As a result:
+  - the annotation line still belongs to the method or type it annotates (`symbol_at`,
+    `own_line_count`, rationale, affected lines);
+  - `source()` still shows the annotation.
+
+  A graph built before this change (located at the annotation) gets exactly the span it had.
+  Python spans are unchanged: they start at the `def` and exclude decorators, as before.
+- **Anchors facts.** For tree-sitter languages, the `def` field is now the name line. `start` stays
+  the node's first line, the same `start`/`def` pair Python facts already had (decorator line, def
+  line), so `a in (start, def)` matches in analysis, critique and entail. Fingerprints did not
+  change, so the scheme `ts1` and every anchor made under it stay valid. Only the `file_facts` row
+  key changes (`cache_scheme`: `ts1.def2`), so facts cached before are computed again once instead of
+  being read back with the old `def`.
+- **review_rules** (`_ts_def_at`, `ts_header`, `ts_param_names`, `ts_single_return`,
+  `ts_param_count`) finds a definition by either its name line or its first line (`_defined_on`).
+  This covers new facts and facts cached before. When several definitions match, `_ts_def_at`
+  ranks them: a definition with the symbol's name (review passes the last part of the qualified
+  name), then one whose first line and name line are both the line (the innermost), then one
+  named there, then one starting there. Anonymous nodes are skipped, so the `class` keyword token
+  is never taken for the class.
+- **Python overloads are one node, at the implementation.** I kept the existing convention:
+  same-scope redefinitions share one id and one node. Java overloads are separate nodes (D57)
+  only because a call binds to one of them by argument count, which does not apply to `@overload`
+  stubs.
+  - The decorated-definition branch records each `function_definition` under `@overload`
+    (`overload` or `typing.overload`).
+  - The first stub creates the node, which is flagged `overload_stub: true`.
+  - The first def without `@overload` moves the node to its own line and clears the flag.
+  - The stubs' lines are kept in the node's `overloads` metadata.
+  - With stubs only (a stub module), the node stays at the first stub and keeps the flag.
+  - Other redefinitions (a conditional `def` or a property setter) keep first-wins, as before.
+- `_AST_CACHE_SCHEMA` 8 -> 9, so cached per-file extractions are made again.
+- **Review round.** A review found three defects, all fixed:
+  - `Graph.span` gave a member the whole span of an annotated type whose name was on the member's
+    line, and `symbol_at` gave the annotation line to that member. In `@FunctionalInterface` /
+    `public interface Fn { void apply(int x); }`, `.apply()` spanned the interface (6,7) and line 6
+    belonged to it; in `@Deprecated` / `public class W { void a() { b(); }`, `.a()` spanned the
+    whole class. The cause: name lines were written into the shared `ends` map, keyed only by
+    line. They are now kept apart (`named`, above) and matched by name, so these spans are again
+    the ones the code before this change gave (`.apply()` (6,6), `.a()` its own line) and the
+    annotation line belongs to the type.
+  - `review_rules._ts_def_at` and `ts_header` took the annotated type for the member declared on
+    its name line (the pre-order walk met the type first): `ts_param_names` on `apply` gave `[]`
+    instead of `['x']`, and `ts_header` gave the interface's header. They now rank the matches as
+    described above. The ranking also fixes an older defect: under an annotation, the `class`
+    keyword token on the name line was returned as the definition.
+  - These notes said TS gets the same answer as before. A decorated TS class without `export`
+    moves to its name line; the TS bullet above now says so, and a test pins it.
+  - Checked and left as they are: health metrics (`FnMetrics`) start a function's range at its
+    first annotation or decorator in every language (`health.py` takes the first decorator's line
+    for Python too), so their citations are consistent and did not change.
+
+### 138.3 Measured
+
+Windows 11, Python 3.13, one process at a time. The clones are the pinned ones in C:/vbench.
+
+| repository | gold v1 before (2026-10-02 run) | gold v1 after | crashes | timeouts | clean after revert | scan s before / after | update s before / after |
+|---|---|---|---|---|---|---|---|
+| fastapi/sqlmodel | 9/10 (`def-field-impl` missed: cited :242) | 10/10 | 0 | 0 | yes | 35.1 / 30.0 | 18.3 / 19.2 |
+| google/gson | 9/10 (`def-dopeek` missed: cited :581) | 10/10 | 0 | 0 | yes | 30.0 / 29.8 | 25.1 / 27.5 |
+
+The scan and update times are single runs and are within run-to-run noise. I did not run the other
+8 repositories.
+
+After the review round (run on the merge with competitor-backlog f8a4721; the later 7071ed9 only
+changes the tq-audit report and table), gson again: gold v1 10/10,
+0 crashes, 0 timeouts, clean after revert, scan 27.9 s, update 33.9 s (single run), and the same
+`review` output (exit 3, 76798 bytes) as before the round. sqlmodel was not run again: the round
+changes only tree-sitter spans and lookups, and Python spans and lines take another path.
+
+### 138.4 Not done
+
+- The cited line is the name's line. For a declaration whose modifiers wrap onto their own line
+  (`@Override` / `public` / `String toString()`), that is the line of `toString`, not the line of
+  `public`.
+- A method with an annotation on the same line (`@Test void t()`) and one under an annotation now
+  differ only in where the span starts. Python spans still exclude decorators while Java spans
+  include annotations. This is deliberate: it keeps every tree-sitter Java span exactly as it was
+  (a heuristic span can change, see below).
+- Python `@overload` stubs get no node of their own. A question about one stub's signature gets
+  the implementation, and the stub lines only through the `overloads` metadata. A stub that comes
+  after the implementation is recorded in `overloads` but moves nothing.
+- The implementation is the first def without `@overload`, even when its body is `...` too. With
+  `if TYPE_CHECKING:` holding a plain `def k(a): ...` and the runtime def in `else:`, the node
+  moves to the `TYPE_CHECKING` def, not to the runtime body.
+- Each stub keeps its own `contains` / `method` edge at the stub's line, so stub lines show up as
+  edge locations of the one node. Harmless, but not cleaned up.
+- A heuristic span (no tree-sitter definition starts at the node's line, such as a Java enum
+  constant) ends before the next symbol's line. Symbols below an annotation are now at their name
+  line, so such a span can grow by the annotation's lines (`RED` in `public enum E { RED }` followed
+  by an annotated record: (4,5) before, (4,6) now).
+- This changes engine files (`index.py`, `project_index/`), so the `measured: k/n held-out` part of
+  `verinoda tq` answers is hidden until `verinoda benchmark tq-audit` is run again and the table
+  committed. I did not run the audit here.
+- Kotlin `@Deprecated("y")` on the line above `object Obj`: the grammar leaves the annotation
+  outside the object's node, so the span starts at `object`, before and after this change.
+- Only Java, Kotlin, C# and TS (methods and classes) and Python are covered by tests. PHP
+  attributes, Swift attributes and Scala annotations follow the same rule untested.
+- Benchmark files that cite Java lines were not re-checked, apart from the realworld gold of
+  sqlmodel and gson: benchmarks/review_fixtures, benchmarks/verdict_audit and the mods results.
+  A gold that cites an annotation line as the definition would now miss.
+- The extractor's own test suite (tests_upstream) was not run. A grep found no test there that
+  asserts the line of an annotated or overloaded definition.
+
+### 138.5 Tests
+
+- New tests in tests/test_definition_lines.py (8, 4 of them from the review round):
+  - Java, Kotlin, C# and TS methods and classes are cited at their name line, including a
+    multi-line modifier list.
+  - Python `@overload` and `@typing.overload` groups, at module level and in a class, are one node
+    at the implementation. The node has `overloads` metadata and the implementation's call edge.
+    With stubs only, the node stays at the first stub with `overload_stub`.
+  - `ts_def_info` returns the ends (first lines only) and the named definitions. `Graph.span`
+    starts at the annotation for a new graph and for an old one, and `symbol_at` still gives the
+    annotation line to the method.
+  - Anchor facts use the name line as `def`. `ts_param_count` finds the method from either line,
+    and `cache_scheme` keys tree-sitter facts apart.
+  - Review round: a member on the name line of an annotated Java enum, interface or class and of a
+    C# interface keeps its own span, and the annotation line belongs to the type; `ts_param_names`
+    and `ts_header` pick the member (or the type, given its name) on that line; the `class` keyword
+    is not taken for an annotated class; a decorated TS class without `export` is cited at its name
+    line, an exported one at its class line.
+- tests/test_testcode.py: the JUnit test `coolsByOne` is cited at :8, its span starting at its
+  `@Test` line, :7.
+- Updated expectations: these tests had recorded the annotation line as the definition line.
+  - tests/test_sides.py: the `Mod.onInitialize` entry moves from Mod.java:6 to :7.
+  - tests/test_jvm_callbacks.py: the entries move to their name lines (GlowMod.java:20,
+    GlowModClient.java:19, ModEvents.java:27, the `ModEvents` class at :16).
+
+## 139. Route prefixes, trailing slashes and bounded route output (D166, 2026-10-01)
+
+### 139.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md) found two `routes`
+defects and three harness defects.
+
+- D3. full-stack-fastapi-template mounts every router with
+  `app.include_router(api_router, prefix=settings.API_V1_STR)`. `py_facts` read only a string literal
+  there, so the prefix became `""`. The table showed `/login/access-token` instead of
+  `/api/v1/login/access-token`, with no note. Two gold facts missed. `@router.get("/")` under
+  `prefix="/items"` was shown as `/items`, but FastAPI serves `/items/`. An `APIRouter(prefix=<expr>)`
+  lost its prefix the same way, and a `register_blueprint(url_prefix=<expr>)` dropped the mount.
+- D9. `routes --json` was 248 KB on express. 880 supertest calls in test/ were ambiguous between the routes of
+  unrelated example apps and other test files. 200 of them were listed with 8 candidates each, the rest only
+  counted, and nothing showed that the code was test or example code.
+- H1. The harness's routes judge compared `method` with a row key that does not exist (rows have `methods`).
+- H2. The judge matches `handler` as text of the row, and that text is a node id. The README did not say so.
+- H3. summary.md printed one environment line per commit, although the two commits differed only in
+  benchmark files.
+
+### 139.2 Decisions
+
+- **Prefix values.** A prefix that is not a literal goes through `py_pieces`. Its parts resolve in this
+  order:
+  - a value of the same file listed by `py_values`: a module constant (`NAME = "..."`, also annotated), a
+    class attribute default (`Cls.ATTR`), or `obj.ATTR` for a module-level `obj = Cls()`;
+  - at link time, a name imported from another module (`from app.core.config import settings`). That
+    module is found among the graph's Python files, read, and given to `py_values`. Re-exports are
+    followed up to three times.
+
+  `obj.ATTR` counts only when the `Cls()` call passes no positional argument. A literal keyword argument
+  wins over the default. `Settings(**kw)` resolves nothing. A name bound more than once has no value, and
+  a function parameter of that name counts as a binding. An attribute that is assigned anywhere
+  (`obj.ATTR = ...`, `Cls.ATTR = ...`, or `self.ATTR = ...` in a method) has no value. A class that
+  defines `__init__` gives `obj.ATTR` no value, unless it is a `BaseSettings` subclass. An imported name
+  that a parameter or an assignment rebinds is not followed.
+- **Citing the value.** Every Python row that used a resolved value carries `prefix_from`, which names
+  where the value comes from. This includes a same-file constant. A JavaScript `app.use(CONST, router)`
+  constant is resolved without a note. For a `BaseSettings` subclass it reads "the class default at config.py:22; the
+  environment can set another value at run time". The value is the default, not a value checked at run
+  time.
+- **A prefix that cannot be resolved.** A call, `os.environ[...]` or a name no module spells still keeps
+  its mount and its routes. The row gets `mount: "prefix not resolved: <expr>"`, with the expression as
+  written. Several of these are joined with `; `, also together with `not found`. The text view shows
+  `(mount prefix not resolved: ...)`. An edge to such a route gets the note "the route's path lacks a
+  prefix the text does not spell".
+- **Facts version.** Facts carry `prefix_expr`, `prefix_pieces` and `prefix_from`, so `FACTS_VERSION` is
+  now 4 (3 before the review round): older cached facts are parsed again. A JavaScript `app.use(CONST, router)` with a module
+  constant is read as well.
+- **Trailing slash.** `join_path(..., keep_slash=True)` keeps a trailing `/` of the last part that has
+  one. It is used for routes in Python files: FastAPI, Flask and Django serve the path as written, so
+  `/items` + `/` is `/items/`. It is not used for JavaScript files, because Express serves a router's `/`
+  at the mount path itself. Matching splits on `/` and drops empty segments, so a call to `/items` still
+  fits `/items/`. Only the displayed path changed.
+- **Labels.** `code_kind(path)` gives `"test"` (`testcode.is_test_file`) or `"example"` (`examples/`,
+  `example/`, `samples/`, `demos/`, `docs_src/`, `tutorials/`). It labels route rows, ambiguous calls
+  and their candidates, unmatched calls and method mismatches as `code`.
+- **Scope of a test or example call.** A call in test or example code, or a supertest call, is matched
+  first against the app it builds or imports. The scope is the file and its full import closure, through
+  relative `import`/`require` and the graph's `imports_from` edges. A route is in scope when any file of
+  its mount chain is in scope: its own file, or a file that mounts it, up to the app. When candidates are
+  in scope, only those count, and the edge notes how many routes outside also match the path. Two
+  exceptions apply:
+  - A test-client or example call (not supertest) is not narrowed when a route outside the scope names
+    more literal segments than every route inside it (`/items` outside, `/{page}` inside). The call
+    stays ambiguous. A Python scope rests on the graph's imports, which can miss a package re-export.
+  - A supertest call with no candidate in scope is unmatched, with
+    `why: "no route read in the app under test fits (this file and the N it imports); M elsewhere do"`.
+    This applies when the file imports something or builds an app itself.
+
+  Any other call keeps all candidates. A mount through a package `__init__.py` that only re-exports the
+  router (`from app.api.main import api_router`) is followed, up to three re-exports.
+- **Bounded report.** The linker now keeps every ambiguous call, unmatched call and method mismatch, with
+  every candidate, so counts are exact. `cross_service.bounded()` makes the view for `verinoda routes`:
+  - ambiguous calls with the same protocol, method, URL and candidate set become one group: the first
+    call, `calls`, and up to 5 `also_at`;
+  - at most 50 groups (`AMBIGUOUS_GROUPS`) of 5 candidates (`AMBIGUOUS_CANDIDATES`), with
+    `candidates_total` when cut;
+  - at most 50 unmatched calls and 50 method mismatches (`LIST_CAP`);
+  - every cut is counted (`also_at_more`, `<list>_more`), and `ambiguous_calls` plus `<list>_by_code`
+    give the totals;
+  - a `bounded` line says how to see everything: `routes --all` shows every call and every candidate,
+    ungrouped.
+- **Sidecar.** The sidecar keeps the first 200 ambiguous calls (`REPORT_CAP`) with 8 candidates each and
+  `candidates_total`, as before. Its counts are now the full counts. The report itself keeps every
+  candidate, also of an ambiguous tRPC/gRPC/GraphQL call (before, 8, with the cut not counted).
+- **A route whose prefix is not resolved.** A call that fits only such routes gets no edge. It is
+  unmatched, with `why: "only routes whose prefix is not resolved fit: ..."`. When other routes fit too,
+  those are kept and the edge notes how many unresolved ones were set aside.
+- **Text view.** A grouped ambiguous call shows `also at <file:line>, ... (+N more)` under its line.
+- **H1.** `_judge_route` requires the check's `method` in the row's `methods` list. A row for any method
+  (`methods: null`) does not count. A miss lists the rows on the same path that differ.
+- **H2.** The README (step 3) says the full path includes prefixes and a written trailing `/`, and that
+  `handler` is the node id. A new key `at` (the route's declaration file:line) is accepted in its place.
+- **H3.** `run.py` records `verinoda_code_tree` (`git rev-parse HEAD:verinoda`). `report.env_lines` merges
+  environments that differ only in the commit and have the same `verinoda/` code. The test is the tree id
+  when both have one, else `git diff --quiet A B -- verinoda/` in this checkout. A dirty run or a commit
+  git does not know is never merged. The committed summary.md of 2026-10-02 was re-rendered: its two
+  lines are now "at 8d9ab97 and 1ab4a71 (the same verinoda/ code: the commits differ only in files
+  outside verinoda/)".
+- **Review round.** A review of 31aef6d confirmed four defects. All four are fixed:
+  - A test call's scope stopped three imports deep. A test whose app mounts a router four imports away
+    linked confidently to the app's catch-all `/{page}` instead of staying ambiguous with `/items`. The
+    scope is now the full import closure. A route counts as in scope through its mount chain, and a more
+    specific route outside keeps a non-supertest call ambiguous.
+  - For the same reason, a supertest call to a correctly mounted route four `require`s deep was reported
+    unmatched. It now links.
+  - `def mount(app, API): app.include_router(r, prefix=API)` took the module constant `API`. A parameter
+    now counts as a binding, so the prefix is not resolved.
+  - `obj.ATTR` took the class default even when `__init__`, a method or a later `obj.ATTR = ...`
+    assignment set another value. These now give no value.
+
+  Several smaller points were also fixed: a same-file constant now gets its `prefix_from` note, RPC
+  ambiguous calls are no longer cut at 8, the text view shows `also_at`, and a call that fits only routes
+  with an unresolved prefix gets no edge. Two earlier statements here were wrong: "every row that used a
+  resolved value carries `prefix_from`" was not true for a same-file constant, and "`--all` lists every
+  candidate" was not true for RPC calls. Both statements are now true. One point is not fixed; see Limits.
+
+### 139.3 Measured
+
+Windows 11, Python 3.13.14, one process at a time. "Before" numbers come from the committed results of
+2026-10-02, code 488b553, or from a read-only `routes --json` with that code on the same clone and index.
+"After" numbers are from `benchmarks/realworld/run.py --repos <repo>` at 31aef6d, with results in a scratch
+folder.
+
+| | before | after |
+|---|---:|---:|
+| full-stack-fastapi-template gold v1 | 7/10 | 9/10 |
+| `route-login-access-token`, `route-read-item` | miss, miss | hit, hit |
+| template `routes --json` bytes | 4,402 | 8,420 |
+| express gold v1 / v2 | 4/10 / 2/2 | 4/10 / 2/2 |
+| express `routes --json` bytes (default) | 247,767 | 70,871 |
+| express `routes --json --all` bytes | - | 281,919 |
+| express ambiguous calls | 880 (200 listed, 680 counted) | 197 (14 groups) |
+| express unmatched calls | 1 | 513 (50 listed) |
+| express HTTP edges | 27 | 21 |
+
+Review round (5e3499f), each repository re-run with `run.py`, and read-only `routes --json` counts with
+31aef6d and with 5e3499f on the same clone and index:
+
+| | 31aef6d | 5e3499f |
+|---|---:|---:|
+| full-stack-fastapi-template gold v1 | 9/10 | 9/10 |
+| template `routes --json` bytes (harness) | 8,420 | 8,420 |
+| template rows with `prefix_from` / not resolved | 23 / 0 | 23 / 0 |
+| express gold v1 / v2 | 4/10 / 2/2 | 4/10 / 2/2 |
+| express `routes --json` bytes (default / `--all`) | 70,870 / 281,919 | 73,407 / 294,118 |
+| express ambiguous (groups) / unmatched / method mismatch | 197 (14) / 513 / 8 | 197 (14) / 513 / 8 |
+| express HTTP edges | 21 | 21, the same 21 |
+| sqlmodel gold v1 | 9/10 | 9/10 |
+| sqlmodel `routes --json` bytes (default / `--all`) | 50,433 / 265,195 | 51,569 / 266,331 |
+| sqlmodel ambiguous (groups) / unmatched / edges | 108 (19) / 12 / 16 | 108 (19) / 12 / 16 |
+
+- **Review round.** On the three repositories, the same calls are linked, ambiguous and unmatched as at
+  31aef6d. The output grew because 21 express edges now carry the note "N route(s) outside the app under
+  test also match the path", and so do all 16 sqlmodel edges. An intermediate version kept a supertest call
+  unless every fitting route had a known mount. On express, that gave 614 ambiguous calls (63 groups) and
+  a 2.1 MB `--all`, because 36 example routers have no mount found. It was dropped. A route that the app
+  under test serves is declared or mounted in a file of the app's import closure.
+
+- **Template.** All 23 routes now carry `/api/v1`. The 8 paths written with a trailing `/` keep it, for
+  example `GET /api/v1/items/` and `POST /api/v1/reset-password/`. I read `items.py:13` (`"/"` under
+  `prefix="/items"`), `login.py:77`, `private.py:23` and `utils.py:29` in the clone to confirm. The JSON grew
+  because every row now carries its `prefix_from` note.
+- **Template links.** `linked` stays 0. The only client call found is `frontend/tests/utils/mailcatcher.ts:16`.
+  The generated SDK (`frontend/src/client/sdk.gen.ts`, `url: '/api/v1/...'` inside a request-options
+  object) is not read as a client call.
+- **Express edges.** 26 edges were removed and 20 added. Each removed edge linked a test call to a route in
+  a file the test neither defines nor imports (test/app.param.js, test/app.router.js, test/req.baseUrl.js,
+  examples/route-separation/index.js). The 20 added edges link test/acceptance/route-separation.js and
+  test/acceptance/vhost.js to the example apps they import, and test/res.format.js to its own routes.
+- **Express unmatched.** Most of the 513 unmatched calls are acceptance tests of example apps whose routes are
+  not read. For example, examples/auth requires `../../` instead of `express`, so it is not seen as an
+  Express app.
+- **Express routes.** The route table (286 rows, 45 KB) is the largest part of the bounded output.
+- **sqlmodel.** Not re-run with the harness at 31aef6d. A read-only `routes --json` on its existing index gave
+  214,168 bytes before (committed results) and 50,433 after: 108 ambiguous calls in 19 groups.
+- **No regressions.** Both runs had 0 crashes and 0 timeouts, and the clones were clean afterwards.
+
+### 139.4 Not done
+
+- **Values that are resolved.** Only values the text spells as a string literal are resolved: a constant,
+  a class attribute default, or an instance attribute default. These are not resolved:
+  - a `get_settings()` call (`@lru_cache` style), `os.environ`, or a computed value. These are marked,
+    never guessed;
+  - a value assigned in `__init__` or another method, or after the class (`obj.ATTR = ...`), and any
+    `obj.ATTR` of a class with `__init__` (except `BaseSettings`), or a settings value set by `.env` or by
+    the environment. The note says so for `BaseSettings`;
+  - a `Field(default=...)`.
+- **Bindings are counted per module, not per scope.** A parameter or a local variable with a constant's
+  name, anywhere in the module, also unresolves a module-level use of that constant. This is
+  conservative: the value is marked "prefix not resolved", never wrong. `setattr(...)` and
+  `self.__dict__` writes are not seen. A class with `__init__` already gives no `obj.ATTR`.
+- **A route whose prefix is not resolved is not linked alone.** It still matches by the path without the
+  prefix. When it is the only fit, the call is unmatched with a `why`.
+- **The trailing slash in JVM files.** Spring and JAX-RS paths are built in `jvm_facts` with the old
+  `join_path` and still drop a trailing `/`. JavaScript files keep the Express convention.
+- **The scope of a test call.** The scope follows only relative JavaScript imports and the graph's
+  `imports_from` edges, which can miss a Python package re-export. A test that gets its app from a
+  workspace package (a non-relative import) and imports some unrelated local helper is reported as
+  unmatched, not ambiguous. It gets no edge either way. Routes loaded at run time (an
+  `fs.readdirSync` loader) are not in any scope, so a supertest call to them is unmatched.
+- **The harness environment merge.** `report.same_code()` runs `git diff` in the checkout that renders
+  the summary. When that checkout knows neither commit, it falls back to separate lines without saying so.
+  The merge also ignores changes outside `verinoda/` that can change behaviour, such as dependency pins in
+  pyproject. Not changed in the review round.
+- **Example apps the scope cannot help.** Calls to example apps whose routes are not read stay unmatched.
+  In express, examples that `require('../../')` instead of `express` are not seen as Express apps.
+  This is a separate extraction gap.
+- **The route table itself is not capped.** It is 286 rows on express. The caps apply to the ambiguous,
+  unmatched and method-mismatch lists.
+- **The SDK of the template.** The generated SDK's `__request(OpenAPI, {url: ...})` calls are not read as
+  clients, so the template's front end still links to no route.
+
+### 139.5 Tests
+
+- tests/test_routes_prefix.py (new, 41 tests). An indexed project in the template's shape:
+  - the settings default is resolved and cited with its file:line;
+  - the `/items/` trailing slash is kept and still matched without it;
+  - a client links through the resolved prefix, and a call without the prefix is unmatched;
+  - `version_prefix()` and `os.environ[...]` give `prefix not resolved` rows;
+  - `f"{V2}/x"` with an imported constant resolves;
+  - example and test labels are set;
+  - a supertest call links to the app it imports, not to the other example app;
+  - grouped ambiguous calls and `--all`, and the sidecar's counts and 8-candidate cap.
+
+  Also unit tests of `bounded` (groups, candidates, list caps, the text), `join_path(keep_slash=)`,
+  `py_values` (16 cases: rebinding, keyword override, `**kw`, a shadowing parameter, `self.ATTR` in
+  `__init__`, an `__init__` that may set anything, `obj.ATTR =` and `Cls.ATTR =` later) and a Flask
+  `url_prefix` from an imported constant.
+
+  Review round, a second indexed project:
+  - a FastAPI test whose router is four imports away stays ambiguous between `/items` and `/{page}`;
+  - an example test whose app has only `/{page}` stays ambiguous when another example names `/orders`;
+  - a supertest call links through test, server, app, routes/index and routes/users;
+  - a Flask call that fits only a route with an unresolved prefix is unmatched with a `why`.
+
+  Also: a parameter that shadows a constant or an import, attribute overrides, a cited same-file
+  constant, RPC candidates uncut, and `also at` in the text view.
+- Touched files together: test_routes_prefix.py, test_cross_service.py and test_realworld_harness.py, 193
+  passed and 1 skipped (41 + 65 + 87 and 1 skipped).
+- tests/test_cross_service.py: one new test. The route table keeps Django's written slash, FastAPI's
+  `@router.post("")`, and Express's mount path for a router's `/`. 65 passed.
+- tests/test_realworld_harness.py:
+  - the routes judge (`methods`, a row for any method, `at`, the exact path);
+  - environment lines merged by tree id; not merged for another tree, a dirty run or unknown commits;
+    merged by `git diff` for 8d9ab97 and 1ab4a71.
+
+  87 passed, 1 skipped.
+- tests/test_docs.py: 19 passed.
+
+## 140. Distinct symbols never share a node (D167, 2026-10-01)
+
+### 140.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md, defect 1)
+found two distinct symbols sharing one node. `normalize_id` (verinoda/project_index/ids.py) folds
+case and drops leading and repeated underscores, so axios `Axios.request` (lib/core/Axios.js:40) and
+`Axios._request` (:83) both mint `lib_core_axios_axios_request`. In express, the selector
+`lib/response.js::sendFile` resolved to the module function `sendfile` (:927) as an exact match.
+
+Verinoda already had guards against this. They missed both cases:
+
+- `verinoda.case_ids.split_case_collisions`, run by `index._distinct_case_ids` around extraction
+  and graph building, splits nodes of one file that share an id. Two things kept it from the axios
+  case:
+  1. It only handled names equal after `casefold`. `request` and `_request` are not.
+  2. It never saw the second node. The generic tree-sitter extractor
+     (`extractors/engine.py`, `_extract_generic`) keeps a `seen_ids` set, and `add_node` silently
+     drops a definition whose id is already taken. So `_request` was gone before any post-pass ran.
+     Its `method` edge and every call in its body were still emitted under the shared id, and
+     `this._request()` became a self-call on `request`, which was then dropped.
+- Upstream has its own salts for Python (`_python_pre_scan_underscore_collisions`: module-level
+  functions and direct methods only, the public name keeps the id) and for Go (exported versus
+  unexported names). No other language had one, and Python nested functions were not covered.
+- `verinoda/portable_ids.py` only rewrites ids minted from an absolute path. It has nothing to do
+  with name collisions.
+- The resolver (`naming.exact_nodes` -> `retrieval._names_symbol`) compares names with `fold_tr`,
+  which lower-cases them. It already preferred the node with the right case when several were
+  found. But when the only candidate differed in case (express: `sendfile` for `sendFile`), it
+  returned that node as `exact`, with no note.
+
+### 140.2 Decisions
+
+- **The extractor no longer drops the second definition.** It gives it its own id. `add_node`
+  records which name holds each id. Before a function or method definition takes an id,
+  `_distinct_def_id` checks that record. If a different name already holds the id, the new
+  definition gets `<id>_<first 6 hex of sha1(name)>`. That is the same form the Python and Go salts
+  and `case_ids` already use. If a third name already holds that salted id, the hash gets longer
+  (10, 16, 40).
+  - The check covers functions, methods, nested functions (JS and Python), JS `const f = () =>`,
+    `exports.f =`, `X.prototype.f =`, `this.f =` / `api.f =` member assignments, and class-field
+    arrows.
+  - The same name again keeps one id, as before: an overload, a getter and its setter, Ruby
+    `def self.x` beside `def x`.
+  - Names are compared by their last part (`Foo::bar` against `bar`), so a C++ out-of-class
+    definition still meets its declaration.
+  - In PHP, `fold_case` makes names that differ only in case one symbol.
+- **Who keeps the plain id:** the name with the fewest leading underscores (the public name), in
+  any declaration order. During the walk the definition met first holds the plain id. When the file
+  is done, `_public_def_swaps` gives the plain id to a later definition with fewer leading
+  underscores, and the earlier holder gets the salted id of its own name. All of the file's nodes,
+  edges and `raw_calls` callers are renamed together. A Java overload group moves with its first
+  member. Names with the same number of underscores, such as a case pair (`getX` / `getx`) or a
+  class `Foo` beside a function `foo`, keep declaration order. This is the rule of Python's upstream
+  pre-scan and of the `case_ids` net (see the review round below).
+- **The net in `case_ids` is widened** to names that mint one id. That means names that differ in
+  case or underscores. A label that is not an identifier (a heading `Foo bar` beside `Foo-bar`)
+  still needs case alone to be split.
+  - Underscore differences split in every language. Case differences still split only in
+    case-sensitive languages.
+  - Of a split group, the member with the fewest leading underscores keeps the id, so the public
+    name keeps it. For case-only groups this is the same code-point order as before.
+  - The "split the nodes already show" pass now also routes edges that end at the plain id when the
+    two names differ in underscores. The extractor's own import edge for `import { _helper }` is
+    minted as `make_id(stem, "_helper")`, which is `helper`'s id. The line text now moves that edge
+    to `_helper`.
+- **Calls bind to the exact name.** The in-file call maps (`label_to_nid`) and the cross-file
+  resolvers were already exact. Once both definitions exist, `this._request()` binds to
+  `_request`, and `request()` to `request`.
+- **A code name matched only case-insensitively is a labelled fallback, never `exact`.**
+  `naming.resolve` runs a new check, `_case_folded`. It applies when every node found is in a
+  case-sensitive language and none of them is named with the written case.
+  - One node: the result is `similar`, with the note "no symbol is named `sendFile` with this case;
+    ... matched sendfile() (lib/response.js:927) only case-insensitively". `trace` reports that
+    note under `fuzzy`.
+  - Several nodes: the result is `ambiguous`, with the same note.
+  - An exact-case node, when one exists, still wins as before.
+- **The AST cache schema goes from 9 to 11** (together with the definition-line fix, which took 9) (`project_index/cache.py`), so cached extractions made
+  by the old code are not reused. 9 was the first version of this branch.
+- The vendored changes are marked "Verinoda patch". docs/UPSTREAM.md lists them.
+- **Review round.** A reviewer found three defects in the first version. Each is fixed and has a
+  regression test in tests/test_distinct_ids.py.
+  1. *A public function lost its id to an earlier private const.* In `const _config = {}` followed
+     by `export function config()`, the walk met the const first, so the const kept
+     `src_store_config` and the function moved to a salted id. The base graph had the function on
+     that id. The claim that "no id that existed before changes" was false. Now the public name
+     takes the plain id in any order (see "Who keeps the plain id"). The extractor and the
+     `case_ids` net now follow one rule. Test:
+     `test_the_public_name_keeps_the_plain_id_whichever_is_declared_first` (also `__a` / `_a` / `a`
+     declared in that order).
+  2. *Java ids that already existed changed, and a numbered overload id named a different method.*
+     The base graph already kept Java `_fetch` as its own node through overload numbering
+     (`..._fetch_3`), in the family of the public name. The first version salted `_fetch` but
+     still numbered its second overload in that family, so `fetch_3` changed from `_fetch(int)` to
+     `_fetch(int,int)`. Now a salted method's overloads are numbered from its own salted id
+     (`..._fetch_<hash>_2`). Java `_x` ids therefore change (see the upgrading note). The calls
+     also improve: in the base graph, `fetch(a)` inside `_fetch(int,int)` also bound to
+     `_fetch(int)`, because both took one argument. Now it binds only to `fetch`. Test:
+     `test_java_overloads_of_a_salted_method_are_numbered_from_its_own_id` (both declaration
+     orders).
+  3. *A multi-line ES import of the private twin left a false import edge on the public twin.* For
+     `import {` / `_helper,` / `} from './h'`, the edge's own line names neither twin. `case_ids`
+     now reads an import whose `{` opens a list on to its `}`. An edge that nothing places is
+     dropped when its source already reaches another member of the pair, through the same
+     relation and from the same line. Tests:
+     `test_the_build_net_reads_an_import_across_its_lines` and the multi-line import in the
+     public-name test.
+
+  Of the minor findings, one is fixed: `_def_symbol_name` now splits only a qualified name. A
+  label such as `{ _helper: priv }` is its own name, which
+  `test_a_label_that_is_no_qualified_name_is_its_own_symbol_name` checks. The other minor findings
+  are listed under Limits. The AST cache schema went to 11 (10 on the branch), so caches made by the first version of
+  this branch are not reused.
+
+### 140.3 Measured
+
+On Windows 11 with Python 3.13.14, one process at a time.
+
+- **Real-world benchmark** (`benchmarks/realworld/run.py --repos <repo> --out <scratch>`, clones in
+  C:/vbench), before (benchmarks/results/realworld-2026-10-02) and after:
+
+  | repo | gold v1 before | gold v1 after | gold v2 before | gold v2 after | crashes | clean after |
+  |---|---:|---:|---:|---:|---:|---|
+  | axios/axios v1.20.0 | 7/10 | 9/10 | - | - | 0 | yes |
+  | expressjs/express v5.2.1 | 4/10 | 4/10 | 2/2 | 2/2 | 0 | yes |
+
+  After the review round, both repositories were run again, one at a time. The gold, crashes and
+  clean results are the same as in the table.
+
+  - axios: `request-calls-private` and `private-request-merges-config` now hit.
+    `request-reaches-adapter` still misses, for a different reason than before. Before, the source
+    was unresolved. Now `_request` resolves (lib/core/Axios.js:83), but there is no directed path.
+    Both hops are absent from the graph:
+    - `dispatchRequest.call(this, newConfig)` (Axios.js:242);
+    - `adapters.getAdapter(...)` (dispatchRequest.js:52).
+
+    `trace _request dispatchRequest` and `trace dispatchRequest lib/adapters/adapters.js::getAdapter`
+    each answer "no directed path". These are not id problems.
+  - express: `sendfile-calls-helper` still misses, because `res.sendFile = function sendFile` is no
+    node (defect 2). `trace lib/response.js::sendFile lib/response.js::sendfile` now returns the
+    status "ambiguous: both endpoints resolved to the same node" with
+    `fuzzy.source` = "no symbol is named `sendFile` with this case; `lib/response.js::sendFile`
+    matched sendfile() (lib/response.js:927) only case-insensitively (in this language names that
+    differ in case are different symbols)". The defect asked for exactly that warning.
+  - I ran both repositories twice: once during development, then again on the final code. Both
+    runs gave the same gold. Times of the final run:
+
+    | repo | scan before | scan after | `update` before | `update` after |
+    |---|---:|---:|---:|---:|
+    | axios | 29.6 s | 29.7 s | 21.0 s | 30.7 s |
+    | express | 11.1 s | 13.6 s | 9.1 s | 10.1 s |
+
+    The development run measured axios at 25.8 s / 20.6 s and express at 14.1 s / 11.2 s. The
+    review-round run measured axios at 29.3 s / 22.9 s and express at 11.4 s / 9.4 s. The spread
+    between runs of the same code is as large as the before/after differences, so I do not
+    attribute the times to this change.
+- **Split pairs in the axios graph after the review-round run: 5** (3,889 nodes). Each one
+  checked by hand:
+  - `.request()` / `._request()` (lib/core/Axios.js);
+  - `._transform()` (:11) keeps the plain id and `.__transform()` (:6) is salted
+    (lib/helpers/ZlibHeaderTransformStream.js). Before the review round it was the other way
+    round, because `__transform` comes first. By the base extractor's rule (it kept the definition
+    met first), the base graph had `__transform` on the plain id and no node for `_transform`. I
+    did not rebuild axios with the base package to confirm this. If it holds,
+    this plain id now names a different method;
+  - `setProxy()` / `__setProxy`, `isNodeEnvProxyEnabled()` / `__isNodeEnvProxyEnabled` and
+    `isSameOriginRedirect()` / `__isSameOriginRedirect` (lib/adapters/http.js:1488-1490,
+    `export const __setProxy = setProxy`). Before, each pair minted one id. I did not check
+    whether the old graph merged or dropped the const.
+
+  In the http.js pairs the plain id stays on the function. The express graph has 0 split pairs
+  (441 nodes).
+- **Upgrade without a file change** (fixture of 6 files):
+  1. Build with the unmodified competitor-backlog package (`git archive`): the graph has
+     `.request()` only, and the call at line 7 is read as `request`'s.
+  2. Run `verinoda update` with the new code. It reported
+     `"extraction": {"was": "s8-a8ca4efb242c", "now": "s9-f154e26c06a6"}` and
+     `"index_mode": "full"`.
+  3. The graph then had `lib_axios_axios_request_ee5c95` (`._request()`), the edge
+     `request -calls-> _request`, and the call to mergeConfig on `_request`.
+
+  Review round, with the reviewer's `const _config` / `function config` fixture: `verinoda scan .`
+  with the unmodified package gave one node `src_store_config` (`config`, L13). `verinoda update`
+  with the new code reported `"extraction": {"was": "s8-0b3160ad868f", "now":
+  "s10-7fb9bff7fd72"}` and `"index_mode": "full"`. The graph then had `src_store_config`
+  (`config()`, L13, still the id of the importer's and the callers' edges) and
+  `src_store_config_7e810b` (`_config`, L12).
+- **The new tests against the old code:** all 5 tests of tests/test_distinct_ids.py fail on the
+  unmodified package (missing node `..._request_ee5c95`, missing nested `_step`, no split in the
+  net, `exact` instead of `similar`; the unit test cannot import `_distinct_def_id`). All 5 pass
+  with the change. The 4 review-round tests fail on the branch's first version and pass now.
+
+### 140.4 Not done
+
+- **Language coverage.** Only the definition sites of the generic tree-sitter extractor are
+  covered: JS/TS, Python, Java, C, C++, C#, Kotlin, Scala, Swift, Ruby, Lua, PHP, Groovy. The
+  dedicated extractors (Rust, Dart, Elixir, Julia, Pascal, ...) are not changed. When they emit two
+  nodes with one id, the widened `case_ids` net splits them. When they drop one themselves, nothing
+  recovers it.
+- **Class-like nodes are not checked.** Classes, properties, fields and object-literal owners still
+  go through `add_node` without the check. Two classes `Q` and `_Q` in one file still merge into one
+  node. The methods of the second class are minted under the shared id, so `class _Q { run() }`
+  after `class Q` gives `src_k_q_run`, which reads as a method of `Q`. That is worse than a plain
+  merge.
+- **Declaration order decides only between names with the same number of leading underscores**: a
+  case pair (`getX` / `getx`), or a class `Foo` beside a function `foo`. In the extractor the one
+  declared first keeps the plain id. The `case_ids` net, for the nodes that still arrive with one
+  id, takes the first by code point. Moving `getx` above `getX` swaps their ids on the next build.
+- **C++ out-of-line twins.** Take a class that declares `int area(); int _area();` and defines
+  `int Shape::_area()` out of line. The node it gets (`Shape::_area()`,
+  `src_shape_shape_area_<hash>`) cannot be named: `_area`, `Shape._area`, `Shape::_area` and
+  `src/shape.cpp::_area` all return `not_a_symbol` or `not_found`. `Shape::area` gets no `calls`
+  edge to it, and the in-class declaration's `defines` edge still lands on `area`. This was
+  already so before this change, so C++ is covered only for in-class definitions.
+- **Import edges.** A cross-file import or call that upstream mints as `make_id(stem, name)` lands
+  on the plain id, which belongs to the twin. Only the `case_ids` line-text routing moves it, and
+  only when the edge's line names exactly one of the two. Two examples it cannot move:
+  `import { helper, _helper }` on one line, and a call whose line writes neither name.
+- **Multi-line imports are read only across braces.** An import edge whose line names neither
+  twin is placed by reading on to the closing `}`. Otherwise it is dropped when the same source
+  already has an edge of that relation and line to the other twin. With no such edge, it stays on
+  the twin that kept the id. A single-line `import { helper, _helper }` names both, and its edges
+  are left as they are.
+- **Case-folded matching applies only to text read as code.** A plain capitalised word such as
+  `Area` still resolves `exact` to `area` in a .cpp file. That is by design: a plain word is
+  matched loosely.
+- **Owners and module paths still match case-insensitively.** `axios.request` names
+  `Axios.request`. Only the last name has to match its case. `q` (`f.name = "..."`) compares
+  exactly, as before.
+- **Calls not seen.** Calls through `fn.call(this, ...)` and member calls on an imported object
+  (`adapters.getAdapter`) are still not edges (axios `request-reaches-adapter`).
+- **Express needs defect 2.** Its `sendfile-calls-helper` gold fact needs `res.sendFile = function
+  sendFile` to become a symbol.
+
+### 140.5 Tests
+
+tests/test_distinct_ids.py (new, 9 tests, all with small fixtures):
+
+- `test_javascript_definitions_that_mint_one_id_are_two_nodes_with_their_own_calls`: the axios
+  shape is one class with `request` and `_request`, plus `getX` and `getx` at module level, plus an
+  importer of `getx` and `_helper`. The test checks:
+  - both definitions are nodes, and `request` keeps its old id;
+  - `request -calls-> _request` at the right line, and `_request -calls-> mergeConfig` (not
+    `request`);
+  - the importer's call and import edges land on `getx` and `_helper`, never on their twins;
+  - `resolve("_request")` is exact, and `trace request mergeConfig` runs through `_request`.
+- `test_python_methods_and_nested_functions_that_mint_one_id_are_two_nodes`:
+  - methods `fetch` / `_fetch` (the upstream rule) and nested `step` / `_step` (new) are separate
+    nodes, and the call between the nested pair binds;
+  - module-level `load` / `_load` across files: the import, the call and the calls made in
+    `_load`'s and `_run`'s bodies land on the private twins.
+- `test_the_extractor_salts_only_a_different_name`: unit test of `_distinct_def_id`. It covers the
+  same name, an underscore difference, a case difference, PHP case folding, an id nobody holds, a
+  salted id already taken (a longer hash), and a qualified `Foo::bar` against `bar`.
+- `test_the_build_net_splits_names_that_differ_in_underscores_and_keeps_the_public_id`: the
+  `case_ids` net in either line order; PHP folds case but not underscores; ids shared by another
+  route (`b` / `a_b`, `Foo bar` / `Foo-bar`) are left alone; an `import { _helper }` edge minted
+  with the plain id moves to `_helper`.
+- Review round:
+  - `test_the_public_name_keeps_the_plain_id_whichever_is_declared_first`: `const _config` before
+    `function config`, `__a` / `_a` / `a` in that order, and a multi-line import of `_a`;
+  - `test_java_overloads_of_a_salted_method_are_numbered_from_its_own_id`: `fetch` / `_fetch`, two
+    overloads each, in both declaration orders;
+  - `test_the_build_net_reads_an_import_across_its_lines`: the `case_ids` routing of a multi-line
+    import, and the copy that is dropped;
+  - `test_a_label_that_is_no_qualified_name_is_its_own_symbol_name`.
+- `test_a_code_name_matched_only_case_insensitively_is_labelled_and_never_exact`: the express
+  shape. `lib/response.js::sendFile` is `similar` with the note, and the exact-case selector and
+  the plain word stay `exact`. The `trace` status and `fuzzy.source` match the express output. When
+  both `getX` and `getx` exist, each resolves exactly to its own node.
+
+Run: `pytest tests/test_distinct_ids.py tests/test_case_ids.py tests/test_docs.py`.
+
+## 141. JavaScript assigned methods and nested functions (D168, 2026-10-01)
+
+### 141.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md, D2 and D7) found two gaps in
+the JavaScript/TypeScript extractor (vendored Graphify, `verinoda/project_index/extractors/engine.py`):
+
+- A function assigned to an object's property at module level (`res.json = function json(obj) {...}`,
+  `app.render = function render(...)`, `app.use = (fn) => {...}`) made no symbol. Express 4/5 writes almost all of
+  lib/response.js, lib/request.js and lib/application.js this way, so `q` found 9 plain function declarations in
+  lib/response.js, `trace lib/response.js::json stringify` was unresolved, and `lib/response.js::sendFile` fell back
+  to the module function `sendfile` (the D1 case fold).
+- A function bound inside a function (`const login = async (data) => {...}` inside the `useAuth` hook) was no
+  symbol, so its calls (`LoginService.loginAccessToken`) were credited to `useAuth`.
+
+Before, only `Foo.prototype.bar = fn`, `exports.x = fn`, `this.x = fn` and an object literal built in the same
+function were methods, and only nested `function` declarations were nested symbols.
+
+### 141.2 Decisions
+
+- **Which assignments.** A module-level statement `obj.m = <function expression | arrow | generator>` makes a symbol
+  when `obj` is bound at module level in the same file: a `var`/`let`/`const` declarator (any initializer:
+  `Object.create(...)`, `exports = module.exports = {}`, `require(...)`, `X.prototype`), a function declaration or a
+  class declaration (also exported). An undeclared receiver (`window.x = fn`, a global) and a value that is not a
+  function (`res.limit = 10`, `res.handlers = [f]`) make nothing. This keeps the #1077 guard against bare-named
+  phantom nodes. Assignments inside function bodies keep the earlier rules (`this.x`, a local object literal).
+- **Alias chains.** In `res.contentType = res.type = function contentType() {...}` (also Express's
+  `res.set = res.header = ...` and `req.get = req.header = ...`), every module-object member of the chain is a method
+  at its own line. The body is walked once per name. Nested symbols are made once, under the name next to the
+  function.
+- **Label and shape, as for prototype and class methods.** The method is `.m()` with id `<file>_<obj>_<m>`, joined by
+  a `method` edge from the owner. A `var`/`let`/`const` owner without a node gets one (label `obj`, at its
+  declarator's line) and a `contains` edge from the file. A function or class owner is its own node. The method's
+  line is the assignment's line. So `q ... f.name = "json"` finds `res.json`, and the selector
+  `lib/response.js::sendFile` resolves to `res.sendFile` (lib/response.js:378), whose id no longer folds onto
+  `sendfile`.
+- **The property name is the method's name**, not the function's own name: `res.type = function contentType` is
+  `.type()`, because callers write the property. In Express the two names agree for most methods.
+- **Calls from and to the methods.** Each method's body is walked as its own, so calls inside `res.json` belong to
+  `res.json`. `this.send()` binds to the owner's `send`: the existing own-receiver rule now applies, because the
+  method has an owner. `res.send()` binds when `res` is the module binding and no parameter or local of the caller
+  shadows it. `Foo.create()` binds to `Foo.create` through the same rule, which is checked before the
+  upper-case-receiver defer. Any other in-file call that would bind to such a method is refused and left to the
+  cross-file passes. Examples are a bare `send(path)` (in Express, the `send` package) and `app.render()` on another
+  object (which used to make `res.render` call itself). Such a method takes no name in the file's bare-name map, so
+  a module function of the same name keeps it whatever the order of the two (see Review round). Exports methods keep
+  their old binding.
+- **Nested functions.** A `variable_declarator` whose value is a function, in any function body, is a nested symbol
+  `<parent>_<name>` with label `name()`. One inside an anonymous callback belongs to the nearest named function. It
+  has a `contains` edge from the parent, and its own body and calls, the same shape nested `function` declarations
+  already had. The scan now also runs on the bodies of `exports.x`, `Foo.prototype.x` and the new object methods.
+- **Scope of nested names.** JS/TS nested symbols are recorded in `scope_parents` / `lexical_nids_by_scope`, as the
+  Python extractor does. A bare call binds to the nested function visible from the caller: useAuth's `logout` inside
+  `useAuth`, the module's `logout` elsewhere. A bare call from outside its scope does not reach a nested function,
+  in the file or (since the review round) from another file, and a member call never does: `controller.abort()`
+  inside a nested `const abort` is not a self-call. A nested name no longer overwrites a module-level one in the
+  file's name map. A nested function passed by value from elsewhere in the same file can still be bound to it (see
+  Limits).
+- **Closure capture.** A nested function's locals include every non-function name bound in the enclosing body
+  (declarators, parameters, `catch` and `for ... in/of` bindings). So `use(config)` in it names the enclosing
+  parameter, not a module function `config`. This over-approximates, so it can only drop an indirect edge.
+- **Dead view (`verinoda/deadcode.py`, not vendored).** A unit that a dynamic use keeps alive (weak) now also keeps
+  alive what its folded members reach. Before, an unreached object or class counted its methods under itself. Code
+  that only one of those methods called was then a `callers_unreached` claim with no dynamic use, so it was
+  `strong_inference`. With the new methods, Express's `sendfile` (called only from `res.sendFile`, folded under
+  `res`) became such a strong claim. The same was already true for a Python class loaded by name.
+- **Vendored code.** The extractor changes are in `engine.py`; the review round adds the cross-file index in
+  `extract.py` and the marker lists in `cli.py` and `watch.py`. All are marked "Verinoda patch" and listed in
+  docs/UPSTREAM.md ("Modified"). `cache._AST_CACHE_SCHEMA` goes from 8 to 10.
+- **Review round.** A review found that the first version overstated how isolated the new symbols were:
+  - In the file, a method `res.send` took the bare name `send` from a module function `send` defined before it.
+    The new refusal then dropped `other() -> send()` with nothing to fall back to, and a `send` passed by value
+    went the same way. A method assigned to a module object now takes no name in the file's bare-name map.
+  - Across files, the shared call pass of `extract()` matched bare calls and names passed by value against every
+    node label, including the new nested functions and methods. So `Form() -> reset()` bound to a hook's nested
+    `reset` when `reset` was the caller's own local, and in axios `stopUnixServer() -> done()` (a Promise
+    executor's parameter) and `factory() -> unsubscribe()` (a local `const`) were false edges. In express,
+    `.path()` and `.use()` of `app` were targets of false `indirect_call` edges from a parameter and a local. The
+    engine now marks JS/TS nested functions, methods assigned to a module object and `Foo.prototype.bar` methods
+    with `_no_bare_name`, and the pass leaves them out of its bare-name and by-value index. None of them can be
+    imported under its bare name. Member calls reach the methods through the member resolvers, which do not read
+    that index. Prototype methods had the same flaw before this change. In express, application.js's
+    `resolve('views')` (node:path's `resolve`) bound to `View.prototype.resolve` once the call was inside the new
+    method `app.defaultConfiguration`.
+  - The extraction diff measured `extract_js` file by file, so it never saw these edges. The cross-file delta is now
+    measured with `extract()` over each whole corpus (see Measured).
+  - The marker is persisted for unchanged files on incremental builds (`cli.py`, `watch.py`), as `_callable` is.
+
+### 141.3 Measured
+
+Benchmark (`benchmarks/realworld/run.py`) on private copies of the two pinned clones. The copies have the same sha,
+were copied from `C:/vbench` without `.verinoda/`, and `--work` pointed at them, because other runs were using the
+shared clones at the same time. Before: the code at f4ca326 (`--verinoda-root` on a `git archive` of it). After:
+the committed change. All runs used one machine, one process at a time, with other agents' work running beside
+them.
+
+| repository | gold v1 before | gold v1 after | gold v2 before / after | crashes, timeouts | clean after |
+|---|---:|---:|---:|---|---|
+| expressjs/express v5.2.1 | 4/10 | 7/10 | 2/2 / 2/2 | 0, 0 | yes |
+| fastapi/full-stack-fastapi-template 0.12.0 | 7/10 | 8/10 | - | 0, 0 | yes |
+
+- New hits: express `json-calls-stringify`, `json-calls-send` and `sendfile-calls-helper`; template
+  `frontend-login-calls-sdk`. No hit was lost. The express scenario `trace lib/response.js::json stringify` went
+  from `unresolved` (exit 2) to `found` (exit 0).
+- Three earlier "after" runs during the work gave the same gold.
+- `render-reaches-tryrender` still misses: "source not resolved" before, "no directed path" after (see Limits).
+- Wall times varied with the load from the other runs: express `analyze` median 3.3 s before, and 7.3 s, 2.9 s and
+  3.1 s in after runs with the same output size. No time difference is claimed.
+- `verinoda scan` of express: 441 nodes and 701 edges before, 497 and 826 after. Template: 1448 and 3395 before,
+  1488 and 3468 after.
+- `map --view dead` (a scan, then the view, on the same copies):
+  - express before: 66 code symbols, 18 dead, 0 strong, 36 weak.
+  - express after: 122 code symbols, 31 dead, 0 strong, 49 weak. The new methods of the module objects `res` and
+    `req` are counted under them. Methods of `app` that nothing calls in the repository are weak claims, kept weak
+    by name mentions.
+  - Template: 630 -> 669 code symbols; dead 188, strong 17 and weak 194 both before and after, with the same strong
+    claims.
+  - With the extractor change but without the dead-view change, express had 1 strong claim: `sendfile`.
+
+Extraction diff (`extract_js` per file, before vs after) on 494 JS/TS files: the private copies of express, axios
+and the template's frontend, plus `tests_upstream/fixtures`:
+
+- Nodes 2611 -> 2754 (+144, -1).
+- Edges 5137 -> 5357. Added 238: 92 `calls`, 88 `contains`, 56 `method`, 2 `indirect_call`. Removed 18: 17 `calls`,
+  1 `contains`.
+- Express: +50 `method` edges (46 in lib/: response.js 22, application.js 16, request.js 8; 4 in examples), +31
+  `calls`, nothing removed.
+- Axios: +48 nodes (6 methods, the rest nested functions), +50 / -16 `calls`.
+- Template frontend: +40 nested functions, +11 / -1 `calls`.
+- `tests_upstream/fixtures`: no change.
+- Every removed edge was read. Each removed `calls` edge is now made by the nested function that holds the call:
+  `toJSONObject -> isObject` became `toJSONObject.visit -> isObject`, with `toJSONObject -> visit`. The removed node
+  is axios `validator.js` `formatMessage`, which is now nested in the method `validators.transitional`.
+- Extraction time over the 494 files, in two runs: 18.8 s before and 15.3 s after, then 23.8 s before and 17.7 s
+  after. No slowdown.
+- The review round leaves this per-file output unchanged: `extract_js` over 489 files (the three corpora and
+  `tests_upstream/fixtures`) gives the same 2312 nodes and 4886 edges before and after the round.
+
+Cross-file delta (review round): `extract()` over each whole corpus, so the shared cross-file pass is included. The
+corpora are the JS/TS files of the express, axios and template-frontend clones at their pinned shas, without
+`node_modules`, `dist`, `.min.js` and `.d.ts`. The table counts `calls` and `indirect_call` edges whose two ends are
+in different files: f4ca326 (before), the first version of this change, and the commit after the review round.
+
+| corpus | files | nodes before / after | cross-file, first version vs before | cross-file, after review vs before |
+|---|---:|---:|---|---|
+| express | 142 | 278 / 334 | +11 / -6 | +7 / -2 |
+| axios | 238 | 1204 / 1251 | +10 / -2 | +6 / -2 |
+| template frontend | 100 | 636 / 676 | +26 / -4 | +12 / -4 |
+
+- Every edge of the last column was read.
+  - Express added: 6 calls from the new methods to `lib/utils.js` helpers they import (`.set() -> compileETag`,
+    `compileQueryParser`, `compileTrust`; `.format() -> normalizeType`, `normalizeTypes`; `.send() -> setCharset`),
+    all right. One `indirect_call` moved from the file node of examples/view-locals/user.js to its new method
+    `User.all`: `users` there is user.js's own variable, not index.js's `users()`. It was a false edge before and
+    still is.
+  - Express removed: that same edge's old form, and `examples/resource/index.js -> format()` in
+    content-negotiation (a local `format`), which was false.
+  - Axios added: 6 calls that moved from an outer function to the nested function or method that makes them
+    (`onabort -> CanceledError`, `trackRequestStream -> trackStream`, ...). Removed: the outer form of one of them,
+    and a false `parseParameter -> start()` into a smoke test.
+  - Template added: 12 calls in the generated client that moved to nested functions (`beforeRequest ->
+    mergeHeaders`, `querySerializer -> serializeArrayParam`, ...). Removed: 4 member calls on SDK services
+    (`DeleteUser() -> .deleteUser()`, `useAuth() -> .loginAccessToken()`, ...). They are now made inside nested
+    functions, and plain `extract()` does not bind them from there. `verinoda scan` does: the gold fact
+    `frontend-login-calls-sdk` is a hit.
+- What the review round removed against the first version: express `.path()` and `.use()` targets (a parameter and
+  a local) and `req.signedCookies.js -> .cookie()` (a local `cookie`), all false; `.defaultConfiguration() -> View
+  .resolve()` (it is node:path's `resolve`), false; axios `stopUnixServer -> done()` and `factory -> unsubscribe()`,
+  false; template one `indirect_call` to client.gen.ts's nested `request` (a test fixture's parameter), false. Also
+  gone: two calls from axios throttle.test.js to throttle.js's nested `throttled` and `flush`, and 13 template calls
+  into the hooks' nested `showSuccessToast` and `logout`. These name the right function only because the caller
+  destructures it from the returned value (`const [throttled, flush] = throttle(...)`,
+  `const { logout } = useAuth()`); the pass has no evidence of that, so they are not kept (see Limits).
+- Express also has 4 `indirect_call` edges from tests to examples/view-locals/index.js `count()`, where `count` is a
+  test's local in an anonymous callback. They exist at f4ca326 too. The first version hid them by accident: the new
+  method `User.count` made the name ambiguous.
+
+Benchmark rerun (review round), on the shared clones with `benchmarks/realworld/run.py --repos <name>`, one at a
+time: express gold v1 7/10 and v2 2/2, the template 8/10, axios 7/10 (the same 7 as the 2026-10-02 run). No
+crashes or timeouts, clean after each.
+
+### 141.4 Not done
+
+- Member calls from another file reach the new methods only where a member resolver knows the receiver's type.
+  `res.json(...)` in an app, a test or an Express example is called on a parameter `res` of no known type.
+  `render-reaches-tryrender` misses for the same reason: `res.render` calls `app.render` on `this.req.app`, a local
+  of no known type. Bare calls and names passed by value from another file never reach them, nor a nested function
+  or a prototype method (the `_no_bare_name` marker).
+- A function a hook or factory returns and the caller destructures (`const { logout } = useAuth()`,
+  `const [throttled, flush] = throttle(...)`) is a nested function, so the caller's `logout()` gets no edge. The
+  first version bound these by name alone; they were right in the template but by the same rule that gave the
+  false edges.
+- In the same file, a nested function passed by value (`run(reset)`) from outside its scope can still be bound to
+  it when no module-level function has that name: the by-value lookup does not walk scopes. The nested-scope walk
+  for bare calls also ignores a non-function local of an inner scope that shadows a nested function's name (Python
+  has the same gap).
+- Comma and other sequence forms (`var q = {}; q.z = function () {}, q.w = function () {};`, common in minified
+  code) make no symbol: a sequence expression is not walked.
+- A test's local in an anonymous callback does not shadow a name passed by value from that callback (express tests
+  passing `count` bind to examples/view-locals `count()`); this is older than this change.
+- Only module-level assignments whose receiver the file binds at module level make a symbol. `$.fn.x = fn`,
+  `a.b.c = fn`, `app[method] = fn` (Express's `methods.forEach`), `window.x = fn` and an assignment to a parameter
+  inside a function make none.
+- The function's own name (`function contentType` in `res.type = ...`) is not a name or alias of the symbol.
+- `Foo.x = fn` and `Foo.prototype.x = fn` with the same `x` share one id.
+- `this.set()` in `app.init` makes no edge to `app.set`. A member call named like a builtin global of any language
+  (`set`) is not bound in the file; this is an older rule, kept here.
+- A module-level `res.m()` binds to the module's `res`, even where the code means another object of the same name in
+  a closure that does not bind `res` itself.
+- A nested function passed by value in an object (`useMutation({ mutationFn: login })`) gets no edge from the
+  enclosing function. Only `contains` links `useAuth` to `login`.
+- Two nested functions with the same name in sibling callbacks of one function share one id.
+- The closure capture is an over-approximation: any name bound anywhere in the enclosing body hides an indirect
+  edge to a same-named function.
+
+### 141.5 Tests
+
+- `tests/test_graph_precision.py`: four new tests on fixtures written to `tmp_path`. The fixtures are an
+  Express-shaped response.js and application.js (with an alias chain), a TS hook with nested functions, and a file
+  with a nested `abort`. The tests are `test_functions_assigned_to_a_module_object_are_its_methods`,
+  `test_calls_from_and_to_assigned_methods_resolve`, `test_a_function_bound_inside_a_function_is_its_own_symbol` and
+  `test_a_nested_function_is_not_a_property_and_sees_the_enclosing_locals`. All four fail on f4ca326.
+- `tests/test_deadcode.py`: `test_what_a_kept_alive_class_reaches_through_its_members_is_weak_too` (a Python class
+  named in a string, whose method alone calls a helper). It fails on f4ca326 (the helper is `strong_inference`).
+- Review round, `tests/test_graph_precision.py`: four more tests, each failing on the first version of this change
+  (dd46469):
+  - `test_a_later_assigned_method_does_not_hide_a_module_function_of_the_same_name` (`function send` before
+    `res.send = function send2`: the bare call and the name passed by value bind to the module function);
+  - `test_nested_functions_are_not_bound_from_another_file_by_a_bare_name` (hooks.ts / Form.ts);
+  - `test_assigned_methods_are_not_bound_from_another_file_by_a_bare_name` (lib.js / main.js, with a
+    `View.prototype.resolve` and a bare `resolve()`);
+  - `test_scoped_js_symbols_carry_the_no_bare_name_marker`.
+- Run: `tests/test_graph_precision.py`, `tests/test_deadcode.py` and `tests/test_docs.py` together: 58 passed (23,
+  16 and 19).
+
 ## Sources
 
 - **Retrieval:**

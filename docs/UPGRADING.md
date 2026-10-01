@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D164)
+## Upgrading from 0.4.0 (D137-D168)
 
 ### D137: Trigram regex index
 
@@ -334,6 +334,109 @@ Nothing to migrate. A single-project server (`mcp serve`, `--repo`, `--repo-of`)
   `index_status()` and `project_entry()`; `build_server(None, hub=ProjectHub(...))`; `listed_of()` and
   `index_state()` in `verinoda.mcp.server`. `serve()` takes `projects=`, `max_loaded=`, `transport=`, `host=`,
   `port=` and `state_file=`.
+
+### D165: Definition lines: overload implementations and annotated declarations
+
+- The first `update` after upgrading rebuilds the graph: the extraction stamp and
+  `_AST_CACHE_SCHEMA` 9 both change.
+- Java, Kotlin and C# methods and classes with an annotation or attribute above their name are then
+  cited one or more lines lower, at the name. Their spans do not change.
+- Python functions with `@overload` stubs are cited at the implementation, with the stubs' lines
+  in `metadata.overloads`.
+- Claims citing the old line still resolve: the span covers the annotation, and review and anchor
+  lookups accept the first line too.
+- Tree-sitter anchor facts are computed again once (new cache key `ts1.def2`). Anchors already
+  stored keep their scheme and stay valid.
+
+### D166: Route prefixes, trailing slashes and bounded route output
+
+`verinoda routes` has these changes:
+
+- **Prefixes.** It now shows FastAPI, Flask and APIRouter prefixes given by an expression:
+  - A module constant or a pydantic settings default is resolved, also from another module, and the row
+    cites it in `prefix_from`.
+  - Any other expression keeps its routes, marked `mount: "prefix not resolved: <expr>"`. Before, the
+    prefix was silently dropped, or a `register_blueprint` mount was lost.
+  - The text view's `(mount not found)` is now `(mount <reason>)`.
+- **Trailing slash.** Python route paths keep the trailing `/` the code writes, so `/api/v1/items/` is no
+  longer shown as `/api/v1/items`. Gold files or scripts that compared the path without the slash need
+  updating.
+- **Labels.** Rows and calls in test or example code have `code: "test"` or `code: "example"`.
+- **Test calls.** A test or example call matches the routes of the app it imports first (the full
+  import closure, and routes mounted on it), so fewer calls are ambiguous. Such an edge notes how many
+  routes outside also match the path. A supertest call to an imported app with no matching route is now
+  `unmatched` with a `why`.
+- **Unresolved prefixes.** A call that fits only routes whose prefix is not resolved is now unmatched,
+  with a `why`. Before, it was linked with a note.
+- **Bounded JSON.** The JSON is bounded by default:
+  - `ambiguous` entries are groups (`calls`, `also_at`, `candidates_total`), at most 50 groups of 5
+    candidates;
+  - `unmatched` and `method_mismatch` hold at most 50 entries each, with `<key>_more` counts;
+  - `ambiguous_calls` and `<key>_by_code` hold the totals;
+  - `routes --all` restores every call and every candidate.
+- **Sidecar counts.** The sidecar's cross-service counts are now exact. Before, they stopped at 200 per
+  list.
+- **Facts version.** `FACTS_VERSION` is 4, so the first `update` after upgrading parses the route files
+  again.
+- **Harness.** A routes gold check's `method` now really is checked against `methods`, and `at`
+  (file:line) is accepted. summary.md merges environment lines whose `verinoda/` code is the same.
+
+### D167: Distinct symbols never share a node
+
+`verinoda update` is enough, and no `scan` is needed:
+
+- The extractor's source changed and the AST cache schema went up (now 11). So the extraction stamp
+  recorded in build_stats.json no longer matches, and the next `update` rebuilds the whole graph,
+  even when no file changed. The old AST cache entries are not reused: they live under
+  `cache/ast/v<version>-s8/`, which is swept.
+- `verinoda scan` rebuilds everything too.
+- Most ids stay. The definitions that used to vanish get new `<id>_<6 hex>` ids. Some ids that
+  existed before change, or now name a different symbol:
+  - When a private twin was declared before its public twin (`__transform` before `_transform` in
+    axios, `_Q` before `function q`), the old graph gave the plain id to the private one. Now it
+    goes to the public one, and the private one gets `<id>_<hash>`.
+  - Java `_x` methods that share an id with `x` were numbered in `x`'s overload family
+    (`..._x_2`, `..._x_3`). They now have `<id>_<hash>` and `<id>_<hash>_2`. `x`'s own overloads
+    keep `..._x_2` and so on, but a number that used to belong to `_x` can now belong to an
+    overload of `x`.
+
+  A record keyed by such a node id (a claim's subject id, a saved selector that is a node id) names
+  the other symbol after the rebuild. Evidence anchors pin cited lines by symbol name and
+  fingerprint (`verinoda/anchors.py`), not by node id. Records about a merged node were already
+  about a mix of two symbols. After the rebuild they stay on the public definition.
+- The rebuild record (`rebuild_record.json`) is keyed by a stamp of project_index and index.py, and
+  both changed, so it is not reused.
+- `python_facts.json` and the Python cross-file cache are keyed by their own code stamps, which did
+  not change. They hold no node ids of the split definitions: their call sources are re-routed by
+  `case_ids` on each build.
+- A process that keeps running across the upgrade, such as an MCP server, sees changed code files
+  and stops trusting its rebuild record. Restart it to pick up the new resolver.
+- Answers change in one visible way. A selector written as code that matches a symbol only when
+  case is folded (`sendFile` for `sendfile`, in a case-sensitive language) is now `similar` with a
+  note, or `ambiguous` when it matches several, never `exact`. `trace` shows the note under
+  `fuzzy`. The rename preview (`rename_preview`) and the callers/callees view (`butterfly`) run
+  only on an exact match. They now return the matched node as a candidate, with the note, instead
+  of running.
+
+### D168: JavaScript assigned methods and nested functions
+
+The AST cache schema is now 12 (10 on the branch; merged after the id and definition-line fixes), so the first `verinoda scan` or `verinoda update` after upgrading extracts every
+file again.
+
+JavaScript and TypeScript graphs gain symbols:
+
+- methods assigned to a module-level object (`res.json`, `app.render`; label `.json()`, owner `res`), alias chains
+  included;
+- functions bound inside functions (`useAuth`'s `login`).
+
+Calls made inside those functions now start from them. So `q`, `trace`, impact and `map` answers that named the
+outer function for such a call now name the inner one. A selector like `lib/response.js::sendFile` now resolves to
+the method instead of a same-named function that differs only in case. In the dead view, code reached only through
+a member of a weak unit is weak as well (`via`).
+
+A bare call or a name passed by value in one file no longer binds to a nested function, an object-assigned method
+or a `Foo.prototype` method of another file. Some cross-file edges therefore go away, including right ones
+to a function a hook returns and the caller destructures (`const { logout } = useAuth()`).
 
 ## Upgrading from 0.3.2 (D60-D136)
 

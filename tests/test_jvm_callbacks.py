@@ -215,11 +215,11 @@ def test_review_dependents_follow_the_callback(glow, tmp_path):
 def test_framework_entry_points_of_a_fabric_mod(glow):
     df = am.dataflow(index.load(glow))
     entries = {e["symbol"] + "@" + e["at"].rsplit("/", 1)[-1]: e for e in df["entries"]}
-    init = entries[".onInitialize()@GlowMod.java:19"]
+    init = entries[".onInitialize()@GlowMod.java:20"]
     assert init["basis"] == "declared"
     assert any('fabric.mod.json entrypoint "main"' in w for w in init["why"])
     assert any("implements ModInitializer" in w for w in init["why"])
-    assert entries[".onInitializeClient()@GlowModClient.java:18"]["basis"] == "declared"
+    assert entries[".onInitializeClient()@GlowModClient.java:19"]["basis"] == "declared"
     tick = entries[".tick()@RepairScheduler.java:33"]
     assert tick["basis"] == "framework"
     assert tick["why"] == [f"callback registered with ServerTickEvents.END_SERVER_TICK.register(...) at {TICK}:24"]
@@ -229,7 +229,7 @@ def test_framework_entry_points_of_a_fabric_mod(glow):
     assert tiers == sorted(tiers)
     assert not any("gametest" in e["at"] for e in df["entries"])   # a test source set is no entry point
     # the dataflow view is no longer empty: onInitialize -> GlowConfig.load writes the config file
-    path = next(p for p in df["paths"] if p["entry"].endswith("GlowMod.java:19"))
+    path = next(p for p in df["paths"] if p["entry"].endswith("GlowMod.java:20"))
     assert [h["to"] for h in path["hops"]] == [".load()"] and path["sink_kinds"] == ["file-write"]
     assert any("JVM mods" in lim for lim in df["coverage"]["limits"])
 
@@ -238,10 +238,10 @@ def test_framework_entry_points_of_a_neoforge_mod(forge):
     df = am.dataflow(index.load(forge))
     by = {(e["symbol"], e["at"].rsplit("/", 1)[-1]): e for e in df["entries"]}
     assert by[(".EmberForge()", "EmberForge.java:21")]["why"] == ["@Mod class: the mod loader constructs it"]
-    click = by[(".onLeftClickForge()", "ModEvents.java:26")]
+    click = by[(".onLeftClickForge()", "ModEvents.java:27")]
     assert click["basis"] == "framework"
     assert click["why"] == ["@SubscribeEvent handler of PlayerInteractEvent.LeftClickBlock"]
-    assert by[("ModEvents", "ModEvents.java:15")]["basis"] == "framework"   # @EventBusSubscriber
+    assert by[("ModEvents", "ModEvents.java:16")]["basis"] == "framework"   # @EventBusSubscriber
     assert by[(".serverTick()", "EmberForgeBlockEntity.java:75")]["basis"] == "callback"
     sinks = {s["symbol"]: s for s in df["sinks"]}
     assert sinks[".stoke()"]["evidence"][0]["kind"] == "saved-data-write (dirty flag)"

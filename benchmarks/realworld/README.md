@@ -92,8 +92,13 @@ each leave a marker file if executed.
    each with `source` (file:line) and a `check` of kind `q` (`cites`: the file:line an `at` of the
    rows must be, exactly), `trace` (`via_at`: file:line of edges of one path, `via_files`: files
    where an edge of that path is, `source_at` / `target_at`: where the ends must resolve), `query`
-   (`expect_file` in the `top_k`), `routes` (method, path, handler) or `schema` (table). Commit the
-   gold file before running Verinoda on that repository.
+   (`expect_file` in the `top_k`), `routes` or `schema` (table). Commit the gold file before running
+   Verinoda on that repository. A `routes` check names the full `path` as the route table shows it
+   (with the mount prefixes, and a trailing `/` where the code writes one); `method` must be in the
+   row's `methods` list (a row for any method does not count); `handler` is text the row must
+   contain, in practice the handler's graph node id (`examples_route_separation_post_list`: lower
+   case, underscores, no file extension), not a file path; `at` is the file:line where the route is
+   declared (the row's `at`), the way to name a handler without its node id.
 4. Run it alone: `python benchmarks/realworld/run.py --repos owner/name`.
 
 A gold fact is never edited after the first run. A check written badly gets a new entry appended

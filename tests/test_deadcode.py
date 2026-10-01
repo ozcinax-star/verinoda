@@ -407,3 +407,25 @@ def test_mcp_dead_view_cuts_the_searched_lists_before_the_claims(plugins, pview)
         assert cut["searched.entry_points"]["kept"] == 1 and cut["searched.entry_modules"]["kept"] == 1
         assert len(res["claims"]) + res.get("claims_not_shown", 0) == total  # the count stays right when cut
         assert ("claims" in cut) == (len(res["claims"]) < total) and res["claims"]
+
+
+def test_what_a_kept_alive_class_reaches_through_its_members_is_weak_too(tmp_path):
+    # an unreached class named in a string (a plugin loaded by name) counts its methods under it; the helper only
+    # its method calls is kept alive with it, not a strong dead claim (Express's `res.sendFile -> sendfile`)
+    files = {
+        "pkg/__init__.py": '"""Plugins."""\n',
+        "pkg/kept.py": ('class PluginQqz:\n    def go(self):\n        return helper_qqz()\n\n\n'
+                        'def helper_qqz():\n    return 1\n'),
+        "run.py": ('import pkg.kept\n\nNAMES = ["PluginQqz"]\n\n\ndef main():\n    return NAMES\n\n\n'
+                   'if __name__ == "__main__":\n    main()\n'),
+    }
+    for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text(text, encoding="utf-8")
+    _scan(tmp_path)
+    v = deadcode.dead_code(index.load(tmp_path))
+    plugin = _claim(v, "PluginQqz")
+    assert plugin["status"] == "weak_inference" and _claim(v, ".go()") is None   # the method counted under it
+    helper = _claim(v, "helper_qqz()")
+    assert helper["kind"] == "callers_unreached" and helper["status"] == "weak_inference"
+    assert helper["dynamic_uses"][0]["kind"] == "via" and "PluginQqz" in helper["dynamic_uses"][0]["why"]

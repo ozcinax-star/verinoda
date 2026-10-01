@@ -3864,8 +3864,9 @@ def dispatch_command(cmd: str) -> None:
                         }
                         # Keep bounded resolver identity for unchanged nodes;
                         # these markers cannot be reconstructed from labels.
+                        # Verinoda patch: _no_bare_name keeps JS/TS scoped symbols out of bare-name matching.
                         for _marker in (
-                            "_callable", "_callable_class", "_elixir_module",
+                            "_callable", "_callable_class", "_elixir_module", "_no_bare_name",
                             "_rust_impl_key", "_rust_declaration_count",
                         ):
                             if _node.get(_marker):

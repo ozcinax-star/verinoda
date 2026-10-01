@@ -503,6 +503,7 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
     kept_by_protocol = 0
     units: list[str] = []
     folded: Counter = Counter()
+    folded_members: dict[str, list[str]] = {}   # unit -> the members counted under it
     for n in considered:
         if n in reached or g.file(n) in dead_file_set:
             continue
@@ -511,6 +512,7 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
             top = up
         if top != n:
             folded[top] += 1
+            folded_members.setdefault(top, []).append(n)
             continue
         cls = owner.get(n)
         if cls and _protocol(_bare(g, n), _bare(g, cls)):
@@ -568,7 +570,8 @@ def dead_code(g: Graph, limit: int = DEFAULT_LIMIT) -> dict:
     unit_set = set(units)
     node_file = {n: f for f in dead_files for n in (file_node[f], *g.symbols_in(f))}
     via: dict[str, tuple[str, str]] = {}                        # unit or orphan file -> (at, name) of the source
-    sources = ([(am._loc(g, n), g.label(n), [n]) for n in units if found[n][1]]
+    # a unit kept alive keeps the members counted under it (an object's or class's methods) alive too
+    sources = ([(am._loc(g, n), g.label(n), [n, *folded_members.get(n, ())]) for n in units if found[n][1]]
                + [(f"{f}:1", f, [file_node[f], *g.symbols_in(f)]) for f in dead_files if file_found[f][0]])
     for at, name, start_nodes in sorted(sources):
         for m in reach(start_nodes, reached):
