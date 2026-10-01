@@ -560,7 +560,9 @@ class AtlasTools:
         self._span_stat: dict[str, tuple | None] = {}   # file -> stat when its cached spans were noted
         self._span_noted = 0                              # entries of g._spans already noted
         self._lex_cache: tuple[Any, Any] | None = None
-        self._query_memo: OrderedDict[tuple, tuple[tuple, dict]] = OrderedDict()
+        self._query_memo: OrderedDict[tuple, tuple[tuple, Any]] = OrderedDict()
+        # the passages project_query printed in this session: file -> (its stat then, [(a, b), ...])
+        self._session_seen: dict[str, tuple[tuple | None, list[tuple[int, int]]]] = {}
         self._background: subprocess.Popen | None = None  # a `verinoda update` started after a slow analyze
         self.racy_ns = RACY_NS
         self._call_started_ns = time.time_ns()
@@ -812,33 +814,64 @@ class AtlasTools:
             # the budget follows the config / environment, and stale files change the answer's notes: both key the memo
             key = (q, n, fmt, budget, tuple(fresh.get("files") or ()))
             hit = self._query_memo.get(key)
+            res = None
             if hit is not None and hit[0] == self._query_deps(g, tuple(f for f, _ in hit[0][-1])):
                 self._query_memo.move_to_end(key)
                 self.cache_stats["query_memo_hits"] += 1
-                return hit[1]
-            try:
-                res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget), filters=True)
-            except query_filters.FilterError as exc:
-                raise ToolFailure("invalid_argument", str(exc),
-                                  "filters: path:GLOB lang:NAME symbol:NAME is:vendored|generated|minified|test "
-                                  "/regex/, AND OR NOT, -filter, parentheses") from None
-            retrieval.attach_freshness(res, g, fresh)
+                res = hit[1]
+            if res is None:
+                try:
+                    res = retrieval.retrieve(g, q, retrieval.Budget(max_items=n, max_chars=budget), filters=True)
+                except query_filters.FilterError as exc:
+                    raise ToolFailure("invalid_argument", str(exc),
+                                      "filters: path:GLOB lang:NAME symbol:NAME is:vendored|generated|minified|test "
+                                      "/regex/, AND OR NOT, -filter, parentheses") from None
+                retrieval.attach_freshness(res, g, fresh)
+                rd = getattr(res, "render", None)
+                if rd is not None:  # the same answer is recomputed only when one of its inputs changed on disk
+                    files = tuple(sorted({h.file for h in rd.ranking.hits} | {i["file"] for i in res.get("items", [])}))
+                    deps = self._query_deps(g, files)
+                    if not any(self._racy(st) for st in _deps_stats(deps)):
+                        self._query_memo[key] = (deps, res)
+                        while len(self._query_memo) > QUERY_MEMO_SIZE:
+                            self._query_memo.popitem(last=False)
             if fmt == "json":
-                out = _jsonable(res)
-            else:
-                # the escaped JSON string must still fit the response cap
-                chars = min(budget, max(800, int((self.max_chars - 200) * 0.85)))
-                out = {"format": "text", "question": q, "text": retrieval.render_text(res, budget_chars=chars)}
-            rd = getattr(res, "render", None)
-            if rd is not None:  # the same answer is recomputed only when one of its inputs changed on disk
-                files = tuple(sorted({h.file for h in rd.ranking.hits} | {i["file"] for i in res.get("items", [])}))
-                deps = self._query_deps(g, files)
-                if not any(self._racy(st) for st in _deps_stats(deps)):
-                    self._query_memo[key] = (deps, out)
-                    while len(self._query_memo) > QUERY_MEMO_SIZE:
-                        self._query_memo.popitem(last=False)
-            return out
+                return _jsonable(res)
+            # the escaped JSON string must still fit the response cap
+            chars = min(budget, max(800, int((self.max_chars - 200) * 0.85)))
+            dedup = os.environ.get("VERINODA_QUERY_DEDUP", "1") != "0"
+            returned: list[tuple[str, int, int]] = []
+            text = retrieval.render_text(res, budget_chars=chars, seen=self._seen_now() if dedup else None,
+                                         returned=returned)
+            if dedup:
+                self._note_returned(returned)
+            return {"format": "text", "question": q, "text": text}
         return self._run("project_query", go, need="graph")
+
+    def _stat_key(self, rel: str) -> tuple | None:
+        try:
+            st = (self.repo / rel).stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
+    def _seen_now(self) -> dict[str, list[tuple[int, int]]]:
+        """The spans printed earlier in this session of files that did not change since (a changed file's passages
+        are new again)."""
+        out = {}
+        for rel, (stamp, spans) in list(self._session_seen.items()):
+            if stamp is not None and stamp == self._stat_key(rel):
+                out[rel] = spans
+            else:
+                del self._session_seen[rel]
+        return out
+
+    def _note_returned(self, returned: list[tuple[str, int, int]]) -> None:
+        for rel, a, b in returned:
+            stamp, spans = self._session_seen.get(rel, (self._stat_key(rel), []))
+            if (a, b) not in spans:
+                spans.append((a, b))
+            self._session_seen[rel] = (stamp, spans)
 
     def grep_context(self, pattern: str, path: str | None = None) -> dict:
         """What the static graph says about the symbols a Grep searched for, as a Claude Code PostToolUse hook

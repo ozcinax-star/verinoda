@@ -445,6 +445,7 @@ def test_project_query_follows_the_question_shape_budget_when_it_is_on(repo, mon
 
     q = "where is compute_total defined?"  # one clause
     monkeypatch.setattr(retrieval, "SHAPE_CHARS_NARROW", 900)  # the example is too small to fill 4800
+    monkeypatch.setenv("VERINODA_QUERY_DEDUP", "0")   # one session asks twice: compare the full answers
     t = AtlasTools(repo)
     monkeypatch.setenv("VERINODA_SHAPE_BUDGET", "0")
     wide = t.project_query(q)
@@ -659,6 +660,7 @@ def test_the_kept_graph_follows_the_receiver_call_sidecar_when_graph_json_stays(
 def test_project_query_answers_are_kept_until_an_input_changes(fresh_repo, monkeypatch):
     from verinoda import freshness, index, retrieval
 
+    monkeypatch.setenv("VERINODA_QUERY_DEDUP", "0")   # the same text twice: the session's dedup is off here
     t = AtlasTools(fresh_repo)
     t.racy_ns = 0  # the fixture wrote every file a moment ago; see the racy-file test for the default
     real = retrieval.retrieve
@@ -697,7 +699,8 @@ def test_project_query_answers_are_kept_until_an_input_changes(fresh_repo, monke
     assert t.project_query(QUESTION, max_items=5) == reindexed and t.cache_stats["query_memo_hits"] == hits + 1
 
 
-def test_nothing_is_kept_from_a_file_modified_close_to_the_call(fresh_repo):
+def test_nothing_is_kept_from_a_file_modified_close_to_the_call(fresh_repo, monkeypatch):
+    monkeypatch.setenv("VERINODA_QUERY_DEDUP", "0")
     t = AtlasTools(fresh_repo)
     assert t.racy_ns == mcp_server.RACY_NS == 2_000_000_000
     t.racy_ns = time.time_ns()  # every file counts as modified just now (copytree kept the old mtimes)
@@ -1550,7 +1553,9 @@ def test_stdio_roundtrip(repo, tmp_path):
     sc = _structured(q)
     if sc is not None:
         assert sc == {"format": "text", "question": QUESTION, "text": text}
-    assert q_again.content[0].text == text
+    # the same question again in the same session: what it printed is listed, not printed twice
+    again = q_again.content[0].text
+    assert again != text and "already returned earlier in this session, not repeated" in again
     assert _payload(qj) == _norm(core)
 
     dp = _payload(d)
@@ -1773,3 +1778,24 @@ def test_the_hooks_template_calls_grep_context_through_run_tool():
     assert entry["matcher"] == "Grep" and hook["type"] == "mcp_tool" and hook["server"] == "verinoda"
     assert hook["tool"] == mcp_server.GATEWAY and hook["input"]["name"] == "grep_context"
     assert hook["input"]["arguments"] == {"pattern": "${tool_input.pattern}"}
+
+
+def test_a_repeated_query_in_one_session_returns_only_new_passages(fresh_repo):
+    t = AtlasTools(fresh_repo)
+    t.racy_ns = 0
+    first = t.project_query(QUESTION, max_items=5)["text"]
+    heads = [ln.split()[1] for ln in first.splitlines() if ln.startswith("## ")]
+    assert heads
+    again = t.project_query(QUESTION, max_items=5)["text"]
+    assert not any(ln.startswith(f"## {h} ") for h in heads for ln in again.splitlines())
+    assert "already returned earlier in this session, not repeated" in again and heads[0] in again
+    # another session (a new server) sees them again
+    assert AtlasTools(fresh_repo).project_query(QUESTION, max_items=5)["text"] == first
+    # a file edited since: its passages are new again
+    rel = heads[0].rsplit(":", 1)[0]
+    p = fresh_repo / rel
+    p.write_text(p.read_text(encoding="utf-8") + "\n# edited\n", encoding="utf-8", newline="\n")
+    third = t.project_query(QUESTION, max_items=5)["text"]
+    assert any(ln.startswith(f"## {rel}:") for ln in third.splitlines())
+    # json answers are not deduplicated: they are data, not text an agent reads once
+    assert t.project_query(QUESTION, max_items=5, format="json")["items"]

@@ -602,8 +602,13 @@ def _filters_line(fb: dict) -> str:
     return f"{head} - none of the {ranked} units the ranked text matches passes them"
 
 
-def render_text(result: dict, budget_chars: int = 6000) -> str:
+def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[tuple[int, int]]] | None = None,
+                returned: list[tuple[str, int, int]] | None = None) -> str:
     """Plain text for a model, skeleton first, packed to ``budget_chars``.
+
+    ``seen`` (file -> spans): items an earlier answer of the same session already printed with their passages;
+    they are not printed again, only listed by location at the end, so the budget goes to new passages.
+    ``returned`` collects ``(file, a, b)`` of each item printed here with its passages.
 
     Works on the result of :func:`retrieve`. A result that went through JSON
     (no ranking attached) is rendered from its items alone.
@@ -648,7 +653,11 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
     rest: list[str] = []
     outlined = False
     sig_back: dict[int, tuple[int, str]] = {}  # passage block -> (its short header block, header with signature)
+    repeated: list[str] = []
     for i, h in enumerate(rd.ranking.hits):
+        if seen and any(x <= h.a and h.b <= y for x, y in seen.get(h.file, ())):
+            repeated.append(f"{h.file}:{h.a}-{h.b}")
+            continue
         if h.file.lower().endswith(PROSE_SUFFIXES):
             if prose >= TEXT_MAX_PROSE:
                 continue
@@ -733,12 +742,17 @@ def render_text(result: dict, budget_chars: int = 6000) -> str:
         # the lines printed, not the whole span: a method of a long class whose section showed two
         # other passages still gets its own section (with its callers)
         shown[h.file].extend(wins)
+        if returned is not None:
+            returned.append((h.file, a, b))
     if handle is not None:
         missing, n_missing = search_index.unindexed_matching(handle, rd.ranking.query)
         if missing:
             add(_clip(f"not indexed, and the path matches your words ({n_missing}): "
                       + "; ".join(f"{f} ({why})" for f, why in missing)
                       + ("; ..." if n_missing > len(missing) else ""), 400))
+    if repeated:
+        add(_clip("already returned earlier in this session, not repeated (read them there, or open the file): "
+                  + "; ".join(repeated[:12]) + (f"; +{len(repeated) - 12} more" if len(repeated) > 12 else ""), 500))
     more = len(rest) + max(0, rd.ranking.candidates - len(rd.ranking.hits))
     if outlined:
         add("(calls / called by: static call graph, '?' = inferred edge; may be incomplete)")
