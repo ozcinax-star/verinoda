@@ -1528,6 +1528,21 @@ def cmd_access_check(args) -> int:
     return 3 if c["absent"] or c["malformed"] else 4 if c["unknown"] else 0
 
 
+def cmd_mixin_check(args) -> int:
+    from verinoda import mixincheck
+
+    repo = _repo(args)
+    missing = [p for p in args.paths if not (Path(p).is_file() or (repo / p).is_file())]
+    if missing:
+        raise SystemExit(f"error: not a file: {', '.join(missing)}")
+    res = mixincheck.lookup(repo, [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths])
+    _emit(args, res, lambda r: print(mixincheck.render(r)))
+    if res["status"] == "no_mixins":
+        return 2
+    c = res["counts"]
+    return 3 if c["absent"] else 4 if c["unknown"] else 0
+
+
 def cmd_lang(args) -> int:
     from verinoda import langkeys
 
@@ -4104,6 +4119,11 @@ def build_parser() -> argparse.ArgumentParser:
                                                "(exit 3: absent or malformed; 4: something unknown)")
     sp.add_argument("paths", nargs="*", help="files to check instead of the ones found (.accesswidener, "
                                              ".classtweaker, accesstransformer.cfg)")
+    sp = add("mixin-check", cmd_mixin_check, "Mixin method selectors, @At targets and @Shadow members checked "
+                                             "against the target class's bytecode on the build's classpath: each "
+                                             "exists, is absent (with the nearest real ones) or unknown, with its "
+                                             "line (exit 3: absent; 4: something unknown; 2: no Mixin)")
+    sp.add_argument("paths", nargs="*", help="Java files to check instead of every file with a @Mixin")
     sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")
