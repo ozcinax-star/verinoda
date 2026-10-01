@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D111)
+## Upgrading from 0.3.2 (D60-D112)
 
 ### D63: Running a project's own tests safely
 
@@ -517,6 +517,13 @@ one file, a Python library imported by one product file, the environment read in
 the `decide record` command. `verinoda decide dismiss CANDIDATE --reason "..."` records the user's dismissal in
 `.verinoda/dismissed_decisions.json` (local; `--undo` lists it again). No MCP tool was added: UPGRADING's tool
 count does not change.
+
+### D112: Change risk score
+
+`review` (CLI and `--json`) and MCP `change_review` gain a `risk` key: a heuristic score out of 100 with every
+part listed (`value`, `weight`, `cap`, `points`, locations) and the inputs not measured named. The summary ends
+with one sentence giving the score. No tool, argument or exit code changes; the tool count in UPGRADING stays as
+it is.
 
 ### D60-D62
 

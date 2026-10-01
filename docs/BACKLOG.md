@@ -85,7 +85,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 8.4 | **Change risk score** | One roll-up of a change's findings, reach and test coverage, with the parts shown | Greptile, GitNexus | a score whose inputs are listed; never "safe" |
 | 8.5 | **Path-scoped review rules** | Rule files per directory (like BUGBOT.md), AGENTS.md and CLAUDE.md read as rules; off, warning and error modes | Cursor Bugbot, Greptile, CodeRabbit | a rule under `src/api/` applies only to changes there |
 | 8.6 | **Incremental re-review** | Review only commits since the last review, with repeated findings removed | Bugbot, Ellipsis | a second `review` shows only new findings |
 | 8.7 | **SARIF in and out, CI check status** | Import linter and CodeQL SARIF as evidence; export `review` and `check` as SARIF | GitHub Copilot review, Code Pathfinder | GitHub code scanning shows Verinoda's findings |

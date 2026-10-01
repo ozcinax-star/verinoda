@@ -8749,6 +8749,102 @@ distribution imported as `attr` in one file and `attrs` in another giving no can
 `parse_guard` accepts; a dismissal writing `.verinoda/.gitignore` and a BOM-prefixed list reading back. Touched modules' tests: `test_decide.py`,
 `test_decide_lifecycle.py`, `test_decide_review3.py`, `test_cli.py`, `test_docs.py`, `test_line_endings.py`.
 
+## 85. Change risk score (D112, 2026-10-01)
+
+### 85.1 Why
+
+`review` already measures a change from several directions: the findings it introduced (with the
+introduced/preexisting differential), the public definitions it breaks, the dependents it reaches, the tests that
+reach it, a coverage report's uncovered changed lines and what it could not tell. Nothing rolled these up, so two
+reviews could not be compared at a glance and a reader had to add the sections up in their head. Greptile and
+GitNexus show a single risk figure; ours must show how it was made and must never turn a low number into "safe".
+
+### 85.2 Decisions
+
+- No new command and no new MCP tool: the score is `review`'s `risk` key (`verinoda review --json`, the text
+  output, the MCP `change_review` response). The tool count is unchanged; no new argument, so the core menu text
+  is unchanged.
+- New module `verinoda/risk.py`; it reads only the finished review result (no second analysis, no git call).
+- The score is the sum over nine parts of `min(count x weight, cap)`; the caps add up to 100:
+
+  | part | counts | weight | cap |
+  |---|---|---|---|
+  | findings_strong | introduced findings, statically verified or strong_inference | 10 | 30 |
+  | findings_weak | introduced findings, weak_inference | 2 | 6 |
+  | api_breaking | `api_changes` breaking (counted before the list cap) | 10 | 20 |
+  | api_unknown | `api_changes` unknown | 2 | 4 |
+  | dependents | `dependents_total` | 1 | 10 |
+  | untested | `tests.no_test_reaches` | 5 | 10 |
+  | reach_unknown | `tests.reach_unknown` | 1 | 5 |
+  | uncovered_lines | changed lines a coverage report shows no test ran | 1 | 10 |
+  | unknowns | the review's `unknown` entries | 1 | 5 |
+
+  A tenth row, `preexisting` (the findings the base had too), is listed with weight 0: the base's findings are
+  not the change's risk, but the reader sees they exist. With `findings=all` the preexisting findings sit under
+  `concerns` and are still left out of the findings parts (`delta: preexisting`).
+- Every part is listed, also at zero, with its value, weight, cap, points and up to three `file:line` locations
+  (finding lines, API definitions, dependents, changed definitions, uncovered lines). The block's `evidence_at`
+  is their union (at most ten), in the same shape as a review finding (`status`, `finding`, `evidence_at`).
+- An input not measured is named in `not_measured` and its part has `value: null` and 0 points, never a zero
+  count: uncovered_lines when no coverage report was read (the reason names an unreadable report given with
+  `--coverage` apart from no report at all), when the report read measured none of the changed lines (the changed
+  files are not in it, or match it ambiguously), or for a planned change; `preexisting` for a planned change (no
+  base to compare findings with). Concerns left out by `concerns` and the review's `not_checked` are carried in
+  `notes`, as are a per-concern list cut at its cap, a graph older than some files (`graph_stale`: dependents and
+  the tests' reach may miss callers), a report that measured only some changed files, uncovered lines read from a
+  report older than the file (weak_inference, counted at full weight), and, for a planned change, that the
+  findings parts count findings in the targets' current code.
+- A review with no changed definition scores 0 with no parts (an unknown raised without a change stays in
+  `unknown`, not in the score), so the finding text, `--json`, the MCP response and the record agree.
+- Status: `strong_inference` (the weights are a choice). `review` needs a graph (it stops with "run `verinoda
+  scan` first" without one), so there is no no-graph case to score. Bands: low (< 20), medium (20-49),
+  high (>= 50). The finding text, the summary sentence, the text output and the MCP
+  note all say the score is a heuristic and a low one is never "safe".
+- MCP: `risk.compact()` keeps the score, band, status and one `value x weight = points` string per part (354
+  characters for a change with nothing found); `risk` is in `change_review`'s `keep` list, right after
+  `counts`, so the response cap cuts other lists first.
+- The review record stored in `analyses` keeps the score, band and status.
+
+### 85.3 Measured
+
+- The compact MCP block: 354 characters (every part at zero); the full block: about 2,300 characters.
+- The tests' worktree fixture (one body change reached by one caller and no test): `dependents` 1 and
+  `untested` 1 counted, the score equal to the sum of its parts, the same score in `--json`, the summary, the
+  text output and the MCP response.
+- No second analysis: the score reads the result dict only, so the review's time is unchanged within noise.
+
+Review round: a coverage report that measured none of the changed files was scored as a measured zero; it is now
+not measured, with the files it lacks named. The no-graph branch could not happen (`review` loads the graph or
+stops) and was removed; a stale graph and a stale or partial report are said in `notes` instead. An unreadable
+`--coverage` report no longer tells the user to pass `--coverage`. A review with no changed definition but an
+unknown scored 1 while its text said 0; it now scores 0 with no parts everywhere. A planned change's `preexisting`
+row is not measured instead of 0, and a note says its findings are the targets' current ones. End-to-end tests now
+cover a real coverage report (counted, and read but not covering the changed file), an unreadable one,
+`findings=all` with a preexisting finding, a planned change and the no-change unknown.
+
+### 85.4 Not done
+
+- The weights and caps are chosen, not fitted: no labelled set of risky and safe changes exists to fit them.
+  The score orders changes by how much the review found, not by how likely they are to break.
+- A count says how many, not how bad: one breaking change to a function with forty callers counts like one with
+  a single caller (its dependents count separately, up to their cap).
+- A `--run-tests` outcome is reported under `tests` and not scored.
+- Per-concern lists are capped at 25 before scoring; the findings caps are reached long before that, and a cut is
+  said in `notes`.
+
+### 85.5 Tests
+
+`tests/test_risk.py`: the caps add up to 100; a change with nothing found lists every part at zero and never says
+safe; the parts, weights and caps add up (a capped part, a zero-weight preexisting row, locations, the compact
+form under 600 characters); inputs not measured (no coverage report, an unreadable one, one that covers none of
+the changed files, a planned change, a concern left out) are named and not counted; a stale graph, a stale report
+and a partial report are noted; a worktree review carries the score in `--json`, the text, the summary and the MCP
+response (placed after `counts`); a tree with no changed definition scores 0 and prints no score, also with an
+unknown; a real review with a coverage report (counted; read but not covering the changed file; unreadable),
+with `findings=all` (the preexisting finding is not scored) and of a planned change. Also run:
+`tests/test_review.py`, `tests/test_review_delta.py`, `tests/test_reviewers.py`, `tests/test_decide_review3.py`,
+`tests/test_mcp.py`, `tests/test_docs.py`, `tests/test_line_endings.py`.
+
 ## Sources
 
 - **Retrieval:**
