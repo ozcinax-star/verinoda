@@ -923,24 +923,48 @@ def _overlay(repo: Path, dst: Path, paths: list[str], ids: dict[str, str] | None
 
 
 def _replay(dst: Path, files: dict[str, bytes | None], ids: dict[str, str] | None) -> int:
-    """Write recorded file contents over a commit copy (``None``: the file is left out of the copy)."""
-    for rel in sorted(files):
-        clean = rel.replace("\\", "/").strip()
-        if not clean or clean.startswith("/") or path_escape(clean) or not treestate.safe_path(clean):
+    """Write recorded file contents over a commit copy (``None``: the file is left out of the copy).
+
+    Deletions go first; a directory where the recorded tree has a file (or a file where it has a directory)
+    is removed from the copy, since the recorded tree cannot hold both."""
+    clean: dict[str, bytes | None] = {}
+    for rel in files:
+        c = rel.replace("\\", "/").strip()
+        if not c or c.startswith("/") or path_escape(c) or not treestate.safe_path(c):
             raise ValueError(f"replay path {rel!r} must be a repository-relative file path (not in .git or "
                              ".verinoda, in any spelling)")
-        out = dst / clean
-        data = files[rel]
-        if data is None:
-            if out.is_file():
-                out.unlink()
+        clean[c] = files[rel]
+
+    def drop(rel: str) -> None:
+        out = dst / rel
+        if out.is_dir() and not out.is_symlink():
+            shutil.rmtree(out)
             if ids is not None:
-                ids.pop(clean, None)
-            continue
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(data)
+                for k in [k for k in ids if k.startswith(rel + "/")]:
+                    ids.pop(k)
+        elif out.exists() or out.is_symlink():
+            out.unlink()
         if ids is not None:
-            ids[clean] = treestate.content_id(data)
+            ids.pop(rel, None)
+
+    for rel in sorted(p for p, d in clean.items() if d is None):
+        if (dst / rel).is_file() or (dst / rel).is_symlink():
+            drop(rel)
+        elif ids is not None:
+            ids.pop(rel, None)
+    for rel in sorted(p for p, d in clean.items() if d is not None):
+        parts = rel.split("/")
+        for k in range(1, len(parts)):  # a file of the base where the recorded tree has a directory
+            up = "/".join(parts[:k])
+            if (dst / up).is_file() or (dst / up).is_symlink():
+                drop(up)
+        out = dst / rel
+        if out.is_dir() and not out.is_symlink():  # a directory of the base where the recorded tree has a file
+            drop(rel)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(clean[rel])
+        if ids is not None:
+            ids[rel] = treestate.content_id(clean[rel])
     return len(files)
 
 

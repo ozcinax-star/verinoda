@@ -2639,7 +2639,8 @@ def _r_debug_status(r: dict) -> None:
         print(f"  other command: {ln}")
     for a in r.get("attempts") or []:
         what = a.get("failure") or ""
-        where = f"commit {a['commit']}" if a.get("commit") else f"tree {a['tree']}"
+        where = (f"tree of attempt {a['replay_of']}" if a.get("replay_of") is not None else
+                 f"commit {a['commit']}" if a.get("commit") else f"tree {a['tree']}")
         loop = f"  loop: {', '.join(a['loop'])}" if a.get("loop") else ""
         print(f"  #{a['n']} {a['kind']:<12} {a['outcome']:<5} {where}  {what}  [{a.get('progress') or '-'}]"
               f"{'  (agent-reported)' if a['run_by'] == 'agent' else ''}{loop}")

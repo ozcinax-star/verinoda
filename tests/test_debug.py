@@ -1008,3 +1008,83 @@ def test_bisect_over_attempts_names_the_agent_step_that_broke_the_repro(tmp_path
     assert "first failing attempt: 2 (agent) rename the quantity key" in out
     with pytest.raises(SystemExit, match="attempt numbers"):
         cli.main(["debug", "bisect", "--attempts", "--good", "abc", "--repo", r])
+
+
+def test_bisect_over_attempts_in_a_session_that_started_on_a_failure(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    _sub(repo, "orders/pricing.py", "subtotal * 0.9", "subtotal * 0.8")  # the failure the session starts on
+    _git(repo, "commit", "-q", "-am", "bug")
+    st = open_store(repo)
+    assert debug.start(st, repo, "discount", PT)["outcome"] == "fail"
+    _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')  # step 1 breaks two more tests
+    debug.attempt(st, repo, hypothesis="rename the quantity key", observed_output="1 failed\n", exit_code=1,
+                  command=PT)
+    _sub(repo, "orders/config.py", "Runtime configuration", "Runtime configuration (ORDERS_*)")
+    debug.attempt(st, repo, hypothesis="document the settings", observed_output="1 failed\n", exit_code=1,
+                  command=PT)
+    assert debug.attempt(st, repo, hypothesis="still failing?")["outcome"] == "fail"
+    n_rows = len(st.all("SELECT n FROM debug_attempts"))
+    with pytest.raises(debug.DebugError, match="good before bad"):
+        debug.bisect_attempts(st, repo, good=3, bad=1)  # an inverted pair is refused before anything runs
+    assert len(st.all("SELECT n FROM debug_attempts")) == n_rows
+    b = debug.bisect_attempts(st, repo)
+    # the baseline still fails the discount test, but the tests the steps broke passed there
+    assert b["status"] == "found" and b["first_bad_attempt"]["attempt"] == 1, b["conclusion"]
+    assert b["symptom"]["failing_at_good"] == 1 and len(b["symptom"]["tests"]) == 2
+    assert "the failure the session started with was already there" in b["conclusion"]
+    assert debug.bisect_attempts(st, repo, good=0)["first_bad_attempt"]["attempt"] == 1
+    s = debug.status(st, repo)
+    bis = [x for x in s["latest"]["strategies"] if x["id"] == "bisect"]
+    assert bis and not bis[0].get("done")  # the commit bisect was proposed and never ran: a replay is not it
+    replay = next(a for a in s["attempts"] if a["source"] == "attempt")
+    assert replay["replay_of"] == 1
+    assert cli.main(["debug", "status", "--repo", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert f"#{replay['n']} bisect" in out and "tree of attempt 1" in out
+
+
+def test_bisect_over_attempts_skips_steps_it_cannot_run_and_says_why(tmp_path, monkeypatch, capsys):
+    repo = _repo(tmp_path)
+    st = open_store(repo)
+    assert debug.start(st, repo, "totals", PT)["outcome"] == "pass"
+    _sub(repo, "orders/config.py", "Runtime configuration", "Runtime configuration (ORDERS_*)")
+    _agent_step(st, repo, "document the settings")
+    _sub(repo, "README.md", "# ", "# Notes kept nowhere: ")
+    _agent_step(st, repo, "add a note")
+    _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')
+    _agent_step(st, repo, "rename the quantity key")
+    assert debug.attempt(st, repo, hypothesis="does the suite still pass?")["outcome"] == "fail"
+    rows = debug._attempts_by_n(st, debug._session(st, None)["id"])
+    note = rows[2]["tree_files"]["README.md"]
+    (treestate.blobs_dir(repo) / note[:2] / note).unlink()  # step 2's edit: its content was not kept
+    real = debug.attempt
+
+    def timed_out(*a, **kw):
+        if kw.get("replay_of") is not None:
+            return {"attempt": 999, "outcome": "timeout"}
+        return real(*a, **kw)
+
+    monkeypatch.setattr(debug, "attempt", timed_out)
+    b = debug.bisect_attempts(st, repo)
+    assert b["status"] == "range" and (b["good"], b["bad"]) == (0, 3)
+    why = {sk["attempt"]: sk["why"] for sk in b["skipped"]}
+    assert why == {1: "the run could not tell (timeout)", 2: "a changed file's content was not kept"}
+    assert "skipped steps left it open" in b["conclusion"]
+    assert debug.bisect_attempts(st, repo, max_runs=1)["status"] == "range"
+    assert cli.main(["debug", "bisect", "--attempts", "--repo", str(repo)]) == 3
+    out = capsys.readouterr().out
+    assert "skipped attempt 1: the run could not tell (timeout)" in out and "None" not in out
+
+
+def test_a_replay_can_put_a_file_where_the_base_has_a_directory_and_back(tmp_path):
+    dst = tmp_path / "copy"
+    (dst / "docs" / "adr").mkdir(parents=True)
+    (dst / "docs" / "adr" / "0001.md").write_text("a\n", encoding="utf-8")
+    (dst / "notes").write_text("n\n", encoding="utf-8")
+    ids = {"docs/adr/0001.md": "x", "notes": "y"}
+    experiments._replay(dst, {"docs/adr/0001.md": None, "docs": b"x\n", "notes": None, "notes/a.md": b"a\n"}, ids)
+    assert (dst / "docs").read_bytes() == b"x\n" and (dst / "notes" / "a.md").read_bytes() == b"a\n"
+    assert set(ids) == {"docs", "notes/a.md"}
+    experiments._replay(dst, {"docs/b.md": b"b\n", "notes": b"n\n"}, ids)  # without the deletions recorded
+    assert (dst / "docs" / "b.md").is_file() and (dst / "notes").is_file()
+    assert set(ids) == {"docs/b.md", "notes"}

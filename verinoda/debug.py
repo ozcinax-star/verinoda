@@ -1679,9 +1679,13 @@ def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, 
             if _replay_files(repo, s["row"]) is None:
                 skipped.append({"attempt": s["n"], "why": "a changed file's content was not kept"})
                 return "skipped", None
-            got = attempt(store, repo, sess["id"], hypothesis=f"bisect over attempts: {why} (tree of attempt "
-                                                              f"{s['n']})", expect="pass", kind="bisect",
-                          replay_of=s["row"])
+            try:
+                got = attempt(store, repo, sess["id"], hypothesis=f"bisect over attempts: {why} (tree of attempt "
+                                                                  f"{s['n']})", expect="pass", kind="bisect",
+                              replay_of=s["row"])
+            except (OSError, ValueError) as e:  # the copy could not hold the recorded tree
+                skipped.append({"attempt": s["n"], "why": f"its tree could not be rebuilt ({type(e).__name__})"})
+                return "skipped", None
             rec = _attempts_by_n(store, sess["id"]).get(got["attempt"]) or {"outcome": got["outcome"],
                                                                             "n": got["attempt"]}
         entry = {"attempt": s["n"], "outcome": rec["outcome"], "run": rec["n"],
@@ -1704,6 +1708,8 @@ def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, 
                 "conclusion": why, "next_step": next_step}
 
     hi = index_of(bad, "bad") if bad is not None else len(steps) - 1
+    if good is not None and index_of(good, "good") >= hi:  # checked before anything runs
+        raise DebugError(f"attempt {good} is not before attempt {steps[hi]['n']}; bisect needs good before bad")
     o_bad, e_bad = outcome_at(hi, "the bad end: does the repro fail here?")
     n_bad = steps[hi]["n"]
     if o_bad is None:
@@ -1717,8 +1723,6 @@ def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, 
                     "coarse": bad_row.get("sig_coarse"), "attempt": e_bad["run"]})
     if good is not None:
         lo = index_of(good, "good")
-        if lo >= hi:
-            raise DebugError(f"attempt {good} is not before attempt {n_bad}; bisect needs good before bad")
     else:
         now_rows = _attempts(store, sess["id"])
         lo = next((i for i in range(hi - 1, -1, -1)
@@ -1729,6 +1733,17 @@ def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, 
     o_good, e_good = outcome_at(lo, "the good end: does the repro pass here?")
     if o_good is None:
         return stop("the run budget ended before the good end was run", "raise --max-runs")
+    narrowed = None
+    if o_good == "fail" and e_good and str(e_good.get("for_the_symptom") or "").startswith("part:"):
+        # The session started on a failure that is still there: what the steps broke is the bad end's failing
+        # tests that passed at the good end. Search for those; the failure the session started with is not it.
+        g_tests = ((_attempts_by_n(store, sess["id"]).get(e_good["run"]) or {}).get("signature") or {}).get("tests")
+        new = sorted(t for t in symptom["tests"]
+                     if isinstance(g_tests, dict) and looprules._outcome_of(t, g_tests) == "passed")
+        if new:
+            narrowed = {"tests": new[:LIST_CAP], "failing_at_good": len(symptom["tests"]) - len(new)}
+            symptom.update({"tests": set(new), "coarse": None})
+            o_good = "pass"
     if o_good != "pass":
         return stop(f"the repro does not pass on the tree of attempt {steps[lo]['n']} ({o_good}"
                     + (f", run {e_good['run']}" if e_good else "") + "): no earlier step of the session passes, so "
@@ -1750,7 +1765,8 @@ def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, 
                 verdict = (i, o)
                 break
             if o is not None and o != "skipped":
-                skipped.append({"attempt": steps[i]["n"], "why": e.get("for_the_symptom") if e else o})
+                skipped.append({"attempt": steps[i]["n"],
+                                "why": (e or {}).get("for_the_symptom") or f"the run could not tell ({o})"})
         if verdict is None:
             break
         i, o = verdict
@@ -1768,6 +1784,9 @@ def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, 
                       "one run per tree: a flaky test can move the boundary (`verinoda debug rerun` on a tree)",
                       "steps are the session's attempts in order; an edit reverted and made again between "
                       "them breaks bisect's one-boundary assumption"]}
+    if narrowed:
+        out["symptom"] = {**narrowed, "why": f"attempt {steps[first_lo]['n']} already failed the other "
+                                             f"{narrowed['failing_at_good']} test(s); the search is for these"}
     if any(r.get("tree_differs") for r in runs):
         out["limits"].append("a rebuilt tree's hash differs from the recorded one (files outside the recorded "
                              "changes, such as untracked or skipped ones, differ): "
@@ -1796,6 +1815,10 @@ def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, 
                              "to look")
         if row["run_by"] == "agent" and row["outcome"] == "pass":
             out["conclusion"] += "; the agent reported that step as passing"
+        if narrowed:
+            out["conclusion"] += (f"; judged on the {len(symptom['tests'])} test(s) that fail at attempt {n_bad} and "
+                                  f"passed at attempt {passed['n']} (the failure the session started with was "
+                                  "already there)")
     else:
         out["conclusion"] = (f"the first failing step is between attempt {passed['n']} (passes, run "
                              f"{seen[lo]['run']}) and attempt {failed['n']} (fails, run {seen[hi]['run']}); the run "
@@ -1941,6 +1964,8 @@ def status(store: Store, repo: Path, session_id: str | None = None) -> dict:
                      "hypothesis": a["hypothesis"][:160], "tree": (a.get("tree_hash") or "")[:12],
                      "source": (a.get("copy_source") or {}).get("kind"),
                      "commit": ((a.get("copy_source") or {}).get("commit") or "")[:12] or None,
+                     **({"replay_of": a["copy_source"].get("attempt")}
+                        if (a.get("copy_source") or {}).get("kind") == "attempt" else {}),
                      "failure": looprules._summ(a) if a["outcome"] != "pass" else None,
                      "progress": a.get("progress"), "loop": rules, "stop": bool(a.get("stop")),
                      "experiment_id": a.get("experiment_id")})
@@ -1954,7 +1979,8 @@ def status(store: Store, repo: Path, session_id: str | None = None) -> dict:
         ran_as = {"differential": ("differential",), "bisect": ("bisect",), "rerun": ("rerun",), "observe": ("probe",)}
         for s in strategies:
             later = [a for a in attempts if a["n"] > last_loop["n"] and a["kind"] in ran_as.get(s["id"], ())
-                     and (s["id"] != "observe" or (a.get("trace") or {}).get("run_id"))]
+                     and (s["id"] != "observe" or (a.get("trace") or {}).get("run_id"))
+                     and (a.get("copy_source") or {}).get("kind") != "attempt"]  # a replay is not that strategy
             if later:
                 s["done"] = f"attempt {later[-1]['n']} ({later[-1]['kind']}): {later[-1]['outcome']}"
         out["latest"] = {"attempt": last_loop["n"], "stop": bool(last_loop.get("stop")),
