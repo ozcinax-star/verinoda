@@ -9,7 +9,7 @@ Design rules enforced here (and tested in tests/test_store.py):
 * The schema is versioned in ``meta.schema_version``; ``_MIGRATIONS`` is the
   upgrade path for existing databases.
 * A claim's ``text`` and ``created_at`` never change (v4 trigger); derived
-  caches (``file_facts``, ``resolutions``, ``file_stat``) may be recomputed.
+  caches (``file_facts``, ``resolutions``, ``file_stat``, ``test_map``) may be recomputed.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 class SchemaTooNew(RuntimeError):
@@ -554,8 +554,35 @@ _SCHEMA_V8 = """
 ALTER TABLE memory ADD COLUMN expires_at TEXT;
 """
 
+# v9: the persistent test-to-code map (verinoda/testmap.py): per test the run that last mapped it, and the
+# in-repository functions it ran with each file's content id in that run (and whether it ran in a setup or
+# teardown phase: fixture code a wider-scoped fixture may share with other tests). A derived cache of runtime_calls,
+# rewritten on every observed run (no append-only triggers).
+_SCHEMA_V9 = """
+CREATE TABLE IF NOT EXISTS test_map_tests (
+    test TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    commit_sha TEXT,
+    complete INTEGER NOT NULL,
+    outcome TEXT,
+    functions INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS test_map (
+    test TEXT NOT NULL,
+    path TEXT NOT NULL,
+    qual TEXT NOT NULL,
+    fingerprint TEXT,
+    run_id TEXT NOT NULL,
+    fixture INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (test, path, qual)
+);
+CREATE INDEX IF NOT EXISTS idx_test_map_path ON test_map(path, qual);
+"""
+
 _MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5,
-                               6: _SCHEMA_V6, 7: _SCHEMA_V7, 8: _SCHEMA_V8}
+                               6: _SCHEMA_V6, 7: _SCHEMA_V7, 8: _SCHEMA_V8,
+                               9: _SCHEMA_V9}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",

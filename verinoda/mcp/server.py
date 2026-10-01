@@ -1252,11 +1252,16 @@ class AtlasTools:
                 from verinoda import risk
 
                 res["risk"] = risk.compact(res["risk"])
+            aff = (res.get("tests") or {}).pop("affected", None) if isinstance(res.get("tests"), dict) else None
+            if aff:
+                from verinoda import testmap
+
+                res["affected_tests"] = testmap.compact(aff)
             return res
         return self._run("change_review", go, need="graph",
                          # the findings come before the lists that lead to them: what to read first, the tests,
                          # what ran (concerns_checked) and what went stale are cut before any concern is
-                         keep=("summary", "exit", "counts", "risk", "concerns", "unknown", "changes", "api_changes",
+                         keep=("summary", "exit", "counts", "affected_tests", "risk", "concerns", "unknown", "changes", "api_changes",
                                "decisions", "differential", "since_last"),
                          first=("dependents", "binding_readers", "skipped", "read_first"))
 

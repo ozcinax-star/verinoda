@@ -196,8 +196,10 @@ def _trace_env(timeout: float) -> dict[str, str]:
             "VERINODA_TRACE_MAX_BYTES": str(int(lim["max_bytes"]))}
 
 
-def _trace_summary(store: Store, repo: Path, exp: dict, data: bytes, commit: str | None) -> dict:
-    """Ingest the call trace of a repro run; per failing test, the in-repo symbols it reached."""
+def _trace_summary(store: Store, repo: Path, exp: dict, data: bytes, commit: str | None,
+                   file_ids: dict[str, str] | None = None) -> dict:
+    """Ingest the call trace of a repro run (and update the test map, :mod:`verinoda.testmap`); per failing test,
+    the in-repo symbols it reached."""
     from verinoda.runtime import trace as rt
 
     sha = hashlib.sha256(data).hexdigest()
@@ -208,6 +210,9 @@ def _trace_summary(store: Store, repo: Path, exp: dict, data: bytes, commit: str
     tr["header"] = {**h, "complete": complete}
     rid = rt.ingest(store, tr, experiment_id=exp["id"], snapshot_id=None, commit=commit, trace_sha256=sha,
                     extra_header={"source": "debug", "experiment_outcome": exp["outcome"]})
+    from verinoda import testmap
+
+    testmap.update(store, rid, file_ids)
     outcomes = {t: rt.phase_outcome(v.get("phases", {})) for t, v in tr["tests"].items()}
     called = sorted(t for t, v in tr["tests"].items() if (v.get("phases") or {}).get("call"))
     failing = sorted(t for t, o in outcomes.items() if o in ("failed", "error"))
@@ -609,7 +614,7 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
 
             if art.get(rt.TRACE_FILE):
                 trace_info = _trace_summary(store, repo, exp, Path(art[rt.TRACE_FILE]).read_bytes(),
-                                            source.get("commit"))
+                                            source.get("commit"), ids)
             else:
                 trace_info = {"complete": False, "error": "the tracer wrote no trace (not a pytest run, or it "
                                                           "failed to load)"}
