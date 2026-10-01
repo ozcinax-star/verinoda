@@ -4986,9 +4986,9 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         try:
             pr = path_rules.check(repo, base=base_sha, staged=staged)
             rules = path_rules.summary(pr) if pr["rule_files"] and pr["changed_files"] else None
-        except path_rules.RulesError as exc:
+        except Exception as exc:   # an optional block never stops the review
             unknown.append({"kind": "path_rules", "at": None, "what": "which path-scoped review rules the change "
-                            "breaks", "why": str(exc)[:300], "next_step": "run `verinoda rules`"})
+                            "breaks", "why": f"{type(exc).__name__}: {exc}"[:300], "next_step": "run `verinoda rules`"})
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
     res = {
         "review_id": None,

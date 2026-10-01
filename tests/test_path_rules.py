@@ -118,6 +118,8 @@ def test_staged_reads_rule_files_from_the_index(repo):
 
 def test_a_bad_regex_is_unknown_and_a_bad_base_an_error(repo):
     _write(repo, "REVIEW.md", "```verinoda-rules\nerror broken: regex (\n```\n")
+    assert path_rules.check(repo)["changed_files"] == 0     # a rule block is not a change the rules check
+    _write(repo, "src/core/c.py", "def c():\n    return 3\n")
     res = path_rules.check(repo)
     assert res["exit"] == 3 and res["incomplete"][0]["rule"] == "broken"
     with pytest.raises(path_rules.RulesError):
@@ -162,3 +164,51 @@ def test_review_carries_the_rules(repo):
     _git(repo, "commit", "-q", "-m", "no rules")
     _write(repo, "src/core/c.py", "def c():\n    return 3\n")
     assert "path_rules" not in rv.review(repo, store=None, record=False, concerns=["config"])
+
+
+def test_a_new_rule_does_not_match_itself(repo):
+    _write(repo, "AGENTS.md", ROOT_RULES.replace("```\n", "error no-todo: regex TODO -- no TODO left\n```\n", 1)
+           + "\nA TODO in the prose of the file.\n")
+    res = path_rules.check(repo)
+    assert [(f["rule"], f["at"]) for f in res["findings"]] == [("no-todo", "AGENTS.md:11")]
+
+
+def test_names_and_hunks_git_prints_oddly(repo):
+    _write(repo, "src/my dir/a b.py", "x = 1\n")
+    _write(repo, "src/n.md", "one\ntwo\nthree\n# TODO old\nfive\nsix\nseven\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "more")
+    _git(repo, "config", "diff.interHunkContext", "5")
+    _write(repo, "AGENTS.md", "```verinoda-rules\nerror no-todo: regex TODO\n```\n")
+    _git(repo, "add", "AGENTS.md")
+    _git(repo, "commit", "-q", "-m", "rule")
+    _write(repo, "src/my dir/a b.py", "x = 1\n# TODO new\n")
+    _write(repo, "src/n.md", "new first\none\n++ counter\nthree\n# TODO old\nfive\nsix\nseven\n# TODO late\n")
+    got = sorted(f["at"] for f in path_rules.check(repo)["findings"])
+    assert got == ["src/my dir/a b.py:2", "src/n.md:9"]
+
+
+def test_staged_in_a_project_below_the_git_top(tmp_path):
+    top = tmp_path / "top"
+    proj = top / "proj"
+    _write(proj, "x.py", "x = 1\n")
+    _git(top, "init", "-q")
+    _git(top, "add", "-A")
+    _git(top, "commit", "-q", "-m", "one")
+    _write(proj, "AGENTS.md", "```verinoda-rules\nerror no-todo: regex TODO\n```\n")
+    _write(proj, "x.py", "x = 1\n# TODO\n")
+    _git(top, "add", "-A")
+    res = path_rules.check(proj, staged=True)
+    assert res["exit"] == 1 and [f["at"] for f in res["findings"]] == ["x.py:2"]
+
+
+def test_same_folder_order_and_no_rule_files(repo):
+    _write(repo, "src/api/REVIEW.md", "```verinoda-rules\noff no-print: regex print\\(\n```\n")
+    _write(repo, "src/api/h.py", "print('x')\n")
+    assert path_rules.check(repo)["findings"] == []          # REVIEW.md comes before .cursor/BUGBOT.md
+    for f in ("AGENTS.md", "src/api/.cursor/BUGBOT.md", "src/api/REVIEW.md"):
+        (repo / f).unlink()
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "no rules")
+    res = path_rules.check(repo)
+    assert res["rule_files"] == [] and res["exit"] == 0
