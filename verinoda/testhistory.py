@@ -9,9 +9,10 @@ this table existed are added the first time the history is read (:func:`sync`).
 :func:`report` (``verinoda debug flaky``) reads the history:
 
 * a test is **flaky** when one tree (the ledger's tree hash) has both a passing and a failing run of it;
-* a failing test's change **held** when it passed the last ``N`` runs in a row (``debug.rerun_times``, ``--runs``)
-  since its last failure, every one of them on a tree other than the failing one. A pass on the failing tree
-  makes the test flaky there, not fixed;
+* a failing test's change **held** when it passed the last ``N`` runs of the working tree in a row
+  (``debug.rerun_times``, ``--runs``) since its last failure there, every one of them on a tree no run of it ever
+  failed on. A pass on a failing tree makes the test flaky there, not fixed; runs of other commits (``bisect``,
+  ``differential``) never count toward held, since an older commit passing says nothing about the newest one;
 * the **quarantine** list is the user's (``verinoda debug quarantine TEST``): Verinoda keeps it, shows each
   quarantined test's history beside it, and never skips, deselects or reruns a test because of it.
 
@@ -28,6 +29,8 @@ from verinoda.store import Store, now
 LIST_CAP = 20
 EVIDENCE_CAP = 3
 HISTORY_CAP = 20
+# runs of a commit other than the working tree: they never count toward (or restart) a held fix
+OTHER_COMMIT_KINDS = {"bisect", "differential"}
 # the failure-signature plugin's outcomes; skipped and xfailed tests ran nothing that passed or failed
 OUTCOMES = {"passed": "pass", "xpassed": "pass", "failed": "fail", "error": "fail"}
 LIMITS = [
@@ -95,31 +98,40 @@ def quarantine(store: Store, test: str, *, remove: bool = False, reason: str | N
     current = _quarantined(store)
     if remove and test not in current:
         raise ValueError(f"{test} is not quarantined")
-    if not remove and test in current:
-        return {"test": test, "quarantined": True, "changed": False, **current[test]}
-    store.insert("test_quarantine", {"test": test, "action": "remove" if remove else "add",
-                                     "reason": (reason or "").strip() or None, "created_at": now()})
+    reason = (reason or "").strip() or None
     known = store.one("SELECT COUNT(*) AS n FROM test_runs WHERE test = ?", (test,))["n"]
-    out = {"test": test, "quarantined": not remove, "changed": True, "recorded_runs": known}
-    if not remove and reason:
-        out["reason"] = reason.strip()
+    if not remove and test in current:  # the same shape as a first add; the logged reason stays
+        out = {"test": test, "quarantined": True, "changed": False, "recorded_runs": known, **current[test]}
+        if reason and reason != current[test].get("reason"):
+            out["note"] = "already quarantined: the reason was not changed (--remove, then add it again)"
+        return out
+    at = now()
+    store.insert("test_quarantine", {"test": test, "action": "remove" if remove else "add", "reason": reason,
+                                     "created_at": at})
+    out = {"test": test, "quarantined": not remove, "changed": True, "recorded_runs": known, "reason": reason,
+           "since": at}
     if not known:
         out["note"] = "no recorded run of this test id; check the spelling against `verinoda debug flaky`"
     return out
 
 
-def _locate(repo: Path, test: str) -> str | None:
+def _locate(repo: Path, test: str, cache: dict | None = None) -> str | None:
     """``path:line`` of a pytest test's definition in the working tree (the file alone when the line is not
-    found), or None for a command id or a path outside the repository."""
+    found), or None for a command id or a path outside the repository. ``cache`` keeps each file's text."""
     if test.startswith("$ ") or "::" not in test:
         return None
     path = test.split("::", 1)[0]
     name = test.rsplit("::", 1)[-1].split("[", 1)[0]
-    try:
-        f = (repo / path).resolve()
-        f.relative_to(repo.resolve())
-        text = f.read_text(encoding="utf-8", errors="replace")
-    except (OSError, ValueError):
+    cache = {} if cache is None else cache
+    if path not in cache:
+        try:
+            f = (repo / path).resolve()
+            f.relative_to(repo.resolve())
+            cache[path] = f.read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            cache[path] = None
+    text = cache[path]
+    if text is None:
         return None
     m = re.search(rf"^[ \t]*(?:async[ \t]+)?def[ \t]+{re.escape(name)}\b", text, re.M)
     return f"{path}:{text.count(chr(10), 0, m.start()) + 1}" if m else path
@@ -135,12 +147,17 @@ def _judge(runs: list[dict], n_verify: int) -> dict:
     passed = sum(1 for r in runs if r["outcome"] == "pass")
     out = {"runs": len(runs), "passed": passed, "failed": len(runs) - passed,
            "pass_rate": round(passed / len(runs), 2), "flaky_trees": both}
-    fails = [i for i, r in enumerate(runs) if r["outcome"] == "fail"]
-    if fails and fails[-1] + 1 < len(runs):
-        last = runs[fails[-1]]
-        after = runs[fails[-1] + 1:]
-        changed = all(r["tree_hash"] and r["tree_hash"] != last["tree_hash"] for r in after)
-        out["since_last_failure"] = {"passes": len(after), "on_changed_tree": changed, "failed_run": last}
+    # held reads the working tree's runs only: a bisect or differential pass on an older commit is no fix
+    own = [r for r in runs if r.get("kind") not in OTHER_COMMIT_KINDS and
+           (r.get("copy_source") or {}).get("kind", "worktree") == "worktree"]
+    fails = [i for i, r in enumerate(own) if r["outcome"] == "fail"]
+    if fails and fails[-1] + 1 < len(own):
+        last = own[fails[-1]]
+        after = own[fails[-1] + 1:]
+        failed_trees = {r["tree_hash"] for r in runs if r["outcome"] == "fail"}
+        changed = all(r["tree_hash"] and r["tree_hash"] not in failed_trees for r in after)
+        out["since_last_failure"] = {"passes": len(after), "on_changed_tree": changed, "failed_run": last,
+                                     "last_pass": after[-1]}
         if changed:
             out["held"] = len(after) >= n_verify
     return out
@@ -154,8 +171,8 @@ def _evidence(rows: list[dict]) -> list[str]:
     return seen[:EVIDENCE_CAP]
 
 
-def _entry(repo: Path, test: str, j: dict, quarantined: dict) -> dict:
-    return {"test": test, "at": _locate(repo, test), "runs": j["runs"], "passed": j["passed"],
+def _entry(test: str, j: dict, quarantined: dict) -> dict:
+    return {"test": test, "at": None, "runs": j["runs"], "passed": j["passed"],
             "failed": j["failed"], "pass_rate": j["pass_rate"], "quarantined": test in quarantined}
 
 
@@ -164,10 +181,14 @@ def report(store: Store, repo: Path, *, runs: int | None = None, test: str | Non
     from verinoda.paths import load_config
 
     repo = Path(repo).resolve()
+    if runs is not None and int(runs) < 1:
+        raise ValueError("--runs must be 1 or more")
     n_verify = max(1, int(runs or (load_config(repo).get("debug") or {}).get("rerun_times", 5)))
     added = sync(store)
-    rows = store.all("SELECT t.*, a.n AS attempt_n FROM test_runs t LEFT JOIN debug_attempts a ON a.id = t.attempt_id "
-                     "ORDER BY t.test, t.seq")
+    # run order is the attempts' order, not the rows' (sync adds older attempts after newer live ones)
+    rows = store.all("SELECT t.*, a.n AS attempt_n, a.copy_source AS copy_source FROM test_runs t "
+                     "LEFT JOIN debug_attempts a ON a.id = t.attempt_id "
+                     "ORDER BY t.test, t.created_at, a.rowid, t.seq")
     by_test: dict[str, list[dict]] = {}
     for r in rows:
         by_test.setdefault(r["test"], []).append(r)
@@ -177,17 +198,17 @@ def report(store: Store, repo: Path, *, runs: int | None = None, test: str | Non
         j = _judge(rs, n_verify)
         if j.get("held"):
             last = j["since_last_failure"]["failed_run"]
-            e = _entry(repo, name, j, q)
+            e = _entry(name, j, q)
             e.update(status="strong_inference", was_flaky=bool(j["flaky_trees"]),
-                     evidence=_evidence([last, rs[-1]]),
+                     evidence=_evidence([last, j["since_last_failure"]["last_pass"]]),
                      finding=f"passed the last {j['since_last_failure']['passes']} recorded run(s) in a row, each "
-                             f"on a tree other than the one it last failed on (session {last['session_id']} attempt "
+                             f"of the working tree, on trees no run of it failed on, since it last failed (session {last['session_id']} attempt "
                              f"{last['attempt_n']}); a measurement on this machine, not proof the cause is gone")
             held.append(e)
         elif j["flaky_trees"]:
             tree = j["flaky_trees"][-1]
             on_tree = [r for r in rs if r["tree_hash"] == tree]
-            e = _entry(repo, name, j, q)
+            e = _entry(name, j, q)
             e.update(status="strong_inference",
                      evidence=_evidence([next(r for r in on_tree if r["outcome"] == "fail"),
                                          next(r for r in on_tree if r["outcome"] == "pass")]),
@@ -199,9 +220,12 @@ def report(store: Store, repo: Path, *, runs: int | None = None, test: str | Non
     flaky.sort(key=lambda e: (e["pass_rate"], -e["runs"], e["test"]))
     held.sort(key=lambda e: e["test"])
     pending.sort(key=lambda e: (-e["passes"], e["test"]))
+    texts: dict = {}  # each test file read once, and only for the entries shown
+    for e in flaky[:LIST_CAP] + held[:LIST_CAP]:
+        e["at"] = _locate(repo, e["test"], texts)
     flaky_names = {e["test"] for e in flaky}
     quarantine_out = []
-    for name, info in sorted(q.items()):
+    for name, info in sorted(q.items())[:LIST_CAP]:
         rs = by_test.get(name) or []
         item = {"test": name, "since": info["since"], "reason": info.get("reason"), "runs": len(rs)}
         if rs:
@@ -215,7 +239,7 @@ def report(store: Store, repo: Path, *, runs: int | None = None, test: str | Non
            "pending": pending[:LIST_CAP], "quarantine": quarantine_out,
            "quarantine_candidates": [e["test"] for e in flaky if not e["quarantined"]][:LIST_CAP],
            "limits": LIMITS}
-    if max(len(flaky), len(held), len(pending)) > LIST_CAP:
+    if max(len(flaky), len(held), len(pending), len(q)) > LIST_CAP:
         out["truncated"] = True
     if test:
         rs = by_test.get(test)
@@ -225,7 +249,7 @@ def report(store: Store, repo: Path, *, runs: int | None = None, test: str | Non
                                         "(`verinoda debug rerun`) or check the id against the lists above"}
         else:
             j = _judge(rs, n_verify)
-            item = {"test": test, "at": _locate(repo, test), "runs": j["runs"], "passed": j["passed"],
+            item = {"test": test, "at": _locate(repo, test, texts), "runs": j["runs"], "passed": j["passed"],
                     "failed": j["failed"], "pass_rate": j["pass_rate"], "flaky_trees": len(j["flaky_trees"]),
                     "quarantined": test in q,
                     "history": [{"session": r["session_id"], "attempt": r["attempt_n"], "kind": r["kind"],

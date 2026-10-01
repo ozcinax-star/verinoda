@@ -32,11 +32,11 @@ def _store(tmp_path: Path) -> Store:
 
 
 def _attempt(st: Store, n: int, tree: str, tests: dict | None, *, outcome: str | None = None,
-             run_by: str = "verinoda", command=None, record: bool = True) -> dict:
+             run_by: str = "verinoda", command=None, record: bool = True, kind: str = "rerun") -> dict:
     if outcome is None:
         outcome = "fail" if any(o in ("failed", "error") for o in (tests or {}).values()) else "pass"
     sig = {"status": "none"} | ({"tests": tests} if tests is not None else {})
-    row = {"id": f"dba_{n}", "session_id": "dbg_1", "n": n, "kind": "rerun", "hypothesis": "h",
+    row = {"id": f"dba_{n}", "session_id": "dbg_1", "n": n, "kind": kind, "hypothesis": "h",
            "command": command or PT, "run_by": run_by, "tree_hash": tree, "outcome": outcome, "signature": sig,
            "created_at": f"2026-10-01T00:00:{n:02d}+00:00"}
     st.insert("debug_attempts", row)
@@ -126,8 +126,11 @@ def test_the_quarantine_list_is_the_users_and_logged(tmp_path):
     _attempt(st, 0, "A", {T: "failed"})
     _attempt(st, 1, "A", {T: "passed"})
     q = testhistory.quarantine(st, T, reason="times out on CI")
-    assert q == {"test": T, "quarantined": True, "changed": True, "recorded_runs": 2, "reason": "times out on CI"}
-    assert testhistory.quarantine(st, T)["changed"] is False
+    assert q.pop("since") and q == {"test": T, "quarantined": True, "changed": True, "recorded_runs": 2,
+                                    "reason": "times out on CI"}
+    again = testhistory.quarantine(st, T, reason="another reason")  # the same keys; the logged reason stays
+    assert again.pop("note").startswith("already quarantined") and again.pop("since")
+    assert again == {"test": T, "quarantined": True, "changed": False, "recorded_runs": 2, "reason": "times out on CI"}
     assert "check the spelling" in testhistory.quarantine(st, "tests/test_x.py::typo")["note"]
     r = testhistory.report(st, tmp_path)
     assert r["flaky"][0]["quarantined"] and r["quarantine_candidates"] == []
@@ -144,6 +147,65 @@ def test_the_quarantine_list_is_the_users_and_logged(tmp_path):
                                                                                                 "remove"]
     with pytest.raises(sqlite3.DatabaseError, match="append-only"):
         st.conn.execute("DELETE FROM test_quarantine")
+
+
+def test_passes_of_older_commits_from_bisect_or_differential_never_make_a_held_fix(tmp_path):
+    st = _store(tmp_path)
+    _attempt(st, 0, "HEAD", {T: "failed"}, kind="baseline")
+    for n in range(1, 6):  # bisect's good end and midpoints pass on older commits
+        _attempt(st, n, f"C{n}", {T: "passed"}, kind="bisect")
+    _attempt(st, 6, "C0", {T: "passed"}, kind="differential")
+    r = testhistory.report(st, tmp_path, runs=5)
+    assert not r["held"] and not r["pending"] and not r["flaky"]
+    for n in range(7, 9):  # the working tree changed and now passes: that counts
+        _attempt(st, n, "FIX", {T: "passed"})
+    assert testhistory.report(st, tmp_path, runs=5)["pending"] == [{"test": T, "passes": 2, "of": 5}]
+    one = testhistory.report(st, tmp_path, runs=2)
+    assert [e["test"] for e in one["held"]] == [T] and "attempt 0" in one["held"][0]["finding"]
+
+
+def test_a_pass_on_a_tree_that_failed_before_is_not_a_held_fix(tmp_path):
+    st = _store(tmp_path)
+    _attempt(st, 0, "A", {T: "failed"})
+    _attempt(st, 1, "B", {T: "failed"})
+    for n in range(2, 5):  # back on tree A, which failed before
+        _attempt(st, n, "A", {T: "passed"})
+    r = testhistory.report(st, tmp_path, runs=3)
+    assert not r["held"] and [e["test"] for e in r["flaky"]] == [T]
+
+
+def test_attempts_added_on_read_keep_their_run_order(tmp_path):
+    st = _store(tmp_path)
+    for n in range(5):  # recorded before the table existed
+        _attempt(st, n, "A", {T: "passed"}, record=False)
+    _attempt(st, 5, "B", {T: "failed"})  # recorded live after the upgrade, before the first read
+    r = testhistory.report(st, tmp_path, runs=5, test=T)
+    assert r["recorded"]["added_now"] == 5 and not r["held"] and not r["flaky"]
+    assert [h["attempt"] for h in r["test"]["history"]] == [0, 1, 2, 3, 4, 5]
+    assert "since_last_failure" not in r["test"]
+
+
+def test_lists_are_capped_the_quarantine_too_and_files_are_read_only_for_shown_entries(tmp_path, monkeypatch):
+    st = _store(tmp_path)
+    for i in range(LIST_N := testhistory.LIST_CAP + 5):
+        testhistory.quarantine(st, f"tests/test_x.py::test_q{i}")
+    tests = {f"tests/test_x.py::test_{i}": "passed" for i in range(LIST_N)}
+    _attempt(st, 0, "A", tests)
+    _attempt(st, 1, "A", {t: "failed" for t in tests})
+    calls = []
+    real = testhistory._locate
+    monkeypatch.setattr(testhistory, "_locate", lambda *a: calls.append(a[1]) or real(*a))
+    r = testhistory.report(st, tmp_path)
+    assert len(r["quarantine"]) == testhistory.LIST_CAP and len(r["flaky"]) == testhistory.LIST_CAP
+    assert r["truncated"] is True and len(calls) == testhistory.LIST_CAP
+
+
+def test_runs_below_one_is_an_error(tmp_path):
+    st = _store(tmp_path)
+    for bad in (0, -3):
+        with pytest.raises(ValueError, match="1 or more"):
+            testhistory.report(st, tmp_path, runs=bad)
+    assert testhistory.report(st, tmp_path, runs=1)["verify_runs"] == 1
 
 
 def test_a_test_is_located_at_its_definition(tmp_path):

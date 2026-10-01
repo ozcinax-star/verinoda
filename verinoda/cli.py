@@ -2595,7 +2595,11 @@ def cmd_debug(args) -> int:
         if sub == "flaky":
             from verinoda import testhistory
 
-            _emit(args, testhistory.report(st, repo, runs=args.runs, test=args.test), _r_debug_flaky)
+            try:
+                res = testhistory.report(st, repo, runs=args.runs, test=args.test)
+            except ValueError as exc:
+                raise SystemExit(f"error: {exc}")
+            _emit(args, res, _r_debug_flaky)
             return 0
         if sub == "quarantine":
             from verinoda import testhistory
