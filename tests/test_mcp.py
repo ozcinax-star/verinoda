@@ -81,6 +81,8 @@ EXPECTED_PARAMS = {
     "feedback_resolve": ({"feedback_id", "verdict", "reason", "evidence_ids", "correction"},
                          {"feedback_id", "verdict", "reason", "evidence_ids"}),
     "index_update": (set(), set()),
+    "list_projects": (set(), set()),
+    "index_status": (set(), set()),
     "decision_record": ({"action", "decision_id", "chosen", "rationale", "title", "brief_id", "guards", "governs",
                          "revisit_when", "supersedes", "link", "guard_ids", "at", "reason", "until", "document",
                          "user_statement", "question_id"}, {"action"}),
@@ -100,7 +102,8 @@ EXPECTED_PARAMS = {
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
              "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq"}
+             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq",
+             "list_projects", "index_status"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -262,6 +265,8 @@ def _all_calls(t: AtlasTools) -> dict:
         "feedback_process": lambda: t.feedback_process("fb_1"),
         "feedback_resolve": lambda: t.feedback_resolve("fb_1", "confirmed", "because", ["evd_1"]),
         "index_update": lambda: t.index_update(),
+        "list_projects": lambda: t.list_projects(),
+        "index_status": lambda: t.index_status(),
         "decision_record": lambda: t.decision_record("list"),
         "decision_check": lambda: t.decision_check(),
         "dependency_ask": lambda: t.dependency_ask("app.py", "sqlite3"),
@@ -1408,6 +1413,11 @@ def test_unscanned_repo_returns_structured_error_for_every_tool(tmp_path):
             continue
         if name in ("grep_context", "read_context"):  # a hook adds nothing rather than an error
             assert fn() == {}
+            continue
+        if name in ("list_projects", "index_status"):  # they describe the state instead of needing it
+            res = fn()
+            row = res["projects"][0] if name == "list_projects" else res
+            assert "error" not in res and row["state"] == "not_scanned" and not row["graph_loaded"], res
             continue
         res = fn()
         assert res["error"] == "not_initialised", (name, res)

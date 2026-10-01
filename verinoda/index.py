@@ -78,8 +78,11 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     from verinoda.python_cross import python_cross_cache
     from verinoda.python_facts import python_facts_cache
 
+    from verinoda.project_index import cache as _graph_cache
+
     install_path_identity_memo()
     repo = Path(repo).resolve()
+    _graph_cache.use_stat_index_for(repo)  # one process may build several projects (one stat index each)
     ensure_atlas(repo)  # the upstream pipeline expects its output directory to exist
     index_dir(repo).mkdir(parents=True, exist_ok=True)
     buf = io.StringIO()
