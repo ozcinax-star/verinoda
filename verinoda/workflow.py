@@ -408,8 +408,10 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
         # repository.py). The whole corpus is re-extracted instead; unchanged files come
         # from the AST cache.
         configs = _config_digests(repo, state["files"])
-        stats = index.build(repo, prune_missing=True)
-        index_mode = "full"
+        # with the switch on (verinoda.incremental), only the files the edit can affect are extracted again
+        # and graph.json is patched, when nothing calls for the full build
+        stats = index.build(repo, prune_missing=True, incremental=None if outdated else diff)
+        index_mode = "incremental" if (stats.get("incremental") or {}).get("used") else "full"
         if not stats.get("ok", True) and diff["removed"]:
             # The indexer refuses a graph that shrinks; removed files explain the
             # shrink, so rebuild with force rather than keep their nodes.
@@ -446,7 +448,8 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
     stale = invalidate_stale(store, snap)
     out = {"snapshot": snap, "changed": diff, "changed_count": len(changed), "stale": stale,
            "mode": "incremental", "index_mode": index_mode, "index_seconds": round(t_index, 3),
-           **({"extraction": {"was": built_by, "now": buildlock.extraction_stamp(repo)}} if outdated else {})}
+           **({"extraction": {"was": built_by, "now": buildlock.extraction_stamp(repo)}} if outdated else {}),
+           **({"incremental": stats["incremental"]} if (stats or {}).get("incremental") else {})}
     if changed:
         files = store.snapshot_files(snap["id"])
         out["derived"] = _derive(store, repo, changed=changed, all_files=sorted(files), file_hashes=files,

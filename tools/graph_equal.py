@@ -3,8 +3,9 @@
     python tools/graph_equal.py A/.verinoda/index/graph.json B/.verinoda/index/graph.json [--json]
 
 What is compared: the set of node ids with each node's attributes, and the multiset of edges with theirs, both
-without the attributes that depend on history rather than on the tree (``community`` - clustering is remapped to
-the previous build's numbers - and layout or timestamp fields). Exit 0 when equal, 1 with the first differences
+without the attributes that depend on history rather than on the tree (``community`` and its ``community_name`` -
+clustering is remapped to the previous build's numbers, and an incremental update keeps each node's community -
+and layout or timestamp fields). Exit 0 when equal, 1 with the first differences
 otherwise, 2 when a file cannot be read.
 """
 
@@ -16,7 +17,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-HISTORY_FIELDS = {"community", "x", "y", "z", "built_at", "generated_at"}
+HISTORY_FIELDS = {"community", "community_name", "x", "y", "z", "built_at", "generated_at"}
 
 
 def _load(path: Path) -> dict:

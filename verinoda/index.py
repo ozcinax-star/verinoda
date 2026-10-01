@@ -58,7 +58,8 @@ _CACHE_MAX = 4096              # per-file caches are cleared when they grow past
 
 
 def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
-          quiet: bool = True, prune_missing: bool = False, fresh_caches: bool = False) -> dict:
+          quiet: bool = True, prune_missing: bool = False, fresh_caches: bool = False,
+          incremental: dict | None = None) -> dict:
     """Run the Graphify-derived AST pipeline; return graph stats.
 
     ``fresh_caches`` (``scan --force``): the per-file Python caches (python_facts.json, python_cross.json)
@@ -73,10 +74,17 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     A build with ``prune_missing`` (``scan``/``update``; not ``force``, not ``changed``) leaves
     graph.json as it is when the last build rewrote it, the pipeline produced that build's graph
     again and nothing that build left has changed (:class:`_keep_unchanged_graph`; ``graph_kept``).
+
+    ``incremental`` (``update``: the snapshot diff, ``{"added", "modified", "removed"}``): with the switch of
+    :mod:`verinoda.incremental` on, graph.json is patched from the files the change can affect instead of rebuilt
+    when nothing calls for the full build (``incremental`` in the result: ``used`` and the ``reason`` when not);
+    a full build with the switch on writes the ledger the next patch starts from.
     """
     from verinoda.project_index.watch import _rebuild_code
     from verinoda.python_cross import python_cross_cache
     from verinoda.python_facts import python_facts_cache
+
+    from verinoda import incremental as inc
 
     install_path_identity_memo()
     repo = Path(repo).resolve()
@@ -85,10 +93,21 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
     buf = io.StringIO()
     keep = _keep_unchanged_graph(repo, active=prune_missing and changed is None and not force)
     empties = _known_empty_json(repo, replay=not force)
+    switch = inc.enabled(repo)
+    capture = inc.Capture(repo, active=switch and changed is None)
+    patched = None  # the update proportional to the change, when it was tried
     # The upstream pipeline also logs to stderr (e.g. hints to run `graphify
     # label`, which is not a Verinoda command); keep both streams in the log.
-    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _vendored_switch(repo), _resolve_once(), _absolutize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties, keep:
-        ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
+    with (redirect_stdout(buf) if quiet else _null()), (redirect_stderr(buf) if quiet else _null()),             _without_report_questions(), _without_upstream_html(), _vendored_switch(repo), _resolve_once(), _absolutize_once(),             _distinct_case_ids(repo), python_facts_cache(index_dir(repo), fresh=fresh_caches), python_cross_cache(index_dir(repo), fresh=fresh_caches), empties:
+        if switch and incremental is not None and changed is None and not force:
+            patched = inc.attempt(repo, incremental)
+        if patched is not None and patched.get("used"):
+            ok = True
+        else:
+            with keep, capture:
+                ok = _rebuild_code(repo, changed_paths=changed, force=force, block_on_lock=True)
+    if patched is not None and patched.get("used"):
+        return _patched_stats(repo, patched, buf)
     if keep.failed:  # the full path would have failed making its report: so does this build
         ok = False
     gp = graph_path(repo)
@@ -125,6 +144,38 @@ def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None,
             out["receiver_calls"] = refresh_receiver_sidecar(repo)
         except (OSError, ValueError) as exc:  # the sidecar is derived data; load() recomputes it
             out["receiver_calls"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    if switch and ok and changed is None:  # the ledger an update proportional to the change starts from
+        try:
+            out["incremental_ledger"] = inc.record(repo, capture)
+        except Exception as exc:  # noqa: BLE001 - no ledger: the next update is a full build
+            inc.drop(repo)
+            out["incremental_ledger"] = {"recorded": False, "why": f"{type(exc).__name__}: {exc}"[:300]}
+    else:
+        inc.drop(repo)  # graph.json moved on without it
+    if patched is not None:
+        out["incremental"] = {"used": False, "reason": patched.get("reason"), "seconds": patched.get("seconds")}
+    return out
+
+
+def _patched_stats(repo: Path, patched: dict, buf) -> dict:
+    """``build``'s result after an update proportional to the change (:mod:`verinoda.incremental`): graph.json
+    was patched and is final (its ids portable, no file of it missing: no file was added or removed)."""
+    gp = graph_path(repo)
+    out = {"ok": True, "graph_path": str(gp), "nodes": patched.get("nodes"), "edges": patched.get("edges"),
+           "log": buf.getvalue()[-2000:], "portable_ids": {"changed": 0}, "pruned_files": [],
+           "incremental": {k: patched.get(k) for k in ("used", "reason", "seconds", "changed", "affected",
+                                                       "batch", "batch_files", "times")}}
+    if len(out["incremental"].get("affected") or ()) > 50:
+        out["incremental"]["affected"] = out["incremental"]["affected"][:50]
+    import time
+
+    t = time.monotonic()
+    try:
+        out["receiver_calls"] = refresh_receiver_sidecar(repo)
+    except (OSError, ValueError) as exc:
+        out["receiver_calls"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    out["incremental"]["times"] = {**(out["incremental"].get("times") or {}),
+                                   "receiver_sidecar": round(time.monotonic() - t, 3)}
     return out
 
 
