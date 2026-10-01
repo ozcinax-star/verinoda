@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D159)
+## Upgrading from 0.4.0 (D137-D160)
 
 ### D137: Trigram regex index
 
@@ -243,6 +243,15 @@ New command `verinoda tq` and MCP tool `tq` (41 tools; through `run_tool` in the
 `history_search` catalog line is shorter and run_tool's `arguments` description lost its example. Library callers:
 `graphquery.run` gains `query=`, `ctx=` and `route=` (text calls unchanged), and `testmap.mapping_current` is new.
 Nothing to migrate; tq writes nothing. (Also in docs/UPGRADING.md.)
+
+### D160: Host intent for analyze
+
+Nothing to migrate. `verinoda analyze "<question>" --intent INTENT` and MCP `analyze`'s `intent` (full profile
+only; `--profile full` or `mcp.profile` "full") take one of the plan intents (`locate`, `define`, `flow`,
+`callers`, `dataflow`, `config`, `tests`, `why`, `history`, `impact`, `behaviour`, `compare_reference`,
+`performance`, `architecture`, `usage`, `decide`). It is used only when the rule reading of the question agrees;
+the result then has `intent_check` with both readings. Not with `--plan` / `plan_json`. The core profile's
+`analyze` is unchanged, and the MCP tool count stays 40.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

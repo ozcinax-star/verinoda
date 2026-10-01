@@ -100,7 +100,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 13.7 | **Measured frequencies for typed answers** | `verinoda benchmark tq-audit`: a held-out calibration table keyed by gold and engine hashes; an answer shows `measured: k/n` only for cells with n of 30 or more; a reliability report for the claim confidence caps (no cap changed) | TypeSafe Jev (calibrated outputs) | the report and its table are committed; a changed engine hides `measured` (test); the report lists observed precision against each cap |
-| 13.8 | **Host intent on analyze (full profile)** | optional `intent` on full-profile analyze and `--intent`, checked against the rule reading; a disagreement is reported and the rule reading is used | TypeSafe Jev (typed task framing) | it never changes a status (test); the core analyze schema is unchanged; measured on the verdict audit and fastbench before any promotion to core |
 
 ## 14 - Outputs and views
 
