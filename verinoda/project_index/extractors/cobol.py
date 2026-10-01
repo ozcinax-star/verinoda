@@ -1,6 +1,7 @@
 """Deterministic extraction for fixed- and free-format COBOL source."""
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -32,13 +33,14 @@ _NOT_PARAGRAPHS = frozenset({
     "COMPUTE", "ADD", "SUBTRACT", "MULTIPLY", "DIVIDE", "PERFORM", "COPY",
     "CALL", "IF", "ELSE", "END-IF", "END-PERFORM", "END-EXEC",
 })
+# Suffixes a copybook named in COPY may carry when it is not next to the program.
+_COPYBOOK_SUFFIXES = frozenset({".cpy", ".cbl", ".cob", ".cobol"})
 _PERFORM_MODIFIERS = frozenset({
     "UNTIL", "VARYING", "TIMES", "WITH", "TEST", "FOREVER",
 })
 
 
-def _code_lines(source: str) -> list[tuple[int, str]]:
-    """Return logical COBOL lines with fixed-format continuations joined."""
+def _is_free_format(source: str) -> bool:
     physical = source.splitlines()
     forced_free = bool(
         re.search(r">>\s*SOURCE\s+FORMAT\s+(?:IS\s+)?FREE", source, re.IGNORECASE)
@@ -56,7 +58,13 @@ def _code_lines(source: str) -> list[tuple[int, str]]:
         for line in physical if line.strip()
     )
     nonempty = sum(bool(line.strip()) for line in physical)
-    free = forced_free or fixed_markers < max(1, nonempty // 2)
+    return forced_free or fixed_markers < max(1, nonempty // 2)
+
+
+def _code_lines(source: str) -> list[tuple[int, str]]:
+    """Return logical COBOL lines with fixed-format continuations joined."""
+    physical = source.splitlines()
+    free = _is_free_format(source)
 
     logical: list[tuple[int, str]] = []
     for number, line in enumerate(physical, 1):
@@ -96,6 +104,81 @@ def _starts_inside_string(code: str, offset: int) -> bool:
     return False
 
 
+def _path_key(source: str) -> str:
+    return os.path.normcase(os.path.normpath(source))
+
+
+def resolve_cobol_copybooks(
+    per_file: list[dict], all_nodes: list[dict], all_edges: list[dict]
+) -> None:
+    """Link a COPY to a copybook kept in another directory (a COPYLIB layout).
+
+    The extractor links a copybook that sits next to the program itself; any
+    other COPY is left here as a pending entry. It is bound by stem, ignoring
+    case, among the extracted COBOL files: one in the program's own directory
+    wins, otherwise exactly one match anywhere. No match, or several, adds no
+    edge, so no node is invented for a copybook that was not read.
+    """
+    # Node ids are final by now but the ids a pending entry carries may not be,
+    # so the program is found again by its file and label.
+    programs: dict[tuple[str, str], str] = {}
+    by_stem: dict[str, list[tuple[str, str]]] = {}
+    for node in all_nodes:
+        source = node.get("source_file")
+        if not source:
+            continue
+        metadata = node.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("language") == "cobol":
+            programs.setdefault((_path_key(str(source)), str(node.get("label"))), node["id"])
+        if node.get("label") != Path(str(source)).name:
+            continue
+        source_path = Path(str(source))
+        if source_path.suffix.lower() not in _COPYBOOK_SUFFIXES:
+            continue
+        by_stem.setdefault(source_path.stem.casefold(), []).append((str(source), node["id"]))
+
+    existing = {
+        (edge.get("source"), edge.get("target"))
+        for edge in all_edges
+        if edge.get("relation") == "imports_from"
+    }
+    for result in per_file:
+        for copy in result.get("cobol_copies") or []:
+            program_file = str(copy.get("source_file", ""))
+            program_key = _path_key(program_file)
+            program_id = programs.get((program_key, str(copy.get("program_label"))))
+            if program_id is None:
+                continue
+            candidates = [
+                (source, nid) for source, nid in by_stem.get(str(copy.get("stem", "")).casefold(), [])
+                if _path_key(source) != program_key
+            ]
+            local = [
+                c for c in candidates
+                if os.path.dirname(_path_key(c[0])) == os.path.dirname(program_key)
+            ]
+            chosen = local if local else candidates
+            if len(chosen) != 1:
+                continue
+            target_source, target_id = chosen[0]
+            pair = (program_id, target_id)
+            if pair in existing:
+                continue
+            existing.add(pair)
+            edge: dict[str, Any] = {
+                "source": program_id,
+                "target": target_id,
+                "relation": "imports_from",
+                "confidence": "EXTRACTED",
+                "source_file": program_file,
+                "source_location": copy.get("source_location"),
+                "weight": 1.0,
+            }
+            if Path(target_source).is_absolute():
+                edge["target_file"] = target_source
+            all_edges.append(edge)
+
+
 def extract_cobol(path: Path) -> dict:
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
@@ -107,6 +190,7 @@ def extract_cobol(path: Path) -> dict:
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     raw_calls: list[dict[str, Any]] = []
+    copies: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     seen_edges: set[tuple[str, str, str]] = set()
 
@@ -163,7 +247,9 @@ def extract_cobol(path: Path) -> dict:
     add_node(file_id, path.name, 1, kind="file")
 
     code_lines = _code_lines(source)
+    free_format = _is_free_format(source)
     current_program = file_id
+    program_label = path.name
     current_scope = file_id
     in_procedure = False
     in_exec = False
@@ -185,6 +271,7 @@ def extract_cobol(path: Path) -> dict:
         program_match = _PROGRAM.search(upper)
         if program_match:
             name = program_match.group(1).upper()
+            program_label = name
             current_program = add_node(
                 _make_id(file_id, "program", name.casefold()),
                 name,
@@ -212,13 +299,24 @@ def extract_cobol(path: Path) -> dict:
                 kind="copybook_reference",
             )
             add_edge(current_program, reference_id, "contains", line)
-            add_edge(
-                current_program,
-                _make_id(str(target)),
-                "imports_from",
-                line,
-                target_file=str(target),
-            )
+            # Verinoda patch: a copybook that is not next to the program is
+            # bound later by resolve_cobol_copybooks (or not at all), instead
+            # of an edge to a file that does not exist.
+            if target.is_file():
+                add_edge(
+                    current_program,
+                    _make_id(str(target)),
+                    "imports_from",
+                    line,
+                    target_file=str(target),
+                )
+            else:
+                copies.append({
+                    "program_label": program_label,
+                    "stem": Path(copy_name).stem,
+                    "source_file": source_file,
+                    "source_location": f"L{line}",
+                })
 
         if "PROCEDURE DIVISION" in upper:
             in_procedure = True
@@ -240,6 +338,14 @@ def extract_cobol(path: Path) -> dict:
             continue
 
         paragraph = _PARAGRAPH.match(upper)
+        # Verinoda patch: a scope terminator (END-READ., END-EVALUATE., ...) is
+        # never a paragraph, and in fixed format a header starts in Area A
+        # (columns 8-11), so a lone `B.` closing a statement in Area B is not one.
+        if paragraph and (
+            paragraph.group(1).startswith("END-")
+            or (not free_format and not code[:4].strip())
+        ):
+            paragraph = None
         if paragraph and paragraph.group(1) not in _NOT_PARAGRAPHS:
             name = paragraph.group(1).upper()
             key = (current_program, name.casefold())
@@ -294,4 +400,7 @@ def extract_cobol(path: Path) -> dict:
         if edge["source"] in seen_ids
         and (edge["target"] in seen_ids or edge["relation"] == "imports_from")
     ]
-    return {"nodes": nodes, "edges": clean_edges, "raw_calls": raw_calls}
+    result: dict[str, Any] = {"nodes": nodes, "edges": clean_edges, "raw_calls": raw_calls}
+    if copies:
+        result["cobol_copies"] = copies
+    return result

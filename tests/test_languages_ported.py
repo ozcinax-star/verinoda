@@ -107,6 +107,102 @@ def test_vbnet_classes_imports_and_calls_across_partial_files(tmp_path):
     assert ("PlaceOrder()", "calls", "Validate()") in edges           # declared in the other partial file
 
 
+def _extract_files(tmp_path: Path, files: dict[str, str]) -> dict:
+    from verinoda.project_index.extract import extract
+
+    paths = []
+    for rel, text in files.items():
+        p = tmp_path / "src" / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        paths.append(p)
+    return extract(sorted(paths), cache_root=tmp_path / "cache", root=tmp_path / "src", parallel=False)
+
+
+def test_vbnet_nested_types_keep_their_members_and_calls(tmp_path):
+    _needs("vbnet")
+    res = _extract_files(tmp_path, {"Repo.vb": "Public Class Outer\n  Public Class Inner\n    Sub Deep()\n"
+                                               "      Log2()\n    End Sub\n    Sub Log2()\n    End Sub\n"
+                                               "  End Class\n  Public Structure Point\n    Public X As Integer\n"
+                                               "  End Structure\nEnd Class\n"})
+    labels, edges = _labelled(res)
+    assert {"Outer", "Inner", "Deep()", "Log2()", "Point", "X"} <= labels
+    assert ("Deep()", "calls", "Log2()") in edges
+    assert ("Outer", "contains", "Inner") in edges and ("Outer", "contains", "Point") in edges
+
+
+_COBOL_READER = (
+    "       IDENTIFICATION DIVISION.\n"
+    "       PROGRAM-ID. RDR.\n"
+    "       PROCEDURE DIVISION.\n"
+    "       MAIN-PARA.\n"
+    "           PERFORM READ-ONE\n"
+    "           MOVE WS-A TO\n"
+    "               WS-B.\n"
+    "           STOP RUN.\n"
+    "       READ-ONE.\n"
+    "           READ CUST-FILE\n"
+    "               AT END MOVE 'Y' TO WS-EOF\n"
+    "           END-READ.\n"
+    "           EVALUATE TRUE\n"
+    "             WHEN WS-EOF = 'Y'\n"
+    "               PERFORM AFTER-READ\n"
+    "           END-EVALUATE.\n"
+    "       AFTER-READ.\n"
+    "           DISPLAY 'DONE'.\n"
+)
+
+
+def test_cobol_scope_terminators_and_area_b_names_are_not_paragraphs(tmp_path):
+    res = _extract_files(tmp_path, {"rdr.cbl": _COBOL_READER})
+    labels, edges = _labelled(res)
+    paragraphs = {n["label"] for n in res["nodes"] if n["metadata"].get("kind") == "paragraph"}
+    assert paragraphs == {"MAIN-PARA", "READ-ONE", "AFTER-READ"}
+    assert ("READ-ONE", "calls", "AFTER-READ") in edges
+    assert not {"END-READ", "END-EVALUATE", "WS-B"} & labels
+
+
+def test_cobol_copybook_in_another_directory_is_linked_and_a_missing_one_is_no_ghost(tmp_path):
+    program = ("       IDENTIFICATION DIVISION.\n       PROGRAM-ID. MAINP.\n       DATA DIVISION.\n"
+               "       WORKING-STORAGE SECTION.\n       COPY CUSTREC.\n       COPY NOWHERE.\n"
+               "       PROCEDURE DIVISION.\n       MAIN-PARA.\n           STOP RUN.\n")
+    copybook = "       01 CUSTOMER-REC.\n          05 CUST-ID PIC 9(5).\n"
+    res = _extract_files(tmp_path, {"src/main.cbl": program, "copybooks/CUSTREC.CPY": copybook})
+    ids = {n["id"] for n in res["nodes"]}
+    imports = [e for e in res["edges"] if e["relation"] == "imports_from"]
+    assert len(imports) == 1 and imports[0]["target"] in ids and imports[0]["source"] in ids
+    target = next(n for n in res["nodes"] if n["id"] == imports[0]["target"])
+    assert target["label"] == "CUSTREC.CPY"
+
+
+def test_names_that_differ_only_in_case_stay_two_symbols(tmp_path):
+    _needs("r")
+    _needs("solidity")
+    _needs("erlang")
+    res = _extract_files(tmp_path, {
+        "r.R": "Foo <- function() foo()\nfoo <- function() 1\n",
+        "T.sol": "pragma solidity ^0.8.0;\ncontract T { function y() public {} }\n"
+                 "contract t { function x() public {} }\n",
+        "e.erl": "-module(e).\nf() -> 'F'().\n'F'() -> ok.\n",
+    })
+    labels, edges = _labelled(res)
+    by_label: dict[str, set[str]] = {}
+    for n in res["nodes"]:
+        by_label.setdefault(n["label"], set()).add(n["id"])
+    assert {"Foo()", "foo()", "T", "t", "f/0", "F/0"} <= labels
+    assert by_label["Foo()"].isdisjoint(by_label["foo()"]) and by_label["T"].isdisjoint(by_label["t"])
+    assert ("Foo()", "calls", "foo()") in edges and ("f/0", "calls", "F/0") in edges
+    assert ("t", "method", "x()") in edges and ("T", "method", "x()") not in edges
+
+
+def test_an_erlang_export_in_base_notation_does_not_drop_the_file(tmp_path):
+    _needs("erlang")
+    res = _extract_files(tmp_path, {"b.erl": "-module(b).\n-export([f/2#1, g/0]).\nf(X) -> X.\ng() -> f(1).\n"})
+    labels, edges = _labelled(res)
+    assert {"f/1", "g/0"} <= labels
+    assert ("b", "exports", "f/1") in edges and ("b", "exports", "g/0") in edges
+
+
 def test_razor_functions_block_methods(tmp_path):
     from verinoda.project_index.extract import extract_razor
 
@@ -240,6 +336,14 @@ def test_spans_from_the_optional_grammars(tmp_path):
     assert sol[6] == 25 and sol[11] == 14 and sol[20] == 24
     r = index.ts_def_ends((FIX / "r" / "main.R").read_bytes(), ".r")
     assert r[3] == 6 and r[8] == 10
+
+
+def test_a_definition_ending_at_column_zero_ends_on_the_line_before():
+    from verinoda import index
+
+    pytest.importorskip("tree_sitter_groovy")
+    groovy = index.ts_def_ends((ROOT / "tests_upstream" / "fixtures" / "sample.groovy").read_bytes(), ".groovy")
+    assert groovy[14] == 14 and groovy[13] == 16    # line 14 used to end on 15, the next line
 
 
 def test_lang_filter_names_the_new_languages():

@@ -6,7 +6,7 @@ from typing import Any
 
 from tree_sitter import Node
 
-from verinoda.project_index.extractors.base import _file_stem, _make_id, _read_text
+from verinoda.project_index.extractors.base import _CaseIds, _file_stem, _make_id, _read_text
 
 
 _TYPE_DECLARATIONS = {
@@ -90,6 +90,7 @@ def extract_solidity(path: Path) -> dict:
     raw_calls: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     seen_edges: set[tuple[str, str, str]] = set()
+    case_id = _CaseIds()
 
     def add_node(
         nid: str,
@@ -180,7 +181,7 @@ def extract_solidity(path: Path) -> dict:
             continue
         type_name = _read_text(name_node, source)
         type_id = add_node(
-            _make_id(stem, type_kind, type_name),
+            case_id(_make_id(stem, type_kind, type_name), type_name),
             type_name,
             declaration,
             kind=type_kind,
@@ -224,7 +225,7 @@ def extract_solidity(path: Path) -> dict:
             # signature; discriminate on the name — which is unique per kind
             # within a contract scope — rather than the line number, so a node's
             # id stays stable when the member moves (avoids incremental id churn).
-            member_id = _make_id(type_id, kind, name, signature or name)
+            member_id = case_id(_make_id(type_id, kind, name, signature or name), name)
             add_node(
                 member_id,
                 label,
@@ -272,7 +273,7 @@ def extract_solidity(path: Path) -> dict:
                         if field_name_node is None:
                             continue
                         field_name = _read_text(field_name_node, source)
-                        field_id = _make_id(struct_id, "field", field_name)
+                        field_id = case_id(_make_id(struct_id, "field", field_name), field_name)
                         add_node(field_id, field_name, field, kind="field")
                         add_edge(struct_id, field_id, "contains", field)
                 continue
@@ -289,7 +290,7 @@ def extract_solidity(path: Path) -> dict:
                         if value.type != "enum_value":
                             continue
                         value_name = _read_text(value, source)
-                        value_id = _make_id(enum_id, value_name)
+                        value_id = case_id(_make_id(enum_id, value_name), value_name)
                         add_node(value_id, value_name, value, kind="enum_value")
                         add_edge(enum_id, value_id, "contains", value)
                 continue
@@ -429,7 +430,7 @@ def extract_solidity(path: Path) -> dict:
         )
         arity = len(parameters)
         func_id = add_node(
-            _make_id(stem, "function", name, f"{arity}:{signature}"),
+            case_id(_make_id(stem, "function", name, f"{arity}:{signature}"), name),
             f"{name}()",
             declaration,
             kind="function",

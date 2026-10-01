@@ -195,11 +195,11 @@ def extract_vbnet(path: Path) -> dict:
         add_edge(type_id, member_id, "contains", member)
         return member_id
 
-    def process_type(block: Node, parent_id: str, namespace: str) -> None:
+    def process_type(block: Node, parent_id: str, namespace: str) -> tuple[str, str] | None:
         kind = _TYPE_BLOCKS[block.type]
         name_node = block.child_by_field_name("name")
         if name_node is None:
-            return
+            return None
         name = _read_text(name_node, source)
         full_name = f"{namespace}.{name}" if namespace else name
         owner_key = full_name.casefold()
@@ -319,6 +319,7 @@ def extract_vbnet(path: Path) -> dict:
                         handled,
                     ))
             bodies.append((member, method_id, owner_key, name))
+        return type_id, full_name
 
     def scan(node: Node, parent_id: str, namespace: str) -> None:
         if node.type == "imports_statement":
@@ -342,12 +343,14 @@ def extract_vbnet(path: Path) -> dict:
                     scan(child, namespace_id, full_namespace)
             return
         if node.type in _TYPE_BLOCKS:
-            process_type(node, parent_id, namespace)
-            # Nested type declarations are the only child containers that still
-            # need recursion after processing this type's own members.
+            processed = process_type(node, parent_id, namespace)
+            # Verinoda patch: a nested Class/Structure/Module block is a direct
+            # child of its outer block (not wrapped in type_declaration), so
+            # recurse into both forms and place them under the outer type.
+            outer_id, outer_name = processed if processed else (parent_id, namespace)
             for child in node.named_children:
-                if child.type == "type_declaration":
-                    scan(child, parent_id, namespace)
+                if child.type == "type_declaration" or child.type in _TYPE_BLOCKS:
+                    scan(child, outer_id, outer_name)
             return
         for child in node.named_children:
             scan(child, parent_id, namespace)

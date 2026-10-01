@@ -39,7 +39,7 @@ from verinoda.project_index.extractors.bash import extract_bash  # noqa: F401
 from verinoda.project_index.extractors.mcfunction import extract_mcfunction  # noqa: F401
 from verinoda.project_index.extractors.blade import extract_blade  # noqa: F401
 # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d): COBOL, Erlang, R, Solidity and VB.NET
-from verinoda.project_index.extractors.cobol import extract_cobol  # noqa: F401
+from verinoda.project_index.extractors.cobol import extract_cobol, resolve_cobol_copybooks  # noqa: F401
 from verinoda.project_index.extractors.csharp import (
     CsharpNameResolver,
     _resolve_cross_file_csharp_imports,
@@ -5235,6 +5235,13 @@ register_language_resolver(
 )
 register_language_resolver(
     LanguageResolver("r_sourced_calls", frozenset({".r", ".R"}), resolve_r_sourced_calls)
+)
+register_language_resolver(
+    LanguageResolver(
+        "cobol_copybooks",
+        frozenset({".cbl", ".cob", ".cobol", ".cpy", ".CBL", ".COB", ".CPY"}),
+        resolve_cobol_copybooks,
+    )
 )
 register_language_resolver(
     LanguageResolver(

@@ -6,7 +6,7 @@ from typing import Any, Iterable
 
 from tree_sitter import Node
 
-from verinoda.project_index.extractors.base import _file_stem, _make_id, _read_text
+from verinoda.project_index.extractors.base import _CaseIds, _file_stem, _make_id, _read_text
 
 
 def _atom(value: str) -> str:
@@ -74,6 +74,17 @@ def resolve_erlang_remote_calls(
             })
 
 
+def _integer(text: str) -> int | None:
+    """Verinoda patch: an Erlang integer literal, base notation (``2#101``) and
+    digit separators (``1_000``) included; None for anything else."""
+    text = text.replace("_", "")
+    base, separator, digits = text.partition("#")
+    try:
+        return int(digits, int(base)) if separator else int(text)
+    except ValueError:
+        return None
+
+
 def extract_erlang(path: Path) -> dict:
     try:
         from tree_sitter import Parser
@@ -95,6 +106,7 @@ def extract_erlang(path: Path) -> dict:
     raw_calls: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     seen_edges: set[tuple[str, str, str]] = set()
+    case_id = _CaseIds()
 
     def add_node(
         nid: str,
@@ -170,10 +182,11 @@ def extract_erlang(path: Path) -> dict:
             for fa in (item for item in _descendants(node) if item.type == "fa"):
                 atom_node = next((item for item in _descendants(fa) if item.type == "atom"), None)
                 integer = next((item for item in _descendants(fa) if item.type == "integer"), None)
-                if atom_node is not None and integer is not None:
+                arity = _integer(_read_text(integer, source)) if integer is not None else None
+                if atom_node is not None and arity is not None:
                     export_specs.append((
                         _atom(_read_text(atom_node, source)),
-                        int(_read_text(integer, source)),
+                        arity,
                         fa,
                     ))
             continue
@@ -252,7 +265,7 @@ def extract_erlang(path: Path) -> dict:
                 name = _atom(_read_text(name_container, source))
                 label = name
             declaration_id = add_node(
-                _make_id(module_id, kind, name),
+                case_id(_make_id(module_id, kind, name), name),
                 label,
                 node,
                 kind=kind,
@@ -277,7 +290,7 @@ def extract_erlang(path: Path) -> dict:
             function_id = functions.get(key)
             if function_id is None:
                 function_id = add_node(
-                    _make_id(module_id, "function", name, str(arity)),
+                    case_id(_make_id(module_id, "function", name, str(arity)), name),
                     f"{name}/{arity}",
                     clause,
                     kind="function",

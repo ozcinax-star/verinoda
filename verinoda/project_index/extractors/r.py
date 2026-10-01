@@ -6,7 +6,7 @@ from typing import Any
 
 from tree_sitter import Node
 
-from verinoda.project_index.extractors.base import _file_stem, _make_id, _read_text
+from verinoda.project_index.extractors.base import _CaseIds, _file_stem, _make_id, _read_text
 
 
 _CLASS_CONSTRUCTORS = frozenset({"R6Class", "setRefClass", "ggproto"})
@@ -112,6 +112,7 @@ def extract_r(path: Path) -> dict:
     scope_parent: dict[str, str] = {}
     callable_bodies: list[tuple[Node, str]] = []
     classes: dict[str, str] = {}
+    case_id = _CaseIds()
 
     def add_node(
         nid: str,
@@ -185,7 +186,7 @@ def extract_r(path: Path) -> dict:
     def declare_function(
         name: str, function: Node, body: Node | None, owner: str, relation: str = "contains"
     ) -> str:
-        nid = _make_id(owner, name)
+        nid = case_id(_make_id(owner, name), name)
         line = function.start_point[0] + 1
         add_node(nid, f"{name}()", line, kind="function", callable_node=True)
         add_edge(owner, nid, relation, line)
@@ -198,7 +199,7 @@ def extract_r(path: Path) -> dict:
         return nid
 
     def add_class(name: str, declaration: Node, owner: str = file_id) -> str:
-        nid = _make_id(stem, "class", name)
+        nid = case_id(_make_id(stem, "class", name), name)
         line = declaration.start_point[0] + 1
         add_node(nid, name, line, kind="class", callable_node=True)
         add_edge(owner, nid, "contains", line)
@@ -355,7 +356,7 @@ def extract_r(path: Path) -> dict:
                             add_class_members(class_id, arguments)
                         continue
                 if top_level and name_node is not None:
-                    nid = _make_id(owner, name)
+                    nid = case_id(_make_id(owner, name), name)
                     line = name_node.start_point[0] + 1
                     add_node(nid, name, line, kind="variable")
                     add_edge(owner, nid, "contains", line)
