@@ -133,7 +133,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 14.1 | **Evidence-backed code tours** | A tour built from `trace` or the dataflow view, pinned to a commit, re-anchored when code moves; CodeTour format | CodeTour | `verinoda tour` writes a `.tour` file that opens in VS Code |
-| 14.2 | **Named flow maps** | A `trace` or map result saved under a name, shareable and citable by agents | Windsurf/Devin Codemaps | `verinoda map save NAME` and an MCP read by name |
 
 ## 15 - Runtime evidence import
 

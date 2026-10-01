@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D117)
+## Upgrading from 0.3.2 (D60-D118)
 
 ### D63: Running a project's own tests safely
 
@@ -561,6 +561,14 @@ saw a test both pass and fail. No MCP tool added; the tool count is unchanged.
 docs/UPGRADING.md must mention **v7** for `tests/test_docs.py::test_schema_version_and_mcp_tool_count_match_the_code`
 to pass (it asserts `v{SCHEMA_VERSION}` appears there); this branch could not edit UPGRADING.md, so that one
 test fails until the upgrading note is merged.
+
+### D118: Named flow maps
+
+New: `verinoda map save NAME --trace A B` (or `--view V`) keeps a trace or map views in
+`.verinoda/maps/NAME.json`; `verinoda map show NAME` reads it back as `current`, `stale` (exit 1, the changed
+files named) or `unknown` (exit 1, it cites no file) and `map list` lists them; `.verinoda` is git-ignored, so
+share a map with `git add -f .verinoda/maps/NAME.json`. MCP: `map_view` takes `view: "saved"` with `targets: [NAME]`. The MCP
+tool count does not change (no new tool), so UPGRADING's tool count stays as it is.
 
 ### D60-D62
 

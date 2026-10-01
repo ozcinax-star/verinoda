@@ -9235,6 +9235,108 @@ file, 4 runs on one tree with every test flipping, in a directory with spaces an
   `tests/test_store.py`, `tests/test_docs.py` (one expected failure: UPGRADING.md lacks v7, see above),
   `tests/test_line_endings.py`.
 
+## 91. Named flow maps (D118, 2026-10-01)
+
+### 91.1 Why
+
+A trace or a map view an agent worked out ("how an order request reaches the repository") is gone when the
+session ends; the next agent, or a reviewer, runs it again or trusts a copy pasted into a note that nobody
+checks. Windsurf/Devin Codemaps keep such maps by name. Here a saved map is citable by name, and reading it back
+says whether the code it describes is still the code: an old map is never presented as current.
+
+### 91.2 Decisions
+
+- **No new command or tool: `map` gets three actions, MCP `map_view` one view.** `verinoda map save NAME
+  [--trace SOURCE TARGET [--mode] | --view V [--target ...] [--base] [--max-tokens]]` (neither: the default
+  views), `map show NAME`, `map list`. The first positional of `map` is the project folder; `save`, `show` and
+  `list` there are the actions (a project folder with such a name is passed as `./save` or `--repo`). The MCP
+  read is `map_view` with `view: saved`, `targets: [NAME]` (none: the list), reached through `run_tool` in the
+  core profile: the core menu grows by six characters (`|saved`), no tool and no argument is added, the tool
+  count stays as it is.
+- **What is saved is the `--json` result the command prints**, with the arguments that made it, under
+  `.verinoda/maps/NAME.json` (`verinoda.named_map/1`), the index's latest snapshot id and commit, and for each
+  file the result cites the sha256 **the snapshot recorded** - not the file on disk: the result describes the
+  indexed version. A file is cited when a string or key of the result names a snapshot path, alone or as
+  `path:LINE`, `path:A-B` or `path::Symbol`, as the whole string or as a word of a longer one (the tests view
+  writes `"apply_discount() (orders/pricing.py:11)"` and `"orders/repository.py:9 .__init__()"`). The
+  index-freshness keys of the result (`stale_count`, `stale_files`, `index_freshness`) are dropped before the
+  citations are read and are not saved: a file is never cited because it changed since the index; a cited file that had changed since the
+  index when saving is recorded as `stale_at_save` and makes the map read back stale at once.
+- **Reading back hashes the cited files again** (stat-cached, `snapshot.hash_files`): `current` when each has the
+  recorded hash, `stale` when one changed or is gone, `unknown` when the map cites no file (an empty cycles or
+  sides view, an impact view of a clean tree): nothing was compared, so the claim is `unknown`, not
+  `primary_source_verified`, and the next step is the command that makes the map from the code now. The answer carries `as_of` (snapshot, commit, saved_at),
+  the changed files (up to 20, with the exact count), one `primary_source_verified` claim stating the hash
+  comparison (evidence: each changed file with its saved hash prefix and `modified`/`removed`), the command
+  that makes the map again, and `limits`. The saved result is returned as it was, under `result`, after those
+  keys; in the MCP answer `status`, `name`, `as_of`, the changed files, the claim and the next step are kept
+  first and are never cut before the saved result.
+- **Refused, not saved**: a trace that is not `found`, a view whose `--target` did not resolve (exit 2), a name
+  that is not 1-64 letters, digits, `.`, `_`, `-` starting with a letter or digit (no path can be formed from
+  it). Saving under an existing name replaces the map (written to a temporary file, then renamed).
+- **Exit codes of `map show`**: 0 current, 1 stale (for CI: a map cited in a document that no longer holds),
+  1 also for unknown (it cannot be shown current), 2 not found, invalid name, or a map file that is not a
+  valid saved map (not JSON, `files` not a map of repository-relative paths to sha256 hashes); such a file is
+  listed as `invalid` and never stops the other maps from being listed.
+- **Names are exact, and names that differ only in case are refused**: `maps/` ignores case on Windows and
+  macOS, so `map save T1` beside `t1` would replace it; it is refused (exit 2) and `map show T1` finds only a
+  file named exactly `T1.json`.
+- **An impact or repo view saved without `--target`** took its targets from the working-tree changes; the
+  targets it used are saved as its `target` argument, so the re-run command makes the same map.
+- **Arguments that would be ignored are refused** (exit 2), as plain `map` does: `--trace` with a view
+  argument, `--mode` without `--trace`, any view or trace argument with `show` or `list`, a name with `list`.
+- **Sharing**: `.verinoda/` is git-ignored as a whole (`.verinoda/.gitignore` is `*`), so a map is shared by
+  committing it explicitly: `git add -f .verinoda/maps/NAME.json` (printed by `map save`); once tracked, later
+  saves show up as changes.
+
+### 91.3 Measured
+
+On a scanned copy of `examples/orders_app`: the trace `create_order_handler -> OrderRepository.save` saves as
+1,821 bytes citing 3 files; the default views (`map save all`) as 21,953 bytes citing 11 files. Reading either
+back took about 0.04 s. The MCP answer for the trace is 1,828 characters, for all default views 11,678 (cut
+to the 12,000 cap with the status keys first). Core menu: 4,444 characters (limit 4,500).
+
+Review round: the citations were read as whole strings only, so a saved tests view cited 0 of the 6 files
+it names and read `current` after any edit; it now cites them (per view on the scratch copy: hierarchy 11,
+dependencies 7, dataflow 3, config 5, tests 6, history 11, repo 7, dead 2, hotspots 5; cycles, sides and a
+clean-tree impact view 0 and read `unknown`). The freshness keys decided the citations before being dropped
+(a cycles view saved beside an edited `orders/pricing.py` read stale); they are now dropped first. Also fixed:
+a map citing nothing read `current`; an impact view without `--target` did not keep its targets; `T1` replaced
+`t1`; a broken map file crashed `map show` and `map list`; an unreadable index gave a traceback with exit 1;
+ignored arguments passed silently. `git add -f` on a saved map stages it (checked on the scratch copy).
+
+### 91.4 Not done
+
+- `current` means only that the files the map cites are as they were. A file it does not cite can change what
+  a new run returns (a new path through a new file, a new dependent of an impact target, a new folder in the
+  hierarchy); the read says so in `limits`. A whole-project view cites most files and goes stale with almost any
+  change.
+- A file is cited only when a string of the result names it; a view that names a folder or a package (the
+  hierarchy's folder rows) is checked through the files it does name.
+- The saved result is not re-run or migrated: a map saved by an older Verinoda keeps that version's shape.
+- An impact view saved without `--target` cites the changed files it was computed from, so it reads back
+  stale until the change is indexed and the map saved again.
+- A map file is checked for shape when read, not for having been written by Verinoda: a hand-edited hash
+  only makes the map read stale.
+- Saving is CLI only; agents read maps by name but do not write them (no write tool behind the core menu).
+
+### 91.5 Tests
+
+`tests/test_named_maps.py`: citation of `path:LINE`, `path:A-B`, `path::Symbol` and keys; name checks; a trace
+saved through the CLI reads current, stays current when an uncited file changes, goes stale (exit 1, the file
+named, the claim's evidence, the re-run command, the result kept) when a cited file changes or is removed; a
+view saved, listed, shown and replaced; a map saved from a file changed since the index reads stale; refusals
+(unresolved trace, bad name, missing name, stray argument, unknown map, empty list); MCP `map_view` saved view
+(read, list, two targets, bad name, unknown name, a small response cap keeping the status first).
+Review round: citations inside longer strings; a saved tests view cites the files it names and goes stale on
+an edit to one; a view saved beside an unrelated stale file cites nothing from it and reads `unknown` (exit 1);
+an impact view without `--target` keeps its targets; a name differing only in case is refused; broken map
+files (list `files`, a `../` path, not JSON) read `invalid` (exit 2) and are listed without hiding the
+others, also through MCP; an unreadable index does not crash a read and refuses a save; ignored arguments are
+refused.
+Also run: `tests/test_mcp.py` (view enum, core menu under 4,500), `tests/test_docs.py`, `tests/test_cli.py -k
+"map or trace or help"`, `tests/test_architecture_map.py`, `tests/test_line_endings.py`.
+
 ## Sources
 
 - **Retrieval:**
