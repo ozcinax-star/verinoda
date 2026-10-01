@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D165)
+## Upgrading from 0.4.0 (D137-D166)
 
 ### D137: Trigram regex index
 
@@ -337,6 +337,39 @@ Nothing to migrate. A single-project server (`mcp serve`, `--repo`, `--repo-of`)
   lookups accept the first line too.
 - Tree-sitter anchor facts are computed again once (new cache key `ts1.def2`). Anchors already
   stored keep their scheme and stay valid.
+
+### D166: Route prefixes, trailing slashes and bounded route output
+
+`verinoda routes` has these changes:
+
+- **Prefixes.** It now shows FastAPI, Flask and APIRouter prefixes given by an expression:
+  - A module constant or a pydantic settings default is resolved, also from another module, and the row
+    cites it in `prefix_from`.
+  - Any other expression keeps its routes, marked `mount: "prefix not resolved: <expr>"`. Before, the
+    prefix was silently dropped, or a `register_blueprint` mount was lost.
+  - The text view's `(mount not found)` is now `(mount <reason>)`.
+- **Trailing slash.** Python route paths keep the trailing `/` the code writes, so `/api/v1/items/` is no
+  longer shown as `/api/v1/items`. Gold files or scripts that compared the path without the slash need
+  updating.
+- **Labels.** Rows and calls in test or example code have `code: "test"` or `code: "example"`.
+- **Test calls.** A test or example call matches the routes of the app it imports first (the full
+  import closure, and routes mounted on it), so fewer calls are ambiguous. Such an edge notes how many
+  routes outside also match the path. A supertest call to an imported app with no matching route is now
+  `unmatched` with a `why`.
+- **Unresolved prefixes.** A call that fits only routes whose prefix is not resolved is now unmatched,
+  with a `why`. Before, it was linked with a note.
+- **Bounded JSON.** The JSON is bounded by default:
+  - `ambiguous` entries are groups (`calls`, `also_at`, `candidates_total`), at most 50 groups of 5
+    candidates;
+  - `unmatched` and `method_mismatch` hold at most 50 entries each, with `<key>_more` counts;
+  - `ambiguous_calls` and `<key>_by_code` hold the totals;
+  - `routes --all` restores every call and every candidate.
+- **Sidecar counts.** The sidecar's cross-service counts are now exact. Before, they stopped at 200 per
+  list.
+- **Facts version.** `FACTS_VERSION` is 4, so the first `update` after upgrading parses the route files
+  again.
+- **Harness.** A routes gold check's `method` now really is checked against `methods`, and `at`
+  (file:line) is accepted. summary.md merges environment lines whose `verinoda/` code is the same.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
