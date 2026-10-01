@@ -3040,6 +3040,11 @@ def _r_observe(r: dict) -> None:
           f"{r.get('evidence_records')} evidence record(s) (not printed; `--json` for the summary)")
     if r.get("runtime_flaws") is not None:
         _r_flaws(r["runtime_flaws"])
+    if r.get("runtime_diff") is not None:
+        from verinoda.runtime import rundiff
+
+        for ln in rundiff.render(r["runtime_diff"]):
+            print("  " + ln)
     cost = r.get("cost") or {}
     print(f"  cost: cpu {cost.get('cpu_s')} s, wall {cost.get('wall_s')} s, run {cost.get('duration_s')} s")
     for lim in r.get("limits") or []:
@@ -3080,9 +3085,22 @@ def cmd_observe(args) -> int:
         flawmod.thresholds(th)
     except ValueError as exc:
         raise SystemExit(f"error: {exc}") from None
+    if args.compare:
+        from verinoda import treestate
+
+        try:
+            treestate.resolve_commit(repo, args.compare)
+        except Exception as exc:  # noqa: BLE001 - a ref that does not name a commit
+            raise SystemExit(f"error: --compare {args.compare}: {exc}") from None
     res = rt.observe(st, repo, ids, timeout=args.timeout, snapshot=st.latest_snapshot(), graph=g,
                      targets=symbols, mode=args.mode, flaws=not args.no_flaws, flaw_thresholds=th)
     summary = _observe_summary(res, g, symbols, selected)
+    if args.compare:
+        from verinoda.runtime import rundiff
+
+        summary["runtime_diff"] = rundiff.observe_pair(st, repo, ids, args.compare, graph=g, head=res,
+                                                       timeout=args.timeout, flaws=not args.no_flaws,
+                                                       route_table=rundiff.route_table(repo, g))
     _emit(args, summary, _r_observe)
     # 3: the run did not establish what was asked (incomplete trace, or reach asked with the tracer off)
     unobserved = any(not v["n"] and not v["observed"] for v in summary.get("target_reach", {}).values())
@@ -4976,6 +4994,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="runtime flaws: a slow path takes MS+ ms of a test phase (default 100) ...")
     sp.add_argument("--slow-share", type=float, metavar="F",
                     help="... and at least this share of it, 0..1 (default 0.2)")
+    sp.add_argument("--compare", metavar="REF",
+                    help="also run the same tests on the files of commit REF (an isolated copy) and list what "
+                         "changed at run time: calls, library calls, SQL, routes, exceptions, test outcomes")
     sp = add("probe", cmd_probe, "call one changed Python function on many generated inputs at the base and in the "
                                  "working tree (isolated runs) and report behaviour differences, stated properties "
                                  "that fail and undeclared exceptions (exit 3 unless nothing was found)")

@@ -4882,6 +4882,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         diffs = [fd for fd in diffs if fd.rel not in reports]
     base_texts = {fd.rel: fd.old for fd in diffs}
     ctx = _Ctx(repo, g, store, base_texts)
+    ctx.base_commit = (base_info or {}).get("commit")
     if staged and not targets:
         # the staged tree for every file: files outside the diff whose working copy differs from the index are
         # read from the index, and the index lists the files
@@ -5406,7 +5407,7 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
             from verinoda.runtime import trace
 
             nodes = [c.node for c in code_changes if c.node and c.file.endswith(".py")]
-            res = trace.observe(ctx.store, ctx.repo, py_ids, graph=ctx.g, targets=nodes)
+            res = trace.observe(ctx.store, ctx.repo, py_ids, graph=ctx.g, targets=nodes, flaws=True)
             tr = res.get("target_reach") or {}
             by_symbol = {}
             for c in code_changes:
@@ -5420,6 +5421,13 @@ def _tests(ctx: _Ctx, changes: list[Change], *, run_tests: bool, observe: bool, 
                               "limits": res.get("limits"), "error": res.get("error"),
                               "tree": "the working tree (it equals the index for every tracked file)" if staged
                               is not None else "the working tree"}
+            if res.get("run_id") and getattr(ctx, "base_commit", None):
+                from verinoda.runtime import rundiff
+
+                # the same tests on the base commit: what the change altered at run time
+                out["observe"]["runtime_diff"] = rundiff.observe_pair(
+                    ctx.store, ctx.repo, py_ids, ctx.base_commit, graph=ctx.g, head=res,
+                    route_table=rundiff.route_table(ctx.repo, ctx.g))
             reached = {t for v in by_symbol.values() for t in v}
             out["no_test_reaches"] = [s for s in out["no_test_reaches"] if not by_symbol.get(s)]
             out["reach_unknown"] = [r for r in out["reach_unknown"] if not by_symbol.get(r["symbol"])]
@@ -5941,6 +5949,10 @@ def render_text(res: dict) -> str:
                                                                      for s, v in (ob.get("reached") or {}).items())
                    + (f"; selected but not reaching: {', '.join(ob['selected_not_reaching'])}"
                       if ob.get("selected_not_reaching") else ""))
+        if ob.get("runtime_diff"):
+            from verinoda.runtime import rundiff
+
+            out += ["  " + ln for ln in rundiff.render(ob["runtime_diff"])]
     if t.get("run"):
         r = t["run"]
         summ = r.get("summary")

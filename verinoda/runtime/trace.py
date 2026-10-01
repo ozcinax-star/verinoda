@@ -155,10 +155,11 @@ def select_tests(g, symbols: Iterable[str], *, terms: Iterable[str] = (), limit:
 # -- trace file ----------------------------------------------------------------------------
 
 def parse_trace(data: bytes) -> dict:
-    """``{"header": {...}, "tests": {nodeid: {...}}, "edges": [...]}`` from plugin JSON lines."""
+    """``{"header": {...}, "tests": {nodeid: {...}}, "edges": [...], "raises": [...]}`` from plugin JSON lines."""
     header: dict = {}
     tests: dict[str, dict] = {}
     edges: list[dict] = []
+    raises: list[dict] = []
     for raw in data.decode("utf-8", "replace").splitlines():
         if not raw.strip():
             continue
@@ -172,15 +173,32 @@ def parse_trace(data: bytes) -> dict:
         if k == "header":
             header = rec
         elif k == "test":
-            tests[rec["id"]] = {"phases": rec.get("phases", {}), "duration": rec.get("duration")}
+            tests[rec["id"]] = {"phases": rec.get("phases", {}), "duration": rec.get("duration"),
+                                **({"exc": rec["exc"]} if isinstance(rec.get("exc"), dict) else {})}
         elif k == "edge":
             edges.append(rec)
+        elif k == "raise" and isinstance(rec.get("site"), list) and len(rec["site"]) == 3:
+            raises.append(rec)
     if header.get("schema") not in (None, SCHEMA):
         raise ValueError(f"unsupported trace schema {header.get('schema')!r}")
     ctxs = header.get("contexts", [])
-    for e in edges:
-        e["contexts"] = [ctxs[i] for i in e.get("ctx", []) if 0 <= i < len(ctxs)]
-    return {"header": header, "tests": tests, "edges": edges}
+    for e in edges + raises:
+        e["contexts"] = [ctxs[i] for i in e.get("ctx", []) if isinstance(i, int) and 0 <= i < len(ctxs)]
+    return {"header": header, "tests": tests, "edges": edges, "raises": raises}
+
+
+MAX_RAISES_KEPT = 2000   # raise sites kept in a run's header, most hit first
+
+
+def _raises_for_header(raises: list[dict]) -> list[dict]:
+    """The raise records as the run header keeps them: site, type, hits and up to 10 tests."""
+    out = []
+    for r in sorted(raises, key=lambda r: (-int(r.get("hits") or 0), r["site"][0], r["site"][1], r.get("type") or ""))[
+            :MAX_RAISES_KEPT]:
+        tests = sorted({t for t in (_ctx_test(c) for c in r.get("contexts", [])) if t})
+        out.append({"site": r["site"], "type": str(r.get("type") or "?"), "hits": int(r.get("hits") or 0),
+                    "tests": tests[:10], "n_tests": len(tests)})
+    return out
 
 
 def phase_outcome(phases: dict) -> str:
@@ -198,15 +216,22 @@ def _ctx_test(ctx: str) -> str | None:
 # -- source helpers ------------------------------------------------------------------------
 
 class _Sources:
-    """Per-call cache of the user's files (lines + AST), read lazily."""
+    """Per-call cache of the user's files (lines + AST), read lazily: the working tree's, or with ``commit``
+    the files of that commit (``git cat-file``)."""
 
-    def __init__(self, repo: Path):
-        self.repo = repo
+    def __init__(self, repo: Path, commit: str | None = None):
+        self.repo, self.commit = repo, commit
         self._lines: dict[str, list[str] | None] = {}
         self._trees: dict[str, ast.AST | None] = {}
 
     def lines(self, rel: str) -> list[str] | None:
         if rel not in self._lines:
+            if self.commit:
+                from verinoda.snapshot import git
+
+                text = git(self.repo, "cat-file", "blob", f"{self.commit}:{rel}") if rel != EXT else None
+                self._lines[rel] = text.splitlines() if text is not None else None
+                return self._lines[rel]
             try:
                 self._lines[rel] = (self.repo / rel).read_text(encoding="utf-8", errors="replace").splitlines()
             except (OSError, ValueError):
@@ -340,6 +365,9 @@ def ingest(store: Store, trace: dict, *, experiment_id: str | None, snapshot_id:
     header = dict(trace["header"])
     header.pop("contexts", None)
     header["tests_outcomes"] = trace["tests"]
+    if trace.get("raises"):
+        header["raises"] = _raises_for_header(trace["raises"])
+        header["raises_total"] = len(trace["raises"])
     header.update(extra_header or {})
     rid = run_id or new_id("rtr")
     rows = []
@@ -523,7 +551,7 @@ def _resolve_targets(g, targets: Iterable[str]) -> list[tuple[str, str | None, s
 def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float | None = None,
             snapshot=None, graph=None, targets: Iterable[str] = (), mode: str = "auto",
             limits: dict | None = None, max_evidence: int = MAX_EVIDENCE, flaws: bool = False,
-            flaw_thresholds: dict | None = None) -> dict:
+            flaw_thresholds: dict | None = None, ref: str | None = None) -> dict:
     """Run ``test_ids`` (<= 50; empty = the whole suite) under the call tracer and ingest the trace.
 
     Returns ``run_id``, ``complete`` (+ ``completeness`` details), observed
@@ -537,6 +565,12 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     N+1 queries, repeated SQL and slow paths of this run, by
     ``flaw_thresholds`` (:data:`verinoda.runtime.flaws.DEFAULTS`). The block is
     also kept in the run's header (without evidence).
+
+    ``ref``: run the tests on the files of that commit instead of the working tree (an isolated copy made
+    with ``git cat-file``, :func:`verinoda.experiments.run`); the run is filed under no snapshot, the test
+    map is not updated from it, and its ``commit`` is the resolved commit. Edge flags and the flaws' loops
+    read that commit's files; graph nodes are the working tree's graph (``files_differ_from_worktree`` lists
+    the traced files that differ).
     """
     from verinoda import experiments
     from verinoda.paths import load_config
@@ -553,10 +587,16 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     grace = max(2.0, min(30.0, 0.15 * timeout))
     lim = {**DEFAULT_LIMITS, **(limits or {})}
     flaw_th = flawmod.thresholds(flaw_thresholds) if flaws else None
-    snap = _snapshot_row(store, snapshot)
-    # The commit that is checked out now is what runs (the copy is made from the working tree);
-    # edits since the snapshot are reported per traced file (files_changed_since_snapshot).
-    commit = (git(repo, "rev-parse", "HEAD") or "").strip() or (snap or {}).get("commit_sha")
+    if ref is not None:
+        from verinoda import treestate
+
+        commit = treestate.resolve_commit(repo, ref)
+        snap = None
+    else:
+        snap = _snapshot_row(store, snapshot)
+        # The commit that is checked out now is what runs (the copy is made from the working tree);
+        # edits since the snapshot are reported per traced file (files_changed_since_snapshot).
+        commit = (git(repo, "rev-parse", "HEAD") or "").strip() or (snap or {}).get("commit_sha")
     env = {"VERINODA_TRACE_MODE": mode, "VERINODA_TRACE_FILE": TRACE_FILE,
            "VERINODA_TRACE_DEADLINE_S": f"{max(1.0, timeout - grace):.1f}",
            "VERINODA_TRACE_MAX_PY_START": str(int(lim["max_py_start"])),
@@ -571,12 +611,14 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
             "-p", "no:cacheprovider", *ids]
     scope = f"{len(ids)} selected test id(s)" if ids else "whole test suite"
     base = {"run_id": None, "complete": False, "scope": scope, "tests_requested": ids,
-            "truncated_ids": truncated, "limits": list(LIMITS_TEXT)}
+            "truncated_ids": truncated, "limits": list(LIMITS_TEXT),
+            **({"ref": ref, "commit": commit} if ref is not None else {})}
     file_ids: dict[str, str] = {}   # content ids of the copy that ran: the test map's fingerprints
     try:
-        exp = experiments.run(store, repo, argv, hypothesis=f"observe calls made by {scope}", commit=commit,
+        exp = experiments.run(store, repo, argv, hypothesis=f"observe calls made by {scope}"
+                              + (f" at {ref}" if ref is not None else ""), commit=commit,
                               timeout=timeout, plugins=plugins, env_extra=env,
-                              file_ids=file_ids)
+                              file_ids=file_ids, ref=ref)
     except experiments.ExperimentRefused as exc:
         return {**base, "error": f"refused: {exc}",
                 "next_step": exc.next_step or "check the test ids (paths must stay inside the repository) or enable a "
@@ -599,7 +641,7 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     sha = hashlib.sha256(data).hexdigest()
     trace = parse_trace(data)
     h = trace["header"]
-    src = _Sources(repo)
+    src = _Sources(repo, commit if ref is not None else None)
     boundary_sites = {(e["caller"][0], e["caller"][1]) for e in trace["edges"] if e.get("boundary")}
     flags = {i: _edge_flags(e, src, boundary_sites) for i, e in enumerate(trace["edges"])}
     session_complete = h.get("exitstatus") in (0, 1) and not h.get("stopped_early") and exp["outcome"] != "timeout"
@@ -608,6 +650,11 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
     extra = {"requested": ids, "truncated_ids": truncated, "session_complete": session_complete,
              "complete_trace": bool(h.get("complete")), "experiment_outcome": exp["outcome"],
              "files_changed_since_snapshot": changed, "trace_path": trace_path}
+    if ref is not None:
+        extra.update(ref=ref, files_differ_from_worktree=_differ_from_worktree(repo, file_ids, trace["edges"]))
+    flaws_path = (exp.get("artifacts") or {}).get(flawmod.FLAWS_FILE) if flaws else None
+    if flaws_path:
+        extra["flaws_path"] = flaws_path
     trace["header"] = {**h, "complete": complete}
     rid = new_id("rtr")
     flaw_block = None
@@ -618,7 +665,8 @@ def observe(store: Store, repo: Path, test_ids: Iterable[str], *, timeout: float
                  extra_header=extra, flags=flags, run_id=rid)
     from verinoda import testmap
 
-    mapped = testmap.update(store, rid, file_ids)
+    # the test map describes the working tree's tests: a run of another commit does not update it
+    mapped = testmap.update(store, rid, file_ids) if ref is None else {"skipped": f"a run of {ref}"}
     run = load_run(store, rid)
     g = (graph if graph is not None else _load_graph(repo)) or None  # graph=False: skip node mapping
     mapper = _Mapper(g, src)
@@ -648,6 +696,22 @@ def _flaws(exp: dict, src: _Sources, rid: str, th: dict, repo: Path, commit: str
         block["limits"].append("the test run stopped early or ran fewer tests than asked: counts cover the tests "
                                "that ran")
     return block
+
+
+def _differ_from_worktree(repo: Path, file_ids: dict[str, str], edges: list[dict]) -> list[str]:
+    """Traced files of a commit copy whose content differs from the working tree's (or that it lacks)."""
+    from verinoda.treestate import content_id
+
+    files = sorted({p for e in edges for p in (e["caller"][0], e["callee"][0]) if p != EXT})
+    out = []
+    for rel in files:
+        try:
+            cur = content_id((repo / rel).read_bytes())
+        except OSError:
+            cur = None
+        if file_ids.get(rel) is None or file_ids.get(rel) != cur:
+            out.append(rel)
+    return out[:200]
 
 
 def _changed_since_snapshot(store: Store, repo: Path, snap: dict | None, edges: list[dict]) -> list[str]:
