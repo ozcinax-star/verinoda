@@ -6,8 +6,10 @@ and every step is idempotent, so running it again is how you refresh a project:
 1. ``init`` - create ``.verinoda/`` (database, config); never in the home
    directory itself unless ``allow_home``;
 2. agent skills (+ MCP) for the agents that are actually installed on this
-   machine (``agents="auto"``), or the ones named, through the same installer
-   as ``verinoda install`` (it never overwrites files it does not own);
+   machine (``agents="auto"``: Claude Code and Codex on PATH; ``agents="all"``:
+   every supported agent found by its rule, :func:`found_agents`), or the ones
+   named, through the same installer as ``verinoda install`` (it never
+   overwrites files it does not own);
 3. ``scan`` on a first run, ``update`` afterwards - index the code (AST only,
    no LLM, no network). After step 2, so the index already has what setup
    wrote; Verinoda's own files are not indexed at all (:mod:`verinoda.selffiles`);
@@ -25,12 +27,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-AGENTS = ("claude", "codex")
+from verinoda.agents import more_agents
+from verinoda.agents.installer import ALL_AGENTS as AGENTS  # every agent setup can name
+
+SKILL_AGENTS = ("claude", "codex")
 USAGE = {
     "claude": "Claude Code: open this folder, approve the `verinoda` MCP server once (/mcp), then ask "
               "`/verinoda <question>`",
     "codex": "Codex: trust this project so it reads .codex/config.toml, then mention `$verinoda <question>` "
              "(Codex has no /verinoda command)",
+    **{a: s.usage for a, s in more_agents.SPECS.items()},
 }
 
 
@@ -195,16 +201,31 @@ def detect_agents() -> list[str]:
     """Agents whose CLI is on PATH (the same lookup the installer uses)."""
     from verinoda.agents import installer
 
-    return [a for a in AGENTS if installer._which(a)]
+    return [a for a in SKILL_AGENTS if installer._which(a)]
 
 
-def _choose(agents: str | list[str]) -> list[str]:
+def found_agents(project_dir: Path, home: Path | None = None, scope: str = "project") -> dict[str, str]:
+    """``{agent: why it counts as found}`` for every supported agent: Claude Code and Codex when their CLI
+    is on PATH, the others by :func:`verinoda.agents.more_agents.found` (their folder in the project or the
+    home folder, or their program on PATH). Agents with no location for ``scope`` are left out."""
+    from verinoda.agents import installer
+
+    home = Path(home) if home is not None else Path.home()
+    out = {a: f"`{a}` is on PATH" for a in SKILL_AGENTS if installer._which(a)}
+    for a in more_agents.AGENTS:
+        why = more_agents.found(a, project_dir, home, installer._which)
+        if why and scope in more_agents.scopes(a):
+            out[a] = why
+    return out
+
+
+def _choose(agents: str | list[str], found: dict[str, str] | None = None) -> list[str]:
     if isinstance(agents, (list, tuple)):
         chosen = list(agents)
     elif agents == "auto":
         chosen = detect_agents()
     elif agents == "all":
-        chosen = list(AGENTS)
+        chosen = list(found or {})
     elif agents == "none":
         chosen = []
     else:
@@ -233,9 +254,12 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
                            "or pass --allow-home if you really mean it")
     if scope not in ("project", "user"):
         raise SetupRefused("scope must be 'project' or 'user'")
-    chosen = _choose(agents)
+    found = found_agents(repo, home, scope) if agents == "all" else None
+    chosen = _choose(agents, found)
 
     report: dict = {"repo": str(repo), "steps": [], "agents": [], "warnings": [], "next_steps": []}
+    if found is not None:  # why each agent counts as found (a folder or a program, never a guess)
+        report["agents_found"] = found
     # the command that runs this build: `verinoda` only when the PATH one is this build (installer.resolve_launcher)
     launcher = installer.resolve_launcher()
     cli = launcher["cli"]
@@ -322,10 +346,10 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
                 report["warnings"].append(w)
         if r.get("ok", True):
             report["next_steps"].append(USAGE[agent])
-    if not chosen and agents == "auto":
-        missing = [a for a in AGENTS if a not in chosen]
+    if not chosen and agents in ("auto", "all"):
+        missing = [a for a in (SKILL_AGENTS if agents == "auto" else AGENTS) if a not in chosen]
         report["warnings"].append(
-            "no coding agent found on PATH (claude, codex); the CLI works on its own. Install an agent later "
+            f"no coding agent found ({', '.join(missing)}); the CLI works on its own. Install an agent later "
             "and re-run `verinoda setup`, or name one: --agents claude")
         report["agents_detected"] = []
         report["agents_missing"] = missing

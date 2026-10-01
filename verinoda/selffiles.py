@@ -244,9 +244,9 @@ def config_digest(path: Path) -> str | None:
         doc = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         return "b:" + hashlib.sha256(raw).hexdigest()
-    if isinstance(doc, dict):  # the two shapes the extractor reads: mcpServers, or mcp.servers
-        nested = doc.get("mcp") if isinstance(doc.get("mcp"), dict) else {}
-        for servers in (doc.get("mcpServers"), nested.get("servers")):
+    if isinstance(doc, dict):  # the two shapes the extractor reads (mcpServers, mcp.servers), and VS Code's
+        nested = doc.get("mcp") if isinstance(doc.get("mcp"), dict) else {}  # top-level servers
+        for servers in (doc.get("mcpServers"), nested.get("servers"), doc.get("servers")):
             if isinstance(servers, dict) and is_own_mcp_entry(NAME, servers.get(NAME)):
                 del servers[NAME]
     text = json.dumps(doc, sort_keys=True, ensure_ascii=False, separators=(",", ":"))

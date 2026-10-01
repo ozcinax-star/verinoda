@@ -128,7 +128,7 @@ def test_setup_refuses_home_and_unknown_agents(tmp_path, monkeypatch):
         setup_mod.setup_project(home, agents="none")
     assert not (home / ".verinoda").exists()
     with pytest.raises(setup_mod.SetupRefused):
-        setup_mod.setup_project(tmp_path, agents="cursor")
+        setup_mod.setup_project(tmp_path, agents="notepad")
 
 
 def test_setup_cli_json(project):

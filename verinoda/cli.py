@@ -3770,7 +3770,9 @@ def build_parser() -> argparse.ArgumentParser:
                                  "on PATH (safe to re-run)", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp.add_argument("--agents", default="auto",
-                    help="auto (claude/codex found on PATH), all, none, or a comma list such as claude,codex")
+                    help="auto (claude/codex found on PATH), all (every supported agent found: claude, codex, "
+                         "cursor, gemini, copilot, kiro, continue, aider), none, or a comma list such as "
+                         "claude,cursor")
     sp.add_argument("--scope", choices=["project", "user"], default="project")
     sp.add_argument("--no-mcp", action="store_true", help="skills only, no MCP registration")
     sp.add_argument("--allow-home", action="store_true", help="allow setting up the home directory itself")
@@ -4662,7 +4664,8 @@ def build_parser() -> argparse.ArgumentParser:
     for name, fn, help_ in (("install", cmd_install, "install the Verinoda skill (+MCP) for an agent"),
                             ("uninstall", cmd_uninstall, "remove only what `install` added")):
         sp = add(name, fn, help_, repo=False)
-        sp.add_argument("--agent", required=True, choices=["claude", "codex"])
+        sp.add_argument("--agent", required=True,
+                        choices=["claude", "codex", "cursor", "gemini", "copilot", "kiro", "continue", "aider"])
         sp.add_argument("--scope", required=True, choices=["project", "user"])
         sp.add_argument("--project-dir")
         sp.add_argument("--dry-run", action="store_true")
