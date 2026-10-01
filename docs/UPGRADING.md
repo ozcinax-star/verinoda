@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D151)
+## Upgrading from 0.4.0 (D137-D152)
 
 ### D137: Trigram regex index
 
@@ -158,6 +158,19 @@ does the same for a proposed package. Off by default; only public package names 
 sources are skipped, names behind a private registry the project configures are never sent); answers cached in
 `.verinoda/research/package-check.json`. Dependency items of `guards.declared_dependencies` gain `declared`
 (the name as written). Nothing to migrate.
+
+### D152: Full type and name check through tsc, pyright or mypy
+
+`verinoda check` gains `--checker tsc|pyright|mypy|auto` and `--checker-timeout SECONDS`: the project's own type
+checker is run (never installed or downloaded; in a project not trusted with `verinoda trust`, only a checker
+outside the repository, never pyright, and mypy only without `plugins`/`python_executable`) and its errors on the
+lines in scope are sites with `status` `observed` and a `checker` field {tool, version, config, code}; a
+TypeScript file it compiled is no longer listed under `not_checked`. A new verdict `mismatch` (a call or type that
+does not fit; exit 3) appears in `summary` of every `check` result (0 without `--checker`) and sorts with
+`absent`; the result gains `checker` (one entry per run) when the option is given, and a site Verinoda and the
+checker both report may carry `confirmed_by`, `checker_says` or `own_verdict`. A checker not found, not run,
+timed out or failing is exit 4 with the next step. Without the option `check` is unchanged. No MCP tool changes;
+MCP `code_check` never runs a checker.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
