@@ -8,8 +8,11 @@ whose kind and children match the pattern's:
   same text; ``$_`` matches one node without capturing;
 - ``$$$REST`` matches zero or more nodes in a sequence of children (``$$$`` alone: without capturing);
 - anything else must be the same node kind with the same children; a leaf must have the same text. Commas and
-  semicolons between children are not compared (so ``foo($A, $$$REST)`` matches ``foo(1)``) and comments in
-  the code are skipped.
+  semicolons between children are not compared (so ``foo($A, $$$REST)`` matches ``foo(1)``), except a comma that
+  marks a hole (``[1, , 2]``), and comments in the code are skipped.
+
+``$NAME`` is a metavariable wherever it stands, inside a string literal too (``print("$A")`` matches any one-part
+string), and there is no escape: a literal ``$_GET`` or ``$NAME`` cannot be searched.
 
 A pattern that is not a whole construct of a language on its own (a Java call has no top level) is parsed inside
 the smallest wrapper that makes it one (a statement, a class body, a method body); the pattern's node is the
@@ -55,6 +58,10 @@ _MULTI = re.compile(r"\$\$\$([A-Z_][A-Z0-9_]*)?")
 _SINGLE = re.compile(r"\$([A-Z_][A-Z0-9_]*)")
 _MV_TEXT = re.compile(r"^VNMV(S?)_([A-Z0-9_]*)$")
 _SEPARATORS = {",", ";"}
+_OPENERS = {"(", "[", "{"}
+# the keys of a rule file that do not change what matches (anything else, such as `not`, `inside` or
+# `constraints`, is refused: ignoring it would report matches the rule excludes)
+_RULE_KEYS = {"id", "language", "pattern", "rule", "message", "severity", "note", "url", "metadata"}
 # wrappers that make a fragment a whole program, tried in order (the first that parses without an error wins)
 _WRAPS = ("{p}", "{p};", "class W_ {{ {p} }}", "class W_ {{ void m_() {{ {p} }} }}",
           "class W_ {{ void m_() {{ {p}; }} }}", "class W_ {{ Object f_ = {p}; }}", "void m_() {{ {p}; }}",
@@ -137,8 +144,10 @@ def _compile(pattern: str, suffix: str):
     if parser is None:
         return None
     body = _placeholders(pattern.strip())
+    # PHP reads anything before `<?php` as inline text, which parses but never matches code
+    prefix = "<?php " if lang_name(suffix) == "php" else ""
     for wrap in _WRAPS:
-        text = wrap.format(p=body)
+        text = prefix + wrap.format(p=body)
         tree = parser.parse(text.encode("utf-8"))
         if tree.root_node.has_error:
             continue
@@ -156,8 +165,21 @@ def _compile(pattern: str, suffix: str):
                 if n.start_byte <= start and n.end_byte >= e:
                     stack.extend(n.children)
             if best is not None:
-                return best
+                return best if _has_code(best) else None
     return None
+
+
+def _has_code(node) -> bool:
+    """Whether the node holds any text other than comments (a blank or comment-only pattern matches nothing)."""
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if "comment" in n.type:
+            continue
+        if n.child_count == 0 and n.end_byte > n.start_byte:
+            return True
+        stack.extend(n.children)
+    return False
 
 
 def _needles(pnode) -> frozenset[bytes]:
@@ -179,11 +201,14 @@ def _needles(pnode) -> frozenset[bytes]:
 # -- matching ---------------------------------------------------------------------------------------------------
 
 def _kids(node, *, target: bool) -> list:
-    out = []
+    out, prev = [], None
     for c in node.children:
-        if not c.is_named and c.type in _SEPARATORS:
-            continue
         if target and "comment" in c.type:
+            continue
+        # a separator is dropped, unless it is a comma after a comma or an opening bracket: a hole (`[1, , 2]`)
+        hole = c.type == "," and prev is not None and not prev.is_named and prev.type in _OPENERS | {","}
+        prev = c
+        if not c.is_named and c.type in _SEPARATORS and not hole:
             continue
         out.append(c)
     return out
@@ -272,10 +297,29 @@ def search_file(src: bytes, suffix: str, pnode, *, deadline: float, tree=None) -
 # -- rule files -------------------------------------------------------------------------------------------------
 
 def _scalar(v: str) -> str:
+    """A plain or quoted scalar; a ` #` comment after it is dropped (inside quotes it is text)."""
     v = v.strip()
-    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
-        return v[1:-1].replace("\\\"", "\"") if v[0] == '"' else v[1:-1].replace("''", "'")
-    return v
+    if v[:1] in ("'", '"'):
+        q, i, out = v[0], 1, []
+        while i < len(v):
+            ch = v[i]
+            if q == '"' and ch == "\\" and i + 1 < len(v):
+                out.append({"n": "\n", "t": "\t"}.get(v[i + 1], v[i + 1]))
+                i += 2
+                continue
+            if ch == q:
+                if q == "'" and v[i + 1:i + 2] == "'":
+                    out.append("'")
+                    i += 2
+                    continue
+                rest = v[i + 1:].strip()
+                if rest and not rest.startswith("#"):
+                    raise ValueError(f"text after a quoted value: {v!r}")
+                return "".join(out)
+            out.append(ch)
+            i += 1
+        raise ValueError(f"an unclosed quote: {v!r}")
+    return v.split(" #")[0].strip()
 
 
 def _yaml_doc(lines: list[str]) -> dict:
@@ -309,14 +353,14 @@ def _yaml_doc(lines: list[str]) -> dict:
             cur[key.strip()] = {}
             stack.append((ind, cur[key.strip()]))
         else:
-            cur[key.strip()] = _scalar(val.split(" #")[0])
+            cur[key.strip()] = _scalar(val)
     return root
 
 
 def load_rules(path: Path) -> list[dict]:
     """The rules of a rule file: one per YAML document (``---`` between them)."""
     docs, cur = [], []
-    for ln in Path(path).read_text(encoding="utf-8").splitlines():
+    for ln in Path(path).read_text(encoding="utf-8-sig").splitlines():
         if ln.strip() == "---":
             docs.append(cur)
             cur = []
@@ -328,7 +372,12 @@ def load_rules(path: Path) -> list[dict]:
         if not any(ln.strip() and not ln.lstrip().startswith("#") for ln in lines):
             continue
         d = _yaml_doc(lines)
-        rule = d.get("rule") if isinstance(d.get("rule"), dict) else {}
+        rule = d.get("rule", {})
+        if not isinstance(rule, dict):
+            raise ValueError(f"{path}: rule {k + 1}: `rule` must be a mapping with a pattern")
+        extra = sorted(set(d) - _RULE_KEYS) + [f"rule.{x}" for x in sorted(set(rule) - {"pattern"})]
+        if extra:
+            raise ValueError(f"{path}: rule {k + 1}: not supported: {', '.join(extra)} (a rule is one pattern)")
         pattern = d.get("pattern") or rule.get("pattern")
         if not isinstance(pattern, str) or not pattern.strip():
             raise ValueError(f"{path}: rule {k + 1} has no pattern")
@@ -340,6 +389,18 @@ def load_rules(path: Path) -> list[dict]:
 
 
 # -- the search -------------------------------------------------------------------------------------------------
+
+def _expand(langs) -> set[str]:
+    """Language names as asked; TypeScript includes its .tsx files (a grammar of its own)."""
+    out = {norm_lang(x) for x in langs}
+    return out | {"tsx"} if "typescript" in out else out
+
+
+def _check_langs(names: set[str], what: str) -> None:
+    bad = names - set(known_langs())
+    if bad:
+        raise PatternError(f"unknown language(s){what}: {', '.join(sorted(bad))} (known: {', '.join(known_langs())})")
+
 
 def _inside(rel: str, paths: list[str]) -> bool:
     return not paths or any(p in ("", ".") or rel == p or rel.startswith(p.rstrip("/") + "/") for p in paths)
@@ -353,14 +414,19 @@ def run(repo: Path, pattern: str | None = None, *, rules: list[dict] | None = No
 
     repo = Path(repo)
     jobs = list(rules or [])
+    if pattern is not None and not pattern.strip():
+        raise PatternError("the pattern is empty")
     if pattern:
         jobs.insert(0, {"id": None, "pattern": pattern, "langs": None, "message": ""})
     if not jobs:
         raise PatternError("give a pattern or a rule file")
-    want = {norm_lang(x) for x in langs} if langs else None
-    if want and want - set(known_langs()):
-        raise PatternError(f"unknown language(s): {', '.join(sorted(want - set(known_langs())))} "
-                           f"(known: {', '.join(known_langs())})")
+    want = _expand(langs) if langs else None
+    if want:
+        _check_langs(want, "")
+    for job in jobs:
+        if job["langs"]:
+            _check_langs({norm_lang(x) for x in job["langs"]}, f" of rule {job['id']}")
+    job_langs = [_expand(j["langs"]) if j["langs"] else None for j in jobs]
     table = languages()
     paths = [p.replace("\\", "/").strip("/") for p in (paths or [])]
     cand = [f for f in (files if files is not None else listed_files(repo))
@@ -370,10 +436,23 @@ def run(repo: Path, pattern: str | None = None, *, rules: list[dict] | None = No
     compiled: dict[tuple[int, str], object] = {}
     unparsed: dict[str, list[str]] = {}
     suffixes = sorted({Path(f).suffix.lower() for f in cand})
+    if not cand:
+        # no file to search: the pattern is still checked, in one suffix of each language it may be meant for
+        one: dict = {}
+        for sfx in sorted(table):
+            one.setdefault(lang_name(sfx), sfx)
+        for k, job in enumerate(jobs):
+            ok = [s for ln, s in one.items() if (want is None or ln in want)
+                  and (job_langs[k] is None or ln in job_langs[k]) and _compile(job["pattern"], s) is not None]
+            if any(_mv(_compile(job["pattern"], s)) is not None for s in ok):
+                raise PatternError("the pattern is only a metavariable: it would match every node")
+            if not ok:
+                raise PatternError(f"the pattern{' of rule ' + job['id'] if job['id'] else ''} does not parse "
+                                   f"as code of the languages asked")
     for k, job in enumerate(jobs):
         for sfx in suffixes:
             ln = lang_name(sfx)
-            if job["langs"] and ln not in job["langs"]:
+            if job_langs[k] and ln not in job_langs[k]:
                 continue
             pnode = _compile(job["pattern"], sfx)
             if pnode is not None and _mv(pnode) is not None:
@@ -398,7 +477,8 @@ def run(repo: Path, pattern: str | None = None, *, rules: list[dict] | None = No
         if not mine:
             continue
         if time.monotonic() > t_end:
-            res["not_searched"]["budget_spent"] = len(cand) - n
+            res["not_searched"]["budget_spent"] = sum(
+                1 for g in cand[n:] if any((k, Path(g).suffix.lower()) in compiled for k in range(len(jobs))))
             break
         try:
             if (repo / f).stat().st_size > MAX_BYTES:

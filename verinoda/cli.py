@@ -1267,19 +1267,21 @@ def cmd_grep_ast(args) -> int:
         print("error: --max-results must be a positive number", file=sys.stderr)
         return 2
     repo = _repo(args)
+    if not repo.is_dir():
+        print(f"error: not a folder: {repo}", file=sys.stderr)
+        return 2
     pattern, paths = args.pattern, list(args.paths)
     if args.rule and pattern and (Path(pattern).exists() or (repo / pattern).exists()):
         pattern, paths = None, [pattern, *paths]   # with --rule, a first argument that names a path is one
     rels = []
     for p in paths:
-        q = Path(p).resolve()
-        if q.exists() and q.is_relative_to(repo):
-            rels.append(q.relative_to(repo).as_posix())
-        elif (repo / p).exists():
-            rels.append(p)
-        else:
+        # relative to the working directory, else to the project; either way inside the project, normalised
+        tries = [Path(p).resolve()] + ([] if Path(p).is_absolute() else [(repo / p).resolve()])
+        q = next((t for t in tries if t.exists() and t.is_relative_to(repo)), None)
+        if q is None:
             print(f"error: not a file or folder of the project: {p}", file=sys.stderr)
             return 2
+        rels.append(q.relative_to(repo).as_posix())
     try:
         rules = [r for f in args.rule or () for r in grep_ast.load_rules(Path(f))]
         langs = [x for v in args.lang or () for x in v.split(",") if x.strip()]

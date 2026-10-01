@@ -147,3 +147,78 @@ def test_cli_json_and_exit_codes(repo, capsys):
     rules.write_text("id: r\nlanguage: typescript\npattern: foo($A)\n", encoding="utf-8")
     assert cli.main(["grep-ast", "--rule", str(rules), "web", "--repo", str(repo)]) == 0   # `web` is a path
     assert "[r] foo(7)" in capsys.readouterr().out
+
+
+def test_rule_keys_that_would_narrow_the_matches_are_refused(repo):
+    rules = repo / "rel.yml"
+    rules.write_text("id: foo-outside-def\nlanguage: python\nrule:\n  pattern: foo($A)\n  not:\n    inside:\n"
+                     "      kind: function_definition\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not supported: rule.not"):
+        grep_ast.load_rules(rules)
+    rules.write_text("id: c\npattern: foo($A)\nconstraints:\n  A:\n    regex: x\nseverity: warning\n",
+                     encoding="utf-8")
+    with pytest.raises(ValueError, match="not supported: constraints"):
+        grep_ast.load_rules(rules)
+
+
+def test_a_comma_that_marks_a_hole_is_compared(tmp_path):
+    (tmp_path / "a.js").write_text("const x = [1, , 2];\nconst y = [1, 2];\n", encoding="utf-8")
+    res = grep_ast.run(tmp_path, "[$A, $B]")
+    assert [(m["at"], m["text"]) for m in res["matches"]] == [("a.js:2", "[1, 2]")]
+    assert _at(grep_ast.run(tmp_path, "[$A, , $B]")) == ["a.js:1"]
+
+
+def test_a_rule_language_is_checked(repo):
+    rules = repo / "go.yml"
+    for lang in ("golang", "[python]"):
+        rules.write_text(f"id: u\nlanguage: {lang}\npattern: foo($A)\n", encoding="utf-8")
+        with pytest.raises(grep_ast.PatternError, match="unknown language.*of rule u"):
+            grep_ast.run(repo, rules=grep_ast.load_rules(rules))
+
+
+def test_quoted_yaml_values_keep_a_hash_and_a_bom_is_skipped(repo):
+    rules = repo / "q.yml"
+    rules.write_text('\ufeffid: q\nlanguage: python\npattern: \'same($A, "a #b")\'  # a comment\n'
+                     'message: "count # of foo"\n', encoding="utf-8")
+    (r,) = grep_ast.load_rules(rules)
+    assert (r["id"], r["pattern"], r["message"]) == ("q", 'same($A, "a #b")', "count # of foo")
+
+
+def test_typescript_includes_tsx(tmp_path):
+    (tmp_path / "c.tsx").write_text("function g() { foo(1); }\n", encoding="utf-8")
+    assert _at(grep_ast.run(tmp_path, "foo($A)", langs=["typescript"])) == ["c.tsx:1"]
+
+
+def test_the_budget_counts_only_files_a_pattern_could_search(repo):
+    res = grep_ast.run(repo, "def $F($$$ARGS): $$$BODY", total_seconds=-1)
+    assert res["not_searched"]["budget_spent"] == 1   # the Python file; Java and TypeScript do not parse it
+
+
+def test_php_patterns_are_parsed_as_php_code(tmp_path):
+    (tmp_path / "p.php").write_text("<?php\nfoo($x);\n", encoding="utf-8")
+    res = grep_ast.run(tmp_path, "foo($A)", langs=["php"])
+    assert [(m["at"], m["captures"]) for m in res["matches"]] == [("p.php:2", {"A": "$x"})]
+
+
+def test_blank_and_comment_only_patterns_and_no_files_are_refused(repo, tmp_path):
+    with pytest.raises(grep_ast.PatternError, match="empty"):
+        grep_ast.run(repo, "   ")
+    with pytest.raises(grep_ast.PatternError, match="does not parse"):
+        grep_ast.run(repo, "# hi", langs=["python"])
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(grep_ast.PatternError, match="does not parse"):
+        grep_ast.run(empty, "foo(")
+    assert grep_ast.run(empty, "foo($A)")["count"] == 0
+
+
+def test_cli_paths_are_normalised_and_checked(repo, tmp_path, capsys, monkeypatch):
+    outside = tmp_path.parent / (tmp_path.name + "-other")
+    outside.mkdir(exist_ok=True)
+    assert cli.main(["grep-ast", "foo($A)", str(outside), "--repo", str(repo)]) == 2
+    assert "not a file or folder of the project" in capsys.readouterr().err
+    monkeypatch.chdir(repo.parent)
+    assert cli.main(["grep-ast", "foo($A)", "./web", "--repo", str(repo), "--json"]) == 0
+    assert [m["at"] for m in json.loads(capsys.readouterr().out)["matches"]] == ["web/calc.ts:3"]
+    assert cli.main(["grep-ast", "foo($A)", "--repo", str(repo / "nope")]) == 2
+    assert "not a folder" in capsys.readouterr().err
