@@ -838,6 +838,21 @@ def _cmd_named_map(args) -> int:
     from verinoda import named_maps as nm
 
     repo = Path(args.repo).resolve() if args.repo else find_repo_root()
+    view_args = [f for f, v in (("--view", args.view), ("--target", args.target), ("--base", args.base),
+                                ("--max-tokens", args.max_tokens)) if v is not None]
+    # like plain `map`, an argument that would be ignored is refused
+    stray = ["NAME"] if args.path == "list" and args.name else []
+    if args.path != "save":
+        stray += (["--trace"] if args.trace else []) + (["--mode"] if args.mode != "flow" else []) + view_args
+    elif args.trace:
+        stray += view_args
+    elif args.mode != "flow":
+        stray.append("--mode")
+    if stray:
+        print(f"error: `map {args.path}` does not take {', '.join(stray)}"
+              + (" with --trace (a trace or a view, not both)" if args.path == "save" and args.trace else ""),
+              file=sys.stderr)
+        return 2
     if args.path == "list":
         res = nm.listing(repo)
         _emit(args, res, lambda r: _write(nm.render_list(r)))
@@ -858,7 +873,7 @@ def _cmd_named_map(args) -> int:
                 else:
                     _r_map(argparse.Namespace(view=(res.get("args") or {}).get("view"), max_lines=args.max_lines),
                            res["result"])
-        return {"current": 0, "stale": 1}.get(res["status"], 2)
+        return {"current": 0, "stale": 1, "unknown": 1}.get(res["status"], 2)
     try:
         name = nm.check_name(args.name)
     except ValueError as exc:
@@ -889,6 +904,12 @@ def _cmd_named_map(args) -> int:
         kind = "map"
         saved_args = {k: v for k, v in (("view", args.view), ("target", args.target), ("base", args.base),
                                         ("max_tokens", args.max_tokens)) if v}
+        # no --target: the views took the working-tree changes; the targets they used make the map again
+        used = {"impact": ("impact", "targets"), "repo": ("repo", "focus")}.get(args.view)
+        used = (result.get(used[0]) or {}).get(used[1]) if used else None
+        if not args.target and used:
+            saved_args["target"] = list(used)
+            saved_args.pop("base", None)
     try:
         res = nm.save(repo, name, kind, saved_args, result, stale=fresh.get("files") or ())
     except (OSError, ValueError) as exc:
@@ -898,7 +919,8 @@ def _cmd_named_map(args) -> int:
                                      + (f", commit {r['commit'][:12]}" if r.get("commit") else "")
                                      + f", {r['cited_files']} cited file(s)"
                                      + (f"\n note: {r['note']}" if r.get("note") else "")
-                                     + f"\n read it back: verinoda map show {r['name']}"))
+                                     + f"\n read it back: verinoda map show {r['name']}"
+                                     + f"\n share it (.verinoda is git-ignored): git add -f {r['path']}"))
     return 0
 
 
