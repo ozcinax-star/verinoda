@@ -4,7 +4,8 @@
  "environment": {
   "verinoda_version": "0.3.2",
   "python": "3.13.14",
-  "verinoda_commit": "27f72bf",
+  "verinoda_commit": "b4b6b5a",
+  "verinoda_dirty": false,
   "platform": "Windows-11-10.0.26200-SP0",
   "cpus": 16
  },
@@ -20,6 +21,21 @@
    "repos": [
     "junegunn/fzf"
    ]
+  },
+  {
+   "at": "2026-10-01T23:48:55",
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "b4b6b5a",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "repos": [
+    "gin-gonic/gin",
+    "junegunn/fzf"
+   ]
   }
  ],
  "paths_sanitized": [
@@ -33,88 +49,118 @@
    "tag": "v1.12.0",
    "sha": "73726dc606796a025971fe451f0aa6f1b9b847f6",
    "language": "Go",
-   "started": "2026-10-01T23:17:31",
+   "started": "2026-10-01T23:48:55",
    "files": 130,
-   "scan_s": 11.973,
-   "update_s": 7.913,
-   "query_median_s": 1.361,
-   "analyze_median_s": 2.645,
+   "scan_s": 11.926,
+   "update_s": 7.021,
+   "query_median_s": 1.393,
+   "analyze_median_s": 2.589,
    "crashes": [],
    "timeouts": [],
    "max_stdout_bytes": 148766,
    "gold": {
     "hits": 7,
     "total": 10,
+    "v2": {
+     "hits": 1,
+     "total": 2
+    },
     "facts": [
      {
       "id": "def-default",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.136
+      "seconds": 1.176
      },
      {
       "id": "default-calls-new",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.171
+      "seconds": 1.153
      },
      {
       "id": "default-calls-recovery",
+      "v": 1,
       "kind": "trace",
       "hit": false,
-      "why": "no path (ambiguous)",
-      "seconds": 1.242
+      "why": "source not resolved (ambiguous)",
+      "seconds": 1.279
      },
      {
       "id": "servehttp-calls-handle",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.152
+      "seconds": 1.238
      },
      {
       "id": "request-reaches-tree",
+      "v": 1,
       "kind": "trace",
       "hit": false,
       "why": "no path (no directed path)",
-      "seconds": 1.25
+      "seconds": 1.254
      },
      {
       "id": "get-registers-route",
+      "v": 1,
       "kind": "q",
       "hit": false,
       "why": "no row",
-      "seconds": 1.185
+      "seconds": 1.154
      },
      {
       "id": "recovery-calls-writer",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.147
+      "seconds": 1.238
      },
      {
       "id": "context-json-method",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.155
+      "seconds": 1.158
      },
      {
       "id": "query-radix-tree",
+      "v": 1,
       "kind": "query",
       "hit": true,
       "why": "rank 1",
-      "seconds": 1.426
+      "seconds": 1.383
      },
      {
       "id": "query-recovery",
+      "v": 1,
       "kind": "query",
       "hit": true,
       "why": "rank 1",
-      "seconds": 1.303
+      "seconds": 1.321
+     },
+     {
+      "id": "default-calls-recovery@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.208
+     },
+     {
+      "id": "request-reaches-tree@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": false,
+      "why": "no path (no directed path)",
+      "seconds": 1.251
      }
     ]
    },
@@ -131,7 +177,7 @@
       "init",
       "."
      ],
-     "seconds": 1.261,
+     "seconds": 1.265,
      "exit": 0,
      "ok_codes": [
       0
@@ -153,7 +199,7 @@
       ".",
       "--json"
      ],
-     "seconds": 11.973,
+     "seconds": 11.926,
      "exit": 0,
      "ok_codes": [
       0
@@ -162,7 +208,7 @@
      "timeout_s": 1800.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 1191,
+     "stdout_bytes": 1188,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -175,12 +221,11 @@
       "match (f:function) where f.name = \"Default\" and f.file = \"gin.go\" return f",
       "--json"
      ],
-     "seconds": 1.136,
+     "seconds": 1.176,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -200,12 +245,11 @@
       "match (a:function)-[calls]->(b:function) where a.name = \"Default\" and a.file = \"gin.go\" and b.name = \"New\" return a, b",
       "--json"
      ],
-     "seconds": 1.171,
+     "seconds": 1.153,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -226,13 +270,11 @@
       "Recovery",
       "--json"
      ],
-     "seconds": 1.242,
+     "seconds": 1.279,
      "exit": 2,
      "ok_codes": [
       0,
-      1,
-      2,
-      3
+      2
      ],
      "timeout": false,
      "timeout_s": 300.0,
@@ -251,19 +293,18 @@
       "match (a:function)-[calls]->(b:function) where a.name = \"ServeHTTP\" and a.file = \"gin.go\" and b.name = \"handleHTTPRequest\" return a, b",
       "--json"
      ],
-     "seconds": 1.152,
+     "seconds": 1.238,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 1568,
+     "stdout_bytes": 1569,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -277,13 +318,11 @@
       "getValue",
       "--json"
      ],
-     "seconds": 1.25,
+     "seconds": 1.254,
      "exit": 2,
      "ok_codes": [
       0,
-      1,
-      2,
-      3
+      2
      ],
      "timeout": false,
      "timeout_s": 300.0,
@@ -302,12 +341,11 @@
       "match (a:function)-[calls*1..4]->(b:function) where a.name = \"GET\" and a.file = \"routergroup.go\" and b.name = \"addRoute\" and b.file = \"tree.go\" return a, b",
       "--json"
      ],
-     "seconds": 1.185,
+     "seconds": 1.154,
      "exit": 1,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -327,12 +365,11 @@
       "match (a:function)-[calls]->(b:function) where a.name = \"Recovery\" and b.name = \"RecoveryWithWriter\" return a, b",
       "--json"
      ],
-     "seconds": 1.147,
+     "seconds": 1.238,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -352,12 +389,11 @@
       "match (m:function) where m.name = \"JSON\" and m.file = \"context.go\" return m",
       "--json"
      ],
-     "seconds": 1.155,
+     "seconds": 1.158,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -379,13 +415,10 @@
       "--max-items",
       "8"
      ],
-     "seconds": 1.426,
+     "seconds": 1.383,
      "exit": 0,
      "ok_codes": [
-      0,
-      1,
-      2,
-      3
+      0
      ],
      "timeout": false,
      "timeout_s": 300.0,
@@ -406,19 +439,64 @@
       "--max-items",
       "8"
      ],
-     "seconds": 1.303,
+     "seconds": 1.321,
      "exit": 0,
      "ok_codes": [
-      0,
-      1,
-      2,
-      3
+      0
      ],
      "timeout": false,
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
      "stdout_bytes": 5201,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:default-calls-recovery@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "gin.go::Default",
+      "Recovery",
+      "--json"
+     ],
+     "seconds": 1.208,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 513,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:request-reaches-tree@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "ServeHTTP",
+      "getValue",
+      "--json"
+     ],
+     "seconds": 1.251,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 521,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -431,7 +509,7 @@
       "how is a route registered on a router group",
       "--json"
      ],
-     "seconds": 1.293,
+     "seconds": 1.478,
      "exit": 0,
      "ok_codes": [
       0
@@ -453,7 +531,7 @@
       "how does the middleware chain call the next handler",
       "--json"
      ],
-     "seconds": 1.396,
+     "seconds": 1.393,
      "exit": 0,
      "ok_codes": [
       0
@@ -475,7 +553,7 @@
       "how is a JSON response rendered",
       "--json"
      ],
-     "seconds": 1.361,
+     "seconds": 1.344,
      "exit": 0,
      "ok_codes": [
       0
@@ -497,7 +575,7 @@
       "what happens when a request arrives at the engine",
       "--json"
      ],
-     "seconds": 2.732,
+     "seconds": 2.648,
      "exit": 0,
      "ok_codes": [
       0,
@@ -507,7 +585,7 @@
      "timeout_s": 600.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 11642,
+     "stdout_bytes": 11641,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -520,7 +598,7 @@
       "how are panics recovered",
       "--json"
      ],
-     "seconds": 2.558,
+     "seconds": 2.53,
      "exit": 0,
      "ok_codes": [
       0,
@@ -540,12 +618,12 @@
      "command": "trace",
      "argv": [
       "trace",
-      "Default",
+      "gin.go::Default",
       "LoggerWithConfig",
       "--json"
      ],
-     "seconds": 1.238,
-     "exit": 2,
+     "seconds": 1.224,
+     "exit": 0,
      "ok_codes": [
       0,
       2
@@ -554,10 +632,11 @@
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 962,
+     "stdout_bytes": 719,
      "stderr_bytes": 0,
      "json_ok": true,
-     "stderr_tail": ""
+     "stderr_tail": "",
+     "answer_status": "found"
     },
     {
      "step": "q1",
@@ -567,7 +646,7 @@
       "match (f:function) return count(f)",
       "--json"
      ],
-     "seconds": 1.228,
+     "seconds": 1.163,
      "exit": 0,
      "ok_codes": [
       0,
@@ -578,7 +657,7 @@
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 1180,
+     "stdout_bytes": 1179,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -591,7 +670,7 @@
       "match (a:function)-[calls]->(b:function) where b.name = \"Next\" return a limit 20",
       "--json"
      ],
-     "seconds": 1.163,
+     "seconds": 1.199,
      "exit": 1,
      "ok_codes": [
       0,
@@ -608,30 +687,6 @@
      "stderr_tail": ""
     },
     {
-     "step": "check",
-     "command": "check",
-     "argv": [
-      "check",
-      "gin.go",
-      "--json"
-     ],
-     "seconds": 0.792,
-     "exit": 4,
-     "ok_codes": [
-      0,
-      3,
-      4
-     ],
-     "timeout": false,
-     "timeout_s": 300.0,
-     "crash": false,
-     "reason": null,
-     "stdout_bytes": 1659,
-     "stderr_bytes": 0,
-     "json_ok": true,
-     "stderr_tail": ""
-    },
-    {
      "step": "map:dependencies",
      "command": "map",
      "argv": [
@@ -641,7 +696,7 @@
       "dependencies",
       "--json"
      ],
-     "seconds": 1.156,
+     "seconds": 1.112,
      "exit": 0,
      "ok_codes": [
       0
@@ -665,7 +720,7 @@
       "dataflow",
       "--json"
      ],
-     "seconds": 1.661,
+     "seconds": 1.639,
      "exit": 0,
      "ok_codes": [
       0
@@ -689,7 +744,7 @@
       "dead",
       "--json"
      ],
-     "seconds": 2.265,
+     "seconds": 2.287,
      "exit": 0,
      "ok_codes": [
       0
@@ -713,7 +768,7 @@
       "hotspots",
       "--json"
      ],
-     "seconds": 1.421,
+     "seconds": 1.348,
      "exit": 0,
      "ok_codes": [
       0
@@ -734,7 +789,7 @@
       "routes",
       "--json"
      ],
-     "seconds": 1.082,
+     "seconds": 1.053,
      "exit": 0,
      "ok_codes": [
       0
@@ -755,7 +810,7 @@
       "schema",
       "--json"
      ],
-     "seconds": 1.242,
+     "seconds": 1.212,
      "exit": 0,
      "ok_codes": [
       0,
@@ -777,7 +832,7 @@
       "doctor",
       "--json"
      ],
-     "seconds": 2.455,
+     "seconds": 2.404,
      "exit": 0,
      "ok_codes": [
       0,
@@ -787,7 +842,7 @@
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 9912,
+     "stdout_bytes": 9921,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -802,7 +857,7 @@
       "project_query",
       "how is a route registered on a router group"
      ],
-     "seconds": 1.414,
+     "seconds": 1.249,
      "exit": 0,
      "ok_codes": [
       0
@@ -826,7 +881,7 @@
       "analyze",
       "what happens when a request arrives at the engine"
      ],
-     "seconds": 2.854,
+     "seconds": 2.669,
      "exit": 0,
      "ok_codes": [
       0
@@ -848,7 +903,7 @@
       ".",
       "--json"
      ],
-     "seconds": 7.913,
+     "seconds": 7.021,
      "exit": 0,
      "ok_codes": [
       0
@@ -870,7 +925,7 @@
       ".",
       "--json"
      ],
-     "seconds": 3.573,
+     "seconds": 2.992,
      "exit": 3,
      "ok_codes": [
       0,
@@ -893,7 +948,7 @@
       ".",
       "--json"
      ],
-     "seconds": 6.542,
+     "seconds": 5.96,
      "exit": 0,
      "ok_codes": [
       0
@@ -907,95 +962,148 @@
      "json_ok": true,
      "stderr_tail": ""
     }
-   ]
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "b4b6b5a",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
   },
   {
    "name": "junegunn/fzf",
    "tag": "v0.74.4",
    "sha": "a140afeb4d733cad3c96a56bf6db7e26853b6757",
    "language": "Go",
-   "started": "2026-10-01T23:19:00",
+   "started": "2026-10-01T23:50:07",
    "files": 161,
-   "scan_s": 16.726,
-   "update_s": 8.526,
-   "query_median_s": 1.502,
-   "analyze_median_s": 3.534,
+   "scan_s": 14.512,
+   "update_s": 7.456,
+   "query_median_s": 1.503,
+   "analyze_median_s": 3.424,
    "crashes": [],
    "timeouts": [],
    "max_stdout_bytes": 140635,
    "gold": {
-    "hits": 9,
+    "hits": 8,
     "total": 10,
+    "v2": {
+     "hits": 3,
+     "total": 3
+    },
     "facts": [
      {
       "id": "def-run",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.17
+      "seconds": 1.189
      },
      {
       "id": "main-calls-run",
+      "v": 1,
       "kind": "trace",
       "hit": false,
       "why": "no path (no directed path)",
-      "seconds": 1.253
+      "seconds": 1.22
      },
      {
       "id": "parse-calls-parse",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.174
+     },
+     {
+      "id": "run-calls-postprocess",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
       "seconds": 1.172
      },
      {
-      "id": "run-calls-postprocess",
-      "kind": "q",
-      "hit": true,
-      "why": "",
-      "seconds": 1.162
-     },
-     {
       "id": "run-calls-newmatcher",
+      "v": 1,
       "kind": "trace",
-      "hit": true,
-      "why": "",
-      "seconds": 1.277
+      "hit": false,
+      "why": "no path edge at src/matcher.go",
+      "seconds": 1.26
      },
      {
       "id": "matcher-loop-scan",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.184
+      "seconds": 1.168
      },
      {
       "id": "def-fuzzymatchv2",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.209
+      "seconds": 1.167
      },
      {
       "id": "pattern-matchitem",
+      "v": 1,
       "kind": "q",
       "hit": true,
       "why": "",
-      "seconds": 1.158
+      "seconds": 1.159
      },
      {
       "id": "query-fuzzy-algo",
+      "v": 1,
       "kind": "query",
       "hit": true,
       "why": "rank 1",
-      "seconds": 1.421
+      "seconds": 1.413
      },
      {
       "id": "query-options",
+      "v": 1,
       "kind": "query",
       "hit": true,
       "why": "rank 1",
-      "seconds": 1.412
+      "seconds": 1.403
+     },
+     {
+      "id": "main-calls-run@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.232
+     },
+     {
+      "id": "run-calls-newmatcher@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.235
+     },
+     {
+      "id": "pattern-matchitem@v2",
+      "v": 2,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.148
      }
     ]
    },
@@ -1012,7 +1120,7 @@
       "init",
       "."
      ],
-     "seconds": 1.25,
+     "seconds": 1.216,
      "exit": 0,
      "ok_codes": [
       0
@@ -1034,7 +1142,7 @@
       ".",
       "--json"
      ],
-     "seconds": 16.726,
+     "seconds": 14.512,
      "exit": 0,
      "ok_codes": [
       0
@@ -1056,19 +1164,18 @@
       "match (f:function) where f.name = \"Run\" and f.file = \"src/core.go\" return f",
       "--json"
      ],
-     "seconds": 1.17,
+     "seconds": 1.189,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 985,
+     "stdout_bytes": 984,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -1082,13 +1189,11 @@
       "src/core.go",
       "--json"
      ],
-     "seconds": 1.253,
+     "seconds": 1.22,
      "exit": 2,
      "ok_codes": [
       0,
-      1,
-      2,
-      3
+      2
      ],
      "timeout": false,
      "timeout_s": 300.0,
@@ -1107,12 +1212,11 @@
       "match (a:function)-[calls]->(b:function) where a.name = \"ParseOptions\" and b.name = \"parseOptions\" return a, b",
       "--json"
      ],
-     "seconds": 1.172,
+     "seconds": 1.174,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -1132,12 +1236,11 @@
       "match (a:function)-[calls]->(b:function) where a.name = \"Run\" and a.file = \"src/core.go\" and b.name = \"postProcessOptions\" return a, b",
       "--json"
      ],
-     "seconds": 1.162,
+     "seconds": 1.172,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -1158,13 +1261,11 @@
       "NewMatcher",
       "--json"
      ],
-     "seconds": 1.277,
+     "seconds": 1.26,
      "exit": 0,
      "ok_codes": [
       0,
-      1,
-      2,
-      3
+      2
      ],
      "timeout": false,
      "timeout_s": 300.0,
@@ -1183,19 +1284,18 @@
       "match (a:function)-[calls]->(b:function) where a.name = \"Loop\" and a.file = \"src/matcher.go\" and b.name = \"scan\" return a, b",
       "--json"
      ],
-     "seconds": 1.184,
+     "seconds": 1.168,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 1471,
+     "stdout_bytes": 1470,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -1208,12 +1308,11 @@
       "match (f:function) where f.name = \"FuzzyMatchV2\" return f",
       "--json"
      ],
-     "seconds": 1.209,
+     "seconds": 1.167,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -1233,12 +1332,11 @@
       "match (a:function)-[calls]->(b:function) where a.name = \"MatchItem\" and a.file = \"src/pattern.go\" and b.name = \"basicMatch\" return a, b",
       "--json"
      ],
-     "seconds": 1.158,
+     "seconds": 1.159,
      "exit": 0,
      "ok_codes": [
       0,
       1,
-      2,
       3
      ],
      "timeout": false,
@@ -1260,13 +1358,10 @@
       "--max-items",
       "8"
      ],
-     "seconds": 1.421,
+     "seconds": 1.413,
      "exit": 0,
      "ok_codes": [
-      0,
-      1,
-      2,
-      3
+      0
      ],
      "timeout": false,
      "timeout_s": 300.0,
@@ -1287,19 +1382,88 @@
       "--max-items",
       "8"
      ],
-     "seconds": 1.412,
+     "seconds": 1.403,
      "exit": 0,
      "ok_codes": [
-      0,
-      1,
-      2,
-      3
+      0
      ],
      "timeout": false,
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
      "stdout_bytes": 5236,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:main-calls-run@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "main.go::main",
+      "src/core.go::Run",
+      "--json"
+     ],
+     "seconds": 1.232,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 484,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:run-calls-newmatcher@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "src/core.go::Run",
+      "NewMatcher",
+      "--json"
+     ],
+     "seconds": 1.235,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 542,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:pattern-matchitem@v2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"MatchItem\" and a.file = \"src/pattern.go\" and b.name = \"basicMatch\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.148,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1539,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -1312,7 +1476,7 @@
       "how does the terminal draw the list of matches",
       "--json"
      ],
-     "seconds": 1.502,
+     "seconds": 1.503,
      "exit": 0,
      "ok_codes": [
       0
@@ -1334,7 +1498,7 @@
       "how is the input read from the default command",
       "--json"
      ],
-     "seconds": 1.539,
+     "seconds": 1.51,
      "exit": 0,
      "ok_codes": [
       0
@@ -1356,7 +1520,7 @@
       "how are results sorted by score",
       "--json"
      ],
-     "seconds": 1.329,
+     "seconds": 1.311,
      "exit": 0,
      "ok_codes": [
       0
@@ -1378,7 +1542,7 @@
       "how does a keystroke change the query and rerun the matcher",
       "--json"
      ],
-     "seconds": 4.518,
+     "seconds": 4.433,
      "exit": 0,
      "ok_codes": [
       0,
@@ -1388,7 +1552,7 @@
      "timeout_s": 600.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 10032,
+     "stdout_bytes": 10034,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -1401,7 +1565,7 @@
       "how are matches ranked",
       "--json"
      ],
-     "seconds": 2.551,
+     "seconds": 2.415,
      "exit": 0,
      "ok_codes": [
       0,
@@ -1411,7 +1575,7 @@
      "timeout_s": 600.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 9575,
+     "stdout_bytes": 9576,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -1421,12 +1585,12 @@
      "command": "trace",
      "argv": [
       "trace",
-      "main",
-      "FuzzyMatchV2",
+      "main.go::main",
+      "NewMatcher",
       "--json"
      ],
-     "seconds": 1.218,
-     "exit": 2,
+     "seconds": 1.22,
+     "exit": 0,
      "ok_codes": [
       0,
       2
@@ -1435,10 +1599,11 @@
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 361,
+     "stdout_bytes": 683,
      "stderr_bytes": 0,
      "json_ok": true,
-     "stderr_tail": ""
+     "stderr_tail": "",
+     "answer_status": "found"
     },
     {
      "step": "q1",
@@ -1448,7 +1613,7 @@
       "match (f:function) return count(f)",
       "--json"
      ],
-     "seconds": 1.165,
+     "seconds": 1.153,
      "exit": 0,
      "ok_codes": [
       0,
@@ -1459,7 +1624,7 @@
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 1177,
+     "stdout_bytes": 1176,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -1472,7 +1637,7 @@
       "match (a:function)-[calls]->(b:function) where b.name = \"scan\" return a limit 20",
       "--json"
      ],
-     "seconds": 1.188,
+     "seconds": 1.203,
      "exit": 0,
      "ok_codes": [
       0,
@@ -1489,30 +1654,6 @@
      "stderr_tail": ""
     },
     {
-     "step": "check",
-     "command": "check",
-     "argv": [
-      "check",
-      "src/core.go",
-      "--json"
-     ],
-     "seconds": 0.812,
-     "exit": 4,
-     "ok_codes": [
-      0,
-      3,
-      4
-     ],
-     "timeout": false,
-     "timeout_s": 300.0,
-     "crash": false,
-     "reason": null,
-     "stdout_bytes": 1674,
-     "stderr_bytes": 0,
-     "json_ok": true,
-     "stderr_tail": ""
-    },
-    {
      "step": "map:dependencies",
      "command": "map",
      "argv": [
@@ -1522,7 +1663,7 @@
       "dependencies",
       "--json"
      ],
-     "seconds": 1.118,
+     "seconds": 1.177,
      "exit": 0,
      "ok_codes": [
       0
@@ -1546,7 +1687,7 @@
       "dataflow",
       "--json"
      ],
-     "seconds": 2.312,
+     "seconds": 2.315,
      "exit": 0,
      "ok_codes": [
       0
@@ -1570,7 +1711,7 @@
       "dead",
       "--json"
      ],
-     "seconds": 2.749,
+     "seconds": 2.703,
      "exit": 0,
      "ok_codes": [
       0
@@ -1594,7 +1735,7 @@
       "hotspots",
       "--json"
      ],
-     "seconds": 1.511,
+     "seconds": 1.329,
      "exit": 0,
      "ok_codes": [
       0
@@ -1615,7 +1756,7 @@
       "routes",
       "--json"
      ],
-     "seconds": 1.119,
+     "seconds": 1.052,
      "exit": 0,
      "ok_codes": [
       0
@@ -1636,7 +1777,7 @@
       "schema",
       "--json"
      ],
-     "seconds": 1.251,
+     "seconds": 1.21,
      "exit": 0,
      "ok_codes": [
       0,
@@ -1658,7 +1799,7 @@
       "doctor",
       "--json"
      ],
-     "seconds": 2.468,
+     "seconds": 2.366,
      "exit": 0,
      "ok_codes": [
       0,
@@ -1668,7 +1809,7 @@
      "timeout_s": 300.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 10137,
+     "stdout_bytes": 10146,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
@@ -1683,7 +1824,7 @@
       "project_query",
       "how does the terminal draw the list of matches"
      ],
-     "seconds": 1.476,
+     "seconds": 1.458,
      "exit": 0,
      "ok_codes": [
       0
@@ -1707,7 +1848,7 @@
       "analyze",
       "how does a keystroke change the query and rerun the matcher"
      ],
-     "seconds": 4.707,
+     "seconds": 4.47,
      "exit": 0,
      "ok_codes": [
       0
@@ -1729,7 +1870,7 @@
       ".",
       "--json"
      ],
-     "seconds": 8.526,
+     "seconds": 7.456,
      "exit": 0,
      "ok_codes": [
       0
@@ -1751,7 +1892,7 @@
       ".",
       "--json"
      ],
-     "seconds": 3.573,
+     "seconds": 2.921,
      "exit": 3,
      "ok_codes": [
       0,
@@ -1774,7 +1915,7 @@
       ".",
       "--json"
      ],
-     "seconds": 7.12,
+     "seconds": 6.532,
      "exit": 0,
      "ok_codes": [
       0
@@ -1783,12 +1924,27 @@
      "timeout_s": 900.0,
      "crash": false,
      "reason": null,
-     "stdout_bytes": 1202,
+     "stdout_bytes": 1201,
      "stderr_bytes": 0,
      "json_ok": true,
      "stderr_tail": ""
     }
-   ]
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "b4b6b5a",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
   }
  ]
 }
