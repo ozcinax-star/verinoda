@@ -3106,14 +3106,20 @@ def graph_path_exists(repo: Path) -> bool:
 
 def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budget | None = None,
             run_tests: bool = False, challenge: bool = True, max_claims: int = 12, graph=None,
-            observe: bool = False, refresh: str = "auto") -> dict:
+            observe: bool = False, refresh: str = "auto", intent: str | None = None) -> dict:
     """Answer ``question`` (or ``plan``: a dict, JSON text or a plan file) with claims and unknowns.
 
     ``refresh``: ``auto`` refreshes a stale index first unless that would be slow (then the answer
     uses the previous index and says which files are stale), ``inline`` always refreshes, ``skip``
-    never does."""
+    never does. ``intent``: what the host read the question as (a key of ``question_plan.DEFAULT_DONE``),
+    weighed against the rule reading (:func:`question_plan.host_intent`); the result's ``intent_check``
+    says whether it was used. Not with ``plan``, whose sub-questions carry their own intents."""
     from verinoda import critique, workflow
 
+    if intent is not None and intent not in qp.INTENTS:
+        raise ValueError(f"unknown intent {intent!r}; one of: {', '.join(qp.INTENTS)}")
+    if intent is not None and plan is not None:
+        raise ValueError("an intent is for a question; a plan's sub-questions carry their own intents")
     repo = Path(repo).resolve()
     cfg_all = load_config(repo)
     cfg = cfg_all["budget"]
@@ -3160,8 +3166,31 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
 
     # 1-2. understand: the host's plan or one drafted by rules, then the deterministic check
     source = "host" if plan is not None else "fallback"
+    intent_check, check_res = None, None
     if plan is None:
         the_plan = qp.draft(question, g, lex)
+        if intent is not None:
+            # the host's reading of the question, checked against the rules' (it orders the sub-questions and
+            # picks their done_when; a disagreement keeps the rules' plan and is reported, never a status)
+            with_intent, intent_check = qp.host_intent(the_plan, intent, lex)
+            if with_intent is not None:
+                res_ = qp.check(with_intent, g, repo, lex, source="host")
+                # only a sub-question the host's intent retyped counts: one the rules left at their default
+                # differs from their own reading already. host_intent weighs the intent against the same rule
+                # reading, so this is a guard should the two ever read the message differently.
+                retyped = intent_check.get("retyped", [])
+                differs = [d for d in res_["intent_divergence"] if d["sub_question"] in retyped]
+                if res_["status"] == "invalid" or differs:
+                    errs = "; ".join(p.get("msg", "") for p in res_["errors"][:2])
+                    # an intent that only reordered the plan changed no sub-question: what fails is the rules'
+                    # own draft, which then goes the usual way (answered without it)
+                    why = ("the plan check found the intent differs from the rule reading" if differs
+                           else f"the plan with this intent fails its own checks: {errs}" if retyped
+                           else f"the plan drafted by the rules fails its own checks: {errs}")
+                    intent_check.update(applied=False, sub_questions=[], agrees=not differs, why=why)
+                    intent_check.pop("retyped", None)
+                else:
+                    the_plan, check_res = with_intent, res_
     else:
         the_plan = host_plan
     if the_plan is None:
@@ -3169,7 +3198,8 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
                      "links": [], "references": [], "clarifications": [], "unknowns": []}
         stored_plan = {"unparsed": str(plan)[:20000]}
     else:
-        check_res = qp.check(the_plan, g, repo, lex, source=source)
+        if check_res is None:
+            check_res = qp.check(the_plan, g, repo, lex, source=source)
         stored_plan = the_plan
     drafted_id, fallback = None, None
     if source == "fallback" and check_res["status"] == "invalid":
@@ -3195,6 +3225,11 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     base = {"analysis_id": aid, "question": question, "intents": intents, "plan_id": plan_id, "plan_source": source,
             "understood_as": understood,
             "snapshot": {"id": snap["id"], "commit": commit, "dirty": bool(snap["dirty"])}}
+    if intent_check is not None:
+        base["intent_check"] = intent_check
+        step("intent_check", f"host intent {intent}: " + ("used for " + ", ".join(intent_check["sub_questions"])
+                                                          if intent_check["applied"] else
+                                                          f"not used ({intent_check.get('why')})"))
     if fallback:
         base["plan_fallback"] = fallback
         step("plan_fallback", f"drafted plan {drafted_id} invalid ({len(fallback['errors'])} error line(s)); "

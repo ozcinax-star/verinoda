@@ -193,7 +193,7 @@ def lean(res: dict, *, shown_by: list[str] | None = None) -> dict:
         out["snapshot"] = {"id": snap.get("id"), "commit": snap.get("commit"), **({"dirty": True} if snap.get("dirty")
                                                                                    else {})}
     # a stale answer is never silent, nor one given without the plan drafted for it
-    for k in ("errors", "clarifications", "plan_fallback", "index_refresh_error", "index_refresh"):
+    for k in ("errors", "clarifications", "plan_fallback", "intent_check", "index_refresh_error", "index_refresh"):
         if res.get(k):
             out[k] = res[k]
     if res.get("plan_check"):
@@ -318,6 +318,12 @@ def render_text(res: dict) -> str:
         first = (fb.get("errors") or [""])[0]
         out.append(f"note: {fb.get('why') or 'answered without the drafted plan'}"
                    + (f" ({tn.clip(first, ECHO_CHARS)})" if first else ""))
+    ic = res.get("intent_check") or {}
+    if ic:
+        read = ", ".join(ic.get("read_as") or []) or "no intent"
+        out.append(f"host intent {ic.get('given')}: " + (f"used for {', '.join(ic.get('sub_questions') or [])}"
+                                                         if ic.get("applied") else
+                                                         f"not used: {ic.get('why') or f'the rules read {read}'}"))
     status = res.get("status")
     pc = res.get("plan_check") or {}
     if res.get("plan_source") == "host":

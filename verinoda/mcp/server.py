@@ -1338,15 +1338,27 @@ class AtlasTools:
 
     # -- analysis & claims ----------------------------------------------------------
     def analyze(self, question: str = "", run_tests: bool = False, budget_seconds: float = 60,
-                budget_calls: int = 40, plan_json: str | None = None, observe: bool = False) -> dict:
+                budget_calls: int = 40, plan_json: str | None = None, observe: bool = False,
+                intent: str | None = None) -> dict:
         def go():
             from verinoda import analysis
+            from verinoda.question_plan import INTENTS
 
             q = _opt_text(question) or ""
             plan = _plan_text(plan_json)
             if not q and plan is None:
                 raise ToolFailure("invalid_argument", "question must be a non-empty string (or pass plan_json)",
                                   "pass the user's question, or a checked plan as plan_json")
+            want = _opt_text(intent)
+            if intent is not None and want is None:  # a blank intent is a mistake, not "no intent"
+                raise ToolFailure("invalid_argument", "intent must not be blank",
+                                  "choose one of: " + ", ".join(INTENTS) + ", or leave it out", valid=list(INTENTS))
+            if want is not None and want not in INTENTS:
+                raise ToolFailure("invalid_argument", f"unknown intent {want!r}",
+                                  "choose one of: " + ", ".join(INTENTS) + ", or leave it out", valid=list(INTENTS))
+            if want is not None and plan is not None:
+                raise ToolFailure("invalid_argument", "intent is for a question; a plan's sub-questions carry "
+                                  "their own intents", "leave intent out, or set it in the plan")
             b = analysis.Budget(seconds=_clamp(budget_seconds, 1, 600, "budget_seconds", float),
                                 tool_calls=_clamp(budget_calls, 1, 200, "budget_calls"),
                                 context_tokens=6000)  # same default as `verinoda analyze`
@@ -1354,7 +1366,7 @@ class AtlasTools:
                 g = self._graph_for_analysis(st)
                 res = analysis.analyze(st, self.repo, q, plan=plan, budget=b, run_tests=bool(run_tests),
                                        challenge=True, graph=g if g is not None else self._stale_graph(st),
-                                       observe=bool(observe))
+                                       observe=bool(observe), intent=want)
             ref = res.get("index_refresh") or {}
             if ref.get("skipped") and not ref.get("busy") and ref.get("stale_count"):
                 # too slow to run inside the answer: refresh in the background for the next question
@@ -2565,6 +2577,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
             except TypeError:  # pragma: no cover - an older SDK without these arguments
                 continue
 
+    from verinoda.question_plan import INTENTS  # the full analyze's intent values
+
     def register(name: str):
         def deco(fn):
             if name in served:
@@ -2710,9 +2724,14 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         = "",
         observe: Annotated[bool, Field(description="Trace the tests that reach the answer (isolated copy).")]
         = False,
+        intent: Annotated[Literal[INTENTS] | None,  # type: ignore[valid-type]
+                          Field(description="What the question asks for, as you read it (not with plan_json). "
+                                            "Used only when the rules' reading agrees, else intent_check gives "
+                                            "both and the rules' is used. Never changes a claim's status.")]
+        = None,
     ) -> dict[str, Any]:
         return emit(t.analyze(question, run_tests=run_tests, budget_seconds=budget_seconds,
-                              budget_calls=budget_calls, plan_json=plan_json, observe=observe))
+                              budget_calls=budget_calls, plan_json=plan_json, observe=observe, intent=intent))
 
     @register("plan_audit")
     def plan_audit(
