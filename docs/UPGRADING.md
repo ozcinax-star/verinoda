@@ -316,7 +316,7 @@ are unchanged, so the tool count in UPGRADING needs no change.
 
 `review --json` and MCP `change_review` have a new key `api_changes` (a list of verdicts) and `counts` a new key
 `api_breaking` (and `api_changes_total` when the list was cut); the review summary gains a "Public API" sentence when there are public changes. Exit codes are
-unchanged. No tool was added: UPGRADING's tool count does not change.
+unchanged. No tool was added.
 
 ### D87: Decisions a diff touches
 
@@ -324,7 +324,7 @@ unchanged. No tool was added: UPGRADING's tool count does not change.
 reaches, each with `reached_by` entries (`kind`, `entry`, `at`, `why`, `status`, `evidence_at`), and prints
 them under "Decisions to read". A record the change deletes is listed with `status: deleted`; a record that
 could not be read adds `error` and an `unknown` entry of kind `decision_records`. Exit codes and the MCP
-tool count are unchanged (UPGRADING's tool count needs no change).
+tool count are unchanged.
 
 ### D88: Missing mod dependencies and pack collisions
 
@@ -343,14 +343,13 @@ rescan is needed.
   (`coverage.xml`, `lcov.info`, `coverage/lcov.info`, `build/reports/jacoco/test/jacocoTestReport.xml`,
   `target/site/jacoco/jacoco.xml`, ...), a `tests.coverage` section. A review that exited 0 can now exit 3 when
   a fresh report shows changed lines no test ran. `counts.uncovered_changed_lines` is a new key.
-- The MCP tool count does not change (no new tool; `change_review` reads the reports it finds), so
-  UPGRADING's tool count needs no change.
+- The MCP tool count does not change (no new tool; `change_review` reads the reports it finds).
 
 ### D90: Ownership and knowledge map
 
 New command `verinoda owners [TARGET]`: who knows a file, folder, line range or symbol, from CODEOWNERS and git
 blame (main author, bus factor, knowledge loss), as claims. Read only; nothing to migrate. The MCP tool count is
-unchanged (no new tool), so UPGRADING's tool count needs no change. Re-run `verinoda install` (or `setup`) to get
+unchanged (no new tool). Re-run `verinoda install` (or `setup`) to get
 the skills that name it.
 
 ### D91: Hotspots
@@ -391,7 +390,7 @@ violating edge at its cited line and fails with exit 1, as for `no_edge`. Any gl
 `tag:NAME` for a set of globs defined under `[architecture.tags]` in `verinoda.toml` (or
 `[tool.verinoda.architecture.tags]` in `pyproject.toml`). Records written before are unchanged; a record
 using the new kinds is not enforced by an older Verinoda (the kind is reported as unknown). The MCP tool
-count does not change (no new tool), so UPGRADING's tool count needs no edit.
+count does not change (no new tool).
 
 ### D96: Differential findings
 
@@ -401,14 +400,14 @@ findings the change removed under `differential.fixed_findings`. Every finding h
 `--findings all` (MCP `findings: "all"`) for the previous list, with labels. The exit code follows what is listed:
 a change whose findings were all there before now exits 0. `counts` has two new keys, `preexisting` and `fixed`; `op-on-changed-line` findings carry `op_kind` and
 `io-in-loop` findings `base_had: loop` when the loop did that IO before.
-The MCP tool count does not change (no new tool), so UPGRADING's tool count needs no edit.
+The MCP tool count does not change (no new tool).
 
 ### D97: What a merged change made stale
 
 `verinoda review` (and `change_review`) now has a `made_stale` key: the stored claims, notes and decision
 records the change makes stale, each with a status, the changed line and what it cites, plus a "Made stale by
-the change" section in the text. Nothing to do; no new command, no MCP tool count change (UPGRADING's tool
-count stays as it is), no store schema change.
+the change" section in the text. Nothing to do; no new command, no MCP tool count change, no store schema
+change.
 
 ### D98: Decision record lifecycle
 
@@ -420,7 +419,7 @@ written from now on carry a `links:` line in their front matter; an older Verino
 drops the line when it rewrites the record. A record whose `supersedes` or `superseded-by` is not answered by
 the other record now shows a warning in `decide list` (nothing changes in what is enforced). MCP
 `decision_record` has two more actions (`supersede`, `link`) and one more argument (`link`); the tool count is
-unchanged, so UPGRADING's tool count needs no change.
+unchanged.
 
 ### D99: Butterfly view
 
@@ -506,8 +505,7 @@ changes unless you run it. The MCP tool count is unchanged.
 ranked by PageRank over the file dependency graph toward the files in play (the targets, else the git
 changes), and each class, function and method definition line at `file:line`, until the estimated tokens
 reach N (default 1024). `--json` has the ranks (`strong_inference`) and the counts. The MCP `map_view`
-takes `view: "repo"`, with `targets` as the files in play. The MCP tool count is unchanged, so UPGRADING's
-tool count needs no change.
+takes `view: "repo"`, with `targets` as the files in play. The MCP tool count is unchanged.
 
 ### D111: Undocumented decisions
 
@@ -515,8 +513,7 @@ tool count needs no change.
 one file, a Python library imported by one product file, the environment read in one file - each a
 `weak_inference` candidate over a verified fact with `path:line` evidence, with the guard that would keep it and
 the `decide record` command. `verinoda decide dismiss CANDIDATE --reason "..."` records the user's dismissal in
-`.verinoda/dismissed_decisions.json` (local; `--undo` lists it again). No MCP tool was added: UPGRADING's tool
-count does not change.
+`.verinoda/dismissed_decisions.json` (local; `--undo` lists it again). No MCP tool was added.
 
 ### D112: Change risk score
 
@@ -564,7 +561,7 @@ New: `verinoda map save NAME --trace A B` (or `--view V`) keeps a trace or map v
 `.verinoda/maps/NAME.json`; `verinoda map show NAME` reads it back as `current`, `stale` (exit 1, the changed
 files named) or `unknown` (exit 1, it cites no file) and `map list` lists them; `.verinoda` is git-ignored, so
 share a map with `git add -f .verinoda/maps/NAME.json`. MCP: `map_view` takes `view: "saved"` with `targets: [NAME]`. The MCP
-tool count does not change (no new tool), so UPGRADING's tool count stays as it is.
+tool count does not change (no new tool).
 
 ### D60-D62
 
