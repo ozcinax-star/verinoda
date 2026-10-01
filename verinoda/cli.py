@@ -2243,6 +2243,17 @@ def cmd_claim(args) -> int:
         except KeyError as exc:
             raise SystemExit(f"error: {exc}")
         _emit(args, res, _r_claim)
+    elif args.claim_cmd == "asof":
+        from verinoda import asof
+
+        if (args.time is None) == (args.commit is None):
+            raise SystemExit("error: give one of --time WHEN or --commit REV")
+        try:
+            res = (asof.at_time(st, args.time, status=args.status) if args.time is not None else
+                   asof.at_commit(st, repo, args.commit, status=args.status))
+        except asof.AsOfError as exc:
+            raise SystemExit(f"error: {exc}")
+        _emit(args, res, lambda r: print(asof.render(r)))
     elif args.claim_cmd == "list":
         rows = st.claims(status=args.status, limit=args.limit)
         res = [{k: r[k] for k in ("id", "status", "confidence", "kind", "text", "updated_at")} for r in rows]
@@ -4032,13 +4043,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("claim", help="inspect or add claims")
     csub = sp.add_subparsers(dest="claim_cmd", required=True)
-    for name in ("show", "list", "add"):
-        c = csub.add_parser(name)
+    for name in ("show", "list", "asof", "add"):
+        c = csub.add_parser(name, **({"help": "every claim's status as recorded at a moment (--time) or at a commit "
+                                              "(--commit: recorded there observed, carried from an ancestor "
+                                              "strong_inference)"} if name == "asof" else {}))
         c.set_defaults(fn=cmd_claim)
         c.add_argument("--repo")
         c.add_argument("--json", action="store_true")
         if name == "show":
             c.add_argument("id")
+        elif name == "asof":
+            c.add_argument("--time", help="an ISO date or time: what Verinoda had recorded then (a date: its end, UTC)")
+            c.add_argument("--commit", help="a revision: which claims held at that commit")
+            c.add_argument("--status", help="list only the claims with this status then")
         elif name == "list":
             c.add_argument("--status")
             c.add_argument("--limit", type=int, default=50)

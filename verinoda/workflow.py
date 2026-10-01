@@ -538,6 +538,7 @@ def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict:
     if reran is not None and reran["matches_expectation"]:
         changed = []  # a fresh run on the current tree re-established it
     stale_conf = min(c["confidence"] or 0.0, CONFIDENCE_CAP["stale"])
+    read_at = snap["id"] if current and snap else None   # the snapshot of the tree verify read, if it has one
     unconfirmed = []
     note = None
     if reran is not None and not reran["matches_expectation"] and not inconclusive:
@@ -545,19 +546,19 @@ def verify(store: Store, repo: Path, cid: str, *, run: bool = False) -> dict:
         # experiments.run); older passing runs do not outweigh it.
         after = cl.set_status(cid, "contradicted", actor="verify", downgrade=True,
                               reason=f"verify: re-run {reran['id']} {reran['outcome']} on the current tree",
-                              payload={"experiment": reran["id"], "checks": checks},
+                              payload={"experiment": reran["id"], "checks": checks, "snapshot": read_at},
                               confidence=min(c["confidence"] or 0.0, CONFIDENCE_CAP["contradicted"]))
     elif not all_ok:
         after = cl.set_status(cid, "stale", reason="verify: cited source changed", actor="verify",
-                              payload={"checks": checks}, confidence=stale_conf)
+                              payload={"checks": checks, "snapshot": read_at}, confidence=stale_conf)
     elif changed and c["status"] != "contradicted":
         unconfirmed = changed
         note = ("verify: " + ", ".join(changed) + " changed since the claim's snapshot and no re-checkable "
                 "evidence covers it" + ("; re-run with --run" if spec.get("command") and not run else "")
                 + (f"; the re-run was inconclusive ({reran.get('inconclusive_reason')})" if inconclusive else "")
                 + ("; the re-run was refused" if refused else ""))
-        after = cl.set_status(cid, "stale", actor="verify", confidence=stale_conf, payload={"unconfirmed": changed},
-                              reason=note)
+        after = cl.set_status(cid, "stale", actor="verify", confidence=stale_conf,
+                              payload={"unconfirmed": changed, "snapshot": read_at}, reason=note)
     else:
         after = cl.reassess(cid, reason="verify: evidence re-checked", actor="verify")
         if current and snap and c["snapshot_id"] != snap["id"] and after["status"] not in ("stale", "contradicted"):
