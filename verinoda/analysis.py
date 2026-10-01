@@ -3275,6 +3275,14 @@ def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budge
     result = {**base, "status": "answered", "plan_check": qp.compact_check(check_res), "subquestions": subs,
               "claims": out_claims, "unknowns": unknowns, "critique": crit, "steps": steps}
     if question.strip():
+        from verinoda import facts
+
+        try:  # named facts the question names: leads with their status now, never evidence for these claims
+            leads = facts.leads(store, question, repo=repo)
+        except Exception as exc:  # noqa: BLE001 - the answer stands without them; said
+            leads, result["facts_error"] = [], f"{type(exc).__name__}: {exc}"[:200]
+        if leads:
+            result["facts"] = leads
         result["passages"] = _passages(g, question)
         budget.chars += sum(len(ln) + 1 for ln in result["passages"])
     if refresh_info and refresh_info.get("error"):
