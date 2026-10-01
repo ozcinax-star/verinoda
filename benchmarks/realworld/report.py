@@ -7,19 +7,66 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _s(v) -> str:
     return "-" if v is None else (f"{v:.1f}" if isinstance(v, float) else str(v))
 
 
-def _env_line(env: dict | None) -> str:
+def _env_line(env: dict | None, commits: str | None = None) -> str:
     env = env or {}
     dirty = " (with uncommitted changes)" if env.get("verinoda_dirty") else ""
-    return (f"Verinoda {env.get('verinoda_version')} at {env.get('verinoda_commit')}{dirty}, Python "
+    return (f"Verinoda {env.get('verinoda_version')} at {commits or env.get('verinoda_commit')}{dirty}, Python "
             f"{env.get('python')}, {env.get('platform')}, {env.get('cpus')} CPUs")
+
+
+def same_code(a: dict, b: dict) -> bool | None:
+    """Whether two runs' environments ran the same ``verinoda/`` code: by the tree id ``run.py`` records, else by
+    ``git diff --quiet A B -- verinoda/`` in this checkout; None when it cannot be told (a commit unknown here)."""
+    if a.get("verinoda_dirty") or b.get("verinoda_dirty"):
+        return False
+    ta, tb = a.get("verinoda_code_tree"), b.get("verinoda_code_tree")
+    if ta and tb:
+        return ta == tb
+    ca, cb = a.get("verinoda_commit"), b.get("verinoda_commit")
+    if not ca or not cb:
+        return None
+    try:
+        r = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", ca, cb, "--", "verinoda/"],
+                           capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return {0: True, 1: False}.get(r.returncode)
+
+
+def env_lines(envs: list[dict]) -> list[str]:
+    """One line per environment; environments that differ only in the commit, and whose ``verinoda/`` code is the
+    same, share one line that says so (a run that added only benchmark files is not another Verinoda)."""
+    out: list[str] = []
+    groups: list[list[dict]] = []
+    for e in envs:
+        rest = {k: v for k, v in e.items() if k not in ("verinoda_commit", "verinoda_code_tree")}
+        for g in groups:
+            first = g[0]
+            if ({k: v for k, v in first.items() if k not in ("verinoda_commit", "verinoda_code_tree")} == rest
+                    and same_code(first, e)):
+                g.append(e)
+                break
+        else:
+            groups.append([e])
+    for g in groups:
+        commits = list(dict.fromkeys(str(e.get("verinoda_commit")) for e in g))
+        if len(commits) == 1:
+            out.append(_env_line(g[0]))
+        else:
+            out.append(_env_line(g[0], " and ".join(commits)) + " (the same verinoda/ code: the commits differ only "
+                                                                   "in files outside verinoda/)")
+    return out
 
 
 def _gold(g: dict, key: str | None = None) -> str:
@@ -46,15 +93,15 @@ def table_rows(results: dict) -> list[list[str]]:
 
 
 def render(results: dict) -> str:
-    envs = []                   # the environments of the repositories listed (not of runs they replaced)
+    envs: list[dict] = []       # the environments of the repositories listed (not of runs they replaced)
     for r in results.get("repos", []):
-        line = _env_line(r.get("environment") or results.get("environment"))
-        if line not in envs:
-            envs.append(line)
+        env = r.get("environment") or results.get("environment") or {}
+        if env not in envs:
+            envs.append(env)
     if not envs:
-        envs = [_env_line(results.get("environment"))]
+        envs = [results.get("environment") or {}]
     out = [f"# Real-world run {results.get('date', '')}", ""]
-    out += [f"{e}." for e in envs]
+    out += [f"{e}." for e in env_lines(envs)]
     out += ["", "Times in seconds, wall clock, one process at a time. Gold v1: the frozen facts; v2: the "
             "corrected checks added after review.", "",
             "| repo | files | scan s | update s | query / analyze median s | crashes | timeouts | clean after | "

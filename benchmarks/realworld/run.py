@@ -436,6 +436,30 @@ def _judge_trace(check: dict, data: dict) -> tuple[bool, str]:
     return False, f"no path edge at {', '.join(best)}"
 
 
+def _judge_route(check: dict, data: dict) -> tuple[bool, str]:
+    """A ``routes`` check: a row of the route table with exactly this ``path``; with ``method``, a row whose
+    ``methods`` list holds it (a row for any method, ``methods: null``, does not count); with ``handler``, a row
+    whose JSON holds that text (the row's handler is a graph node id such as
+    ``examples_route_separation_post_list``, not a file path); with ``at``, a row declared at that file:line."""
+    want_m = str(check.get("method") or "").upper()
+    near = []
+    for r in data.get("route_table") or []:
+        if not isinstance(r, dict) or r.get("path") != check["path"]:
+            continue
+        ms = [str(m).upper() for m in (r.get("methods") or [])]
+        if want_m and want_m not in ms:
+            near.append(f"methods {ms or 'any'}")
+            continue
+        if check.get("handler") and check["handler"] not in json.dumps(r):
+            near.append(f"handler {r.get('handler')}")
+            continue
+        if check.get("at") and _norm(str(r.get("at", ""))) != _norm(check["at"]):
+            near.append(f"at {r.get('at')}")
+            continue
+        return True, ""
+    return False, "route not in the table" + (f" (same path: {'; '.join(near[:3])})" if near else "")
+
+
 def judge(check: dict, exit_code: int | None, stdout: str) -> tuple[bool, str]:
     """Whether Verinoda's answer holds the gold fact, and why not."""
     try:
@@ -461,15 +485,7 @@ def judge(check: dict, exit_code: int | None, stdout: str) -> tuple[bool, str]:
             return True, f"rank {files.index(want) + 1}"
         return False, f"not in top {k}: {files}"
     if kind == "routes":
-        table = data.get("route_table") or []
-        for r in table:
-            if not isinstance(r, dict):
-                continue
-            if (r.get("path") == check["path"] and (not check.get("method") or
-                                                    str(r.get("method", "")).upper() == check["method"].upper())
-                    and check.get("handler", "") in json.dumps(r)):
-                return True, ""
-        return False, "route not in the table"
+        return _judge_route(check, data)
     if kind == "schema":
         names = {t.get("name") for t in data.get("tables") or [] if isinstance(t, dict)}
         return (check["table"] in names), ("" if check["table"] in names else f"tables: {sorted(map(str, names))[:20]}")
@@ -715,10 +731,13 @@ def environment(python: str, verinoda_root: Path) -> dict:
                        env=dict(os.environ, PYTHONPATH=str(verinoda_root)))
     lines = v.stdout.split()
     commit = _git(["-C", str(verinoda_root), "rev-parse", "--short", "HEAD"]).stdout.strip()
+    # the tree of verinoda/ at that commit: two runs with the same tree ran the same code (the summary says so)
+    tr = _git(["-C", str(verinoda_root), "rev-parse", "--verify", "--quiet", "HEAD:verinoda"])
+    tree = tr.stdout.strip() if tr.returncode == 0 else ""
     dirty = _git(["-C", str(verinoda_root), "status", "--porcelain", "--untracked-files=no"])
     import platform
     return {"verinoda_version": lines[0] if lines else None, "python": lines[1] if len(lines) > 1 else None,
-            "verinoda_commit": commit or None,
+            "verinoda_commit": commit or None, "verinoda_code_tree": tree or None,
             "verinoda_dirty": bool(dirty.stdout.strip()) if dirty.returncode == 0 else None,
             "platform": platform.platform(), "cpus": os.cpu_count()}
 

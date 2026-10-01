@@ -2599,8 +2599,12 @@ def _cross_service(g: Graph, old: dict | None = None) -> dict:
 
     reuse = (old or {}).get("files") if (old or {}).get("facts_version") == cross_service.FACTS_VERSION else None
     files, edges, report, _parsed = cross_service.collect(g, old=reuse)
+    # the report keeps every ambiguous call and candidate; the sidecar the first REPORT_CAP calls, 8 candidates each
+    amb = [dict(a, candidates=a["candidates"][:8], **({"candidates_total": len(a["candidates"])}
+                                                     if len(a["candidates"]) > 8 else {}))
+           for a in report["ambiguous"][:cross_service.REPORT_CAP]]
     return {"facts_version": cross_service.FACTS_VERSION, "files": files,
-            "edges": [[u, v, d] for u, v, d in edges], "ambiguous": report["ambiguous"],
+            "edges": [[u, v, d] for u, v, d in edges], "ambiguous": amb,
             "counts": {k: report[k] for k in ("routes", "clients", "linked", "unresolved_urls", "external")}
             | {"ambiguous": len(report["ambiguous"]), "unmatched": len(report["unmatched"]),
                "method_mismatch": len(report["method_mismatch"])}}
