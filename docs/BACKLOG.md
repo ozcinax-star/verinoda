@@ -113,7 +113,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 11.2 | **Memory event history and expiry** | ADD, UPDATE and DELETE events per learning; a time-to-live | mem0 | `memory history ID` shows the events |
 | 11.3 | **Background consolidation** | Between sessions: re-verify stale claims, merge duplicates | Letta sleep-time agents, Cognee memify | stale claims re-checked by the background update |
 | 11.5 | **Typed notes and wikilinks** | Notes with `[category] fact #tag` lines and `[[symbol]]` links; two-way sync with Markdown files | Basic Memory | a note edited in an editor updates the index |
-| 11.6 | **Glob-scoped context** | Decisions, notes and claims attached to globs surface when an agent touches matching files | Kiro steering, Cursor rules | an MCP read of a file returns its scoped notes |
 
 ## 12 - Docs, decisions and specs
 
