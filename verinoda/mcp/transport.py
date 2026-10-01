@@ -122,7 +122,7 @@ class BearerAuth:
 
     def __init__(self, app, token: str, routes: dict[tuple[str, str], Callable] | None = None):
         self.app = app
-        self._expected = f"Bearer {token}".encode("utf-8")
+        self._expected = token.encode("utf-8")
         self.routes = routes or {}
 
     async def __call__(self, scope, receive, send):
@@ -138,7 +138,9 @@ class BearerAuth:
             if k.lower() == b"authorization":
                 given = v
                 break
-        if not hmac.compare_digest(given, self._expected):
+        # the scheme is case-insensitive (RFC 7235); the token itself is compared in constant time
+        scheme, _, credentials = given.strip().partition(b" ")
+        if scheme.lower() != b"bearer" or not hmac.compare_digest(credentials.strip(), self._expected):
             await _send_json(send, 401, {"error": "unauthorized",
                                          "message": "this server needs 'Authorization: Bearer <token>'; the token "
                                                     "is in the file `verinoda mcp token` names"},
@@ -172,9 +174,11 @@ def is_loopback(host: str) -> bool:
 
 
 def make_http_server(srv, *, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, token: str,
-                     status: Callable[[], dict] | None = None):
+                     status: Callable[[], dict] | None = None, on_started: Callable[[], None] | None = None):
     """``(uvicorn server, bound socket, url)``; ``server.run(sockets=[sock])`` serves until
-    ``server.should_exit`` (set by ``POST /verinoda/shutdown`` too). ``port`` 0 picks a free one."""
+    ``server.should_exit`` (set by ``POST /verinoda/shutdown`` too). ``port`` 0 picks a free one.
+    ``on_started`` runs once the server accepts connections (after the app's lifespan startup), never when that
+    startup failed."""
     import uvicorn
 
     box: dict[str, Any] = {}
@@ -201,7 +205,14 @@ def make_http_server(srv, *, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
         raise
     bound = sock.getsockname()[1]
     config = uvicorn.Config(app, log_level="warning", access_log=False, lifespan="on")
-    server = box["server"] = uvicorn.Server(config)
+
+    class _Server(uvicorn.Server):
+        async def startup(self, *a, **kw):
+            await super().startup(*a, **kw)
+            if on_started is not None and self.started and not self.should_exit:
+                on_started()
+
+    server = box["server"] = _Server(config)
     shown = f"[{host}]" if ":" in host else host
     return server, sock, f"http://{shown}:{bound}{MCP_PATH}"
 
@@ -210,18 +221,24 @@ def serve_http(srv, *, host: str, port: int, status: Callable[[], dict] | None =
                state_file: Path | None = None, label: str = "") -> None:
     """Serve ``srv`` over streamable HTTP until stopped (Ctrl+C, ``POST /verinoda/shutdown``)."""
     token, tpath = load_token()
-    server, sock, url = make_http_server(srv, host=host, port=port, token=token, status=status)
-    print(f"verinoda mcp: {label} listening on {url} (bearer token in {tpath})", file=sys.stderr, flush=True)
+    box: dict[str, Any] = {}
+
+    def started() -> None:  # the state file says "listening" only once the server accepts connections
+        url, port_ = box["url"], box["port"]
+        print(f"verinoda mcp: {label} listening on {url} (bearer token in {tpath})", file=sys.stderr, flush=True)
+        if state_file is not None:
+            state = {"pid": os.getpid(), "url": url, "host": host, "port": port_,
+                     "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "log": str(log_path()),
+                     **({"projects": status().get("projects")} if status else {})}
+            tmp = state_file.with_name(state_file.name + f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            os.replace(tmp, state_file)
+
+    server, sock, url = make_http_server(srv, host=host, port=port, token=token, status=status, on_started=started)
+    box.update(url=url, port=sock.getsockname()[1])
     if not is_loopback(host):
         print(f"verinoda mcp: warning: {host} is reachable from other machines; the token is the only protection "
               "and the traffic is not encrypted", file=sys.stderr, flush=True)
-    if state_file is not None:
-        state = {"pid": os.getpid(), "url": url, "host": host, "port": sock.getsockname()[1],
-                 "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "log": str(log_path()),
-                 **({"projects": status().get("projects")} if status else {})}
-        tmp = state_file.with_name(state_file.name + f".{os.getpid()}.tmp")
-        tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
-        os.replace(tmp, state_file)
     try:
         server.run(sockets=[sock])
     finally:
@@ -269,6 +286,16 @@ def _request(state: dict, method: str, path: str, timeout: float = 5.0) -> tuple
         conn.close()
 
 
+def _token_mismatch(state: dict) -> dict:
+    pid = state.get("pid")
+    end = f"taskkill /PID {pid} /T /F" if os.name == "nt" else f"kill {pid}"
+    return {"running": True, "token_mismatch": True, "url": state.get("url"), "pid": pid,
+            "state_file": str(state_path()),
+            "why": f"the server on port {state['port']} refuses the current token (it was rotated after the server "
+                   "started)",
+            "hint": f"end the server's process ({end}), then `verinoda mcp daemon start` again"}
+
+
 def daemon_status() -> dict:
     state = _read_state()
     if state is None:
@@ -279,9 +306,11 @@ def daemon_status() -> dict:
         return {"running": False, "stale_state": True, "state_file": str(state_path()), "url": state.get("url"),
                 "why": f"no answer on port {state['port']}: {type(exc).__name__}",
                 "hint": "`verinoda mcp daemon stop` removes the state file"}
+    if code == 401:  # a server answers on the port but refuses the current token: kept, never forgotten
+        return _token_mismatch(state)
     if code != 200:
         return {"running": False, "url": state.get("url"), "why": f"HTTP {code} from port {state['port']}",
-                "hint": "another server holds the port, or the token was rotated after it started"}
+                "hint": "another server holds the port"}
     return {"running": True, "url": state.get("url"), "log": state.get("log"), **data}
 
 
@@ -339,6 +368,8 @@ def daemon_stop() -> dict:
         code, data = _request(state, "POST", "/verinoda/shutdown")
     except OSError:
         code, data = 0, {}
+    if code == 401:  # still listening: the state file stays, so the server can still be found
+        return {"stopped": False, **_token_mismatch(state)}
     if code != 200:
         try:
             state_path().unlink()

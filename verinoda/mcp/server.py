@@ -3444,6 +3444,15 @@ def _state_line(repo: Path) -> str:
             "not_scanned": "not scanned - index_update scans it"}[index_state(repo)]
 
 
+def _locked_update(watcher, lock) -> Callable[[], Any]:
+    """A watcher's update under the server's lock: builds of several projects in one process never overlap
+    (a build sets process-wide state, such as the vendored-code switch and the redirected output)."""
+    def run():
+        with lock:
+            return watcher._update()
+    return run
+
+
 def serve(repo: Path | None, profile: str | None = None, *, watch: bool = False,
           projects: list[tuple[str, Path]] | None = None, max_loaded: int | None = None, transport: str = "stdio",
           host: str | None = None, port: int | None = None, state_file: Path | None = None) -> None:
@@ -3499,6 +3508,8 @@ def serve(repo: Path | None, profile: str | None = None, *, watch: bool = False,
             from verinoda.fswatch import Watcher
 
             w = Watcher(root, purpose="mcp serve --watch", fast=True)
+            if hub is not None:
+                w.run_update = _locked_update(w, hub.lock)
             w.start()
             watchers.append(w)
         elif watch:

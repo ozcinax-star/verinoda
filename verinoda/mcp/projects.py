@@ -55,11 +55,19 @@ def registry_path() -> Path:
 
 
 def registered() -> list[dict]:
-    """The registered projects (``name``, ``path``, ``added``); unreadable rows are left out."""
+    """The registered projects (``name``, ``path``, ``added``); unreadable rows are left out. A registry file
+    that exists but cannot be read is an error: a change written over it would lose every registration."""
+    p = registry_path()
     try:
-        data = json.loads(registry_path().read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
         return []
+    except OSError as exc:
+        raise ProjectError(f"cannot read the project registry {p}: {exc}") from None
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ProjectError(f"the project registry {p} is not valid JSON ({exc}); fix or remove the file") from None
     rows = data.get("projects") if isinstance(data, dict) else None
     return [r for r in rows or [] if isinstance(r, dict) and isinstance(r.get("name"), str)
             and isinstance(r.get("path"), str) and r["path"]]
@@ -178,6 +186,14 @@ class _Current:
         return getattr(self._hub.current(), attr)
 
 
+def _remote(path: str) -> bool:
+    """A Windows UNC or device path (two leading slashes or backslashes): resolving it would connect to that
+    host, so it is never looked at (no served project is on one)."""
+    from verinoda.script_guard import _remote as remote
+
+    return remote(path)
+
+
 def _path_values(args: dict) -> list[str]:
     out: list[str] = []
     for k in PATH_ARGS:
@@ -230,6 +246,8 @@ class ProjectHub:
     # -- which project a call is for ---------------------------------------------------------
     def owner(self, path: Path) -> str | None:
         """The served project whose root is ``path`` or holds it (the deepest one)."""
+        if _remote(str(path)):
+            return None
         try:
             p = Path(os.path.realpath(str(path)))
         except (OSError, ValueError):
@@ -357,6 +375,9 @@ class ProjectHub:
                 tool = kwargs.get("name")
                 args = dict(kwargs.get("arguments") or {})
                 inner = args.pop("project", None)
+                if project not in (None, "") and inner not in (None, "") and inner != project:
+                    return emit(HubRefusal("invalid_argument", f"two projects given: {project!r} and, inside "
+                                           f"arguments, {inner!r}", "pass project once").as_dict(str(tool)))
                 project = project if project not in (None, "") else inner
                 kwargs["arguments"] = args
                 if tool == "list_projects":

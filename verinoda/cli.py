@@ -4185,6 +4185,9 @@ def cmd_mcp_daemon(args) -> int:
                 print(f"already running: {r.get('url')} (pid {r.get('pid')})")
             else:
                 print(f"did not start (exit code {r.get('exit_code')}); log {r.get('log')}\n{r.get('log_tail', '')}")
+        elif r.get("token_mismatch"):
+            print(f"still running: {r.get('url')} (pid {r.get('pid')}): {r['why']}")
+            print(r["hint"])
         elif args.action == "status":
             if r.get("running"):
                 print(f"running: {r['url']} (pid {r.get('pid')}, up {r.get('uptime_seconds')} s)")
@@ -4192,9 +4195,12 @@ def cmd_mcp_daemon(args) -> int:
                     print(f"  {n}: {p}")
             else:
                 print("not running" + (f" ({r['why']})" if r.get("why") else ""))
+        elif r.get("stopped"):
+            print(f"stopped (pid {r.get('pid')})")
+        elif r.get("running"):
+            print(f"still running: {r.get('url')} (pid {r.get('pid')})" + (f": {r['why']}" if r.get("why") else ""))
         else:
-            print(f"stopped (pid {r.get('pid')})" if r.get("stopped") else
-                  "not running" + (f" ({r['why']})" if r.get("why") else ""))
+            print("not running" + (f" ({r['why']})" if r.get("why") else ""))
     _emit(args, res, render)
     return 0 if ok else 1
 
@@ -4202,6 +4208,11 @@ def cmd_mcp_daemon(args) -> int:
 def cmd_mcp_token(args) -> int:
     from verinoda.mcp import transport as T
 
+    if args.rotate:
+        running = T.daemon_status()
+        if running.get("running"):  # it would keep the old token, and `daemon stop` could no longer reach it
+            raise SystemExit(f"error: the background server is running (pid {running.get('pid')}); stop it first "
+                             "(`verinoda mcp daemon stop`), then rotate the token and start it again")
     token, path = T.load_token(rotate=args.rotate)
     res = {"token": token, "token_file": str(path), "header": f"Authorization: Bearer {token}"}
 
@@ -5717,8 +5728,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = add("token", cmd_mcp_token, "print the HTTP transport's bearer token and the file it is kept in "
                                     "(created on first use)", repo=False, parent=msub)
-    c.add_argument("--rotate", action="store_true", help="replace it (running HTTP servers keep the old one "
-                                                         "until restarted)")
+    c.add_argument("--rotate", action="store_true", help="replace it (refused while the background server "
+                                                         "runs; a foreground HTTP server keeps the old one until "
+                                                         "restarted)")
 
     c = add("prompts", cmd_mcp_prompts, "the ready workflows the server offers as MCP prompts (review, "
                                         "onboarding, debug, pre_merge): list them, or print one filled in",

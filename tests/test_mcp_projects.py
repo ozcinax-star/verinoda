@@ -365,3 +365,124 @@ def test_daemon_start_status_stop(two, config_dir, monkeypatch):
                     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
                 else:
                     os.kill(pid, 9)
+
+
+# -- review round: one process, several projects -------------------------------------------------
+
+def test_each_project_keeps_its_own_stat_index(two):
+    from verinoda import index as I
+    from verinoda.project_index import cache
+
+    orders, forge = (p for _, p in two)
+    for root in (orders, forge, orders):  # builds of two projects in one process, as a server over both does
+        I.build(root)
+    cache._flush_stat_index()  # what process exit does
+    I.build(forge)  # the switch writes the orders index to its own file
+    cache._flush_stat_index()
+    for own, other in ((orders, forge), (forge, orders)):
+        f = own / ".verinoda" / "index" / "cache" / "stat-index.json"
+        keys = list(json.loads(f.read_text(encoding="utf-8")))
+        assert keys and not [k for k in keys if Path(k).is_absolute()], (own, keys[:5])
+        assert not [k for k in keys if str(other) in k or other.name in k]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="UNC paths are a Windows matter")
+def test_a_unc_path_is_never_resolved(two, config_dir, monkeypatch):
+    srv = S.build_server(None, hub=P.ProjectHub(two))
+    seen: list[str] = []
+    real = os.path.realpath
+
+    def spy(p, *a, **kw):
+        seen.append(os.fspath(p))
+        return real(p, *a, **kw)
+
+    unc = "\\\\127.0.0.1\\verinoda_no_such_share\\x.py"
+    assert unc.startswith(2 * chr(92))
+
+    async def calls():
+        monkeypatch.setattr(os.path, "realpath", spy)
+        try:
+            return (await srv.call_tool("run_tool", {"name": "grep_context",
+                                                     "arguments": {"pattern": "place_order", "path": unc}}),
+                    await srv.call_tool("project_query", {"question": QUESTION, "project": unc}),
+                    await srv.call_tool("project_query", {"question": QUESTION, "project": "//127.0.0.1/s/x"}))
+        finally:
+            monkeypatch.setattr(os.path, "realpath", real)
+
+    by_path, by_project, slashes = anyio.run(calls)
+    assert _json(by_path)["error"] == "project_required"
+    assert _json(by_project)["error"] == "unknown_project" == _json(slashes)["error"]
+    assert not [p for p in seen if p[:2] in ("\\\\", "//")], seen
+
+
+def test_two_different_projects_in_one_run_tool_call_are_refused(two, config_dir):
+    srv = S.build_server(None, hub=P.ProjectHub(two))
+    res = anyio.run(lambda: srv.call_tool("run_tool", {"name": "node_inspect", "project": "orders",
+                                                       "arguments": {"name": "place_order", "project": "forge"}}))
+    assert _err(res) and _json(res)["error"] == "invalid_argument"
+    same = anyio.run(lambda: srv.call_tool("run_tool", {"name": "node_inspect", "project": "orders",
+                                                        "arguments": {"name": "place_order", "project": "orders"}}))
+    assert not _err(same) and _json(same)["node"]["file"] == "orders/service.py"
+
+
+def test_a_corrupt_registry_is_never_overwritten(two, config_dir):
+    config_dir.mkdir(parents=True, exist_ok=True)
+    reg = P.registry_path()
+    reg.write_text('{"version": 1, "projects": [{"name": "a", "path": ', encoding="utf-8")
+    with pytest.raises(P.ProjectError, match="not valid JSON"):
+        P.add(two[0][1])
+    with pytest.raises(P.ProjectError, match="not valid JSON"):
+        P.resolve_specs(["orders_app"])
+    assert reg.read_text(encoding="utf-8").startswith('{"version": 1, "projects": [{"name": "a"')
+
+
+def test_watcher_updates_take_the_servers_lock():
+    lock = threading.Lock()
+
+    class FakeWatcher:
+        def _update(self):
+            return {"held": lock.locked()}
+
+    run = S._locked_update(FakeWatcher(), lock)
+    assert run() == {"held": True} and not lock.locked()
+
+
+def test_a_rotated_token_never_loses_the_running_server(two, config_dir):
+    from verinoda import cli
+
+    hub = P.ProjectHub(two[:1])
+    srv = S.build_server(None, hub=hub)
+    old, _ = T.load_token()
+    state = T.state_path()
+    th = threading.Thread(target=T.serve_http, args=(srv,), daemon=True,
+                          kwargs={"host": "127.0.0.1", "port": 0, "status": hub.status, "state_file": state})
+    th.start()
+    port = None
+    try:
+        deadline = time.monotonic() + 30
+        while not state.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        port = json.loads(state.read_text(encoding="utf-8"))["port"]
+        # the state file is written once the server takes connections
+        assert _http(port, "GET", "/verinoda/status", token=old)[0] == 200
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        try:  # the scheme is case-insensitive
+            conn.request("GET", "/verinoda/status", headers={"Authorization": f"bearer  {old}"})
+            assert conn.getresponse().status == 200
+        finally:
+            conn.close()
+        with pytest.raises(SystemExit, match="stop it first"):
+            cli.main(["mcp", "token", "--rotate"])
+        assert T.load_token()[0] == old
+        T.load_token(rotate=True)  # rotated all the same (by hand, or by an older Verinoda)
+        stop = T.daemon_stop()
+        assert not stop["stopped"] and stop["running"] and stop["token_mismatch"] and stop["pid"] == os.getpid()
+        assert state.exists() and th.is_alive()
+        st = T.daemon_status()
+        assert st["running"] and st["token_mismatch"] and str(os.getpid()) in st["hint"]
+    finally:
+        if port is not None:
+            _http(port, "POST", "/verinoda/shutdown", token=old)
+        th.join(30)
+        assert not th.is_alive()
+    assert not state.exists()

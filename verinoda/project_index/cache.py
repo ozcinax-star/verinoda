@@ -208,6 +208,7 @@ _stat_index_root: Path | None = None
 # (cache_root, #1774) — the two differ under --out and must not be conflated.
 _stat_index_anchor: Path | None = None
 _stat_index_dirty: bool = False
+_stat_index_atexit: bool = False
 
 
 # Filesystem mtime granularity, in nanoseconds. A stat signature only proves a
@@ -330,7 +331,7 @@ def _stat_index_file(root: Path) -> Path:
 
 
 def _ensure_stat_index(root: Path, cache_root: "Path | None" = None) -> None:
-    global _stat_index, _stat_index_root, _stat_index_anchor, _stat_index_dirty
+    global _stat_index, _stat_index_root, _stat_index_anchor, _stat_index_dirty, _stat_index_atexit
     if _stat_index_root is not None:
         return
     # _stat_index_root determines the cache FILE location, so honoring an
@@ -360,7 +361,21 @@ def _ensure_stat_index(root: Path, cache_root: "Path | None" = None) -> None:
                         _stat_index[_stat_key_to_absolute(k, _stat_index_anchor)] = v
         except (json.JSONDecodeError, OSError):
             _stat_index = {}
-    atexit.register(_flush_stat_index)
+    if not _stat_index_atexit:
+        atexit.register(_flush_stat_index)
+        _stat_index_atexit = True
+
+
+def use_stat_index_for(root: Path) -> None:
+    """Before a build of ``root``: when the stat index is pinned to another project (one process building
+    several, such as an MCP server over several projects), write it to that project's own file and start
+    over, so the next build loads and later writes ``root``'s own index instead of filling the first one."""
+    global _stat_index, _stat_index_root, _stat_index_anchor, _stat_index_dirty
+    if _stat_index_anchor is None or (os.path.normcase(str(_stat_index_anchor))
+                                      == os.path.normcase(str(Path(root).resolve()))):
+        return
+    _flush_stat_index()
+    _stat_index, _stat_index_root, _stat_index_anchor, _stat_index_dirty = {}, None, None, False
 
 
 def _flush_stat_index() -> None:
