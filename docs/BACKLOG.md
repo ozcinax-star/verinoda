@@ -164,7 +164,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 19.1 | **Symbolic differential behaviour (opt-in)** | Solver-found inputs where two versions differ; inputs that reach every branch | CrossHair diffbehavior and cover | `probe --symbolic` finds a planted difference random inputs miss |
 | 19.2 | **Java differential tests (opt-in)** | Tests that pass on the old version and fail on the new, for Java | EvoSuiteR, Randoop, Diffblue Cover | `probe` works on a Java method |
-| 19.3 | **Property test templates** | Roundtrip, idempotent and equivalence tests written as a lasting file | Hypothesis Ghostwriter | `probe --emit-test` writes a property test |
 | 19.4 | **Regression test generation (opt-in)** | Tests that pin current behaviour before a refactor | Pynguin | a generated test passes on the current tree |
 | 19.5 | **Runtime diff between base and head** | Call paths, SQL queries, routes and exceptions added or removed at runtime between two revisions | AppMap compare | `review --observe` lists runtime changes |
 
