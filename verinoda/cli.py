@@ -1528,6 +1528,22 @@ def cmd_docs(args) -> int:
     return res["exit"]
 
 
+def cmd_spec(args) -> int:
+    from verinoda import specs
+
+    repo = _repo(args)
+    try:
+        res = specs.check(repo, args.specs_dir)
+    except Exception as exc:  # noqa: BLE001 - exit 1 means unevidenced: an error must never look like one
+        msg = str(exc) if isinstance(exc, specs.SpecError) else f"{type(exc).__name__}: {exc}"
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": msg[:600]}, ensure_ascii=False))
+        print(f"error: {msg}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(specs.render(r)))
+    return res["exit"]
+
+
 def cmd_grep_ast(args) -> int:
     from verinoda import grep_ast
 
@@ -3966,6 +3982,16 @@ def build_parser() -> argparse.ArgumentParser:
                    help="leave out documents matching this glob (repeatable), e.g. a vendored or template folder")
     c.add_argument("--fix", action="store_true", help="rewrite renamed paths and moved line numbers in place (the "
                                                       "reference's own characters only); the rest stays flagged")
+    sp = sub.add_parser("spec", help="requirement criteria traced to the claims, tests and code their evidence "
+                                     "lines name")
+    ssub_spec = sp.add_subparsers(dest="spec_cmd", required=True)
+    c = add("check", cmd_spec, "every criterion of the spec files with its evidence status: verified (a verified "
+                               "claim), tested (a test that exists), broken (a reference that no longer resolves), "
+                               "unevidenced (exit 1: broken, unevidenced or a duplicate id; 3: not checked)",
+            parent=ssub_spec)
+    c.add_argument("--specs-dir", metavar="DIR",
+                   help="the specs folder (default: specs.dir in .verinoda/config.json, [specs] dir in "
+                        "verinoda.toml or pyproject.toml, else .verinoda/specs)")
     sp = add("grep-ast", cmd_grep_ast, "structural search: a code-shaped pattern with metavariables ($A one node, "
                                        "$$$REST zero or more) matched on the tree-sitter trees of the project's "
                                        "files (exit 1: no match, 2: a bad pattern or rule file)")
