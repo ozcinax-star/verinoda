@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D160)
+## Upgrading from 0.4.0 (D137-D168)
 
 ### D137: Trigram regex index
 
@@ -228,7 +228,7 @@ list every node or relation (export, the UI) show them. No MCP change.
 ### Typed questions, batched
 
 New command `verinoda tq` (exit 0 when every answer is decided, 1 when one is `?` or a question is invalid, 2 when the
-batch cannot be read, 3 when a budget cut it) and a new MCP tool `tq`: 41 tools. In the core profile it is reached
+batch cannot be read, 3 when a budget cut it) and a new MCP tool `tq` (the 41st). In the core profile it is reached
 through `run_tool` (not listed in the menu, not named in the server instructions); `--profile full` lists it. The
 run_tool catalog line of `history_search` is shorter (`{text|symbol|message|base, ...}`; its full argument list still
 comes back in an `invalid_arguments` hint) and the gateway's `arguments` description lost its example, so the core
@@ -239,7 +239,7 @@ the asked route (`route=`); its text form and results are unchanged. `testmap.ma
 
 ### D159: Typed questions, batched
 
-New command `verinoda tq` and MCP tool `tq` (41 tools; through `run_tool` in the core profile). The core menu's
+New command `verinoda tq` and MCP tool `tq` (the 41st tool; through `run_tool` in the core profile). The core menu's
 `history_search` catalog line is shorter and run_tool's `arguments` description lost its example. Library callers:
 `graphquery.run` gains `query=`, `ctx=` and `route=` (text calls unchanged), and `testmap.mapping_current` is new.
 Nothing to migrate; tq writes nothing. (Also in docs/UPGRADING.md.)
@@ -252,6 +252,181 @@ only; `--profile full` or `mcp.profile` "full") take one of the plan intents (`l
 `performance`, `architecture`, `usage`, `decide`). It is used only when the rule reading of the question agrees;
 the result then has `intent_check` with both readings. Not with `--plan` / `plan_json`. The core profile's
 `analyze` is unchanged, and the MCP tool count stays 40.
+
+### D161: Real-world benchmark on pinned popular repositories
+
+This adds no change to Verinoda itself. There are new files under `benchmarks/realworld/`, new
+results under `benchmarks/results/realworld-<date>/` and a new test module. Three things to know
+before running:
+
+- **Clone folder.** By default, running it clones into `C:/vbench`, which took 30 MB for the two
+  small repositories (clones and their `.verinoda/`) and a few hundred MB for all ten.
+- **Network.** Cloning needs the network. The tests do not.
+- **Python.** The runner needs Python 3.11 or later (`python -P`) and refuses an older one.
+
+### D162: Measured frequencies for typed answers
+
+`verinoda tq` answers may carry `measured: k/n held-out @<gold sha8>` (JSON key `measured`, text part after
+`via`) when the answer's cell of (type, answer, status) was measured on the frozen held-out gold sets with at least
+30 answers, the question was asked with options such a held-out answer used (never `scope=lib`), verify is on,
+and the installed code is the code that was measured (`tq.py`, `index.py`, every package module they import and
+`project_index/`). It is a frequency on that set, not a probability,
+and it changes no answer or status; any edit to the engine files hides it until `verinoda benchmark tq-audit` is
+run again. New: `verinoda benchmark tq-audit [--work DIR] [--table PATH] [--report-dir DIR] [--no-write]
+[--json]` (source checkout only), the packaged table `verinoda/data/tq_calibration.json`, the held-out set
+`benchmarks/tq_gold2/` and the report `benchmarks/results/tq-audit-2026-10-02/`. No MCP tool, menu or
+instructions change (the tool count stays 41).
+
+### D163: Broader language coverage from upstream Graphify
+
+Nothing to migrate. The extractor files changed, so the extraction stamp changed and the first `verinoda update`
+after upgrading rebuilds the graph by itself. COBOL files (`.cbl .cob .cobol .cpy`) then enter the graph with no
+extra. For VB.NET, R, Erlang and Solidity, install the grammar: `pip install "verinoda[languages]"` (or
+`[vbnet]`, `[r]`, `[erlang]`, `[solidity]`; with uv: `uv tool install --with "tree-sitter-solidity==1.2.13" ...`),
+then run `verinoda update`. Installing a grammar changes the stamp, so that update reads the skipped files.
+
+`scan` and `update` results have a new key, `not_extracted`: a list of groups, each
+`{language, grammar, count, files (first 5), reason, install}`. The CLI prints each group as a `warning:` line.
+Projects with `.sql`, `.tf`, `.ml`, `.lisp`, `.dm` or `.robot` files and without those grammars now see this
+warning; the files were left out before as well. OCaml classes, `.cshtml` `@functions` methods and the
+redaction of more Terraform secret values change those languages' graphs on the rebuild. The query filter
+accepts `lang:cobol`, `lang:erlang`, `lang:r`, `lang:solidity` and `lang:vbnet`.
+
+### Several projects from one server (backlog 1.5)
+
+Nothing to migrate; a single-project server (`mcp serve`, `--repo`, `--repo-of`) lists the same core menu as
+before. Two new MCP tools, `list_projects` and `index_status`: 43 tools. A single-project server lists them only
+in the full profile; a core server over several projects reaches them through `run_tool`. New: `mcp serve
+--projects A,B` / `--all-projects`, `--max-loaded N`, `--transport http` with `--host` / `--port`, `verinoda mcp
+daemon start|status|stop`, `verinoda mcp token [--rotate]` and `verinoda projects add|list|remove`. The user config
+folder gains `projects.json`, `mcp-token`, `mcp-daemon.json` and `mcp-daemon.log`. In a server over several
+projects every tool takes `project`, and a client config that registered one server per project can be replaced
+by one entry with `--projects`. The HTTP transport binds 127.0.0.1:8765 by default and every request needs
+`Authorization: Bearer <token>` from `verinoda mcp token`. `AtlasTools` takes an optional `lock=` and gains
+`drop_caches()`, `graph_loaded`, `list_projects()` and `index_status()`. `build_server` takes `hub=`.
+
+### D164: Several projects from one MCP server, HTTP transport and daemon
+
+Nothing to migrate. A single-project server (`mcp serve`, `--repo`, `--repo-of`) lists the same core menu as before.
+
+- **New tools.** Two new MCP tools, `list_projects` and `index_status`, bring the count to 43. A single-project
+  server lists them only in the full profile; a core server over several projects reaches them through
+  `run_tool`.
+- **New options.** `mcp serve --projects A,B`, `--all-projects`, `--max-loaded N`, and `--transport http` with
+  `--host` / `--port`.
+- **New commands.** `verinoda mcp daemon start|status|stop`, `verinoda mcp token [--rotate]` and
+  `verinoda projects add|list|remove`.
+- **New files.** The user config folder gains `projects.json`, `mcp-token`, `mcp-daemon.json` and
+  `mcp-daemon.log`.
+- **Client configs.** A config that registered one server per project can be replaced by one entry with
+  `--projects`. In that server, pass `project` in tool calls.
+- **Library API.** `AtlasTools(..., lock=)`, plus `drop_caches()`, `graph_loaded`, `list_projects()`,
+  `index_status()` and `project_entry()`; `build_server(None, hub=ProjectHub(...))`; `listed_of()` and
+  `index_state()` in `verinoda.mcp.server`. `serve()` takes `projects=`, `max_loaded=`, `transport=`, `host=`,
+  `port=` and `state_file=`.
+
+### D165: Definition lines: overload implementations and annotated declarations
+
+- The first `update` after upgrading rebuilds the graph: the extraction stamp and
+  `_AST_CACHE_SCHEMA` 9 both change.
+- Java, Kotlin and C# methods and classes with an annotation or attribute above their name are then
+  cited one or more lines lower, at the name. Their spans do not change.
+- Python functions with `@overload` stubs are cited at the implementation, with the stubs' lines
+  in `metadata.overloads`.
+- Claims citing the old line still resolve: the span covers the annotation, and review and anchor
+  lookups accept the first line too.
+- Tree-sitter anchor facts are computed again once (new cache key `ts1.def2`). Anchors already
+  stored keep their scheme and stay valid.
+
+### D166: Route prefixes, trailing slashes and bounded route output
+
+`verinoda routes` has these changes:
+
+- **Prefixes.** It now shows FastAPI, Flask and APIRouter prefixes given by an expression:
+  - A module constant or a pydantic settings default is resolved, also from another module, and the row
+    cites it in `prefix_from`.
+  - Any other expression keeps its routes, marked `mount: "prefix not resolved: <expr>"`. Before, the
+    prefix was silently dropped, or a `register_blueprint` mount was lost.
+  - The text view's `(mount not found)` is now `(mount <reason>)`.
+- **Trailing slash.** Python route paths keep the trailing `/` the code writes, so `/api/v1/items/` is no
+  longer shown as `/api/v1/items`. Gold files or scripts that compared the path without the slash need
+  updating.
+- **Labels.** Rows and calls in test or example code have `code: "test"` or `code: "example"`.
+- **Test calls.** A test or example call matches the routes of the app it imports first (the full
+  import closure, and routes mounted on it), so fewer calls are ambiguous. Such an edge notes how many
+  routes outside also match the path. A supertest call to an imported app with no matching route is now
+  `unmatched` with a `why`.
+- **Unresolved prefixes.** A call that fits only routes whose prefix is not resolved is now unmatched,
+  with a `why`. Before, it was linked with a note.
+- **Bounded JSON.** The JSON is bounded by default:
+  - `ambiguous` entries are groups (`calls`, `also_at`, `candidates_total`), at most 50 groups of 5
+    candidates;
+  - `unmatched` and `method_mismatch` hold at most 50 entries each, with `<key>_more` counts;
+  - `ambiguous_calls` and `<key>_by_code` hold the totals;
+  - `routes --all` restores every call and every candidate.
+- **Sidecar counts.** The sidecar's cross-service counts are now exact. Before, they stopped at 200 per
+  list.
+- **Facts version.** `FACTS_VERSION` is 4, so the first `update` after upgrading parses the route files
+  again.
+- **Harness.** A routes gold check's `method` now really is checked against `methods`, and `at`
+  (file:line) is accepted. summary.md merges environment lines whose `verinoda/` code is the same.
+
+### D167: Distinct symbols never share a node
+
+`verinoda update` is enough, and no `scan` is needed:
+
+- The extractor's source changed and the AST cache schema went up (now 11). So the extraction stamp
+  recorded in build_stats.json no longer matches, and the next `update` rebuilds the whole graph,
+  even when no file changed. The old AST cache entries are not reused: they live under
+  `cache/ast/v<version>-s8/`, which is swept.
+- `verinoda scan` rebuilds everything too.
+- Most ids stay. The definitions that used to vanish get new `<id>_<6 hex>` ids. Some ids that
+  existed before change, or now name a different symbol:
+  - When a private twin was declared before its public twin (`__transform` before `_transform` in
+    axios, `_Q` before `function q`), the old graph gave the plain id to the private one. Now it
+    goes to the public one, and the private one gets `<id>_<hash>`.
+  - Java `_x` methods that share an id with `x` were numbered in `x`'s overload family
+    (`..._x_2`, `..._x_3`). They now have `<id>_<hash>` and `<id>_<hash>_2`. `x`'s own overloads
+    keep `..._x_2` and so on, but a number that used to belong to `_x` can now belong to an
+    overload of `x`.
+
+  A record keyed by such a node id (a claim's subject id, a saved selector that is a node id) names
+  the other symbol after the rebuild. Evidence anchors pin cited lines by symbol name and
+  fingerprint (`verinoda/anchors.py`), not by node id. Records about a merged node were already
+  about a mix of two symbols. After the rebuild they stay on the public definition.
+- The rebuild record (`rebuild_record.json`) is keyed by a stamp of project_index and index.py, and
+  both changed, so it is not reused.
+- `python_facts.json` and the Python cross-file cache are keyed by their own code stamps, which did
+  not change. They hold no node ids of the split definitions: their call sources are re-routed by
+  `case_ids` on each build.
+- A process that keeps running across the upgrade, such as an MCP server, sees changed code files
+  and stops trusting its rebuild record. Restart it to pick up the new resolver.
+- Answers change in one visible way. A selector written as code that matches a symbol only when
+  case is folded (`sendFile` for `sendfile`, in a case-sensitive language) is now `similar` with a
+  note, or `ambiguous` when it matches several, never `exact`. `trace` shows the note under
+  `fuzzy`. The rename preview (`rename_preview`) and the callers/callees view (`butterfly`) run
+  only on an exact match. They now return the matched node as a candidate, with the note, instead
+  of running.
+
+### D168: JavaScript assigned methods and nested functions
+
+The AST cache schema is now 12 (10 on the branch; merged after the id and definition-line fixes), so the first `verinoda scan` or `verinoda update` after upgrading extracts every
+file again.
+
+JavaScript and TypeScript graphs gain symbols:
+
+- methods assigned to a module-level object (`res.json`, `app.render`; label `.json()`, owner `res`), alias chains
+  included;
+- functions bound inside functions (`useAuth`'s `login`).
+
+Calls made inside those functions now start from them. So `q`, `trace`, impact and `map` answers that named the
+outer function for such a call now name the inner one. A selector like `lib/response.js::sendFile` now resolves to
+the method instead of a same-named function that differs only in case. In the dead view, code reached only through
+a member of a weak unit is weak as well (`via`).
+
+A bare call or a name passed by value in one file no longer binds to a nested function, an object-assigned method
+or a `Foo.prototype` method of another file. Some cross-file edges therefore go away, including right ones
+to a function a hook returns and the caller destructures (`const { logout } = useAuth()`).
 
 ## Upgrading from 0.3.2 (D60-D136)
 

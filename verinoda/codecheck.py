@@ -92,7 +92,9 @@ OTHER_LANGUAGES = {".java": "Java", ".kt": "Kotlin", ".kts": "Kotlin", ".scala":
                    ".psm1": "PowerShell", ".m": "Objective-C or MATLAB", ".mm": "Objective-C++", ".f": "Fortran",
                    ".f90": "Fortran", ".f95": "Fortran", ".f03": "Fortran", ".f08": "Fortran", ".v": "Verilog",
                    ".sv": "SystemVerilog", ".svh": "SystemVerilog", ".ml": "OCaml", ".mli": "OCaml",
-                   ".lisp": "Common Lisp", ".lsp": "Common Lisp", ".pas": "Pascal", ".dpr": "Pascal"}
+                   ".lisp": "Common Lisp", ".lsp": "Common Lisp", ".pas": "Pascal", ".dpr": "Pascal",
+                   ".cbl": "COBOL", ".cob": "COBOL", ".cobol": "COBOL", ".cpy": "COBOL", ".erl": "Erlang",
+                   ".hrl": "Erlang", ".escript": "Erlang", ".r": "R", ".sol": "Solidity", ".vb": "VB.NET"}
 # exit codes of `check` and `api`: 3 = something absent (or a version differs from the lock), 4 = nothing absent,
 # but something that was asked for was not checked (another language, a file that does not parse); 0 otherwise
 EXIT_FOUND, EXIT_NOT_CHECKED = 3, 4

@@ -38,6 +38,8 @@ from verinoda.project_index.extractors.apex import extract_apex  # noqa: F401
 from verinoda.project_index.extractors.bash import extract_bash  # noqa: F401
 from verinoda.project_index.extractors.mcfunction import extract_mcfunction  # noqa: F401
 from verinoda.project_index.extractors.blade import extract_blade  # noqa: F401
+# Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d): COBOL, Erlang, R, Solidity and VB.NET
+from verinoda.project_index.extractors.cobol import extract_cobol, resolve_cobol_copybooks  # noqa: F401
 from verinoda.project_index.extractors.csharp import (
     CsharpNameResolver,
     _resolve_cross_file_csharp_imports,
@@ -46,6 +48,7 @@ from verinoda.project_index.extractors.csharp import (
 from verinoda.project_index.extractors.dart import extract_dart  # noqa: F401
 from verinoda.project_index.extractors.dm import extract_dm, extract_dmf, extract_dmi, extract_dmm  # noqa: F401
 from verinoda.project_index.extractors.elixir import extract_elixir  # noqa: F401
+from verinoda.project_index.extractors.erlang import extract_erlang, resolve_erlang_remote_calls  # noqa: F401
 from verinoda.project_index.extractors.fortran import _cpp_preprocess, extract_fortran  # noqa: F401
 from verinoda.project_index.extractors.go import _GO_PREDECLARED_FUNCS, extract_go  # noqa: F401
 from verinoda.project_index.extractors.json_config import extract_json  # noqa: F401
@@ -54,13 +57,19 @@ from verinoda.project_index.extractors.markdown import extract_markdown, _MD_LIN
 from verinoda.project_index.extractors.ocaml import extract_ocaml  # noqa: F401
 from verinoda.project_index.extractors.pascal_forms import extract_delphi_form, extract_lazarus_form  # noqa: F401
 from verinoda.project_index.extractors.powershell import extract_powershell, extract_powershell_manifest  # noqa: F401
+from verinoda.project_index.extractors.r import extract_r, resolve_r_sourced_calls  # noqa: F401
 from verinoda.project_index.extractors.razor import extract_razor  # noqa: F401
 from verinoda.project_index.extractors.robot import extract_robot  # noqa: F401
 from verinoda.project_index.extractors.rust import extract_rust  # noqa: F401
 from verinoda.project_index.extractors.sln import extract_sln  # noqa: F401
+from verinoda.project_index.extractors.solidity import (  # noqa: F401
+    extract_solidity,
+    resolve_solidity_type_references,
+)
 from verinoda.project_index.extractors.sql import extract_sql  # noqa: F401
 from verinoda.project_index.extractors.terraform import extract_terraform, prepare_terraform, resolve_terraform_modules  # noqa: F401
 from verinoda.project_index.extractors.verilog import extract_verilog  # noqa: F401
+from verinoda.project_index.extractors.vbnet import extract_vbnet, resolve_vbnet_partial_calls  # noqa: F401
 from verinoda.project_index.extractors.zig import extract_zig  # noqa: F401
 from verinoda.project_index.security import sanitize_metadata
 from verinoda.project_index.paths import disambiguate_ambiguous_candidates
@@ -2730,6 +2739,9 @@ _CASE_INSENSITIVE_EXTS = frozenset({
     ".php", ".phtml", ".php3", ".php4", ".php5", ".php7", ".phps",  # PHP fns/classes
     ".sql",                                                          # SQL identifiers
     ".nim", ".nims", ".nimble",                                      # Nim (style-insensitive)
+    # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d)
+    ".cbl", ".cob", ".cobol", ".cpy",
+    ".vb",
 })
 
 
@@ -2766,10 +2778,15 @@ _LANG_FAMILY_BY_EXT: dict[str, str] = {
     ".py": "python",
     ".go": "go",
     ".rs": "rust",
+    # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d)
+    ".cbl": "cobol", ".cob": "cobol", ".cobol": "cobol", ".cpy": "cobol",
+    ".r": "r",
+    ".sol": "solidity",
+    ".erl": "erlang", ".hrl": "erlang", ".escript": "erlang",
     ".rb": "ruby", ".rake": "ruby",
     ".php": "php", ".phtml": "php", ".php3": "php", ".php4": "php",
     ".php5": "php", ".php7": "php", ".phps": "php",
-    ".cs": "dotnet", ".razor": "dotnet", ".cshtml": "dotnet", ".xaml": "dotnet",
+    ".cs": "dotnet", ".vb": "dotnet", ".razor": "dotnet", ".cshtml": "dotnet", ".xaml": "dotnet",
     ".lua": "lua", ".luau": "lua",
     ".zig": "zig",
     ".ex": "elixir", ".exs": "elixir",
@@ -5212,6 +5229,32 @@ register_language_resolver(
 register_language_resolver(
     LanguageResolver("rust_self_member_calls", frozenset({".rs"}), _resolve_rust_self_member_calls)
 )
+# Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d)
+register_language_resolver(
+    LanguageResolver("vbnet_partial_calls", frozenset({".vb"}), resolve_vbnet_partial_calls)
+)
+register_language_resolver(
+    LanguageResolver("r_sourced_calls", frozenset({".r", ".R"}), resolve_r_sourced_calls)
+)
+register_language_resolver(
+    LanguageResolver(
+        "cobol_copybooks",
+        frozenset({".cbl", ".cob", ".cobol", ".cpy", ".CBL", ".COB", ".CPY"}),
+        resolve_cobol_copybooks,
+    )
+)
+register_language_resolver(
+    LanguageResolver(
+        "solidity_type_references", frozenset({".sol"}), resolve_solidity_type_references
+    )
+)
+register_language_resolver(
+    LanguageResolver(
+        "erlang_remote_calls",
+        frozenset({".erl", ".hrl", ".escript"}),
+        resolve_erlang_remote_calls,
+    )
+)
 register_language_resolver(
     LanguageResolver(
         "elixir_import_targets",
@@ -6297,6 +6340,9 @@ _DISPATCH: dict[str, Any] = {
     ".cts": extract_js,
     ".go": extract_go,
     ".rs": extract_rust,
+    # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d) (R, Solidity; COBOL and VB.NET after C#, Erlang after Elixir)
+    ".r": extract_r,
+    ".sol": extract_solidity,
     ".java": extract_java,
     ".groovy": extract_groovy,
     ".gradle": extract_groovy,
@@ -6317,6 +6363,11 @@ _DISPATCH: dict[str, Any] = {
     ".metal": extract_cpp,
     ".rb": extract_ruby, ".rake": extract_ruby,
     ".cs": extract_csharp,
+    ".cbl": extract_cobol,
+    ".cob": extract_cobol,
+    ".cobol": extract_cobol,
+    ".cpy": extract_cobol,
+    ".vb": extract_vbnet,
     ".kt": extract_kotlin,
     ".kts": extract_kotlin,
     ".scala": extract_scala,
@@ -6331,6 +6382,9 @@ _DISPATCH: dict[str, Any] = {
     ".psd1": extract_powershell_manifest,
     ".ex": extract_elixir,
     ".exs": extract_elixir,
+    ".erl": extract_erlang,
+    ".hrl": extract_erlang,
+    ".escript": extract_erlang,
     ".m": extract_objc,
     ".mm": extract_objc,
     ".jl": extract_julia,
@@ -6410,6 +6464,13 @@ _DISPATCH: dict[str, Any] = {
 # rather than falling back like Pascal does. Used by the #1745 warning in
 # extract() to tell the user which extra restores the language.
 _EXTRA_FOR_EXTENSION = {
+    # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d)
+    ".vb": "vbnet",
+    ".r": "r",
+    ".sol": "solidity",
+    ".erl": "erlang",
+    ".hrl": "erlang",
+    ".escript": "erlang",
     ".sql": "sql",
     ".tf": "terraform",
     ".tfvars": "terraform",
@@ -6455,6 +6516,8 @@ _SHEBANG_DISPATCH: dict[str, Any] = {
     "lua": extract_lua,
     "php": extract_php,
     "julia": extract_julia,
+    # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d)
+    "Rscript": extract_r,
 }
 
 
@@ -7804,6 +7867,12 @@ def extract(
         ]
     for n in resolution_nodes:
         if n.get("file_type") == "rationale" or n.get("type") == "namespace":
+            continue
+        # Verinoda patch: a JS/TS function bound inside a function, or a method
+        # assigned to a module object, has no bare name another file can call or
+        # pass (the engine marks them); member calls reach the methods through the
+        # member resolvers, which do not read this index.
+        if n.get("_no_bare_name"):
             continue
         raw = n.get("label", "")
         normalised = raw.strip("()").lstrip(".")

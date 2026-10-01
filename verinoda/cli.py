@@ -419,6 +419,11 @@ def _r_derived(r: dict) -> None:
         print(f"  warning: derived data not refreshed: {r['derived']['error']}")
     if r.get("pruned_missing_files"):
         print(f"  pruned from the graph (files no longer exist): {', '.join(r['pruned_missing_files'][:5])}")
+    if r.get("not_extracted"):
+        from verinoda.grammars import describe
+
+        for group in r["not_extracted"]:
+            print(f"  warning: {describe(group)}")
     found = ((r.get("derived") or {}).get("copies") or {}).get("copies") if isinstance(r.get("derived"), dict) else None
     if found:
         print(f"  note: {', '.join(found[:3])}{', ...' if len(found) > 3 else ''} hold a copy of the project's own code; "
@@ -1451,6 +1456,7 @@ def cmd_routes(args) -> int:
                         "context": d.get("context"), **({"notes": d["notes"]} if d.get("notes") else {})}
                        for u, v, d in edges]
     report["derived_by"] = cross_service.ORIGIN
+    report = cross_service.bounded(report, everything=args.all)
 
     def render(r: dict) -> None:
         print(cross_service.render(r, show_routes=not args.no_table))
@@ -4102,16 +4108,149 @@ def cmd_uninstall(args) -> int:
     return 0 if res.get("ok", True) else 1
 
 
+def _mcp_projects(args) -> list | None:
+    """The (name, root) pairs ``--projects`` / ``--all-projects`` name; None for a single-project server."""
+    if not (getattr(args, "projects", None) or getattr(args, "all_projects", False)):
+        return None
+    from verinoda.mcp import projects as P
+
+    try:
+        return P.resolve_specs((args.projects or "").split(","), all_registered=args.all_projects)
+    except P.ProjectError as exc:
+        raise SystemExit(f"error: {exc}") from None
+
+
 def cmd_mcp(args) -> int:
     from verinoda.mcp.server import default_repo, repo_of_config, serve
 
-    if args.repo:
+    projects = _mcp_projects(args)
+    if projects:
+        repo = None
+    elif args.repo:
         repo = _repo(args)
     elif args.repo_of:
         repo = repo_of_config(Path.cwd(), args.repo_of)
     else:
         repo = default_repo(Path.cwd())
-    serve(repo, profile=args.profile, watch=args.watch)
+    if args.transport != "http" and (args.host or args.port is not None):
+        raise SystemExit("error: --host and --port are for --transport http")
+    serve(repo, profile=args.profile, watch=args.watch, projects=projects, max_loaded=args.max_loaded,
+          transport=args.transport, host=args.host, port=args.port,
+          state_file=Path(args.state_file) if args.state_file else None)
+    return 0
+
+
+def cmd_mcp_daemon(args) -> int:
+    """``verinoda mcp daemon start|status|stop``: one background HTTP server (a state file and a log in the user
+    config folder; stop asks the server itself to shut down, behind its token)."""
+    from verinoda.mcp import transport as T
+
+    if args.action == "start":
+        from verinoda.mcp.server import repo_of_config
+
+        rest: list[str] = []
+        projects = _mcp_projects(args)  # resolved here: an unknown name stops now, not in the background
+        if projects:
+            from verinoda.mcp import projects as P
+
+            reg = {r["name"]: Path(r["path"]) for r in P.registered()}
+            specs = [n if reg.get(n) == p else f"{n}={p}" for n, p in projects]
+            if any("," in s for s in specs):
+                raise SystemExit("error: a project path holds a comma; register it (`verinoda projects add`) and "
+                                 "serve it by name")
+            rest += ["--projects", ",".join(specs)]
+        elif args.repo or args.repo_of:
+            rest += ["--repo", str(_repo(args) if args.repo else repo_of_config(Path.cwd(), args.repo_of))]
+        else:
+            raise SystemExit("error: name what to serve: --projects A,B, --all-projects or --repo PATH")
+        for flag, value in (("--profile", args.profile), ("--max-loaded", args.max_loaded)):
+            if value is not None:
+                rest += [flag, str(value)]
+        if args.watch:
+            rest.append("--watch")
+        res = T.daemon_start(rest, host=args.host or T.DEFAULT_HOST,
+                             port=T.DEFAULT_PORT if args.port is None else args.port)
+        ok = bool(res.get("started") or res.get("already_running"))
+    elif args.action == "status":
+        res = T.daemon_status()
+        ok = bool(res.get("running"))
+    else:
+        res = T.daemon_stop()
+        ok = bool(res.get("stopped") or not res.get("running"))
+
+    def render(r):
+        if args.action == "start":
+            if r.get("started"):
+                print(f"started: {r['url']} (pid {r['pid']}); log {r.get('log')}")
+            elif r.get("already_running"):
+                print(f"already running: {r.get('url')} (pid {r.get('pid')})")
+            else:
+                print(f"did not start (exit code {r.get('exit_code')}); log {r.get('log')}\n{r.get('log_tail', '')}")
+        elif r.get("token_mismatch"):
+            print(f"still running: {r.get('url')} (pid {r.get('pid')}): {r['why']}")
+            print(r["hint"])
+        elif args.action == "status":
+            if r.get("running"):
+                print(f"running: {r['url']} (pid {r.get('pid')}, up {r.get('uptime_seconds')} s)")
+                for n, p in (r.get("projects") or {}).items():
+                    print(f"  {n}: {p}")
+            else:
+                print("not running" + (f" ({r['why']})" if r.get("why") else ""))
+        elif r.get("stopped"):
+            print(f"stopped (pid {r.get('pid')})")
+        elif r.get("running"):
+            print(f"still running: {r.get('url')} (pid {r.get('pid')})" + (f": {r['why']}" if r.get("why") else ""))
+        else:
+            print("not running" + (f" ({r['why']})" if r.get("why") else ""))
+    _emit(args, res, render)
+    return 0 if ok else 1
+
+
+def cmd_mcp_token(args) -> int:
+    from verinoda.mcp import transport as T
+
+    if args.rotate:
+        running = T.daemon_status()
+        if running.get("running"):  # it would keep the old token, and `daemon stop` could no longer reach it
+            raise SystemExit(f"error: the background server is running (pid {running.get('pid')}); stop it first "
+                             "(`verinoda mcp daemon stop`), then rotate the token and start it again")
+    token, path = T.load_token(rotate=args.rotate)
+    res = {"token": token, "token_file": str(path), "header": f"Authorization: Bearer {token}"}
+
+    def render(r):
+        print(r["token"])
+        print(f"(kept in {r['token_file']}; clients send it as 'Authorization: Bearer <token>')", file=sys.stderr)
+    _emit(args, res, render)
+    return 0
+
+
+def cmd_projects(args) -> int:
+    from verinoda.mcp import projects as P
+
+    try:
+        if args.projects_cmd == "add":
+            res = P.add(args.path, args.name)
+        elif args.projects_cmd == "remove":
+            res = P.remove(args.spec)
+        else:
+            res = {"registry": str(P.registry_path()),
+                   "projects": [{**r, "missing": True} if not Path(r["path"]).is_dir() else r
+                                for r in P.registered()]}
+    except P.ProjectError as exc:
+        raise SystemExit(f"error: {exc}") from None
+
+    def render(r):
+        if args.projects_cmd == "add":
+            print(f"registered {r['name']}: {r['path']}")
+        elif args.projects_cmd == "remove":
+            print(f"removed {r['removed']}")
+        else:
+            print(f"registry: {r['registry']}")
+            for e in r["projects"]:
+                print(f"  {e['name']}: {e['path']}" + ("  (missing)" if e.get("missing") else ""))
+            if not r["projects"]:
+                print("  (no project is registered: `verinoda projects add PATH`)")
+    _emit(args, res, render)
     return 0
 
 
@@ -4321,6 +4460,26 @@ def cmd_benchmark(args) -> int:
               lambda r: (print(f"verdict audit, split {args.split}" + (f" (full result: {args.out})" if args.out
                                                                        else "")), _render_flat(r)))
         return 0
+    if args.bench_cmd == "tq-audit":
+        from verinoda.benchmark import tq_audit
+
+        def progress(repo: str, n: int) -> None:
+            print(f"[tq-audit] {repo}: {n} answer(s)", file=sys.stderr, flush=True)
+
+        try:
+            res = tq_audit.evaluate(work=Path(args.work).resolve() if args.work else None, progress=progress)
+        except tq_audit.GoldError as exc:
+            print(f"tq-audit: {exc}", file=sys.stderr)
+            return 2
+        written = {} if args.no_write else tq_audit.write(
+            res, table=Path(args.table) if args.table else None,
+            report_dir=Path(args.report_dir) if args.report_dir else None)
+        small = {"summary": res["report"]["summary"], "gold_sha": res["table"]["gold_sha"],
+                 "engine_sha": res["table"]["engine"]["sha"], "written": written,
+                 "reliability": {r["status"]: f"{r['right']}/{r['n']} (cap {r['cap']})"
+                                 for r in res["report"]["reliability"] if r["n"]}}
+        _emit(args, small, lambda r: (print("tq audit (held-out gold sets, verify on)"), _render_flat(r)))
+        return 0 if not res["report"]["summary"]["wrong_at_verified"] else 1
     if args.bench_cmd == "critique-eval":
         from verinoda.benchmark import critique_eval
 
@@ -4438,6 +4597,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--list", action="store_true", help="list the trusted projects")
     sp.add_argument("--yes", action="store_true",
                     help="do not ask to confirm (needed without a terminal; never for an agent to add)")
+    sp = sub.add_parser("projects", help="names for project folders one MCP server serves together "
+                                         "(`verinoda mcp serve --projects A,B`); kept in the user config folder")
+    psub = sp.add_subparsers(dest="projects_cmd", required=True)
+    c = add("add", cmd_projects, "register a project folder under a name", repo=False, parent=psub)
+    c.add_argument("path", nargs="?", default=".")
+    c.add_argument("--name", help="the name (default: the folder's name)")
+    c = add("list", cmd_projects, "list the registered projects", repo=False, parent=psub)
+    c = add("remove", cmd_projects, "unregister a project (its folder and index are not touched)", repo=False,
+            parent=psub)
+    c.add_argument("spec", help="its name or path")
     sp = add("scan", cmd_scan, "index a repository (AST, no LLM) and record a snapshot", repo=False)
     sp.add_argument("path", nargs="?")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
@@ -4622,6 +4791,10 @@ def build_parser() -> argparse.ArgumentParser:
                                    "one handler, ambiguous, unmatched or a method mismatch; tRPC, gRPC, GraphQL and "
                                    "event edges counted")
     sp.add_argument("--no-table", action="store_true", help="leave out the route table (text output)")
+    sp.add_argument("--all", action="store_true",
+                    help="every ambiguous call with every candidate, every unmatched call and method mismatch "
+                         "(default: ambiguous calls grouped by method, URL and candidates, at most 50 groups of 5 "
+                         "candidates, at most 50 unmatched calls and mismatches, each cut counted)")
     sp = add("export", cmd_export, "the graph for other tools: GraphML (Gephi, yEd), Neo4j Cypher, an Obsidian vault "
                                    "or an SVG drawing; each edge with its location and the status it can carry "
                                    "unchecked, no code, no machine paths")
@@ -5521,21 +5694,48 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("mcp", help="MCP server for coding agents")
     msub = sp.add_subparsers(dest="mcp_cmd", required=True)
-    c = msub.add_parser("serve", help="serve over stdio")
-    c.add_argument("--profile", choices=("core", "full"), default=None,
-                   help="tools to serve: core (default: query, analyze, inspect/trace/map, claims and evidence, "
-                        "index_update, code_check, decision_check) or full (all 33); else mcp.profile in "
-                        ".verinoda/config.json")
-    c.add_argument("--watch", action="store_true",
-                   help="run a fast `verinoda update` when files change (operating-system file events), so "
-                        "tool calls answer from edited code without index_update")
+    def serve_options(c) -> None:
+        c.add_argument("--profile", choices=("core", "full"), default=None,
+                       help="tools to serve: core (default: query, analyze, inspect/trace/map, claims and evidence, "
+                            "index_update, code_check, decision_check) or full (all 43); else mcp.profile in "
+                            ".verinoda/config.json")
+        c.add_argument("--watch", action="store_true",
+                       help="run a fast `verinoda update` when files change (operating-system file events), so "
+                            "tool calls answer from edited code without index_update")
+        where = c.add_mutually_exclusive_group()
+        where.add_argument("--repo", help="project root (default: from the folder the server starts in)")
+        where.add_argument("--repo-of", metavar="FILE",
+                           help="serve the nearest folder at or above the start folder whose FILE (a relative path "
+                                "such as .mcp.json) registers this server; what project-scope configs use, so "
+                                "moving the project keeps them working")
+        where.add_argument("--projects", metavar="A,B",
+                           help="serve several projects from one process: registered names (`verinoda projects "
+                                "add`), NAME=PATH or folders; every tool then takes a project argument")
+        where.add_argument("--all-projects", action="store_true", help="serve every registered project")
+        c.add_argument("--max-loaded", type=int, default=None, metavar="N",
+                       help="with several projects: keep the graphs of the N most recently used (default 3)")
+        c.add_argument("--host", default=None,
+                       help="HTTP: the address to listen on (default 127.0.0.1; anything else is reachable from "
+                            "other machines)")
+        c.add_argument("--port", type=int, default=None, help="HTTP: the port (default 8765; 0 picks a free one)")
+
+    c = msub.add_parser("serve", help="serve over stdio (or HTTP with --transport http)")
+    serve_options(c)
+    c.add_argument("--transport", choices=("stdio", "http"), default="stdio",
+                   help="stdio (default), or streamable HTTP with a bearer token (`verinoda mcp token`)")
+    c.add_argument("--state-file", help=argparse.SUPPRESS)  # written by the daemon's server once it listens
     c.set_defaults(fn=cmd_mcp)
-    where = c.add_mutually_exclusive_group()
-    where.add_argument("--repo", help="project root (default: from the folder the server starts in)")
-    where.add_argument("--repo-of", metavar="FILE",
-                       help="serve the nearest folder at or above the start folder whose FILE (a relative path "
-                            "such as .mcp.json) registers this server; what project-scope configs use, so "
-                            "moving the project keeps them working")
+
+    c = add("daemon", cmd_mcp_daemon, "a background MCP server over HTTP: start (with the serve options), status, "
+                                      "stop", repo=False, parent=msub)
+    c.add_argument("action", choices=("start", "status", "stop"))
+    serve_options(c)
+
+    c = add("token", cmd_mcp_token, "print the HTTP transport's bearer token and the file it is kept in "
+                                    "(created on first use)", repo=False, parent=msub)
+    c.add_argument("--rotate", action="store_true", help="replace it (refused while the background server "
+                                                         "runs; a foreground HTTP server keeps the old one until "
+                                                         "restarted)")
 
     c = add("prompts", cmd_mcp_prompts, "the ready workflows the server offers as MCP prompts (review, "
                                         "onboarding, debug, pre_merge): list them, or print one filled in",
@@ -5603,6 +5803,16 @@ def build_parser() -> argparse.ArgumentParser:
                                   "afterwards; reused when given)")
     c.add_argument("--only", help="comma list of case ids")
     c.add_argument("--out", help="write the full result JSON here")
+    c.add_argument("--json", action="store_true")
+    c = bsub.add_parser("tq-audit", help="`verinoda tq` on the frozen held-out gold sets (benchmarks/tq_gold, "
+                                         "tq_gold2): the calibration table behind `measured: k/n` and the "
+                                         "CONFIDENCE_CAP reliability report")
+    c.set_defaults(fn=cmd_benchmark)
+    c.add_argument("--work", help="work directory for the indexed copies (default: a temporary one, removed "
+                                  "afterwards; reused when given)")
+    c.add_argument("--table", help="calibration table to write (default: verinoda/data/tq_calibration.json)")
+    c.add_argument("--report-dir", help="report directory (default: benchmarks/results/tq-audit-DATE)")
+    c.add_argument("--no-write", action="store_true", help="print the summary only")
     c.add_argument("--json", action="store_true")
     c = bsub.add_parser("critique-eval", help="critique precision/recall on the labelled claim set")
     c.set_defaults(fn=cmd_benchmark)

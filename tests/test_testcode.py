@@ -297,6 +297,8 @@ def test_the_tests_of_each_language(g):
                         "TestMain()", ".coolsLater()", ".check()", ".helperTwo()"}
     heat = _node(g, "src/test/java/demo/HeatTest.java", "coolsByOne")
     assert testcode.test_id(g, heat) == "src/test/java/demo/HeatTest.java::coolsByOne"
+    # cited at its name line (8), its span still covering the @Test line above it (7)
+    assert g.line(heat) == 8 and g.span(heat)[0] == 7
     again = _node(g, "tests/test_main.py", "test_run_again")
     assert testcode.test_id(g, again) == "tests/test_main.py::TestMain::test_run_again"
     assert testcode.test_id(g, _node(g, "src/main/java/demo/HeatChecks.java", "notATest")) is None

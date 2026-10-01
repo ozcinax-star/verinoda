@@ -19,6 +19,12 @@ id, a path with or without its extension, a dotted module name, ``path::Class.me
 
 What gave way is kept in ``set_aside`` and said in the note, so a reader sees which node was used.
 
+The name is matched case-insensitively first (a module path, an owner), but in a case-sensitive language
+the last name decides: of the nodes found, the ones whose name is written with the text's own case win
+(``orderService`` the const over ``OrderService`` the class), and when none is, the match is never
+``exact``: one node is ``similar`` and more are ``ambiguous``, with a note that says the name matched only
+case-insensitively (``res.sendFile`` written for the module function ``sendfile``).
+
 A name that names nothing exactly is never replaced by a similar one when it is written as code:
 
 * spelled in a file changed since the index: ``not_indexed`` ("not in the index yet ... run
@@ -192,6 +198,8 @@ class _Names:
     which an exact lookup does not need."""
 
     def __init__(self, g):
+        from verinoda.retrieval import bare_name
+
         self.by_bare: dict[str, list[str]] = defaultdict(list)
         self.files: dict[str, str] = {}
         self.by_stem: dict[str, list[str]] = defaultdict(list)
@@ -208,6 +216,9 @@ class _Names:
             elif (d.get("metadata") or {}).get("language") == "mcfunction":  # one node per file, its function id
                 self.files.setdefault(f, n)
             self.by_bare[fold_tr(label.strip().lstrip(".").split("(")[0].strip())].append(n)
+            alt = bare_name(g, n)  # an Erlang `name/arity` is asked for by its name
+            if alt is not None:
+                self.by_bare[fold_tr(alt)].append(n)
 
 
 def _names(g) -> _Names:
@@ -445,6 +456,47 @@ def _overloads(g, nodes: list[str]) -> bool:
     return len(owners) == 1 and bool(next(iter(owners)))
 
 
+def _written_last(text: str) -> str:
+    """The last name of ``text`` as written (``lib/response.js::sendFile`` -> ``sendFile``)."""
+    from verinoda import question_plan as qp
+
+    _path, name = qp.split_code_name(text)
+    return name.rpartition(".")[2]
+
+
+def _label_last(g, n: str) -> str:
+    return str(g.label(n) or "").strip().strip(".()").rsplit(".", 1)[-1]
+
+
+def _case_folded(g, text: str, nodes: list[str]) -> bool:
+    """Did ``text`` name ``nodes`` only once case is folded: no node's own name is the written one, case and
+    all, and each is in a case-sensitive language, where ``sendFile`` and ``sendfile`` are two names?"""
+    from verinoda.case_ids import CASE_SENSITIVE_SUFFIXES
+
+    want = _written_last(text)
+    if not want or text in g.G:
+        return False
+    for n in nodes:
+        f = g.file(n) or ""
+        if g.is_file_node(n) or PurePosixPath(f).suffix.lower() not in CASE_SENSITIVE_SUFFIXES:
+            return False
+        if _label_last(g, n) == want:
+            return False
+    return True
+
+
+def _folded(g, text: str, best: list[str], aside: list[str]) -> Resolution:
+    """A code name matched only case-insensitively: never as the exact match, and said so."""
+    want = _written_last(text)
+    found = ", ".join(f"{g.label(n)} ({_loc(g, n)})" for n in best[:4]) + (", ..." if len(best) > 4 else "")
+    note = (f"no symbol is named `{want}` with this case; `{text}` matched {found} only case-insensitively "
+            "(in this language names that differ in case are different symbols)")
+    if len(best) == 1:
+        return Resolution(text, SIMILAR, best[0], list(best), note, aside)
+    return Resolution(text, AMBIGUOUS, None, list(best), note + "; give one as path/file.py::Name or a node id",
+                      aside)
+
+
 def resolve(g, text: str, *, stale: Iterable[str] = ()) -> Resolution:
     """Resolve ``text`` (see the module docstring). ``stale``: files changed since the index
     (:func:`verinoda.freshness.check`); a code name spelled only there, where the indexed version did
@@ -458,6 +510,8 @@ def resolve(g, text: str, *, stale: Iterable[str] = ()) -> Resolution:
     # the fuzzy scorer (seconds on a large graph) only for plain words: a name written as code is
     # never replaced by a similar one, and a node it names exactly is found by the lookups
     best, aside = exact_nodes(g, text, fallback=not code)
+    if code and best and _case_folded(g, text, best):
+        return _folded(g, text, best, aside)
     overloads = _overloads(g, best)
     if overloads:  # one method name declared several times in one class: the name, not a tie
         best = sorted(best, key=lambda n: g.line(n) or 0)

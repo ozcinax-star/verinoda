@@ -436,6 +436,13 @@ def test_a_url_built_with_percent_is_not_spelled(zoo):
     assert not [k for k in _cross(index.load(zoo)) if k[0] == "pull_product"]
 
 
+def test_the_route_table_keeps_the_trailing_slash_the_code_writes(zoo, capsys):
+    paths = {r["at"]: r["path"] for r in _report(zoo, capsys)["route_table"]}
+    assert paths["shop/urls.py:6"] == "/shop/products/<int:pk>/"     # Django: as the URLconf writes it
+    assert paths["svc/app/routers/orders.py:11"] == "/v1/orders"        # FastAPI @router.post("") under a prefix
+    assert paths["api/routes/books.js:6"] == "/api/books"               # Express serves a router's '/' at the mount
+
+
 @pytest.mark.parametrize("src, dst, relation, protocol", [
     ("placeOrder", "sendReceipt", "emits", "event"),
     ("UserPage", "trpc/server/router.ts:5", "rpc_calls", "trpc"),

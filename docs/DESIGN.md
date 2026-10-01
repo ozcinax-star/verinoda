@@ -14314,6 +14314,1809 @@ cutting other text.
   `plan_json`, the full schema's enum, and that the core `analyze` has no `intent`; the existing core-menu test
   (core analyze `{question, budget_seconds}`, both menu limits) passes unchanged.
 
+## 134. Real-world benchmark on pinned popular repositories (D161, 2026-10-01)
+
+### 134.1 Why
+
+The existing benchmarks measure retrieval on three corpora: `examples/orders_app`, upstream
+Graphify, and Verinoda's own older source. All three are Python, and two of them were known while
+the tool was being built. This leaves two questions open:
+
+- does every user-facing command finish, without a traceback and in reasonable time, on code
+  nobody tuned for?
+- does it get simple facts right in other languages and other projects' layouts?
+
+This harness answers both for ten repositories (Python, Python + TypeScript, JavaScript,
+TypeScript, Go, Rust, Java and PHP). Each one has a permissive license, more than 10k stars and a
+recent release, and each is pinned to a tag and sha.
+
+### 134.2 Decisions
+
+- **Pinned, not latest.** The manifest gives each repository a tag and the sha it resolved to on
+  2026-10-01, plus the star count on that date. The clone is shallow at that tag, and the runner
+  stops if `HEAD` is not the pinned sha. If a folder in the work directory is at another sha, the
+  runner reports an error and leaves the folder as it is.
+- **Clones outside OneDrive.** The default work directory is `C:/vbench/<owner>__<name>`. It can be
+  changed with `--work` or `$VERINODA_BENCH_WORK`, and the runner warns when the folder is under
+  OneDrive. Sync would slow indexing down and lock files.
+- **The repository's code is never executed.** `guard_argv` is an allow list. Only `init`, `scan`,
+  `update`, `query`, `analyze`, `trace`, `q`, `check`, `map`, `routes`, `schema`, `taint`, `review`
+  and `doctor` may start, each with its own options among `--json`, `--view`, `--max-items` and
+  `--mode`. Any other command and any other token starting with `-` is refused before any process
+  starts, abbreviations included.
+
+  The MCP `analyze` call passes `run_tests=False` and `observe=False`. `check` runs with Verinoda's
+  own interpreter and only the standard library. Every command runs as `python -P -m verinoda` with
+  `PYTHONPATH` set to the checkout under test. Neither the corpus's working directory nor its
+  `sitecustomize.py`, nor a corpus folder named `verinoda/`, is ever imported. Each repository's
+  steps see a fresh, empty `VERINODA_CONFIG_DIR`, so the user's `trust.json` never makes a clone
+  trusted. A test checks all this with the real CLI and marker files.
+- **Every step is a subprocess.** The runner records its seconds, exit code, stdout and stderr
+  sizes, whether the JSON parsed, and the tail of stderr. A step counts as a crash in any of these
+  cases:
+  - its stderr holds a Python traceback (even when the exit code is 0);
+  - its exit code is not one the command documents (`OK_CODES`: for example `trace` 2 means no
+    path, `q` 1 means no row). Gold checks use the codes of their own command;
+  - a non-zero documented exit comes without a JSON object (for `q`, one with `rows`). Verinoda's
+    internal errors also exit 1, with `error: ...` and no JSON;
+  - for the MCP probe, the tool answered `{"error": ...}`.
+
+  A step that runs past its limit (`TIMEOUTS`) is a timeout, and its whole process tree is killed
+  (`taskkill /T` on Windows).
+- **Scenarios a user would run.** The runner does these in order:
+  1. `init` (cold) and `scan`;
+  2. the gold checks;
+  3. 3 `query`, 2 `analyze`, `trace`, 2 `q`, and `check` on one Python, Java or Kotlin file
+     (skipped and recorded when the repository has none);
+  4. four `map` views, `routes`, `schema`, `taint` (Python repositories only) and `doctor`;
+  5. MCP `project_query` and `analyze` through `AtlasTools`;
+  6. a one-line edit, then `update`, `review`, a byte-exact revert, `update` again, and a check
+     that no tracked file changed.
+
+  The questions and the edit come from the manifest's `scenario` when there is one. Otherwise the
+  runner uses generic questions and appends a comment line to the largest source file.
+- **Gold facts are frozen before the run.** For each repository I read 5-10 facts by hand in the
+  clone: a definition at file:line, X calls Y at file:line, a path through the code, or the file
+  that answers a question. Each fact names the Verinoda command that checks it (`q` with the
+  file:line the rows must cite, `trace` with the edges the path must have, `query` with the file
+  that must be in the top k, or `routes`/`schema`). I committed them before Verinoda first ran on
+  that repository: commit 73041f4 has the gold files, and the runs came after 27f72bf. A miss stays
+  a miss. A check written badly is fixed in a new gold version, not by editing the frozen one.
+- **Results without machine paths.** Paths are written as `<CORPUS>`, `<REPO>` and `<HOME>`. If a
+  repository is run again on the same day, its new entry replaces the old one in that day's
+  `results.json`.
+- **Review round.** A review of the first version found eight problems. Each fix has a regression
+  test.
+  1. **Guard.** The deny list let abbreviations (`--run-test`, `--obs`) and code-running commands
+     (`debug try`, `run`, `spec`, `mutations`) through. It is now the allow list above.
+  2. **Hidden errors.** An internal error with exit 1 counted as an answer for `q` and `doctor`,
+     and as a plain miss for gold checks. It is now a crash.
+  3. **MCP errors.** An MCP `{"error": ...}` counted as a success. The probe now exits 1.
+  4. **Gold checks that passed for the wrong reason.**
+     - `cites` also matched `binding/gin.go:236` for `gin.go:236`. It now reads only `at` fields,
+       exactly.
+     - A trace's `via_files` could be met by the resolved target. Now the via files must be where
+       an edge of one path is, and both ends must be resolved.
+     - fzf `pattern-matchitem` cited the definition line. Its v2 cites the call at
+       src/pattern.go:395.
+  5. **One error lost the whole run.** Each repository is now wrapped and recorded on its own.
+     Results are written after each repository, and the edit works on bytes.
+  6. **Dirty clones.** A dirty clone is now refused, and the clone is checked clean after the
+     revert.
+  7. **Symlinks.** The edit could write through a symlink. It now skips symlinks and paths
+     outside the clone. Clones are made without symlinks and LFS downloads, with long paths
+     allowed.
+  8. **Environment.** The latest run's environment used to relabel earlier repositories. Each
+     repository and each run now keeps its own.
+
+  Minor fixes in the same round:
+  - a fresh config folder, so the user's trust never applies;
+  - a check that Python is 3.11 or later;
+  - a tracked `.verinoda/` is kept;
+  - half-finished clones are retried;
+  - trace pairs that name one symbol (`gin.go::Default`, `main.go::main`);
+  - `check` only on a language it reads.
+
+  Five gold v2 entries were appended. The v1 facts are unchanged and still scored, and the report
+  counts v1 and v2 apart.
+
+### 134.3 Measured
+
+Run on 2026-10-01 after the review round, with Verinoda 0.3.2 at b4b6b5a (clean), Python 3.13.14,
+Windows 11 and 16 CPUs. One process ran at a time, and times are wall clock.
+
+| repo | files | scan s | update s | query / analyze median s | crashes | timeouts | clean after | gold v1 | gold v2 |
+|---|---:|---:|---:|---:|---:|---:|---|---:|---:|
+| gin-gonic/gin v1.12.0 (Go) | 130 | 11.9 | 7.0 | 1.4 / 2.6 | 0 | 0 | yes | 7/10 | 1/2 |
+| junegunn/fzf v0.74.4 (Go) | 161 | 14.5 | 7.5 | 1.5 / 3.4 | 0 | 0 | yes | 8/10 | 3/3 |
+
+- **No crashes and no timeouts** under the stricter rules: 34 steps for gin and 35 for fzf (12 and
+  13 of them gold checks). `check` was skipped on both, because neither has a Python, Java or
+  Kotlin file. In the first run, `check` on a Go file exited 4 and measured nothing.
+- **Both clones were clean** after the revert. The runner checked this with `git status`.
+- **The scenario traces now resolve.** `trace gin.go::Default LoggerWithConfig` and
+  `trace main.go::main NewMatcher` both exited 0 with status `found`. In the first run, both pairs
+  exited 2: one was ambiguous and the other found no path.
+- **Other exit codes.** gin's `q2` (who calls `Next`) exited 1 with a JSON answer and no row.
+  `review` exited 3 on both, because it found something to report.
+- **Largest output.** `map --view dead` was the largest response: 149 KB for gin and 141 KB for fzf.
+  Every other step stayed under 15 KB.
+- **v1 gold under the exact rules.** gin stays at 7/10. fzf drops from 9/10 to 8/10, because
+  `run-calls-newmatcher` had hit only through the resolved target: its one edge is at
+  src/core.go:258, not in src/matcher.go. The other misses are the same as in the first run:
+  - gin `default-calls-recovery` (`Default` is ambiguous);
+  - gin `request-reaches-tree` and `get-registers-route` (no Go edge for a method called on a local
+    variable or a field: `root.getValue`, gin.go:715, and `group.engine.addRoute`,
+    routergroup.go:89);
+  - fzf `main-calls-run` (trace between two files).
+- **v2 gold.** 4 of 5 hit:
+  - gin `default-calls-recovery@v2` (edge at gin.go:239);
+  - fzf `main-calls-run@v2` (main.go:113);
+  - fzf `run-calls-newmatcher@v2` (src/core.go:258);
+  - fzf `pattern-matchitem@v2` (src/pattern.go:395).
+
+  gin `request-reaches-tree@v2` still finds no directed path, for the receiver-type gap described
+  above.
+
+### 134.4 Not done
+
+- Only 2 of the 10 repositories have been run, and both are Go. The Python, JavaScript/TypeScript,
+  Rust, Java and PHP repositories, and the steps that need those languages (`taint`, and `check`,
+  which was skipped on both), have not been measured on real code yet. The full run comes later.
+- Each fact was checked by one reader, me. There are 10 v1 facts per repository, so a single fact
+  moves the score by 10 points. Gold measures recall of simple facts, not precision: a wrong extra
+  edge does not count against Verinoda. The v2 entries were written after the first run, so they
+  are not blind; they correct how a fact is checked, never the fact.
+- Times are from one run on one machine, without repeats, so they carry no variance.
+- The edit is a single line, so `update` and `review` are measured on the smallest possible
+  change.
+- The crash rule depends on the documented exit codes and on the JSON a non-zero exit must carry.
+  If a command returns a wrong answer with an allowed code, the rule does not see it. Only the gold
+  facts see wrong answers.
+- Git and Verinoda read the clone, and `git log` reads its history. Clones are made with our own
+  git config (no symlinks, no LFS download), and no hooks or filters come from the repository.
+- The shas of the 8 repositories not run yet were not checked offline; `ensure_clone` stops on a
+  mismatch.
+
+### 134.5 Tests
+
+`tests/test_realworld_harness.py` has 87 tests (one of them skips where symlinks cannot be made,
+as on this Windows account). They need no network and clone nothing from GitHub: the clone step is
+mocked, and the git parts run on local `git init` repositories. Most of them drive the runner with
+a fake `-m fakevn` module that answers, crashes, hangs, exits 1 with `error:` or with a JSON
+answer, or exits with an undocumented code on demand. They cover:
+
+- the allow list: forbidden and missing commands, abbreviations (`--run-test`, `--obs`), options of
+  other commands, `debug try`, `run`, `spec`, `mutations`; the scenario argvs let through; nothing
+  started when an argv is refused;
+- a full scenario whose argvs are all logged and checked against the allow list;
+- a traceback counted as a crash even with exit 0, an undocumented exit counted as a crash, and a
+  documented one not counted; exit 1 without JSON a crash for `q`, `doctor` and gold steps; `q`
+  exit 1 with `rows` an answer;
+- the MCP probe exiting 1 on `{"error": ...}`;
+- a timeout that kills the process within the limit;
+- path sanitizing and JSON detection;
+- the summary's crash, timeout and v1/v2 gold counts, the cold `init`, and the byte-exact revert;
+- gold judging for every kind: exact `at` matching (236 does not match 2360, `binding/gin.go:236`
+  does not match `gin.go:236`); trace via files on path edges of one path, both ends resolved and
+  located; JSON that is not an object;
+- well-formed gold files (v1 frozen, v2 entries with `replaces` and `why`) whose sha matches the
+  manifest, and scenarios that measure something;
+- the clone: reused, a foreign sha refused with the folder kept, a half-finished clone removed and
+  cloned again, the git arguments (no symlinks, long paths, no LFS);
+- a dirty clone refused, a clone left dirty after the revert reported, a tracked `.verinoda/` kept;
+- the edit: CRLF, Latin-1 bytes, and never through a symlink or outside the clone;
+- the empty config folder, and a clone the user's config trusts that is not trusted under the
+  runner;
+- one failing repository recorded while the next one runs, with results on disk after each; the
+  environment per run and per repository; Python older than 3.11 refused;
+- the report table, `merge_results`, and the report CLI.
+
+One test runs the real Verinoda on a tiny git repository, through every step group (`init`,
+`scan`, a gold `q`, `trace`, `check`, `map`, `taint`, `doctor`, the MCP probe, the edit with
+`update` and `review`). That repository's `sitecustomize.py`, `usercustomize.py`, `conftest.py`,
+`setup.py`, `pkg/__main__.py` (which the code imports) and a `verinoda/` package would each leave a
+marker file if executed. The test asserts that no marker appears, that there are no crashes, that
+the gold hit is found and that the clone is clean afterwards.
+
+## 135. Measured frequencies for typed answers (D162, 2026-10-01)
+
+### 135.1 Why
+
+`verinoda tq` (D159) answers closed questions with a value and a status, but a status is a rule's ceiling, not a
+measured rate: nothing told an agent how often a `calls ... = no | strong_inference` had been right. The spec
+(docs/drafts/13.6-13.8-spec.md, sections 4, 5, 7 and the 13.7 build plan) asks for a frequency where one was
+measured and nothing where it was not: `measured: k/n held-out` on an answer only for a cell of (question type,
+answer, status) with at least 30 held-out answers, from a table keyed by the gold set and by the code that decided
+the answers, so a table measured on other code or another set is never shown. The same run gives the first
+observed precision per status next to `claims.CONFIDENCE_CAP`, which DESIGN line 50 says was never recalibrated.
+
+### 135.2 Decisions
+
+- **A second held-out set, frozen first.** The first set's 34 held-out cases put no cell near 30, so
+  `benchmarks/tq_gold2/` was written and committed on its own (c720287) before `tq` ran on any of its questions:
+  323 cases, all held-out (no dev split), 302 on this repository at c23c483 (the `verinoda/` package without
+  `project_index/` and `benchmark/questions/`, copied by `git archive`) and 21 on `examples/orders_app`.
+  Candidates came from a stdlib-`ast` script with a fixed seed (no Verinoda code): definitions whose name is
+  defined once (top-level, methods, functions nested in functions), absent names made of two words of real names,
+  near misses of real names (`exact_node`), direct, module (`graphquery.run`-style) and `self.m()` calls of a
+  function defined once, calls through `from X import NAME as ALIAS` (and two traps where the alias spells another
+  function's name), callers that never spell a function of their own file, and callers that spell a function's
+  name only as a variable or word. Each case was then checked by hand: the cited line read, the binding import
+  read for each cross-file call, the caller's calls listed and read for each no, each absent name searched as a
+  whole word in every file of the copy. `MANIFEST.json` holds the file's sha256, the repositories' copy specs and
+  the orders_app hashes; a test checks them.
+- **Cells and the display rule.** A cell is (type, answer kind, status); answer kinds are `yes`, `no`, `?`,
+  `count`, `files`, `none`, `rows`, `invalid`. `tq` shows a cell's `k/n held-out @<gold sha8>` only when the cell
+  has n >= 30 held-out answers, the question was asked with options (`depth=`, `scope=`, `as=`, taint's `in=`;
+  `need` and `id` change no answer) that a held-out answer of the cell was asked with, verify is on, its answer is decided (never for `?`), the first set's dev split has an answer in
+  the same cell and its precision lies inside the held-out Wilson 95 % interval (the spec's condition; it can
+  hide a cell whose dev side is better than its held-out side), and both hashes below match. It is a frequency on
+  a named set, never a probability, and it changes no answer and no status. In the text form it follows `via`;
+  in JSON it is the `measured` key the spec reserved.
+- **The gold hash** is the sha256 of the lines `<path> <sha256>` of the frozen held-out files
+  (`tq_gold/held_out.json`, `tq_gold2/held_out.json`), sorted. `tq_measured.GOLD_FILES` names them with their
+  hashes; the table must carry exactly these and their combined hash, and in a source checkout the files on disk
+  must still hash to them (re-checked on every batch, so editing a gold file hides `measured` at once).
+- **The engine hash** is the sha256 of the lines `<path>\0<sha256 of the file's bytes, CRLF read as LF>`, one per
+  file sorted by path relative to the package: `tq.py`, `index.py`, every package module they import at any
+  depth (a static AST walk of every `import` statement, those inside functions included; a name imported from a
+  package counts as its submodule when one exists) and every `.py` under `project_index/`; never
+  `tq_measured.py` (the display rule) or `benchmark/` (the harness that writes the table). Today that is 186
+  files (97 outside `project_index/`), an over-approximation of the code that decides an answer. A missing root
+  gives no hash and nothing is shown. It is computed at run time from the installed sources; the walk is cached
+  per process and re-checked on each batch by the mtime and size of every file in it, the paths its imports
+  probed and did not find, and the file list of `project_index/` (about 50-80 ms per batch on this OneDrive
+  checkout). Any edit to these files hides every `measured` until `benchmark tq-audit` is run again and its
+  table committed. The audit refuses a run during which the hash changed.
+- **The scorer and the code the gold is about.** The table records `score_sha`, the hash of
+  `benchmarks/tq_gold/score.py` (which decides right and wrong); in a source checkout a scorer with another hash
+  hides every `measured`. The audit checks each set's MANIFEST.json `fixtures` (under the set) and `examples`
+  (under the repository) hashes as well as its gold files and stops (exit 2) when one changed.
+- **The runner.** `verinoda benchmark tq-audit` (`verinoda/benchmark/tq_audit.py`) checks every gold file against
+  its MANIFEST.json and `GOLD_FILES`, indexes each repository once through the verdict audit's `base_copy`, asks
+  the questions in batches of 20 with verify on, scores them with `benchmarks/tq_gold/score.py` (`?` is never
+  wrong; a count is right as a lower bound) and writes `verinoda/data/tq_calibration.json` (gold files and hash,
+  engine hash and file count, the commit, every held-out cell with its Wilson interval, the dev cell and
+  `shown`/`why_not_shown`) and `benchmarks/results/tq-audit-DATE/report.{json,md}` (every case, the wrong ones, the
+  cells, the reliability table). Exit 1 when an answer at a verified status is wrong, 2 when a gold file (or a
+  fixture or example it is about) changed. The committed run exits 1 (`v-alias-11`, `v-alias-12`, below).
+- **No cap is changed.** The reliability table lists, per status, the decided held-out answers, how many were
+  right, the Wilson interval and whether `CONFIDENCE_CAP` lies inside, below or above it. Changing a cap stays its
+  own reviewed decision (spec section 5).
+- **Study F (the instructions sentence).** The spec's pre-registered rule adds `Several yes/no or count facts:
+  run_tool tq.` to the core instructions only if a paired agent study (>= 24 tasks over 4 repositories, one model
+  in the loop) shows recall kept, median cache-weighted cost down >= 10 % with a bootstrap CI excluding 0, turns
+  not up and over-trust not up. The study was not run in this build (it needs a model in the loop, which this
+  build does not use). Applying the rule as written: its conditions are not shown, so the sentence is not added;
+  no instructions text was edited (test_mcp's instruction and menu limits pass unchanged). This result belongs in
+  DESIGN 132.
+- **Review round.** The reviewer confirmed two findings, both fixed with regression tests. (1) The engine
+  hash listed twelve modules by hand and missed what they import: `naming.py` folds names with
+  `textnorm.fold_tr`, and with `fold_tr` truncated to four characters the hash did not change, `exists
+  placeholder_xyz` on orders_app flipped to a wrong `yes | statically_verified` that still carried `measured:
+  77/77`. The hash now covers the import closure described above (`textnorm.py`, `evidence.py`, `codecheck.py`,
+  `search_index.py`, `guards.py`, `question_plan.py`, `treestate.py`, `testcode.py`, `snapshot.py`,
+  `python_cross.py`, `python_facts.py` and the rest); tests edit a module reached only through another module
+  and one imported inside a function, and edit `textnorm.py` in a copy of the package and see the committed
+  table's cells disappear. (2) `exists NAME scope=lib` is decided by `codecheck.api` reading the installed
+  library, another engine, yet carried the project index cell's `82/82` because the cell key had no options;
+  no held-out case uses `scope=lib`. A cell now records the options its held-out answers were asked with and is
+  shown only for those (all four n >= 30 cells were measured with no options only, so `calls A B depth=2` and
+  `exists X scope=lib` show nothing); `exists json.no_such_fn_xyz scope=lib` on the orders_app copy now has no
+  `measured`. From the minors: `--no-verify` batches show nothing (the table was measured with verify on); the
+  scorer's hash is in the table and the MANIFEST `fixtures`/`examples` hashes are checked by the audit; the
+  README row names `--json` and says the committed run exits 1. The draft overstated the engine hash ("the
+  modules that decide a tq answer"); it now says what the hash covers. The audit was rerun after the fix on
+  3fda4e1: every count below is unchanged, only the engine hash, commit and time changed.
+- **Fixed on the way.** The held-out run found `calls bisect _rev_list` failing with `TypeError` inside tq: the
+  name resolved to the graph's external module node `bisect` (no file, no span) and the AST check behind a no
+  indexed its span. `_ast_calls` now skips a node without a span (a regression test reproduces it). The answer is
+  now a wrong weak no instead of a failed question; the resolution itself is in Limits.
+
+### 135.3 Measured
+
+All on 2026-10-02, Windows, the repository's `.venv`, commit 3fda4e1 (review round), engine sha256
+06b0e5c6... over 186 files, scorer sha256 c932e489..., gold sha256 4962f768..., verify on. Audit time 75.5 s with
+the indexed copies reused (166.8 s with fresh copies, indexing this repository's copy included). Before the
+review round (commit 4dbc14a, engine 29997d9a... over the hand-listed modules) the same run gave the same counts.
+
+Held-out (34 + 323 = 357 cases): 350 decided, 347 right, 3 wrong, 7 unknown (every unknown with a next step);
+locator hits 166/167 (the miss: `exists tokenize`, see Limits). Dev (the first set's 75): 1 wrong
+(`reaches run_by_name target`, the known `getattr` trap, weak no), 4 unknown.
+
+Cells: 22; 4 reach n >= 30, all decided; 3 are shown.
+
+| type | answer | status | held-out right/n | Wilson 95 % | dev right/n | shown |
+|---|---|---|---|---|---|---|
+| exists | yes | statically_verified | 77/77 | 0.953-1.000 | 7/7 | yes |
+| exists | no | strong_inference | 82/82 | 0.955-1.000 | 3/3 | yes |
+| calls | no | strong_inference | 64/64 | 0.943-1.000 | 7/7 | yes |
+| calls | yes | statically_verified | 75/77 | 0.910-0.993 | 10/10 | no: dev above the interval |
+| calls | no | weak_inference | 24/25 | 0.805-0.993 | 0/0 | no: n < 30 |
+
+The other 17 cells have n <= 6 (callers, which, reaches, route, writes, reads, taint, q, tested, and the unknown
+cells).
+
+Reliability against `CONFIDENCE_CAP` (held-out, decided answers of every type):
+
+| status | cap | right/n | precision | Wilson 95 % | cap vs interval |
+|---|---|---|---|---|---|
+| statically_verified | 0.9 | 154/156 | 0.987 | 0.955-0.997 | below |
+| strong_inference | 0.7 | 157/157 | 1.000 | 0.976-1.000 | below |
+| weak_inference | 0.4 | 36/37 | 0.973 | 0.862-0.995 | below |
+| experiment_verified, primary_source_verified, observed, stale | 0.95, 0.85, 0.9, 0.3 | 0 | - | - | no answer |
+
+Every cap with data lies below the observed interval on this set; no cap was changed.
+
+Wrong answers on held-out:
+
+- `calls diff_file is_test_file` and `calls diff_trees is_test_file`: gold no, answered yes at
+  `statically_verified`. `treestate.py` imports `is_test_or_support_file as is_test_file`; the graph has an
+  EXTRACTED `calls` edge from `diff_file` to `testcode.is_test_file` at treestate.py:754, and the verify re-read
+  confirms it because the line spells `is_test_file(`. This breaks D159's gate A (0 wrong at a verified status)
+  on the new set; the first set's gate still holds. The ten import-alias yes cases (the alias's real target) were
+  all right at `statically_verified`.
+- `calls bisect _rev_list`: gold yes, answered no at `weak_inference` (the name resolved to the module `bisect`).
+
+Shapes on the second set: absent names 60/60 and near misses 18/18 strong no; caller not spelling the callee
+55/55 strong no; spelled but not called 24/24 weak no (1 `?`: `references` names 2 symbols); definitions 66/66
+yes (12 nested, 14 methods; 65 verified, 1 strong); `self` calls 16/16 and alias calls 10/10 verified yes;
+direct and module calls 48/50 yes (1 `?`: `stale_files` at ui/data.py:344 has no edge; 1 the `bisect` miss);
+orders_app 20/20 decided right, 1 `?` (`OrderRepository.__init__`, its constructor call has no edge).
+
+### 135.4 Not done
+
+- Three cells are shown, all on `exists` and `calls`, and two of them are absences. Every other type has fewer
+  than 30 held-out answers; their answers carry no `measured`.
+- One author wrote both the rules and the gold. The second set was frozen before tq ran on it, but its
+  candidates were drawn from shapes the rules were designed around (names defined once, a callee never spelled);
+  the frequencies say how tq does on such questions, not on the questions an agent will ask. 302 of 357 held-out
+  cases are on this repository.
+- The `calls yes statically_verified` cell is hidden by the dev rule (dev 10/10 above 0.910-0.993), not by n; the
+  rule hides a cell whose dev side looks better as well as worse.
+- Found and not fixed (engine changes measured on the held-out set would need a fresh set to measure them):
+  an import alias that spells another function's name gives a wrong `statically_verified` yes; a name that is
+  both a project function and an imported module (`bisect`, `tokenize`) resolves to the external module node,
+  which gave the wrong weak no above and a `tokenize` yes with no location (right by chance).
+- The engine hash follows static `import` statements only: a module loaded with `importlib` or `__import__`
+  is not followed (none of the package's own modules is loaded that way today; `anchors.py` loads
+  tree-sitter grammars and `codecheck_env.py` the inspected library's modules with `importlib`; a grammar
+  package's version is not hashed), and non-Python data files the engine reads (the
+  packaged `data/`) are not hashed. It is also wide: 186 files, so most edits to the package hide `measured`
+  until the audit is rerun and its table committed.
+- The cells carry no integrity hash: `shown_cells` trusts the committed table's `shown`, `n` and `right`, so a
+  hand edit to `tq_calibration.json` is not detected (only the gold, scorer and engine hashes are checked).
+- A cell's options are a list of those seen, not counts per option: a cell measured on 40 default questions and
+  one `depth=3` question would show its whole k/n for `depth=3`. Today every n >= 30 cell has only the default
+  options.
+- In an installed wheel the gold files and the scorer are absent, so only the recorded hashes are compared; the
+  on-disk re-hash runs in a source checkout only.
+- Study F was not run; the instructions sentence is not added.
+- The audit needs a source checkout with c23c483 in its history; without it the second set's cases on this
+  repository are skipped.
+
+### 135.5 Tests
+
+- `tests/test_tq_measured.py` (16; with test_mcp.py and test_docs.py 110 passed in the review round): the second set is frozen (MANIFEST hash, ids, repositories, pinned commit,
+  orders_app hashes) and `GOLD_FILES` names both frozen held-out files; every case parses and a yes cites a line;
+  the engine hash covers the import closure of `tq.py` (a module reached through another, one imported inside a
+  function, a module created where an import pointed, a new `project_index/` file; never `tq_measured.py`,
+  `benchmark/` or an unrelated module), ignores CRLF and is None without a root; on the real package it reaches
+  `textnorm.py`, `evidence.py`, `codecheck.py` and `search_index.py`, and an edit to `textnorm.py` in a copy of
+  the package hides the committed table's cells; the gold hash is order-free; Wilson values; the display rule (n >= 30, `shown`, decided only); a doctored
+  engine hash, a changed or missing scorer hash, a changed gold hash, other gold files, another schema, an engine edit after the table, a gold file
+  changed or missing on disk, a missing or broken table each hide `measured`; `tq.ask` shows `measured` in JSON and
+  text only for the cell and its measured options (not for `depth=2`, `scope=lib` or a `--no-verify` batch) and
+  survives an unreadable table; the calibration rule (n, decided, dev inside the
+  interval) and the reliability table against the caps; a changed gold file stops the audit; an end-to-end audit
+  on a tiny frozen set (verdicts, summary, table, report written, a table of another gold set never shown); the
+  CLI's exit codes 0/1/2; the committed table's hashes, intervals and shown cells, and its report.
+- `tests/test_tq.py`: a name resolved to a node without a span no longer fails the question (fails without the
+  fix); the MCP text test allows a `measured` part before `why`.
+
+## 136. Broader language coverage from upstream Graphify (D163, 2026-10-01)
+
+### 136.1 Why
+
+Verinoda's extractor is Graphify pinned at `20a20d3` (after v0.9.65). By v0.9.73 upstream had added five
+languages and changed three existing extractors. A project in one of those languages got nothing from the index:
+detect did not classify its files, or classified them and then had no extractor for them. The backlog row names
+COBOL, R, Solidity, Erlang, OCaml, Terraform attributes and Razor. I compared upstream's `graphify/extractors/`,
+`extract.py` (`_DISPATCH`, `_EXTRA_FOR_EXTENSION`, the language-family and case tables, the resolver
+registrations, the shebang table), `detect.py` `CODE_EXTENSIONS` and `analyze.py` `_LANG_FAMILY` with ours. The
+checkout was a shallow clone of tag `v0.9.73` (HEAD `ef4450d9c28acb2b8cdc22d369c1777b77148eef`), read only;
+none of its code was run.
+
+What upstream has and we did not:
+
+| Language / change | Upstream | Here before | Grammar |
+|---|---|---|---|
+| COBOL (`.cbl .cob .cobol .cpy`) | new `extractors/cobol.py` | not classified | none (regex) |
+| VB.NET (`.vb`) | new `extractors/vbnet.py` + partial-class resolver | not classified | `tree-sitter-vb-dotnet==0.3.0` |
+| R (`.r`/`.R`, `Rscript` shebang) | new `extractors/r.py` + sourced-call resolver | classified as code, no extractor (the #1689 warning) | `tree-sitter-language-pack==0.11.0` |
+| Erlang (`.erl .hrl .escript`) | new `extractors/erlang.py` + remote-call resolver | not classified | `tree-sitter-language-pack==0.11.0` |
+| Solidity (`.sol`) | new `extractors/solidity.py` + type-reference resolver | not classified | `tree-sitter-solidity==1.2.13` |
+| OCaml classes | `class ... = object ... end`: class, methods, instance variables | OCaml read, classes dropped | `tree-sitter-ocaml` (existing extra) |
+| Razor `@functions` | `.cshtml` `@functions { }` read like `@code { }` | Razor read, `@functions` methods dropped | none |
+| Terraform attributes | secret redaction inside lists, `{name, value}` pairs in a plain list, sensitive `variable`/`output` blocks | redaction in maps only | `tree-sitter-hcl` (existing extra) |
+
+OCaml, Terraform and Razor were already here; for them the backlog's point is the attribute and construct
+changes above. No other language or file type in v0.9.73 is missing here (`.mcfunction` is ours only).
+
+### 136.2 Decisions
+
+- **Ported as vendored code.** The five new modules are upstream's files with the module-path rewrite of
+  `tools/port_upstream.py`, plus the review-round fixes below, each marked "Verinoda patch". `ocaml.py`, `razor.py` and `terraform.py` are upstream's v0.9.73
+  files; they had no local changes. Each changed spot in `extract.py`, `detect.py`, `analyze.py`,
+  `extractors/__init__.py` and the three extractors carries a "Verinoda patch: ported from upstream Graphify
+  v0.9.73 (ef4450d)" comment. The rest of `extract.py` stays at the pinned commit. Upstream's other changes since
+  the pin are not taken here (Python import ambiguity, JSX calls, enum containers, Go package sinks and more).
+  `docs/UPSTREAM.md` lists the ported files under Modified. Upstream's `LICENSE`, `LICENSE-MIT` and `NOTICE` were
+  already kept and cover these files; the vendored files carry no per-file notice, and the new ones follow that.
+- **Each grammar is an optional extra, pinned as upstream pins it.** These are `vbnet`, `r`, `erlang` and
+  `solidity`. `languages` installs every optional grammar that has prebuilt wheels on all three systems: the new
+  three packages plus `tree-sitter-sql`, `-hcl`, `-pascal`, `-ocaml` and `-commonlisp`. It leaves out
+  `tree-sitter-dm`, which builds from source outside Windows, and `robotframework`, which is not a grammar.
+  `all` gains the three new packages. `tree-sitter-language-pack` 0.11.0 bundles its grammars as compiled
+  modules (169 `.pyd` files under `bindings/`, `r.pyd` and `erlang.pyd` among them). Its `__init__` imports only standard-library modules and three
+  tree-sitter packages and has no download path, so nothing goes on the network.
+- **A missing grammar is a reported, not-extracted file.** The extractors never raise for a missing grammar;
+  they return `{"nodes": [], "edges": [], "error": "... not installed"}`, and the build goes on. This was
+  upstream's behaviour and is unchanged. New `verinoda/grammars.py` turns that into a report. After a scan, or
+  an update that rebuilt the graph, `not_extracted` lists the project's files that need an optional grammar this
+  install cannot load and that have no node in the graph. They are grouped by grammar, each group with the reason
+  (`tree-sitter-solidity is not installed`, or `... is installed but failed to load: <error>`) and the line
+  `pip install "verinoda[solidity]"`. The CLI prints one warning line per group. This covers the older optional
+  grammars too (SQL, Terraform, OCaml, Common Lisp, DreamMaker, Robot Framework). They failed just as silently
+  before; only the vendored build log said so, and it named `graphifyy[...]`. A test keeps `grammars.SUFFIXES`
+  equal to the extractor's own `_EXTRA_FOR_EXTENSION`.
+- **Installing a grammar reads the skipped files on the next `update`.** `grammars.signature()` is part of
+  `buildlock.extraction_stamp`. It names the optional grammars whose package is found, using `find_spec` with no
+  import, in 10 ms. So the first `update` after installing or removing one rebuilds the graph with no changed
+  file. The vendored pipeline does not stamp files that failed, so it extracts them again.
+- **The minimum downstream wiring, so that `query`, `trace` and `tq` work:**
+  - spans from the grammars (`index._TS_LANGS`: `.sol`, `.vb`, and `.r` through the language pack);
+  - a tree-sitter definition that ends at column 0 of a line now ends on the line before. VB.NET's
+    `method_declaration` includes the newline after `End Function`. The rule also shortens Groovy and Scala
+    definitions whose node ends at column 0; they were one line too long (the following `}` or blank line), and
+    a test pins one Groovy span. graph.json is unchanged on every corpus measured, since it holds no spans;
+  - `lang:cobol|erlang|r|solidity|vbnet` (aliases `cob`, `erl`, `sol`, `vb`, `vb.net`);
+  - an Erlang function, labelled `name/arity`, is named exactly by `name` (`naming._Names`,
+    `retrieval._names_symbol`). Before, `trace checkout total` resolved only by similarity, and `tq`, which takes
+    exact names only, could not name it;
+  - the new suffixes join the code-suffix tables (`analysis` callers, `lexicon` vocabulary, `verdict_gate`
+    sites) and `check`'s `OTHER_LANGUAGES`, so a file there is `not_checked` and is never passed;
+  - Erlang, R and Solidity join `case_ids`' case-sensitive suffixes. COBOL and VB.NET are case-insensitive, as
+    upstream's `_CASE_INSENSITIVE_EXTS` says. Those three extractors kept only the first node per (case-folded)
+    id, so the split had nothing to split until the review round; now they mint the second spelling's id
+    themselves (below).
+- **Review round.** A reviewer confirmed five findings; all are fixed, each with a regression test in
+  `tests/test_languages_ported.py`:
+  - VB.NET nested types were dropped with all their members and calls. tree-sitter-vb-dotnet 0.3.0 wraps only
+    a top-level type in `type_declaration`; a nested `Class`/`Structure`/`Module` block is a direct child of the
+    outer block. `scan()` now recurses into both forms and puts a nested type under its outer type (`contains`),
+    with the outer type's full name as its namespace.
+  - COBOL scope terminators (`END-READ.`, `END-EVALUATE.`, ...) became paragraphs and took the later
+    `PERFORM`/`CALL` edges. A name starting with `END-` is never a paragraph now, and in fixed format a
+    paragraph header must start in Area A (columns 8-11), which also rejects a lone `WS-B.` closing a
+    statement in Area B.
+  - Names that differ only in case were merged in R, Solidity and Erlang (above). `extractors/base.py`
+    `_CaseIds`: the first spelling seen in a file keeps the id, another spelling gets
+    `<id>_<6 hex of sha1(name)>`, the form `case_ids` gives a split member. Scanned end to end: `Foo()` calls
+    `foo()`, contract `t` owns `x()`, `f/0` calls `'F'/0`.
+  - A COBOL `COPY` of a copybook in another directory (a COPYLIB layout) made a ghost node. The extractor now
+    links only a copybook that exists next to the program; any other `COPY` is left as a pending entry that the
+    new `cobol_copybooks` resolver binds by stem, ignoring case, among the extracted COBOL files (one in the
+    program's directory wins, otherwise exactly one match). No match, or several, gives no edge. The resolver
+    finds the program again by file and label, because the ids a pending entry carries are not final yet.
+  - The draft said no existing output changed; the column-0 span rule changes Groovy and Scala spans (above).
+  Cheap minors fixed too: an Erlang export in base notation (`f/2#1`) no longer drops its file with a
+  `ValueError`, and `NOTICE` now names the v0.9.73 files and the "Verinoda patch" convention. The other minors
+  are under Limits.
+- **Erlang spans stay heuristic.** tree-sitter-erlang makes each clause group a separate `fun_decl`, so a
+  function with two clause groups would get the first group's end. The next-symbol rule gives the whole function
+  on the fixture.
+
+### 136.3 Measured
+
+Windows 11, Python 3.13.14, the main checkout's `.venv` with the grammars below installed. Each corpus was
+copied to a temporary folder and scanned with `python -m verinoda scan --json` three times per code version.
+"base" is `competitor-backlog` at `c23c483` (from `git archive`), "new" is this branch. The figures are the
+`index_seconds` medians and graph.json compared as sets of `(id, label, source_file, source_location)` nodes and
+`(source, target, relation, confidence, source_location)` edges.
+
+| Corpus | Files | base | new | Graph difference |
+|---|---|---|---|---|
+| `tests/fixtures/languages` (the 12 new fixture files) | 12 | 0 nodes, 0 edges, 0.69 s | 54 nodes, 60 edges, 0.90 s | +54 nodes, +60 edges, all from the new suffixes |
+| `tests_upstream/fixtures` (the other languages) | 111 | 750 / 828, 5.21 s | 750 / 828, 5.02 s | none |
+| `examples/orders_app` | 11 | 41 / 74, 0.91 s | 41 / 74, 0.92 s | none |
+| gin (Go, pinned clone) | 260 | 1963 / 4615, 6.96 s | 1963 / 4615, 6.32 s | none |
+| guzzle (PHP, pinned clone) | 176 | 3927 / 7869, 13.13 s | 3927 / 7869, 13.94 s | none |
+
+- Review round (one scan each, after the fixes): `tests/fixtures/languages` 54 nodes, 60 edges and
+  `tests_upstream/fixtures` 750 / 828 with the same four `not_extracted` groups; unchanged.
+- The scan-time differences on the unchanged corpora are within run-to-run noise (base gin runs: 7.79, 6.80,
+  6.96 s).
+- On `tests_upstream/fixtures` the new scan reported `not_extracted`: 7 SQL, 2 Robot Framework, 1 Common Lisp
+  and 1 DreamMaker files, each with its reason and install line (those grammars are not installed here).
+  Before, those 11 files were dropped with no word in the scan output.
+- Extraction of each fixture directory alone through `extract()` (first call in a process, grammar import
+  included): COBOL 77 ms (3 files), Erlang 110 ms, R 50 ms, Solidity 64 ms, VB.NET 66 ms.
+- `grammars.signature()`: 10 ms (six grammars found, nothing imported).
+- End to end on the fixture repository: `trace PlaceOrder Validate` (VB.NET, across the two partial files),
+  `trace report drop_missing` (R, through `source()`), `trace transfer _move` (Solidity),
+  `trace MAIN-PARA TAXCALC` (COBOL `CALL`, INFERRED) and `trace checkout total` (Erlang `cart:total/1`, exact
+  name) each found the path. `query "lang:solidity transfer"` and `lang:vbnet` / `lang:erlang` rank only that
+  language's units, with tree-sitter spans for VB.NET (`PlaceOrder` 5-9) and Solidity.
+- Grammar wheels installed into the main checkout's `.venv` (`uv pip install`, all from PyPI and all listed in
+  upstream's `pyproject.toml`): `tree-sitter-vb-dotnet==0.3.0`, `tree-sitter-language-pack==0.11.0` (it pulled
+  its own dependencies `tree-sitter-embedded-template==0.25.0` and `tree-sitter-yaml==0.7.2`),
+  `tree-sitter-solidity==1.2.13`, and the existing extras' grammars from upstream's dev group to test the
+  OCaml and Terraform ports: `tree-sitter-ocaml==0.26.0` (`>=0.25.0`) and `tree-sitter-hcl==1.2.0` (`>=1.2.0`).
+
+### 136.4 Not done
+
+- **Without the extras**, a default install reads COBOL only. VB.NET, R, Erlang and Solidity are reported under
+  `not_extracted`, and their extraction tests are skipped where the grammar is missing.
+- **Language-specific layers are not wired for the new languages.** These stay at file level or heuristics:
+  - `anchors` facets and claim fingerprints, so staleness is per file;
+  - `extract` (the definition around a line), `grep-ast`, `health` and the review rules: no tree-sitter for
+    these languages;
+  - `routes`, `schema` and `taint`;
+  - `check` / `api` (the files are `not_checked`);
+  - test detection for R `testthat`, Erlang `_SUITE`/EUnit and Solidity Foundry tests;
+  - the receiver-call pass.
+  The OCaml, Common Lisp and other older optional languages were in the same state before this change.
+- **Spans:** COBOL and Erlang use the next-symbol heuristic (capped at 80 lines). That is right for COBOL
+  paragraphs. An Erlang function keeps the lines up to the next function.
+- **What the extractors give is upstream's:**
+  - COBOL `CALL` edges to another program are INFERRED and match the program name only;
+  - VB.NET `Imports` of a .NET namespace is an external-namespace node;
+  - R binds a call only through an explicit `source()` of the defining file;
+  - Erlang binds remote calls by module, name and arity;
+  - Solidity: a contract method calling a same-file free function gets no edge (only free-to-free calls bind),
+    `import {Base as B}` with `contract C is B` gives an external node `B` instead of an edge to `Base`, and
+    `super.hook()` is not linked;
+  - VB.NET: an unqualified call to a `Module` function from a class (`Fmt(Name)` with `Fmt` in
+    `Module Helpers`) and `MyBase.Init()` into an inherited base class get no edge; only `Me`/`MyClass`/
+    unqualified own-type calls and `Type.Method()` bind;
+  - Terraform redaction misses a heredoc value (`<<EOF ... password=... EOF`) and name/value pairs inside
+    `jsonencode(...)`; plain lists, maps, sensitive variables/outputs and `.tfvars` are covered.
+- **Case-only name pairs:** in R, Solidity and Erlang the spelling defined first keeps the plain id, while
+  `case_ids` (other languages) gives it to the spelling that sorts first. Both are stable while the names stay.
+- **`.cl` is Common Lisp**, as upstream's `_DISPATCH` has it. A C or GPU project with OpenCL `.cl` kernels and
+  no Common Lisp grammar sees them under `not_extracted` as Common Lisp files with a `verinoda[commonlisp]`
+  install line.
+- **COBOL copybooks** are bound by stem among the files scanned; a copybook outside the scan, or a stem that
+  several directories hold (none of them the program's), gives no `imports_from` edge.
+  Upstream's own tests for these extractors were not copied or run (the rule: no third-party tests run); ours
+  are new fixtures.
+- **`not_extracted` has gaps:**
+  - It reads suffixes only. An extensionless `Rscript` file whose grammar is missing is not listed (the build
+    log still has the vendored warning).
+  - A file kept out of the graph for another reason (`.graphifyignore`) while its grammar is missing is listed
+    with the grammar reason.
+- **Installing or removing a grammar is noticed only by a new process.** The extraction stamp is computed once
+  per process, so a long-running `mcp serve` does not see the change until it restarts. Two installs with
+  different optional grammars rebuild each other's graph on `update`; their graphs differ anyway.
+- **Deprecation warnings:** `tree-sitter-solidity` 1.2.13's binding hands `Language` an int, and tree-sitter
+  0.25 warns that this is deprecated (seen in tests, hidden in normal runs). A future tree-sitter that drops int
+  support will make Solidity report "failed to load" until the pin moves.
+- **Pre-existing failures:** three `tests_upstream` tests failed before this change and still fail on Windows:
+  - `test_terraform_modules::test_same_named_directories_and_cross_file_references_stay_separate` (a `\` vs `/`
+    path comparison; it fails with the base `terraform.py` too; checked);
+  - two Markdown tests in `test_languages.py` (cp1254 console encoding, frontmatter).
+  None of them touches the ported code.
+
+### 136.5 Tests
+
+`tests/test_languages_ported.py` (26 tests), with fixtures written for it in `tests/fixtures/languages/`. The
+fixtures are small programs of our own; nothing is copied from upstream.
+
+- One fixture test per new language, asserting nodes and calls/imports edges:
+  - COBOL: paragraphs, `PERFORM ... THRU` both ends, `COPY` imports_from the copybook, `CALL` to the other
+    program;
+  - Erlang: a local call, a `cart:total` remote call, `-include`, exports, behaviour;
+  - R: `source()` imports_from, calls bound only through the sourced file, no edges to `mean`/`print`;
+  - Solidity: import, inheritance, method and call edges, a modifier `uses` edge;
+  - VB.NET: `Imports`, calls, and a call into the other partial-class file.
+- The ported changes to existing extractors: OCaml class / method / instance variable, Razor `@functions`, and
+  Terraform redaction in lists, name/value pairs in a list and a sensitive variable.
+- Review round: VB.NET nested types with their members and a call; COBOL `END-READ.`/`END-EVALUATE.` and an
+  Area B name are not paragraphs; a COPYLIB copybook in another directory is linked (to the real node) and a
+  missing one gives no edge; `Foo`/`foo` (R), `T`/`t` (Solidity) and `f`/`'F'` (Erlang) stay two symbols with
+  their call; an Erlang base-notation export; a Groovy span ending at column 0.
+- A missing grammar, one parametrized test per tree-sitter language (`sys.modules[...] = None`): the extractor
+  returns an error result with "not installed", `grammars.problem` names the distribution, and the whole
+  `extract()` goes on without the file.
+- Scan and update end to end (git repo with all fixtures, Solidity blocked):
+  - `scan` reports exactly the two `.sol` files with the reason and the install line, and the other languages
+    are in the graph;
+  - `update` is a no-op;
+  - "installing" the grammar makes the next `update` rebuild with 0 changed files, and the `.sol` files are in
+    the graph.
+- `grammars.SUFFIXES` equals the extractor's `_EXTRA_FOR_EXTENSION`; `not_extracted` grouping and `describe`;
+  the extraction stamp changes with a grammar.
+- Spans (VB.NET 5-9 not 5-10, Solidity, R), the `lang:` filter names, Erlang exact naming, LF fixtures.
+
+Runs (one pytest process at a time):
+- `tests/test_languages_ported.py`: 20 passed (before the review round).
+- `tests/test_index.py test_workflow_index.py test_query_filters.py test_retrieval.py test_case_ids.py
+  test_lexicon.py test_verdict_gate.py test_codecheck.py test_cli.py test_analysis.py` plus the 17 tests of the
+  new file at that point: 482 passed.
+- `tests_upstream/test_ocaml.py test_terraform.py test_terraform_modules.py test_extractors_registry.py
+  test_languages.py test_dotnet.py test_language_resolvers.py test_detect.py test_analyze.py`: 771 passed,
+  58 skipped, 3 failed (the pre-existing three above).
+- `tests/test_mcp.py tests/test_docs.py`: 94 passed.
+- Review round, after merging `competitor-backlog`: `tests/test_languages_ported.py tests/test_mcp.py
+  tests/test_docs.py`: 120 passed (26 + 94). The five new regression tests failed on the code before the fixes.
+
+## 137. Several projects from one MCP server, HTTP transport and daemon (D164, 2026-10-01)
+
+### 137.1 Why
+
+Before this change, a Verinoda MCP server answered for exactly one project. A user with several projects
+registered one server per project in each agent. Each server was its own Python process: it imported the stack
+again, loaded its own graph, and was a separate menu entry for the client.
+
+The backlog row is done when one server process answers two projects. Graphify, codebase-memory-mcp, Codanna and
+Kodit already serve several projects, and some of them do it over HTTP. HTTP lets one long-lived server outlive the
+agent sessions and be shared by several clients on the same machine.
+
+### 137.2 Decisions
+
+- **Selecting projects.** `verinoda mcp serve --projects A,B` takes three forms of entry:
+  - registered names (`verinoda projects add|list|remove`, kept in `projects.json` in the user config folder,
+    never inside a project);
+  - `NAME=PATH`;
+  - plain folders. A plain folder takes its registry name if it has one, else its folder name.
+
+  `--all-projects` serves the whole registry. Two projects with the same name, or the same folder listed twice,
+  stop the server with the fix. One is never picked silently.
+- **The `project` argument.** In a server over several projects, every tool takes an optional `project`: a name,
+  or an absolute path inside a served project. `run_tool` takes it at the top level, or inside `arguments`.
+  - It may be left out when only one project is served.
+  - It may also be left out when an absolute path argument of the call (`file_path`, `path`, `paths`,
+    `as_path`, `targets`, `target_path`) lies inside exactly one project. This is how the Read and Grep hooks'
+    calls work unchanged.
+  - Otherwise the call returns `project_required` or `unknown_project`, with the names in the hint.
+  - A path outside every served project never opens a new project.
+  - `index_status` without `project` returns the status of every project. `list_projects` never needs one.
+- **The menu.** A single-project server's menu is unchanged; the `project` argument exists only in a
+  multi-project server. Each tool adds about 150 characters of schema for it.
+- **Profiles, trust and config per project.** Each project resolves its own profile exactly as a server over it
+  alone would (`resolve_profile`): `--profile`, else its own `.verinoda/config.json` only if the user trusts the
+  project, else the user config.
+  - The menu is the union of these profiles: full if any project resolves to full.
+  - A call is checked against the profile of the project it is for. If that profile does not serve the tool,
+    the call is refused with `not_served`. The same happens when a core project's `analyze` or `code_check`
+    gets a full-menu argument with a non-default value, such as `plan_json` or `env`.
+  - So a trusted project that asks for the full menu does not open it to an untrusted one.
+  - Trust and config are read by the same code as before, because each project's `AtlasTools` runs on that
+    project's root.
+- **Memory bound.** Projects share one lock, so calls are serialised exactly as within one project. stdout
+  redirection and index builds are process-wide.
+  - Only the `--max-loaded` (default 3) most recently used projects keep their graph, lexicon and kept
+    `project_query` answers. An older project drops them (`AtlasTools.drop_caches`) and loads them again on its
+    next call.
+  - The bound counts projects, not bytes. Without a new dependency, the size of a loaded graph cannot be
+    measured cheaply in-process.
+  - `index_status` does not count as a use, because it never loads a graph.
+- **`list_projects` and `index_status` are full-profile tools.** Measured on examples/orders_app:
+
+  | Single-project core menu | Characters |
+  |---|---|
+  | Today | 4,426 |
+  | With both tools behind `run_tool` | 4,554 |
+  | With `index_status` listed directly | 4,860 |
+
+  The test limit is 4,500, so both stay out of the single-project core menu. A core server over several projects
+  reaches both through `run_tool`; there the server instructions also name every project.
+- **HTTP transport.** `--transport http` uses the installed SDK's own streamable HTTP app (mcp 2.2.0 here;
+  `streamable_http_app` on mcp 1.8 or later). It runs under uvicorn, which the SDK already depends on, so there
+  is no new dependency.
+  - The socket is bound by Verinoda: 127.0.0.1:8765 by default. `--port 0` picks a free port.
+  - Another address needs an explicit `--host`, and the server then warns that it is reachable from other
+    machines and unencrypted.
+  - The SDK's DNS-rebinding check stays on for loopback hosts.
+- **The token.** A pure-ASGI middleware answers 401 (`WWW-Authenticate: Bearer`) to every HTTP request without
+  `Authorization: Bearer <token>`, before the request reaches the SDK. WebSocket and other ASGI scopes are
+  closed.
+  - The token is `secrets.token_urlsafe(32)`, compared with `hmac.compare_digest`.
+  - It is stored in `mcp-token` in the user config folder. On POSIX the file is mode 0600. On Windows,
+    `icacls` removes the inherited access, grants the user alone and removes the entries a new file can carry
+    explicitly.
+  - `verinoda mcp token [--rotate]` prints the token. `--rotate` is refused while the daemon runs: the daemon would
+    keep the old token, and `daemon stop` could no longer reach it.
+  - The scheme is matched case-insensitively (`bearer <token>` is accepted, as RFC 7235 allows); the token part is
+    compared in constant time.
+  - Nothing connects outbound. The hub never resolves a UNC or device path (`\\host\share`, `//host/share`) an agent
+    passes as `project` or as a path argument: on Windows, resolving one opens an SMB connection to that host.
+    Such a path never names a served project.
+- **Daemon.** The daemon was cheap to add, so it is included: `verinoda mcp daemon start|status|stop`.
+  - `start` runs `mcp serve --transport http` detached. The server writes `mcp-daemon.json` (pid, url, projects)
+    once it accepts connections (after the app's startup; never when that startup failed), and `start` waits for
+    that file.
+  - `status` and `stop` use two token-protected routes of Verinoda's own: `GET /verinoda/status` and
+    `POST /verinoda/shutdown`. `stop` therefore never signals a process id that may have been reused.
+  - On Windows a venv's `python.exe` is a launcher, so the pid in the state file is the server's own, not the
+    launcher's. A start that never listens is killed with its process tree.
+  - When the server answers but refuses the current token (rotated by hand after it started), `status` and `stop`
+    report it as still running, with its pid and how to end it. The state file stays, so the server is never lost
+    from view, and `stop` exits 1. Only a port where nothing answers counts as a stale state file.
+- **Review round.** A review of the first version found four problems, fixed with a regression test each:
+  - `daemon stop` after `mcp token --rotate` got 401, treated it as a stale state file, removed it and exited 0,
+    while the server kept running untracked. Now 401 means "still running" (above), and `--rotate` is refused
+    while the daemon runs.
+  - The vendored file stat index (`stat-index.json`, the fast path for unchanged files) was pinned to the first
+    project a process built. A hub building a second project wrote that project's entries into the first
+    project's `.verinoda/` folder, and the second project never got its own index. `index.build` now writes the
+    pinned index to its own project's file and starts over when it builds another project.
+  - The hub called `realpath` on agent-supplied absolute paths, UNC paths included (an SMB lookup to any host,
+    before the call was refused). The first version's "nothing connects outbound" was therefore not true for the
+    hub. UNC and device paths are now never resolved.
+  - With `--watch` over several projects, each watcher built in its own thread without the hub's lock. A build
+    sets process-wide state (the vendored-code switch `VERINODA_GRAPH_VENDORED`, redirected output), so one
+    project's `index.vendored` could leak into another project's concurrent build. Watcher updates now take the
+    hub's lock, so builds in one process never overlap.
+  - Minor fixes from the same review: the state file is written only once the server accepts connections; the
+    bearer scheme is case-insensitive; `run_tool` with two different projects (top level and inside `arguments`)
+    is refused with `invalid_argument` instead of using one of them; a `projects.json` that exists but cannot be
+    read or parsed is an error, so `projects add` never writes over it and loses the other registrations.
+
+### 137.3 Measured
+
+Measured on 2026-10-02 on Windows 11 with Python 3.13 and mcp 2.2.0. Each row is a fresh process, built
+in-process, timing `project_query` through the SDK (`srv.call_tool`). "Second call" is the same question again,
+answered from the kept answer. Memory is the working set (private bytes in brackets). Each configuration ran twice;
+both runs are shown.
+
+Large project: a copy of Verinoda's own package (`verinoda/`, `graph.json` 16.1 MB). A second copy of it serves
+as the second project.
+
+| Configuration | Memory after the first calls | First call | Second call |
+|---|---|---|---|
+| Single-project server (no hub), 1 project | 166 / 165 MB (152 / 150 MB) | 2.23 / 2.10 s | 0.10 / 0.11 s |
+| Hub, 1 project | 165 / 165 MB (151 / 150 MB) | 2.46 / 2.11 s | 0.11 / 0.10 s |
+| Hub, 2 projects, `--max-loaded 3` | 233 / 234 MB (219 / 220 MB) | 2.28 / 2.11 s for the first project, 1.72 / 1.54 s for the second | 0.11 / 0.10 s and 0.12 / 0.10 s |
+| Hub, 2 projects, `--max-loaded 1` (calls alternate) | 182 / 182 MB at the end (167 / 166 MB) | 2.15 / 2.19 s and 1.63 / 1.54 s | 0.88 / 0.90 s and 1.00 / 1.00 s: each switch reloads the graph |
+
+- An imported, built server with no graph loaded uses 67 MB.
+- A second large project adds about 68 MB to one process, while a second server process would cost 166 MB.
+- The second project's first call is faster (1.5–1.7 s against 2.1–2.5 s) because the imports are already warm.
+- `--max-loaded 1` holds the process at the size of one graph plus about 15 MB, at the price of a graph reload on
+  every switch.
+
+Examples (`examples/orders_app`, `examples/forge_mod`):
+
+| Configuration | Memory | First call |
+|---|---|---|
+| Single-project server, orders | 84 MB | 0.78 s |
+| Hub, orders and forge | 87 MB | 0.70 s for orders, 0.19 s for forge |
+
+Menu sizes (characters of the listed tools, compact JSON, examples/orders_app and forge_mod):
+
+| Server | Menu | Instructions |
+|---|---|---|
+| Single-project core (unchanged) | 4,426 | 1,299 |
+| Single-project full (43 tools) | 48,980 | not measured |
+| Two-project core | 5,168 | 1,697 (with both paths) |
+| Two-project full | 54,144 | not measured |
+
+### 137.4 Not done
+
+- **Memory.** The bound counts projects, not bytes. A very large graph still loads whole. Session notes (the
+  passages `project_query` already printed) stay for every project ever called.
+- **Concurrency.** Calls to different projects wait for each other, as calls within one project always did. A
+  long `analyze` on one project holds the others. With `--watch`, a watcher's update holds them too, for as long
+  as it builds.
+- **Menu.** The menu is read at startup. Projects added to the registry, a project trusted later, or decision
+  records added later are seen only after a restart. When the profiles differ, the menu shows the union, and the
+  narrower project's calls are refused per call rather than hidden.
+- **Path-based project matching.** It needs absolute paths. A repository-relative path never says which project,
+  because it could name a file in any of them.
+- **Security of the HTTP transport.**
+  - Any process of the same user can read the token file.
+  - On Windows, the ACL step depends on `icacls` and the `USERNAME` / `USERDOMAIN` variables. If it fails, the
+    server warns and keeps a file that is only as private as the user config folder.
+  - There is no TLS: on a non-loopback `--host` the token crosses the network in clear text, and the server
+    warns about this.
+  - There is no OAuth and no per-client token.
+  - A rotated token takes effect only after a restart. `--rotate` is refused while the daemon runs, but a
+    foreground `mcp serve --transport http` keeps the old token and is not detected.
+  - On Windows, the token's temporary file is created with the config folder's inherited access and narrowed by
+    `icacls` just after, a short window. An existing token file is not checked again on Windows (on POSIX its mode
+    is).
+- **Daemon.**
+  - One daemon per user config folder.
+  - No restart on crash, no start at login, no log rotation (`mcp-daemon.log` grows).
+  - If the server dies without removing its state file, `status` reports a stale file and `stop` removes it.
+  - A project path containing a comma must be registered and served by name.
+- **Shared `--watch`.** `--watch` starts one file watcher per indexed project, each with its own thread. Their
+  updates run under the hub's lock, one at a time.
+- **Not exercised in tests.** The HTTP transport on mcp 1.x, and the token-file permission path on Linux and
+  macOS.
+
+### 137.5 Tests
+
+- **`tests/test_mcp_projects.py` (new, 16 tests).**
+  - Two scanned fixture projects (copies of examples/orders_app and examples/forge_mod) are answered from one
+    in-process server. Each answer is the same text a single-project `AtlasTools` gives.
+  - The core menu carries `project` on each tool, and `run_tool` reaches `list_projects` and `index_status`.
+  - Project selection works by name, by an absolute path given as `project`, by `project` inside `arguments`,
+    and by an absolute `file_path`.
+  - A missing project gives `project_required`, including for `run_tool` and `index_update`, and for a relative
+    path. An unknown name, a folder name that is not the registered name, and a path outside every project give
+    `unknown_project`, and no `.verinoda/` is created there.
+  - A single project needs no argument.
+  - The LRU bound: with `max_loaded=1` the older graph is dropped and reloaded, and the eviction is counted.
+  - Per-project profile and trust: a trusted project's config gives full and an untrusted one stays core.
+    `lexicon_show` and a `plan_json` argument are refused with `not_served` for the untrusted project.
+    `--profile` applies to all projects.
+  - The registry and its spec errors.
+  - HTTP on a real 127.0.0.1 port (port 0): with no token, a wrong token, a longer token or a truncated token
+    the server returns 401, and also on the status route. With the token: `initialize`, then `project_query`
+    for both projects in one session, then the status route, then the shutdown route, which stops the server
+    thread. The server is always shut down in a `finally`.
+  - The token file is the user's alone (Windows ACL with one entry, or POSIX mode), it is kept between runs, and
+    rotation replaces it.
+  - The default bind is loopback.
+  - Daemon start, status, a second start that finds it already running, and stop, on a real background
+    process. A `finally` kills the process tree if a step failed.
+  - Review round, one test each (each fails on the first version):
+    - A real server started by `serve_http` writes its state file once it answers, accepts `bearer` in lower
+      case, refuses `mcp token --rotate` while it runs, and after a rotation by hand `daemon stop` and
+      `daemon status` report it as still running (`token_mismatch`, its pid) and keep the state file. The
+      server is then stopped with the old token, in a `finally`.
+    - Builds of both projects in one process: each `stat-index.json` holds only its own files, as relative keys.
+    - With `os.path.realpath` spied on (Windows): a UNC path as a `grep_context` argument and as `project`
+      (both spellings) is refused (`project_required`, `unknown_project`) and never resolved.
+    - `run_tool` with two different projects is refused with `invalid_argument`; the same project twice works.
+    - A corrupt `projects.json` stops `projects add` and `--projects`, and the file is left as it was.
+    - A watcher's update runs with the server's lock held.
+- **`tests/test_mcp.py`.** The two tools are added to the expected parameters, the read-only set and the
+  every-tool call table. On an unscanned project both describe the state (`not_scanned`) instead of returning
+  `not_initialised`. The single-project core menu limit (under 4,500) still holds unchanged.
+- **`tests/test_docs.py`.** README, ARCHITECTURE and UPGRADING state 43 tools; README's command table lists
+  `projects`.
+
+Counts on the final commit:
+- `tests/test_mcp_projects.py`: 16 passed.
+- `tests/test_mcp.py`: 75 passed.
+- `tests/test_docs.py`: 19 passed.
+
+One pytest process ran these three files. Afterwards no server process remained.
+
+## 138. Definition lines: overload implementations and annotated declarations (D165, 2026-10-01)
+
+### 138.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md) found two ways
+Verinoda cited the wrong line for a definition:
+
+- **D4.** A Python function declared with `@overload` stubs was cited at the first stub. sqlmodel's
+  `Field` was reported at sqlmodel/main.py:242, an empty `...` body, instead of the implementation
+  at :388. A trace or a "what does Field call" question started from the stub.
+- **D8.** A Java method with an annotation was cited at the annotation line, while a decorated
+  Python def is cited at its `def` line. gson's `doPeek` was reported at JsonReader.java:581
+  (`@SuppressWarnings("fallthrough")`) instead of :582 (`int doPeek()`). `@Override` is on almost
+  every Java method, so these answers were often one line off.
+
+Both come from the vendored extractor (verinoda/project_index/extractors/engine.py). For every
+tree-sitter language except Python, it took the line where the declaration node starts. In Java,
+Kotlin and C#, that node starts with its modifiers, so its annotations or attributes come first.
+For Python, the first definition of a name won: a redefinition with the same id was dropped, and
+its call edges were merged into the first node.
+
+### 138.2 Decisions
+
+- **The cited line is the line of the name.** `_declaration_line` (engine) and `ts_name_line`
+  (anchors) give the line of the node's `name` field when that field is inside the node, and the
+  node's first line otherwise. C/C++ declarators and synthesized names (Swift `deinit`) keep the
+  first line. The rule is the same for every grammar, not a Java-only special case:
+  - Python gets the same answer as before.
+  - TS methods and exported classes keep their line: a method decorator is a sibling node in the
+    class body, and the decorator of an `export class` sits in the `export_statement`. A decorated
+    class without `export` moves to its name line (`@Injectable()` / `class U {}`: from the
+    decorator's line to the class line), because its decorator is inside `class_declaration`.
+  - Java, Kotlin and C# methods and classes move to their name line. So do PHP and Swift attributes
+    that sit inside the node; I did not test those two.
+- **The span still starts at the annotation.** `index.ts_def_info` returns the old
+  `start -> end` map unchanged. Apart from it, it lists the definitions named on each line, with
+  their name, first line, end and whether they are callable (`named`). `Graph.span` takes from
+  `named` only the definition whose name matches the node's label (a method for a `name()` label,
+  the innermost on a tie), and only when that definition starts above the name line. Every other
+  node gets `ends.get(start)` as before, so a member declared on the name line of an annotated type
+  keeps its own span. As a result:
+  - the annotation line still belongs to the method or type it annotates (`symbol_at`,
+    `own_line_count`, rationale, affected lines);
+  - `source()` still shows the annotation.
+
+  A graph built before this change (located at the annotation) gets exactly the span it had.
+  Python spans are unchanged: they start at the `def` and exclude decorators, as before.
+- **Anchors facts.** For tree-sitter languages, the `def` field is now the name line. `start` stays
+  the node's first line, the same `start`/`def` pair Python facts already had (decorator line, def
+  line), so `a in (start, def)` matches in analysis, critique and entail. Fingerprints did not
+  change, so the scheme `ts1` and every anchor made under it stay valid. Only the `file_facts` row
+  key changes (`cache_scheme`: `ts1.def2`), so facts cached before are computed again once instead of
+  being read back with the old `def`.
+- **review_rules** (`_ts_def_at`, `ts_header`, `ts_param_names`, `ts_single_return`,
+  `ts_param_count`) finds a definition by either its name line or its first line (`_defined_on`).
+  This covers new facts and facts cached before. When several definitions match, `_ts_def_at`
+  ranks them: a definition with the symbol's name (review passes the last part of the qualified
+  name), then one whose first line and name line are both the line (the innermost), then one
+  named there, then one starting there. Anonymous nodes are skipped, so the `class` keyword token
+  is never taken for the class.
+- **Python overloads are one node, at the implementation.** I kept the existing convention:
+  same-scope redefinitions share one id and one node. Java overloads are separate nodes (D57)
+  only because a call binds to one of them by argument count, which does not apply to `@overload`
+  stubs.
+  - The decorated-definition branch records each `function_definition` under `@overload`
+    (`overload` or `typing.overload`).
+  - The first stub creates the node, which is flagged `overload_stub: true`.
+  - The first def without `@overload` moves the node to its own line and clears the flag.
+  - The stubs' lines are kept in the node's `overloads` metadata.
+  - With stubs only (a stub module), the node stays at the first stub and keeps the flag.
+  - Other redefinitions (a conditional `def` or a property setter) keep first-wins, as before.
+- `_AST_CACHE_SCHEMA` 8 -> 9, so cached per-file extractions are made again.
+- **Review round.** A review found three defects, all fixed:
+  - `Graph.span` gave a member the whole span of an annotated type whose name was on the member's
+    line, and `symbol_at` gave the annotation line to that member. In `@FunctionalInterface` /
+    `public interface Fn { void apply(int x); }`, `.apply()` spanned the interface (6,7) and line 6
+    belonged to it; in `@Deprecated` / `public class W { void a() { b(); }`, `.a()` spanned the
+    whole class. The cause: name lines were written into the shared `ends` map, keyed only by
+    line. They are now kept apart (`named`, above) and matched by name, so these spans are again
+    the ones the code before this change gave (`.apply()` (6,6), `.a()` its own line) and the
+    annotation line belongs to the type.
+  - `review_rules._ts_def_at` and `ts_header` took the annotated type for the member declared on
+    its name line (the pre-order walk met the type first): `ts_param_names` on `apply` gave `[]`
+    instead of `['x']`, and `ts_header` gave the interface's header. They now rank the matches as
+    described above. The ranking also fixes an older defect: under an annotation, the `class`
+    keyword token on the name line was returned as the definition.
+  - These notes said TS gets the same answer as before. A decorated TS class without `export`
+    moves to its name line; the TS bullet above now says so, and a test pins it.
+  - Checked and left as they are: health metrics (`FnMetrics`) start a function's range at its
+    first annotation or decorator in every language (`health.py` takes the first decorator's line
+    for Python too), so their citations are consistent and did not change.
+
+### 138.3 Measured
+
+Windows 11, Python 3.13, one process at a time. The clones are the pinned ones in C:/vbench.
+
+| repository | gold v1 before (2026-10-02 run) | gold v1 after | crashes | timeouts | clean after revert | scan s before / after | update s before / after |
+|---|---|---|---|---|---|---|---|
+| fastapi/sqlmodel | 9/10 (`def-field-impl` missed: cited :242) | 10/10 | 0 | 0 | yes | 35.1 / 30.0 | 18.3 / 19.2 |
+| google/gson | 9/10 (`def-dopeek` missed: cited :581) | 10/10 | 0 | 0 | yes | 30.0 / 29.8 | 25.1 / 27.5 |
+
+The scan and update times are single runs and are within run-to-run noise. I did not run the other
+8 repositories.
+
+After the review round (run on the merge with competitor-backlog f8a4721; the later 7071ed9 only
+changes the tq-audit report and table), gson again: gold v1 10/10,
+0 crashes, 0 timeouts, clean after revert, scan 27.9 s, update 33.9 s (single run), and the same
+`review` output (exit 3, 76798 bytes) as before the round. sqlmodel was not run again: the round
+changes only tree-sitter spans and lookups, and Python spans and lines take another path.
+
+### 138.4 Not done
+
+- The cited line is the name's line. For a declaration whose modifiers wrap onto their own line
+  (`@Override` / `public` / `String toString()`), that is the line of `toString`, not the line of
+  `public`.
+- A method with an annotation on the same line (`@Test void t()`) and one under an annotation now
+  differ only in where the span starts. Python spans still exclude decorators while Java spans
+  include annotations. This is deliberate: it keeps every tree-sitter Java span exactly as it was
+  (a heuristic span can change, see below).
+- Python `@overload` stubs get no node of their own. A question about one stub's signature gets
+  the implementation, and the stub lines only through the `overloads` metadata. A stub that comes
+  after the implementation is recorded in `overloads` but moves nothing.
+- The implementation is the first def without `@overload`, even when its body is `...` too. With
+  `if TYPE_CHECKING:` holding a plain `def k(a): ...` and the runtime def in `else:`, the node
+  moves to the `TYPE_CHECKING` def, not to the runtime body.
+- Each stub keeps its own `contains` / `method` edge at the stub's line, so stub lines show up as
+  edge locations of the one node. Harmless, but not cleaned up.
+- A heuristic span (no tree-sitter definition starts at the node's line, such as a Java enum
+  constant) ends before the next symbol's line. Symbols below an annotation are now at their name
+  line, so such a span can grow by the annotation's lines (`RED` in `public enum E { RED }` followed
+  by an annotated record: (4,5) before, (4,6) now).
+- This changes engine files (`index.py`, `project_index/`), so the `measured: k/n held-out` part of
+  `verinoda tq` answers is hidden until `verinoda benchmark tq-audit` is run again and the table
+  committed. I did not run the audit here.
+- Kotlin `@Deprecated("y")` on the line above `object Obj`: the grammar leaves the annotation
+  outside the object's node, so the span starts at `object`, before and after this change.
+- Only Java, Kotlin, C# and TS (methods and classes) and Python are covered by tests. PHP
+  attributes, Swift attributes and Scala annotations follow the same rule untested.
+- Benchmark files that cite Java lines were not re-checked, apart from the realworld gold of
+  sqlmodel and gson: benchmarks/review_fixtures, benchmarks/verdict_audit and the mods results.
+  A gold that cites an annotation line as the definition would now miss.
+- The extractor's own test suite (tests_upstream) was not run. A grep found no test there that
+  asserts the line of an annotated or overloaded definition.
+
+### 138.5 Tests
+
+- New tests in tests/test_definition_lines.py (8, 4 of them from the review round):
+  - Java, Kotlin, C# and TS methods and classes are cited at their name line, including a
+    multi-line modifier list.
+  - Python `@overload` and `@typing.overload` groups, at module level and in a class, are one node
+    at the implementation. The node has `overloads` metadata and the implementation's call edge.
+    With stubs only, the node stays at the first stub with `overload_stub`.
+  - `ts_def_info` returns the ends (first lines only) and the named definitions. `Graph.span`
+    starts at the annotation for a new graph and for an old one, and `symbol_at` still gives the
+    annotation line to the method.
+  - Anchor facts use the name line as `def`. `ts_param_count` finds the method from either line,
+    and `cache_scheme` keys tree-sitter facts apart.
+  - Review round: a member on the name line of an annotated Java enum, interface or class and of a
+    C# interface keeps its own span, and the annotation line belongs to the type; `ts_param_names`
+    and `ts_header` pick the member (or the type, given its name) on that line; the `class` keyword
+    is not taken for an annotated class; a decorated TS class without `export` is cited at its name
+    line, an exported one at its class line.
+- tests/test_testcode.py: the JUnit test `coolsByOne` is cited at :8, its span starting at its
+  `@Test` line, :7.
+- Updated expectations: these tests had recorded the annotation line as the definition line.
+  - tests/test_sides.py: the `Mod.onInitialize` entry moves from Mod.java:6 to :7.
+  - tests/test_jvm_callbacks.py: the entries move to their name lines (GlowMod.java:20,
+    GlowModClient.java:19, ModEvents.java:27, the `ModEvents` class at :16).
+
+## 139. Route prefixes, trailing slashes and bounded route output (D166, 2026-10-01)
+
+### 139.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md) found two `routes`
+defects and three harness defects.
+
+- D3. full-stack-fastapi-template mounts every router with
+  `app.include_router(api_router, prefix=settings.API_V1_STR)`. `py_facts` read only a string literal
+  there, so the prefix became `""`. The table showed `/login/access-token` instead of
+  `/api/v1/login/access-token`, with no note. Two gold facts missed. `@router.get("/")` under
+  `prefix="/items"` was shown as `/items`, but FastAPI serves `/items/`. An `APIRouter(prefix=<expr>)`
+  lost its prefix the same way, and a `register_blueprint(url_prefix=<expr>)` dropped the mount.
+- D9. `routes --json` was 248 KB on express. 880 supertest calls in test/ were ambiguous between the routes of
+  unrelated example apps and other test files. 200 of them were listed with 8 candidates each, the rest only
+  counted, and nothing showed that the code was test or example code.
+- H1. The harness's routes judge compared `method` with a row key that does not exist (rows have `methods`).
+- H2. The judge matches `handler` as text of the row, and that text is a node id. The README did not say so.
+- H3. summary.md printed one environment line per commit, although the two commits differed only in
+  benchmark files.
+
+### 139.2 Decisions
+
+- **Prefix values.** A prefix that is not a literal goes through `py_pieces`. Its parts resolve in this
+  order:
+  - a value of the same file listed by `py_values`: a module constant (`NAME = "..."`, also annotated), a
+    class attribute default (`Cls.ATTR`), or `obj.ATTR` for a module-level `obj = Cls()`;
+  - at link time, a name imported from another module (`from app.core.config import settings`). That
+    module is found among the graph's Python files, read, and given to `py_values`. Re-exports are
+    followed up to three times.
+
+  `obj.ATTR` counts only when the `Cls()` call passes no positional argument. A literal keyword argument
+  wins over the default. `Settings(**kw)` resolves nothing. A name bound more than once has no value, and
+  a function parameter of that name counts as a binding. An attribute that is assigned anywhere
+  (`obj.ATTR = ...`, `Cls.ATTR = ...`, or `self.ATTR = ...` in a method) has no value. A class that
+  defines `__init__` gives `obj.ATTR` no value, unless it is a `BaseSettings` subclass. An imported name
+  that a parameter or an assignment rebinds is not followed.
+- **Citing the value.** Every Python row that used a resolved value carries `prefix_from`, which names
+  where the value comes from. This includes a same-file constant. A JavaScript `app.use(CONST, router)`
+  constant is resolved without a note. For a `BaseSettings` subclass it reads "the class default at config.py:22; the
+  environment can set another value at run time". The value is the default, not a value checked at run
+  time.
+- **A prefix that cannot be resolved.** A call, `os.environ[...]` or a name no module spells still keeps
+  its mount and its routes. The row gets `mount: "prefix not resolved: <expr>"`, with the expression as
+  written. Several of these are joined with `; `, also together with `not found`. The text view shows
+  `(mount prefix not resolved: ...)`. An edge to such a route gets the note "the route's path lacks a
+  prefix the text does not spell".
+- **Facts version.** Facts carry `prefix_expr`, `prefix_pieces` and `prefix_from`, so `FACTS_VERSION` is
+  now 4 (3 before the review round): older cached facts are parsed again. A JavaScript `app.use(CONST, router)` with a module
+  constant is read as well.
+- **Trailing slash.** `join_path(..., keep_slash=True)` keeps a trailing `/` of the last part that has
+  one. It is used for routes in Python files: FastAPI, Flask and Django serve the path as written, so
+  `/items` + `/` is `/items/`. It is not used for JavaScript files, because Express serves a router's `/`
+  at the mount path itself. Matching splits on `/` and drops empty segments, so a call to `/items` still
+  fits `/items/`. Only the displayed path changed.
+- **Labels.** `code_kind(path)` gives `"test"` (`testcode.is_test_file`) or `"example"` (`examples/`,
+  `example/`, `samples/`, `demos/`, `docs_src/`, `tutorials/`). It labels route rows, ambiguous calls
+  and their candidates, unmatched calls and method mismatches as `code`.
+- **Scope of a test or example call.** A call in test or example code, or a supertest call, is matched
+  first against the app it builds or imports. The scope is the file and its full import closure, through
+  relative `import`/`require` and the graph's `imports_from` edges. A route is in scope when any file of
+  its mount chain is in scope: its own file, or a file that mounts it, up to the app. When candidates are
+  in scope, only those count, and the edge notes how many routes outside also match the path. Two
+  exceptions apply:
+  - A test-client or example call (not supertest) is not narrowed when a route outside the scope names
+    more literal segments than every route inside it (`/items` outside, `/{page}` inside). The call
+    stays ambiguous. A Python scope rests on the graph's imports, which can miss a package re-export.
+  - A supertest call with no candidate in scope is unmatched, with
+    `why: "no route read in the app under test fits (this file and the N it imports); M elsewhere do"`.
+    This applies when the file imports something or builds an app itself.
+
+  Any other call keeps all candidates. A mount through a package `__init__.py` that only re-exports the
+  router (`from app.api.main import api_router`) is followed, up to three re-exports.
+- **Bounded report.** The linker now keeps every ambiguous call, unmatched call and method mismatch, with
+  every candidate, so counts are exact. `cross_service.bounded()` makes the view for `verinoda routes`:
+  - ambiguous calls with the same protocol, method, URL and candidate set become one group: the first
+    call, `calls`, and up to 5 `also_at`;
+  - at most 50 groups (`AMBIGUOUS_GROUPS`) of 5 candidates (`AMBIGUOUS_CANDIDATES`), with
+    `candidates_total` when cut;
+  - at most 50 unmatched calls and 50 method mismatches (`LIST_CAP`);
+  - every cut is counted (`also_at_more`, `<list>_more`), and `ambiguous_calls` plus `<list>_by_code`
+    give the totals;
+  - a `bounded` line says how to see everything: `routes --all` shows every call and every candidate,
+    ungrouped.
+- **Sidecar.** The sidecar keeps the first 200 ambiguous calls (`REPORT_CAP`) with 8 candidates each and
+  `candidates_total`, as before. Its counts are now the full counts. The report itself keeps every
+  candidate, also of an ambiguous tRPC/gRPC/GraphQL call (before, 8, with the cut not counted).
+- **A route whose prefix is not resolved.** A call that fits only such routes gets no edge. It is
+  unmatched, with `why: "only routes whose prefix is not resolved fit: ..."`. When other routes fit too,
+  those are kept and the edge notes how many unresolved ones were set aside.
+- **Text view.** A grouped ambiguous call shows `also at <file:line>, ... (+N more)` under its line.
+- **H1.** `_judge_route` requires the check's `method` in the row's `methods` list. A row for any method
+  (`methods: null`) does not count. A miss lists the rows on the same path that differ.
+- **H2.** The README (step 3) says the full path includes prefixes and a written trailing `/`, and that
+  `handler` is the node id. A new key `at` (the route's declaration file:line) is accepted in its place.
+- **H3.** `run.py` records `verinoda_code_tree` (`git rev-parse HEAD:verinoda`). `report.env_lines` merges
+  environments that differ only in the commit and have the same `verinoda/` code. The test is the tree id
+  when both have one, else `git diff --quiet A B -- verinoda/` in this checkout. A dirty run or a commit
+  git does not know is never merged. The committed summary.md of 2026-10-02 was re-rendered: its two
+  lines are now "at 8d9ab97 and 1ab4a71 (the same verinoda/ code: the commits differ only in files
+  outside verinoda/)".
+- **Review round.** A review of 31aef6d confirmed four defects. All four are fixed:
+  - A test call's scope stopped three imports deep. A test whose app mounts a router four imports away
+    linked confidently to the app's catch-all `/{page}` instead of staying ambiguous with `/items`. The
+    scope is now the full import closure. A route counts as in scope through its mount chain, and a more
+    specific route outside keeps a non-supertest call ambiguous.
+  - For the same reason, a supertest call to a correctly mounted route four `require`s deep was reported
+    unmatched. It now links.
+  - `def mount(app, API): app.include_router(r, prefix=API)` took the module constant `API`. A parameter
+    now counts as a binding, so the prefix is not resolved.
+  - `obj.ATTR` took the class default even when `__init__`, a method or a later `obj.ATTR = ...`
+    assignment set another value. These now give no value.
+
+  Several smaller points were also fixed: a same-file constant now gets its `prefix_from` note, RPC
+  ambiguous calls are no longer cut at 8, the text view shows `also_at`, and a call that fits only routes
+  with an unresolved prefix gets no edge. Two earlier statements here were wrong: "every row that used a
+  resolved value carries `prefix_from`" was not true for a same-file constant, and "`--all` lists every
+  candidate" was not true for RPC calls. Both statements are now true. One point is not fixed; see Limits.
+
+### 139.3 Measured
+
+Windows 11, Python 3.13.14, one process at a time. "Before" numbers come from the committed results of
+2026-10-02, code 488b553, or from a read-only `routes --json` with that code on the same clone and index.
+"After" numbers are from `benchmarks/realworld/run.py --repos <repo>` at 31aef6d, with results in a scratch
+folder.
+
+| | before | after |
+|---|---:|---:|
+| full-stack-fastapi-template gold v1 | 7/10 | 9/10 |
+| `route-login-access-token`, `route-read-item` | miss, miss | hit, hit |
+| template `routes --json` bytes | 4,402 | 8,420 |
+| express gold v1 / v2 | 4/10 / 2/2 | 4/10 / 2/2 |
+| express `routes --json` bytes (default) | 247,767 | 70,871 |
+| express `routes --json --all` bytes | - | 281,919 |
+| express ambiguous calls | 880 (200 listed, 680 counted) | 197 (14 groups) |
+| express unmatched calls | 1 | 513 (50 listed) |
+| express HTTP edges | 27 | 21 |
+
+Review round (5e3499f), each repository re-run with `run.py`, and read-only `routes --json` counts with
+31aef6d and with 5e3499f on the same clone and index:
+
+| | 31aef6d | 5e3499f |
+|---|---:|---:|
+| full-stack-fastapi-template gold v1 | 9/10 | 9/10 |
+| template `routes --json` bytes (harness) | 8,420 | 8,420 |
+| template rows with `prefix_from` / not resolved | 23 / 0 | 23 / 0 |
+| express gold v1 / v2 | 4/10 / 2/2 | 4/10 / 2/2 |
+| express `routes --json` bytes (default / `--all`) | 70,870 / 281,919 | 73,407 / 294,118 |
+| express ambiguous (groups) / unmatched / method mismatch | 197 (14) / 513 / 8 | 197 (14) / 513 / 8 |
+| express HTTP edges | 21 | 21, the same 21 |
+| sqlmodel gold v1 | 9/10 | 9/10 |
+| sqlmodel `routes --json` bytes (default / `--all`) | 50,433 / 265,195 | 51,569 / 266,331 |
+| sqlmodel ambiguous (groups) / unmatched / edges | 108 (19) / 12 / 16 | 108 (19) / 12 / 16 |
+
+- **Review round.** On the three repositories, the same calls are linked, ambiguous and unmatched as at
+  31aef6d. The output grew because 21 express edges now carry the note "N route(s) outside the app under
+  test also match the path", and so do all 16 sqlmodel edges. An intermediate version kept a supertest call
+  unless every fitting route had a known mount. On express, that gave 614 ambiguous calls (63 groups) and
+  a 2.1 MB `--all`, because 36 example routers have no mount found. It was dropped. A route that the app
+  under test serves is declared or mounted in a file of the app's import closure.
+
+- **Template.** All 23 routes now carry `/api/v1`. The 8 paths written with a trailing `/` keep it, for
+  example `GET /api/v1/items/` and `POST /api/v1/reset-password/`. I read `items.py:13` (`"/"` under
+  `prefix="/items"`), `login.py:77`, `private.py:23` and `utils.py:29` in the clone to confirm. The JSON grew
+  because every row now carries its `prefix_from` note.
+- **Template links.** `linked` stays 0. The only client call found is `frontend/tests/utils/mailcatcher.ts:16`.
+  The generated SDK (`frontend/src/client/sdk.gen.ts`, `url: '/api/v1/...'` inside a request-options
+  object) is not read as a client call.
+- **Express edges.** 26 edges were removed and 20 added. Each removed edge linked a test call to a route in
+  a file the test neither defines nor imports (test/app.param.js, test/app.router.js, test/req.baseUrl.js,
+  examples/route-separation/index.js). The 20 added edges link test/acceptance/route-separation.js and
+  test/acceptance/vhost.js to the example apps they import, and test/res.format.js to its own routes.
+- **Express unmatched.** Most of the 513 unmatched calls are acceptance tests of example apps whose routes are
+  not read. For example, examples/auth requires `../../` instead of `express`, so it is not seen as an
+  Express app.
+- **Express routes.** The route table (286 rows, 45 KB) is the largest part of the bounded output.
+- **sqlmodel.** Not re-run with the harness at 31aef6d. A read-only `routes --json` on its existing index gave
+  214,168 bytes before (committed results) and 50,433 after: 108 ambiguous calls in 19 groups.
+- **No regressions.** Both runs had 0 crashes and 0 timeouts, and the clones were clean afterwards.
+
+### 139.4 Not done
+
+- **Values that are resolved.** Only values the text spells as a string literal are resolved: a constant,
+  a class attribute default, or an instance attribute default. These are not resolved:
+  - a `get_settings()` call (`@lru_cache` style), `os.environ`, or a computed value. These are marked,
+    never guessed;
+  - a value assigned in `__init__` or another method, or after the class (`obj.ATTR = ...`), and any
+    `obj.ATTR` of a class with `__init__` (except `BaseSettings`), or a settings value set by `.env` or by
+    the environment. The note says so for `BaseSettings`;
+  - a `Field(default=...)`.
+- **Bindings are counted per module, not per scope.** A parameter or a local variable with a constant's
+  name, anywhere in the module, also unresolves a module-level use of that constant. This is
+  conservative: the value is marked "prefix not resolved", never wrong. `setattr(...)` and
+  `self.__dict__` writes are not seen. A class with `__init__` already gives no `obj.ATTR`.
+- **A route whose prefix is not resolved is not linked alone.** It still matches by the path without the
+  prefix. When it is the only fit, the call is unmatched with a `why`.
+- **The trailing slash in JVM files.** Spring and JAX-RS paths are built in `jvm_facts` with the old
+  `join_path` and still drop a trailing `/`. JavaScript files keep the Express convention.
+- **The scope of a test call.** The scope follows only relative JavaScript imports and the graph's
+  `imports_from` edges, which can miss a Python package re-export. A test that gets its app from a
+  workspace package (a non-relative import) and imports some unrelated local helper is reported as
+  unmatched, not ambiguous. It gets no edge either way. Routes loaded at run time (an
+  `fs.readdirSync` loader) are not in any scope, so a supertest call to them is unmatched.
+- **The harness environment merge.** `report.same_code()` runs `git diff` in the checkout that renders
+  the summary. When that checkout knows neither commit, it falls back to separate lines without saying so.
+  The merge also ignores changes outside `verinoda/` that can change behaviour, such as dependency pins in
+  pyproject. Not changed in the review round.
+- **Example apps the scope cannot help.** Calls to example apps whose routes are not read stay unmatched.
+  In express, examples that `require('../../')` instead of `express` are not seen as Express apps.
+  This is a separate extraction gap.
+- **The route table itself is not capped.** It is 286 rows on express. The caps apply to the ambiguous,
+  unmatched and method-mismatch lists.
+- **The SDK of the template.** The generated SDK's `__request(OpenAPI, {url: ...})` calls are not read as
+  clients, so the template's front end still links to no route.
+
+### 139.5 Tests
+
+- tests/test_routes_prefix.py (new, 41 tests). An indexed project in the template's shape:
+  - the settings default is resolved and cited with its file:line;
+  - the `/items/` trailing slash is kept and still matched without it;
+  - a client links through the resolved prefix, and a call without the prefix is unmatched;
+  - `version_prefix()` and `os.environ[...]` give `prefix not resolved` rows;
+  - `f"{V2}/x"` with an imported constant resolves;
+  - example and test labels are set;
+  - a supertest call links to the app it imports, not to the other example app;
+  - grouped ambiguous calls and `--all`, and the sidecar's counts and 8-candidate cap.
+
+  Also unit tests of `bounded` (groups, candidates, list caps, the text), `join_path(keep_slash=)`,
+  `py_values` (16 cases: rebinding, keyword override, `**kw`, a shadowing parameter, `self.ATTR` in
+  `__init__`, an `__init__` that may set anything, `obj.ATTR =` and `Cls.ATTR =` later) and a Flask
+  `url_prefix` from an imported constant.
+
+  Review round, a second indexed project:
+  - a FastAPI test whose router is four imports away stays ambiguous between `/items` and `/{page}`;
+  - an example test whose app has only `/{page}` stays ambiguous when another example names `/orders`;
+  - a supertest call links through test, server, app, routes/index and routes/users;
+  - a Flask call that fits only a route with an unresolved prefix is unmatched with a `why`.
+
+  Also: a parameter that shadows a constant or an import, attribute overrides, a cited same-file
+  constant, RPC candidates uncut, and `also at` in the text view.
+- Touched files together: test_routes_prefix.py, test_cross_service.py and test_realworld_harness.py, 193
+  passed and 1 skipped (41 + 65 + 87 and 1 skipped).
+- tests/test_cross_service.py: one new test. The route table keeps Django's written slash, FastAPI's
+  `@router.post("")`, and Express's mount path for a router's `/`. 65 passed.
+- tests/test_realworld_harness.py:
+  - the routes judge (`methods`, a row for any method, `at`, the exact path);
+  - environment lines merged by tree id; not merged for another tree, a dirty run or unknown commits;
+    merged by `git diff` for 8d9ab97 and 1ab4a71.
+
+  87 passed, 1 skipped.
+- tests/test_docs.py: 19 passed.
+
+## 140. Distinct symbols never share a node (D167, 2026-10-01)
+
+### 140.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md, defect 1)
+found two distinct symbols sharing one node. `normalize_id` (verinoda/project_index/ids.py) folds
+case and drops leading and repeated underscores, so axios `Axios.request` (lib/core/Axios.js:40) and
+`Axios._request` (:83) both mint `lib_core_axios_axios_request`. In express, the selector
+`lib/response.js::sendFile` resolved to the module function `sendfile` (:927) as an exact match.
+
+Verinoda already had guards against this. They missed both cases:
+
+- `verinoda.case_ids.split_case_collisions`, run by `index._distinct_case_ids` around extraction
+  and graph building, splits nodes of one file that share an id. Two things kept it from the axios
+  case:
+  1. It only handled names equal after `casefold`. `request` and `_request` are not.
+  2. It never saw the second node. The generic tree-sitter extractor
+     (`extractors/engine.py`, `_extract_generic`) keeps a `seen_ids` set, and `add_node` silently
+     drops a definition whose id is already taken. So `_request` was gone before any post-pass ran.
+     Its `method` edge and every call in its body were still emitted under the shared id, and
+     `this._request()` became a self-call on `request`, which was then dropped.
+- Upstream has its own salts for Python (`_python_pre_scan_underscore_collisions`: module-level
+  functions and direct methods only, the public name keeps the id) and for Go (exported versus
+  unexported names). No other language had one, and Python nested functions were not covered.
+- `verinoda/portable_ids.py` only rewrites ids minted from an absolute path. It has nothing to do
+  with name collisions.
+- The resolver (`naming.exact_nodes` -> `retrieval._names_symbol`) compares names with `fold_tr`,
+  which lower-cases them. It already preferred the node with the right case when several were
+  found. But when the only candidate differed in case (express: `sendfile` for `sendFile`), it
+  returned that node as `exact`, with no note.
+
+### 140.2 Decisions
+
+- **The extractor no longer drops the second definition.** It gives it its own id. `add_node`
+  records which name holds each id. Before a function or method definition takes an id,
+  `_distinct_def_id` checks that record. If a different name already holds the id, the new
+  definition gets `<id>_<first 6 hex of sha1(name)>`. That is the same form the Python and Go salts
+  and `case_ids` already use. If a third name already holds that salted id, the hash gets longer
+  (10, 16, 40).
+  - The check covers functions, methods, nested functions (JS and Python), JS `const f = () =>`,
+    `exports.f =`, `X.prototype.f =`, `this.f =` / `api.f =` member assignments, and class-field
+    arrows.
+  - The same name again keeps one id, as before: an overload, a getter and its setter, Ruby
+    `def self.x` beside `def x`.
+  - Names are compared by their last part (`Foo::bar` against `bar`), so a C++ out-of-class
+    definition still meets its declaration.
+  - In PHP, `fold_case` makes names that differ only in case one symbol.
+- **Who keeps the plain id:** the name with the fewest leading underscores (the public name), in
+  any declaration order. During the walk the definition met first holds the plain id. When the file
+  is done, `_public_def_swaps` gives the plain id to a later definition with fewer leading
+  underscores, and the earlier holder gets the salted id of its own name. All of the file's nodes,
+  edges and `raw_calls` callers are renamed together. A Java overload group moves with its first
+  member. Names with the same number of underscores, such as a case pair (`getX` / `getx`) or a
+  class `Foo` beside a function `foo`, keep declaration order. This is the rule of Python's upstream
+  pre-scan and of the `case_ids` net (see the review round below).
+- **The net in `case_ids` is widened** to names that mint one id. That means names that differ in
+  case or underscores. A label that is not an identifier (a heading `Foo bar` beside `Foo-bar`)
+  still needs case alone to be split.
+  - Underscore differences split in every language. Case differences still split only in
+    case-sensitive languages.
+  - Of a split group, the member with the fewest leading underscores keeps the id, so the public
+    name keeps it. For case-only groups this is the same code-point order as before.
+  - The "split the nodes already show" pass now also routes edges that end at the plain id when the
+    two names differ in underscores. The extractor's own import edge for `import { _helper }` is
+    minted as `make_id(stem, "_helper")`, which is `helper`'s id. The line text now moves that edge
+    to `_helper`.
+- **Calls bind to the exact name.** The in-file call maps (`label_to_nid`) and the cross-file
+  resolvers were already exact. Once both definitions exist, `this._request()` binds to
+  `_request`, and `request()` to `request`.
+- **A code name matched only case-insensitively is a labelled fallback, never `exact`.**
+  `naming.resolve` runs a new check, `_case_folded`. It applies when every node found is in a
+  case-sensitive language and none of them is named with the written case.
+  - One node: the result is `similar`, with the note "no symbol is named `sendFile` with this case;
+    ... matched sendfile() (lib/response.js:927) only case-insensitively". `trace` reports that
+    note under `fuzzy`.
+  - Several nodes: the result is `ambiguous`, with the same note.
+  - An exact-case node, when one exists, still wins as before.
+- **The AST cache schema goes from 9 to 11** (together with the definition-line fix, which took 9) (`project_index/cache.py`), so cached extractions made
+  by the old code are not reused. 9 was the first version of this branch.
+- The vendored changes are marked "Verinoda patch". docs/UPSTREAM.md lists them.
+- **Review round.** A reviewer found three defects in the first version. Each is fixed and has a
+  regression test in tests/test_distinct_ids.py.
+  1. *A public function lost its id to an earlier private const.* In `const _config = {}` followed
+     by `export function config()`, the walk met the const first, so the const kept
+     `src_store_config` and the function moved to a salted id. The base graph had the function on
+     that id. The claim that "no id that existed before changes" was false. Now the public name
+     takes the plain id in any order (see "Who keeps the plain id"). The extractor and the
+     `case_ids` net now follow one rule. Test:
+     `test_the_public_name_keeps_the_plain_id_whichever_is_declared_first` (also `__a` / `_a` / `a`
+     declared in that order).
+  2. *Java ids that already existed changed, and a numbered overload id named a different method.*
+     The base graph already kept Java `_fetch` as its own node through overload numbering
+     (`..._fetch_3`), in the family of the public name. The first version salted `_fetch` but
+     still numbered its second overload in that family, so `fetch_3` changed from `_fetch(int)` to
+     `_fetch(int,int)`. Now a salted method's overloads are numbered from its own salted id
+     (`..._fetch_<hash>_2`). Java `_x` ids therefore change (see the upgrading note). The calls
+     also improve: in the base graph, `fetch(a)` inside `_fetch(int,int)` also bound to
+     `_fetch(int)`, because both took one argument. Now it binds only to `fetch`. Test:
+     `test_java_overloads_of_a_salted_method_are_numbered_from_its_own_id` (both declaration
+     orders).
+  3. *A multi-line ES import of the private twin left a false import edge on the public twin.* For
+     `import {` / `_helper,` / `} from './h'`, the edge's own line names neither twin. `case_ids`
+     now reads an import whose `{` opens a list on to its `}`. An edge that nothing places is
+     dropped when its source already reaches another member of the pair, through the same
+     relation and from the same line. Tests:
+     `test_the_build_net_reads_an_import_across_its_lines` and the multi-line import in the
+     public-name test.
+
+  Of the minor findings, one is fixed: `_def_symbol_name` now splits only a qualified name. A
+  label such as `{ _helper: priv }` is its own name, which
+  `test_a_label_that_is_no_qualified_name_is_its_own_symbol_name` checks. The other minor findings
+  are listed under Limits. The AST cache schema went to 11 (10 on the branch), so caches made by the first version of
+  this branch are not reused.
+
+### 140.3 Measured
+
+On Windows 11 with Python 3.13.14, one process at a time.
+
+- **Real-world benchmark** (`benchmarks/realworld/run.py --repos <repo> --out <scratch>`, clones in
+  C:/vbench), before (benchmarks/results/realworld-2026-10-02) and after:
+
+  | repo | gold v1 before | gold v1 after | gold v2 before | gold v2 after | crashes | clean after |
+  |---|---:|---:|---:|---:|---:|---|
+  | axios/axios v1.20.0 | 7/10 | 9/10 | - | - | 0 | yes |
+  | expressjs/express v5.2.1 | 4/10 | 4/10 | 2/2 | 2/2 | 0 | yes |
+
+  After the review round, both repositories were run again, one at a time. The gold, crashes and
+  clean results are the same as in the table.
+
+  - axios: `request-calls-private` and `private-request-merges-config` now hit.
+    `request-reaches-adapter` still misses, for a different reason than before. Before, the source
+    was unresolved. Now `_request` resolves (lib/core/Axios.js:83), but there is no directed path.
+    Both hops are absent from the graph:
+    - `dispatchRequest.call(this, newConfig)` (Axios.js:242);
+    - `adapters.getAdapter(...)` (dispatchRequest.js:52).
+
+    `trace _request dispatchRequest` and `trace dispatchRequest lib/adapters/adapters.js::getAdapter`
+    each answer "no directed path". These are not id problems.
+  - express: `sendfile-calls-helper` still misses, because `res.sendFile = function sendFile` is no
+    node (defect 2). `trace lib/response.js::sendFile lib/response.js::sendfile` now returns the
+    status "ambiguous: both endpoints resolved to the same node" with
+    `fuzzy.source` = "no symbol is named `sendFile` with this case; `lib/response.js::sendFile`
+    matched sendfile() (lib/response.js:927) only case-insensitively (in this language names that
+    differ in case are different symbols)". The defect asked for exactly that warning.
+  - I ran both repositories twice: once during development, then again on the final code. Both
+    runs gave the same gold. Times of the final run:
+
+    | repo | scan before | scan after | `update` before | `update` after |
+    |---|---:|---:|---:|---:|
+    | axios | 29.6 s | 29.7 s | 21.0 s | 30.7 s |
+    | express | 11.1 s | 13.6 s | 9.1 s | 10.1 s |
+
+    The development run measured axios at 25.8 s / 20.6 s and express at 14.1 s / 11.2 s. The
+    review-round run measured axios at 29.3 s / 22.9 s and express at 11.4 s / 9.4 s. The spread
+    between runs of the same code is as large as the before/after differences, so I do not
+    attribute the times to this change.
+- **Split pairs in the axios graph after the review-round run: 5** (3,889 nodes). Each one
+  checked by hand:
+  - `.request()` / `._request()` (lib/core/Axios.js);
+  - `._transform()` (:11) keeps the plain id and `.__transform()` (:6) is salted
+    (lib/helpers/ZlibHeaderTransformStream.js). Before the review round it was the other way
+    round, because `__transform` comes first. By the base extractor's rule (it kept the definition
+    met first), the base graph had `__transform` on the plain id and no node for `_transform`. I
+    did not rebuild axios with the base package to confirm this. If it holds,
+    this plain id now names a different method;
+  - `setProxy()` / `__setProxy`, `isNodeEnvProxyEnabled()` / `__isNodeEnvProxyEnabled` and
+    `isSameOriginRedirect()` / `__isSameOriginRedirect` (lib/adapters/http.js:1488-1490,
+    `export const __setProxy = setProxy`). Before, each pair minted one id. I did not check
+    whether the old graph merged or dropped the const.
+
+  In the http.js pairs the plain id stays on the function. The express graph has 0 split pairs
+  (441 nodes).
+- **Upgrade without a file change** (fixture of 6 files):
+  1. Build with the unmodified competitor-backlog package (`git archive`): the graph has
+     `.request()` only, and the call at line 7 is read as `request`'s.
+  2. Run `verinoda update` with the new code. It reported
+     `"extraction": {"was": "s8-a8ca4efb242c", "now": "s9-f154e26c06a6"}` and
+     `"index_mode": "full"`.
+  3. The graph then had `lib_axios_axios_request_ee5c95` (`._request()`), the edge
+     `request -calls-> _request`, and the call to mergeConfig on `_request`.
+
+  Review round, with the reviewer's `const _config` / `function config` fixture: `verinoda scan .`
+  with the unmodified package gave one node `src_store_config` (`config`, L13). `verinoda update`
+  with the new code reported `"extraction": {"was": "s8-0b3160ad868f", "now":
+  "s10-7fb9bff7fd72"}` and `"index_mode": "full"`. The graph then had `src_store_config`
+  (`config()`, L13, still the id of the importer's and the callers' edges) and
+  `src_store_config_7e810b` (`_config`, L12).
+- **The new tests against the old code:** all 5 tests of tests/test_distinct_ids.py fail on the
+  unmodified package (missing node `..._request_ee5c95`, missing nested `_step`, no split in the
+  net, `exact` instead of `similar`; the unit test cannot import `_distinct_def_id`). All 5 pass
+  with the change. The 4 review-round tests fail on the branch's first version and pass now.
+
+### 140.4 Not done
+
+- **Language coverage.** Only the definition sites of the generic tree-sitter extractor are
+  covered: JS/TS, Python, Java, C, C++, C#, Kotlin, Scala, Swift, Ruby, Lua, PHP, Groovy. The
+  dedicated extractors (Rust, Dart, Elixir, Julia, Pascal, ...) are not changed. When they emit two
+  nodes with one id, the widened `case_ids` net splits them. When they drop one themselves, nothing
+  recovers it.
+- **Class-like nodes are not checked.** Classes, properties, fields and object-literal owners still
+  go through `add_node` without the check. Two classes `Q` and `_Q` in one file still merge into one
+  node. The methods of the second class are minted under the shared id, so `class _Q { run() }`
+  after `class Q` gives `src_k_q_run`, which reads as a method of `Q`. That is worse than a plain
+  merge.
+- **Declaration order decides only between names with the same number of leading underscores**: a
+  case pair (`getX` / `getx`), or a class `Foo` beside a function `foo`. In the extractor the one
+  declared first keeps the plain id. The `case_ids` net, for the nodes that still arrive with one
+  id, takes the first by code point. Moving `getx` above `getX` swaps their ids on the next build.
+- **C++ out-of-line twins.** Take a class that declares `int area(); int _area();` and defines
+  `int Shape::_area()` out of line. The node it gets (`Shape::_area()`,
+  `src_shape_shape_area_<hash>`) cannot be named: `_area`, `Shape._area`, `Shape::_area` and
+  `src/shape.cpp::_area` all return `not_a_symbol` or `not_found`. `Shape::area` gets no `calls`
+  edge to it, and the in-class declaration's `defines` edge still lands on `area`. This was
+  already so before this change, so C++ is covered only for in-class definitions.
+- **Import edges.** A cross-file import or call that upstream mints as `make_id(stem, name)` lands
+  on the plain id, which belongs to the twin. Only the `case_ids` line-text routing moves it, and
+  only when the edge's line names exactly one of the two. Two examples it cannot move:
+  `import { helper, _helper }` on one line, and a call whose line writes neither name.
+- **Multi-line imports are read only across braces.** An import edge whose line names neither
+  twin is placed by reading on to the closing `}`. Otherwise it is dropped when the same source
+  already has an edge of that relation and line to the other twin. With no such edge, it stays on
+  the twin that kept the id. A single-line `import { helper, _helper }` names both, and its edges
+  are left as they are.
+- **Case-folded matching applies only to text read as code.** A plain capitalised word such as
+  `Area` still resolves `exact` to `area` in a .cpp file. That is by design: a plain word is
+  matched loosely.
+- **Owners and module paths still match case-insensitively.** `axios.request` names
+  `Axios.request`. Only the last name has to match its case. `q` (`f.name = "..."`) compares
+  exactly, as before.
+- **Calls not seen.** Calls through `fn.call(this, ...)` and member calls on an imported object
+  (`adapters.getAdapter`) are still not edges (axios `request-reaches-adapter`).
+- **Express needs defect 2.** Its `sendfile-calls-helper` gold fact needs `res.sendFile = function
+  sendFile` to become a symbol.
+
+### 140.5 Tests
+
+tests/test_distinct_ids.py (new, 9 tests, all with small fixtures):
+
+- `test_javascript_definitions_that_mint_one_id_are_two_nodes_with_their_own_calls`: the axios
+  shape is one class with `request` and `_request`, plus `getX` and `getx` at module level, plus an
+  importer of `getx` and `_helper`. The test checks:
+  - both definitions are nodes, and `request` keeps its old id;
+  - `request -calls-> _request` at the right line, and `_request -calls-> mergeConfig` (not
+    `request`);
+  - the importer's call and import edges land on `getx` and `_helper`, never on their twins;
+  - `resolve("_request")` is exact, and `trace request mergeConfig` runs through `_request`.
+- `test_python_methods_and_nested_functions_that_mint_one_id_are_two_nodes`:
+  - methods `fetch` / `_fetch` (the upstream rule) and nested `step` / `_step` (new) are separate
+    nodes, and the call between the nested pair binds;
+  - module-level `load` / `_load` across files: the import, the call and the calls made in
+    `_load`'s and `_run`'s bodies land on the private twins.
+- `test_the_extractor_salts_only_a_different_name`: unit test of `_distinct_def_id`. It covers the
+  same name, an underscore difference, a case difference, PHP case folding, an id nobody holds, a
+  salted id already taken (a longer hash), and a qualified `Foo::bar` against `bar`.
+- `test_the_build_net_splits_names_that_differ_in_underscores_and_keeps_the_public_id`: the
+  `case_ids` net in either line order; PHP folds case but not underscores; ids shared by another
+  route (`b` / `a_b`, `Foo bar` / `Foo-bar`) are left alone; an `import { _helper }` edge minted
+  with the plain id moves to `_helper`.
+- Review round:
+  - `test_the_public_name_keeps_the_plain_id_whichever_is_declared_first`: `const _config` before
+    `function config`, `__a` / `_a` / `a` in that order, and a multi-line import of `_a`;
+  - `test_java_overloads_of_a_salted_method_are_numbered_from_its_own_id`: `fetch` / `_fetch`, two
+    overloads each, in both declaration orders;
+  - `test_the_build_net_reads_an_import_across_its_lines`: the `case_ids` routing of a multi-line
+    import, and the copy that is dropped;
+  - `test_a_label_that_is_no_qualified_name_is_its_own_symbol_name`.
+- `test_a_code_name_matched_only_case_insensitively_is_labelled_and_never_exact`: the express
+  shape. `lib/response.js::sendFile` is `similar` with the note, and the exact-case selector and
+  the plain word stay `exact`. The `trace` status and `fuzzy.source` match the express output. When
+  both `getX` and `getx` exist, each resolves exactly to its own node.
+
+Run: `pytest tests/test_distinct_ids.py tests/test_case_ids.py tests/test_docs.py`.
+
+## 141. JavaScript assigned methods and nested functions (D168, 2026-10-01)
+
+### 141.1 Why
+
+The real-world run of 2026-10-02 (benchmarks/results/realworld-2026-10-02/defects.md, D2 and D7) found two gaps in
+the JavaScript/TypeScript extractor (vendored Graphify, `verinoda/project_index/extractors/engine.py`):
+
+- A function assigned to an object's property at module level (`res.json = function json(obj) {...}`,
+  `app.render = function render(...)`, `app.use = (fn) => {...}`) made no symbol. Express 4/5 writes almost all of
+  lib/response.js, lib/request.js and lib/application.js this way, so `q` found 9 plain function declarations in
+  lib/response.js, `trace lib/response.js::json stringify` was unresolved, and `lib/response.js::sendFile` fell back
+  to the module function `sendfile` (the D1 case fold).
+- A function bound inside a function (`const login = async (data) => {...}` inside the `useAuth` hook) was no
+  symbol, so its calls (`LoginService.loginAccessToken`) were credited to `useAuth`.
+
+Before, only `Foo.prototype.bar = fn`, `exports.x = fn`, `this.x = fn` and an object literal built in the same
+function were methods, and only nested `function` declarations were nested symbols.
+
+### 141.2 Decisions
+
+- **Which assignments.** A module-level statement `obj.m = <function expression | arrow | generator>` makes a symbol
+  when `obj` is bound at module level in the same file: a `var`/`let`/`const` declarator (any initializer:
+  `Object.create(...)`, `exports = module.exports = {}`, `require(...)`, `X.prototype`), a function declaration or a
+  class declaration (also exported). An undeclared receiver (`window.x = fn`, a global) and a value that is not a
+  function (`res.limit = 10`, `res.handlers = [f]`) make nothing. This keeps the #1077 guard against bare-named
+  phantom nodes. Assignments inside function bodies keep the earlier rules (`this.x`, a local object literal).
+- **Alias chains.** In `res.contentType = res.type = function contentType() {...}` (also Express's
+  `res.set = res.header = ...` and `req.get = req.header = ...`), every module-object member of the chain is a method
+  at its own line. The body is walked once per name. Nested symbols are made once, under the name next to the
+  function.
+- **Label and shape, as for prototype and class methods.** The method is `.m()` with id `<file>_<obj>_<m>`, joined by
+  a `method` edge from the owner. A `var`/`let`/`const` owner without a node gets one (label `obj`, at its
+  declarator's line) and a `contains` edge from the file. A function or class owner is its own node. The method's
+  line is the assignment's line. So `q ... f.name = "json"` finds `res.json`, and the selector
+  `lib/response.js::sendFile` resolves to `res.sendFile` (lib/response.js:378), whose id no longer folds onto
+  `sendfile`.
+- **The property name is the method's name**, not the function's own name: `res.type = function contentType` is
+  `.type()`, because callers write the property. In Express the two names agree for most methods.
+- **Calls from and to the methods.** Each method's body is walked as its own, so calls inside `res.json` belong to
+  `res.json`. `this.send()` binds to the owner's `send`: the existing own-receiver rule now applies, because the
+  method has an owner. `res.send()` binds when `res` is the module binding and no parameter or local of the caller
+  shadows it. `Foo.create()` binds to `Foo.create` through the same rule, which is checked before the
+  upper-case-receiver defer. Any other in-file call that would bind to such a method is refused and left to the
+  cross-file passes. Examples are a bare `send(path)` (in Express, the `send` package) and `app.render()` on another
+  object (which used to make `res.render` call itself). Such a method takes no name in the file's bare-name map, so
+  a module function of the same name keeps it whatever the order of the two (see Review round). Exports methods keep
+  their old binding.
+- **Nested functions.** A `variable_declarator` whose value is a function, in any function body, is a nested symbol
+  `<parent>_<name>` with label `name()`. One inside an anonymous callback belongs to the nearest named function. It
+  has a `contains` edge from the parent, and its own body and calls, the same shape nested `function` declarations
+  already had. The scan now also runs on the bodies of `exports.x`, `Foo.prototype.x` and the new object methods.
+- **Scope of nested names.** JS/TS nested symbols are recorded in `scope_parents` / `lexical_nids_by_scope`, as the
+  Python extractor does. A bare call binds to the nested function visible from the caller: useAuth's `logout` inside
+  `useAuth`, the module's `logout` elsewhere. A bare call from outside its scope does not reach a nested function,
+  in the file or (since the review round) from another file, and a member call never does: `controller.abort()`
+  inside a nested `const abort` is not a self-call. A nested name no longer overwrites a module-level one in the
+  file's name map. A nested function passed by value from elsewhere in the same file can still be bound to it (see
+  Limits).
+- **Closure capture.** A nested function's locals include every non-function name bound in the enclosing body
+  (declarators, parameters, `catch` and `for ... in/of` bindings). So `use(config)` in it names the enclosing
+  parameter, not a module function `config`. This over-approximates, so it can only drop an indirect edge.
+- **Dead view (`verinoda/deadcode.py`, not vendored).** A unit that a dynamic use keeps alive (weak) now also keeps
+  alive what its folded members reach. Before, an unreached object or class counted its methods under itself. Code
+  that only one of those methods called was then a `callers_unreached` claim with no dynamic use, so it was
+  `strong_inference`. With the new methods, Express's `sendfile` (called only from `res.sendFile`, folded under
+  `res`) became such a strong claim. The same was already true for a Python class loaded by name.
+- **Vendored code.** The extractor changes are in `engine.py`; the review round adds the cross-file index in
+  `extract.py` and the marker lists in `cli.py` and `watch.py`. All are marked "Verinoda patch" and listed in
+  docs/UPSTREAM.md ("Modified"). `cache._AST_CACHE_SCHEMA` goes from 8 to 10.
+- **Review round.** A review found that the first version overstated how isolated the new symbols were:
+  - In the file, a method `res.send` took the bare name `send` from a module function `send` defined before it.
+    The new refusal then dropped `other() -> send()` with nothing to fall back to, and a `send` passed by value
+    went the same way. A method assigned to a module object now takes no name in the file's bare-name map.
+  - Across files, the shared call pass of `extract()` matched bare calls and names passed by value against every
+    node label, including the new nested functions and methods. So `Form() -> reset()` bound to a hook's nested
+    `reset` when `reset` was the caller's own local, and in axios `stopUnixServer() -> done()` (a Promise
+    executor's parameter) and `factory() -> unsubscribe()` (a local `const`) were false edges. In express,
+    `.path()` and `.use()` of `app` were targets of false `indirect_call` edges from a parameter and a local. The
+    engine now marks JS/TS nested functions, methods assigned to a module object and `Foo.prototype.bar` methods
+    with `_no_bare_name`, and the pass leaves them out of its bare-name and by-value index. None of them can be
+    imported under its bare name. Member calls reach the methods through the member resolvers, which do not read
+    that index. Prototype methods had the same flaw before this change. In express, application.js's
+    `resolve('views')` (node:path's `resolve`) bound to `View.prototype.resolve` once the call was inside the new
+    method `app.defaultConfiguration`.
+  - The extraction diff measured `extract_js` file by file, so it never saw these edges. The cross-file delta is now
+    measured with `extract()` over each whole corpus (see Measured).
+  - The marker is persisted for unchanged files on incremental builds (`cli.py`, `watch.py`), as `_callable` is.
+
+### 141.3 Measured
+
+Benchmark (`benchmarks/realworld/run.py`) on private copies of the two pinned clones. The copies have the same sha,
+were copied from `C:/vbench` without `.verinoda/`, and `--work` pointed at them, because other runs were using the
+shared clones at the same time. Before: the code at f4ca326 (`--verinoda-root` on a `git archive` of it). After:
+the committed change. All runs used one machine, one process at a time, with other agents' work running beside
+them.
+
+| repository | gold v1 before | gold v1 after | gold v2 before / after | crashes, timeouts | clean after |
+|---|---:|---:|---:|---|---|
+| expressjs/express v5.2.1 | 4/10 | 7/10 | 2/2 / 2/2 | 0, 0 | yes |
+| fastapi/full-stack-fastapi-template 0.12.0 | 7/10 | 8/10 | - | 0, 0 | yes |
+
+- New hits: express `json-calls-stringify`, `json-calls-send` and `sendfile-calls-helper`; template
+  `frontend-login-calls-sdk`. No hit was lost. The express scenario `trace lib/response.js::json stringify` went
+  from `unresolved` (exit 2) to `found` (exit 0).
+- Three earlier "after" runs during the work gave the same gold.
+- `render-reaches-tryrender` still misses: "source not resolved" before, "no directed path" after (see Limits).
+- Wall times varied with the load from the other runs: express `analyze` median 3.3 s before, and 7.3 s, 2.9 s and
+  3.1 s in after runs with the same output size. No time difference is claimed.
+- `verinoda scan` of express: 441 nodes and 701 edges before, 497 and 826 after. Template: 1448 and 3395 before,
+  1488 and 3468 after.
+- `map --view dead` (a scan, then the view, on the same copies):
+  - express before: 66 code symbols, 18 dead, 0 strong, 36 weak.
+  - express after: 122 code symbols, 31 dead, 0 strong, 49 weak. The new methods of the module objects `res` and
+    `req` are counted under them. Methods of `app` that nothing calls in the repository are weak claims, kept weak
+    by name mentions.
+  - Template: 630 -> 669 code symbols; dead 188, strong 17 and weak 194 both before and after, with the same strong
+    claims.
+  - With the extractor change but without the dead-view change, express had 1 strong claim: `sendfile`.
+
+Extraction diff (`extract_js` per file, before vs after) on 494 JS/TS files: the private copies of express, axios
+and the template's frontend, plus `tests_upstream/fixtures`:
+
+- Nodes 2611 -> 2754 (+144, -1).
+- Edges 5137 -> 5357. Added 238: 92 `calls`, 88 `contains`, 56 `method`, 2 `indirect_call`. Removed 18: 17 `calls`,
+  1 `contains`.
+- Express: +50 `method` edges (46 in lib/: response.js 22, application.js 16, request.js 8; 4 in examples), +31
+  `calls`, nothing removed.
+- Axios: +48 nodes (6 methods, the rest nested functions), +50 / -16 `calls`.
+- Template frontend: +40 nested functions, +11 / -1 `calls`.
+- `tests_upstream/fixtures`: no change.
+- Every removed edge was read. Each removed `calls` edge is now made by the nested function that holds the call:
+  `toJSONObject -> isObject` became `toJSONObject.visit -> isObject`, with `toJSONObject -> visit`. The removed node
+  is axios `validator.js` `formatMessage`, which is now nested in the method `validators.transitional`.
+- Extraction time over the 494 files, in two runs: 18.8 s before and 15.3 s after, then 23.8 s before and 17.7 s
+  after. No slowdown.
+- The review round leaves this per-file output unchanged: `extract_js` over 489 files (the three corpora and
+  `tests_upstream/fixtures`) gives the same 2312 nodes and 4886 edges before and after the round.
+
+Cross-file delta (review round): `extract()` over each whole corpus, so the shared cross-file pass is included. The
+corpora are the JS/TS files of the express, axios and template-frontend clones at their pinned shas, without
+`node_modules`, `dist`, `.min.js` and `.d.ts`. The table counts `calls` and `indirect_call` edges whose two ends are
+in different files: f4ca326 (before), the first version of this change, and the commit after the review round.
+
+| corpus | files | nodes before / after | cross-file, first version vs before | cross-file, after review vs before |
+|---|---:|---:|---|---|
+| express | 142 | 278 / 334 | +11 / -6 | +7 / -2 |
+| axios | 238 | 1204 / 1251 | +10 / -2 | +6 / -2 |
+| template frontend | 100 | 636 / 676 | +26 / -4 | +12 / -4 |
+
+- Every edge of the last column was read.
+  - Express added: 6 calls from the new methods to `lib/utils.js` helpers they import (`.set() -> compileETag`,
+    `compileQueryParser`, `compileTrust`; `.format() -> normalizeType`, `normalizeTypes`; `.send() -> setCharset`),
+    all right. One `indirect_call` moved from the file node of examples/view-locals/user.js to its new method
+    `User.all`: `users` there is user.js's own variable, not index.js's `users()`. It was a false edge before and
+    still is.
+  - Express removed: that same edge's old form, and `examples/resource/index.js -> format()` in
+    content-negotiation (a local `format`), which was false.
+  - Axios added: 6 calls that moved from an outer function to the nested function or method that makes them
+    (`onabort -> CanceledError`, `trackRequestStream -> trackStream`, ...). Removed: the outer form of one of them,
+    and a false `parseParameter -> start()` into a smoke test.
+  - Template added: 12 calls in the generated client that moved to nested functions (`beforeRequest ->
+    mergeHeaders`, `querySerializer -> serializeArrayParam`, ...). Removed: 4 member calls on SDK services
+    (`DeleteUser() -> .deleteUser()`, `useAuth() -> .loginAccessToken()`, ...). They are now made inside nested
+    functions, and plain `extract()` does not bind them from there. `verinoda scan` does: the gold fact
+    `frontend-login-calls-sdk` is a hit.
+- What the review round removed against the first version: express `.path()` and `.use()` targets (a parameter and
+  a local) and `req.signedCookies.js -> .cookie()` (a local `cookie`), all false; `.defaultConfiguration() -> View
+  .resolve()` (it is node:path's `resolve`), false; axios `stopUnixServer -> done()` and `factory -> unsubscribe()`,
+  false; template one `indirect_call` to client.gen.ts's nested `request` (a test fixture's parameter), false. Also
+  gone: two calls from axios throttle.test.js to throttle.js's nested `throttled` and `flush`, and 13 template calls
+  into the hooks' nested `showSuccessToast` and `logout`. These name the right function only because the caller
+  destructures it from the returned value (`const [throttled, flush] = throttle(...)`,
+  `const { logout } = useAuth()`); the pass has no evidence of that, so they are not kept (see Limits).
+- Express also has 4 `indirect_call` edges from tests to examples/view-locals/index.js `count()`, where `count` is a
+  test's local in an anonymous callback. They exist at f4ca326 too. The first version hid them by accident: the new
+  method `User.count` made the name ambiguous.
+
+Benchmark rerun (review round), on the shared clones with `benchmarks/realworld/run.py --repos <name>`, one at a
+time: express gold v1 7/10 and v2 2/2, the template 8/10, axios 7/10 (the same 7 as the 2026-10-02 run). No
+crashes or timeouts, clean after each.
+
+### 141.4 Not done
+
+- Member calls from another file reach the new methods only where a member resolver knows the receiver's type.
+  `res.json(...)` in an app, a test or an Express example is called on a parameter `res` of no known type.
+  `render-reaches-tryrender` misses for the same reason: `res.render` calls `app.render` on `this.req.app`, a local
+  of no known type. Bare calls and names passed by value from another file never reach them, nor a nested function
+  or a prototype method (the `_no_bare_name` marker).
+- A function a hook or factory returns and the caller destructures (`const { logout } = useAuth()`,
+  `const [throttled, flush] = throttle(...)`) is a nested function, so the caller's `logout()` gets no edge. The
+  first version bound these by name alone; they were right in the template but by the same rule that gave the
+  false edges.
+- In the same file, a nested function passed by value (`run(reset)`) from outside its scope can still be bound to
+  it when no module-level function has that name: the by-value lookup does not walk scopes. The nested-scope walk
+  for bare calls also ignores a non-function local of an inner scope that shadows a nested function's name (Python
+  has the same gap).
+- Comma and other sequence forms (`var q = {}; q.z = function () {}, q.w = function () {};`, common in minified
+  code) make no symbol: a sequence expression is not walked.
+- A test's local in an anonymous callback does not shadow a name passed by value from that callback (express tests
+  passing `count` bind to examples/view-locals `count()`); this is older than this change.
+- Only module-level assignments whose receiver the file binds at module level make a symbol. `$.fn.x = fn`,
+  `a.b.c = fn`, `app[method] = fn` (Express's `methods.forEach`), `window.x = fn` and an assignment to a parameter
+  inside a function make none.
+- The function's own name (`function contentType` in `res.type = ...`) is not a name or alias of the symbol.
+- `Foo.x = fn` and `Foo.prototype.x = fn` with the same `x` share one id.
+- `this.set()` in `app.init` makes no edge to `app.set`. A member call named like a builtin global of any language
+  (`set`) is not bound in the file; this is an older rule, kept here.
+- A module-level `res.m()` binds to the module's `res`, even where the code means another object of the same name in
+  a closure that does not bind `res` itself.
+- A nested function passed by value in an object (`useMutation({ mutationFn: login })`) gets no edge from the
+  enclosing function. Only `contains` links `useAuth` to `login`.
+- Two nested functions with the same name in sibling callbacks of one function share one id.
+- The closure capture is an over-approximation: any name bound anywhere in the enclosing body hides an indirect
+  edge to a same-named function.
+
+### 141.5 Tests
+
+- `tests/test_graph_precision.py`: four new tests on fixtures written to `tmp_path`. The fixtures are an
+  Express-shaped response.js and application.js (with an alias chain), a TS hook with nested functions, and a file
+  with a nested `abort`. The tests are `test_functions_assigned_to_a_module_object_are_its_methods`,
+  `test_calls_from_and_to_assigned_methods_resolve`, `test_a_function_bound_inside_a_function_is_its_own_symbol` and
+  `test_a_nested_function_is_not_a_property_and_sees_the_enclosing_locals`. All four fail on f4ca326.
+- `tests/test_deadcode.py`: `test_what_a_kept_alive_class_reaches_through_its_members_is_weak_too` (a Python class
+  named in a string, whose method alone calls a helper). It fails on f4ca326 (the helper is `strong_inference`).
+- Review round, `tests/test_graph_precision.py`: four more tests, each failing on the first version of this change
+  (dd46469):
+  - `test_a_later_assigned_method_does_not_hide_a_module_function_of_the_same_name` (`function send` before
+    `res.send = function send2`: the bare call and the name passed by value bind to the module function);
+  - `test_nested_functions_are_not_bound_from_another_file_by_a_bare_name` (hooks.ts / Form.ts);
+  - `test_assigned_methods_are_not_bound_from_another_file_by_a_bare_name` (lib.js / main.js, with a
+    `View.prototype.resolve` and a bare `resolve()`);
+  - `test_scoped_js_symbols_carry_the_no_bare_name_marker`.
+- Run: `tests/test_graph_precision.py`, `tests/test_deadcode.py` and `tests/test_docs.py` together: 58 passed (23,
+  16 and 19).
+
 ## Sources
 
 - **Retrieval:**

@@ -104,6 +104,8 @@ TOOL_NAMES: tuple[str, ...] = (
     "feedback_process",
     "feedback_resolve",
     "index_update",
+    "list_projects",
+    "index_status",
     "decision_record",
     "decision_check",
     "dependency_ask",
@@ -543,15 +545,24 @@ def _file_stat(p: Path) -> tuple[int, int, int] | None:
     return st.st_mtime_ns, st.st_size, getattr(st, "st_ino", 0)
 
 
+def index_state(repo: Path) -> str:
+    """``indexed`` (a graph), ``initialised`` (``.verinoda/`` without a graph) or ``not_scanned``."""
+    if graph_path(repo).exists():
+        return "indexed"
+    return "initialised" if atlas_dir(repo).is_dir() else "not_scanned"
+
+
 # -- the tools --------------------------------------------------------------------
 
 class AtlasTools:
     """Tool implementations over one repository (no MCP SDK needed)."""
 
-    def __init__(self, repo: Path | str, *, max_chars: int = MAX_RESPONSE_CHARS):
+    def __init__(self, repo: Path | str, *, max_chars: int = MAX_RESPONSE_CHARS, lock: Any = None):
         self.repo = Path(repo).resolve()
         self.max_chars = max_chars
-        self._lock = threading.RLock()
+        # a server over several projects passes one lock to all of them: stdout redirection and index builds
+        # are process-wide, so calls stay serialised across projects as they are within one
+        self._lock = lock or threading.RLock()
         self._graph_cache: tuple[tuple, Any] | None = None
         self._span_stat: dict[str, tuple | None] = {}   # file -> stat when its cached spans were noted
         self._span_noted = 0                              # entries of g._spans already noted
@@ -704,6 +715,20 @@ class AtlasTools:
             self._lex_cache = (key, lexmod.load(self.repo) if key else None)
             self.cache_stats["lexicon_loads"] += 1
         return self._lex_cache[1]
+
+    @property
+    def graph_loaded(self) -> bool:
+        """Is this project's graph kept in memory now?"""
+        return self._graph_cache is not None
+
+    def drop_caches(self) -> None:
+        """Forget the kept graph, its spans, the lexicon and the kept project_query answers (a server over several
+        projects bounds its memory this way); the next call loads them again. Session notes stay."""
+        with self._lock:
+            self._graph_cache = None
+            self._span_stat, self._span_noted = {}, 0
+            self._lex_cache = None
+            self._query_memo.clear()
 
     def _stale_graph(self, st):
         """The kept (or loaded) graph for an analysis that will not refresh the index first: None when a
@@ -1871,6 +1896,48 @@ class AtlasTools:
         return self._run("dependency_ask", go, keep=("verdict", "rules", "next_step"))
 
     # -- index ----------------------------------------------------------------------
+    def project_entry(self, name: str | None = None) -> dict:
+        """One row of list_projects: name, path, index state, trust, and whether the graph is kept in memory."""
+        from verinoda.paths import is_trusted
+
+        return {"name": name or self.repo.name, "path": str(self.repo), "state": index_state(self.repo),
+                "trusted": is_trusted(self.repo), "graph_loaded": self.graph_loaded}
+
+    def list_projects(self) -> dict:
+        """The projects this server answers for: here the one it was started on."""
+        return {"projects": [self.project_entry()], "count": 1}
+
+    def index_status(self) -> dict:
+        """The index of this project: its state, when the graph was written, the files changed since (the same
+        check every answer runs), whether a build runs now and whether this server keeps the graph in memory."""
+        def go():
+            from datetime import datetime, timezone
+
+            from verinoda import buildlock, freshness
+
+            out = self.project_entry()
+            out.pop("name")
+            st = _file_stat(graph_path(self.repo))
+            out["build_running"] = _build_running(self.repo)
+            if st is None:
+                out["hint"] = "call index_update (it scans or indexes this folder)"
+                return out
+            out["graph_written"] = datetime.fromtimestamp(st[0] / 1e9, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            last = buildlock.last_build_seconds(self.repo)
+            if last is not None:
+                out["last_build_seconds"] = round(last, 2)
+            fresh = freshness.check(self.repo)
+            if fresh.get("checked"):
+                out["stale_count"] = fresh["count"]
+                if fresh["count"]:
+                    out.update(modified=fresh["modified"], added=fresh["added"], removed=fresh["removed"],
+                               stale_files=fresh["files"][:20])
+                    out["hint"] = "call index_update to take the changed files in"
+            else:
+                out["index_freshness"] = f"not checked: {fresh.get('why')}"
+            return out
+        return self._run("index_status", go, need="none", keep=("state", "stale_count", "hint"))
+
     def index_update(self) -> dict:
         if not atlas_dir(self.repo).is_dir():
             return self._first_scan()
@@ -2083,6 +2150,9 @@ GATEWAY_CATALOG: dict[str, str] = {
     "dependency_ask": "dependency_ask {source, target}: may source import it",
     "history_search": "history_search {text|symbol|message|base, ...}: when text came/went, commits, compare",
     "tq": "tq {questions}: typed questions (calls, reaches, callers, which...), many per call",
+    # behind run_tool only in a server over several projects (the single-project core menu has no room for them)
+    "list_projects": "list_projects {}: the projects served",
+    "index_status": "index_status {}: a project's index state and stale files",
 }
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
@@ -2120,6 +2190,7 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
   strategies[0] with debug_strategy and show debug_status. Never say "fixed": the repro passed at tree T in run R.
 - grep_context: what the Grep hook adds (definition, callers, callees of a searched symbol).
 - read_context: what the Read/Edit hook adds (decision records, notes and rules about the file).
+- list_projects / index_status: the projects served; an index's state and the files changed since it.
 - change_probe: after editing a Python function, its base and working-tree versions on generated inputs. A
   difference is a behaviour change, not a bug; say "no difference found in N inputs", never "verified"; a refusal,
   inconclusive or incomplete is not a pass."""
@@ -2182,9 +2253,14 @@ def served_tools(repo: Path, profile: str) -> tuple[str, ...]:
 def listed_tools(repo: Path, profile: str) -> tuple[str, ...]:
     """The tools the menu lists: the core profile's direct tools and the gateway to the rest of
     :func:`served_tools`; the full profile lists every tool."""
+    return listed_of(served_tools(repo, profile), profile)
+
+
+def listed_of(served: tuple[str, ...], profile: str) -> tuple[str, ...]:
+    """:func:`listed_tools` for a given set of served tools (a server over several projects serves their union)."""
     if profile != "core":
-        return served_tools(repo, profile)
-    behind = [n for n in served_tools(repo, profile) if n not in CORE_DIRECT]
+        return served
+    behind = [n for n in served if n not in CORE_DIRECT]
     return (*CORE_DIRECT, *((GATEWAY,) if behind else ()))
 
 
@@ -2334,6 +2410,12 @@ DESCRIPTIONS: dict[str, str] = {
     "index_update": (
         "Re-index after editing files (on a folder never scanned: the first scan); claims whose files changed "
         "become stale. mode: noop | incremental | full | first_scan."),
+    "list_projects": (
+        "The projects this server answers for: name (what the project argument takes), path, index state, "
+        "trusted, and whether the graph is kept in memory."),
+    "index_status": (
+        "A project's index: not_scanned | initialised | indexed, when the graph was written, the files changed "
+        "since (stale_count), whether a build is running. Read-only; index_update re-indexes."),
     "decision_record": (
         "Decision records (Markdown with front matter in decisions.dir, logged append-only). action: list | "
         "record (chosen + rationale; optional brief_id, guards, governs, revisit_when, supersedes) | import (a "
@@ -2403,7 +2485,8 @@ DESCRIPTIONS: dict[str, str] = {
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
               "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq"}
+              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq",
+              "list_projects", "index_status"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -2531,17 +2614,30 @@ def _result_wrapper(major: int) -> Callable[[dict], Any]:
     return emit
 
 
-def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: str | None = None):
+def build_server(repo: Path | str | None, tools: AtlasTools | None = None, *, profile: str | None = None,
+                 hub: Any = None):
     """An MCP server (SDK object) exposing the tools of a profile (:func:`resolve_profile`; ``core`` by
-    default, ``full`` = :data:`TOOL_NAMES`) over ``repo``."""
+    default, ``full`` = :data:`TOOL_NAMES`) over ``repo``.
+
+    ``hub`` (a :class:`verinoda.mcp.projects.ProjectHub`): serve several projects instead. Every tool then takes
+    an optional ``project`` argument, the menu is the union of what each project's own profile serves, and a call
+    is checked against the profile of the project it is for (:meth:`ProjectHub.wrap`)."""
     from pydantic import Field
 
     Server, major = _load_sdk()
-    t = tools or AtlasTools(repo)
-    profile = resolve_profile(t.repo, profile)
-    served = set(served_tools(t.repo, profile))
     emit = _result_wrapper(major)
-    text = instructions(profile, decisions="decision_check" in served).format(repo=t.repo)
+    if hub is not None:
+        t = hub.current_tools  # resolves to the AtlasTools of the project the running call is for
+        profile = hub.menu_profile
+        served = set(hub.menu_served())
+        text = hub.instructions(instructions(profile, decisions=bool(served & {"decision_check", "dependency_ask"})))
+        listed = set(listed_of(tuple(sorted(served)), profile))
+    else:
+        t = tools or AtlasTools(repo)
+        profile = resolve_profile(t.repo, profile)
+        served = set(served_tools(t.repo, profile))
+        text = instructions(profile, decisions="decision_check" in served).format(repo=t.repo)
+        listed = set(listed_tools(t.repo, profile))
     from verinoda import buildinfo
 
     # serverInfo.version names the build (``0.1.0.dev0+<commit12>``, ``+unknown``), so a client can tell
@@ -2560,11 +2656,12 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     # a description names only what this profile serves (else the CLI)
     plan_check = "see question_plan_check" if "question_plan_check" in served else "from `verinoda plan check`"
 
-    listed = set(listed_tools(t.repo, profile))
     impl: dict[str, Callable] = {}   # every served tool's function: run_tool calls the ones not listed
     slim = {"analyze", "code_check"} if profile == "core" else set()  # listed with fewer arguments (below)
 
     def add(name: str, fn, description: str) -> None:
+        if hub is not None:
+            fn = hub.wrap(name, fn, emit)
         kwargs: dict[str, Any] = {"name": name, "description": description,
                                   "structured_output": False}  # no output schema: results are open objects
         ann = _tool_annotations(name)
@@ -2941,6 +3038,14 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     def index_update() -> dict[str, Any]:
         return emit(t.index_update())
 
+    @register("list_projects")
+    def list_projects() -> dict[str, Any]:
+        return emit(hub.list_projects() if hub is not None else t.list_projects())
+
+    @register("index_status")
+    def index_status() -> dict[str, Any]:
+        return emit(t.index_status())
+
     StrList = list[str] | None
 
     @register("decision_record")
@@ -3124,7 +3229,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
         add("analyze", analyze_core, DESCRIPTIONS["analyze"])
         add("code_check", code_check_core, DESCRIPTIONS["code_check"])
-    behind = [n for n in (*CORE_TOOLS, "grep_context", "read_context") if n in impl and n not in listed] \
+    behind = [n for n in (*CORE_TOOLS, "grep_context", "read_context", "list_projects", "index_status")
+              if n in impl and n not in listed] \
         if GATEWAY in listed else []
     if behind:
         import inspect
@@ -3333,49 +3439,103 @@ def repo_of_config(start: Path, rel: str) -> Path:
     return default_repo(here)
 
 
-def serve(repo: Path, profile: str | None = None, *, watch: bool = False) -> None:
-    """Serve the Verinoda tools for ``repo`` over stdio (``verinoda mcp serve [--profile core|full] [--watch]``).
+def _state_line(repo: Path) -> str:
+    return {"indexed": "indexed", "initialised": "initialised, not indexed - index_update builds the index",
+            "not_scanned": "not scanned - index_update scans it"}[index_state(repo)]
 
-    ``watch``: also run a fast ``update`` when the project's files change (:class:`verinoda.fswatch.Watcher`,
+
+def _locked_update(watcher, lock) -> Callable[[], Any]:
+    """A watcher's update under the server's lock: builds of several projects in one process never overlap
+    (a build sets process-wide state, such as the vendored-code switch and the redirected output)."""
+    def run():
+        with lock:
+            return watcher._update()
+    return run
+
+
+def serve(repo: Path | None, profile: str | None = None, *, watch: bool = False,
+          projects: list[tuple[str, Path]] | None = None, max_loaded: int | None = None, transport: str = "stdio",
+          host: str | None = None, port: int | None = None, state_file: Path | None = None) -> None:
+    """Serve the Verinoda tools for ``repo`` (``verinoda mcp serve [--profile core|full] [--watch]``), or for
+    several ``projects`` (``--projects A,B``: :class:`verinoda.mcp.projects.ProjectHub`), over stdio or, with
+    ``transport="http"``, over streamable HTTP with a bearer token (:mod:`verinoda.mcp.transport`).
+
+    ``watch``: also run a fast ``update`` when a project's files change (:class:`verinoda.fswatch.Watcher`,
     woken by file events), so the next tool call answers from the edited code without ``index_update``."""
-    repo = Path(repo).resolve()
+    from verinoda import buildinfo
+    from verinoda.paths import ignored_settings_note
+
+    hub = None
     try:
-        srv = build_server(repo, profile=profile)
+        if projects:
+            from verinoda.mcp.projects import ProjectError, ProjectHub
+
+            try:
+                hub = ProjectHub(projects, profile=profile, max_loaded=max_loaded)
+            except ProjectError as exc:
+                raise ValueError(str(exc)) from None
+            srv = build_server(None, hub=hub)
+            roots = list(hub.projects.items())
+        else:
+            repo = Path(repo).resolve()  # type: ignore[arg-type]
+            srv = build_server(repo, profile=profile)
+            roots = [(repo.name, repo)]
         major = _load_sdk()[1]
     except (RuntimeError, ValueError) as exc:  # SDK missing or shadowed, unknown profile: a message
         raise SystemExit(f"error: {exc}") from None
-    if major < 2:
+    if transport == "stdio" and major < 2:
         _move_protocol_off_std_fds()
-    if graph_path(repo).exists():
-        state = "indexed"
-    elif atlas_dir(repo).is_dir():
-        state = "initialised, not indexed - index_update builds the index"
-    else:
-        state = "not scanned - index_update scans it"
     served = getattr(srv, "verinoda_profile", DEFAULT_PROFILE)
-    from verinoda import buildinfo
+    build = f"build {buildinfo.server_version()} ({sys.executable})"
+    if hub is None:
+        repo = roots[0][1]
+        print(f"verinoda mcp: serving {repo} over {transport} ({_state_line(repo)}; "
+              f"{len(listed_tools(repo, served))} tools, profile {served}); {build}", file=sys.stderr, flush=True)
+    else:
+        listed = listed_of(tuple(hub.menu_served()), served)
+        print(f"verinoda mcp: serving {len(roots)} projects over {transport} ({len(listed)} tools, profile {served}; "
+              f"graphs kept for {hub.max_loaded} at a time); {build}", file=sys.stderr, flush=True)
+        for name, root in roots:
+            print(f"verinoda mcp:   {name}: {root} ({_state_line(root)}; profile {hub.profiles[name]})",
+                  file=sys.stderr, flush=True)
+    for _name, root in roots:
+        note = ignored_settings_note(root)
+        if note:
+            print(f"verinoda mcp: {note}", file=sys.stderr, flush=True)
+    watchers = []
+    for _name, root in roots:
+        if watch and graph_path(root).exists():
+            from verinoda.fswatch import Watcher
 
-    print(f"verinoda mcp: serving {repo} over stdio ({state}; {len(listed_tools(repo, served))} tools, "
-          f"profile {served}); "
-          f"build {buildinfo.server_version()} ({sys.executable})", file=sys.stderr, flush=True)
-    from verinoda.paths import ignored_settings_note
-
-    note = ignored_settings_note(repo)
-    if note:
-        print(f"verinoda mcp: {note}", file=sys.stderr, flush=True)
-    watcher = None
-    if watch and graph_path(repo).exists():
-        from verinoda.fswatch import Watcher
-
-        watcher = Watcher(repo, purpose="mcp serve --watch", fast=True)
-        watcher.start()
-    elif watch:
-        print("verinoda mcp: --watch needs an index: run index_update, then restart the server to watch",
-              file=sys.stderr, flush=True)
+            w = Watcher(root, purpose="mcp serve --watch", fast=True)
+            if hub is not None:
+                w.run_update = _locked_update(w, hub.lock)
+            w.start()
+            watchers.append(w)
+        elif watch:
+            print(f"verinoda mcp: --watch needs an index of {root}: run index_update, then restart the server to "
+                  "watch it", file=sys.stderr, flush=True)
     try:
-        srv.run("stdio")
+        if transport == "http":
+            from verinoda.mcp import transport as http_transport
+
+            def status() -> dict:
+                if hub is not None:
+                    return hub.status()
+                return {"projects": {roots[0][0]: str(roots[0][1])}, "menu_profile": served}
+
+            try:
+                http_transport.serve_http(srv, host=host or http_transport.DEFAULT_HOST,
+                                          port=http_transport.DEFAULT_PORT if port is None else port,
+                                          status=status, state_file=state_file, label="MCP server")
+            except (RuntimeError, OSError) as exc:  # no HTTP transport in the SDK, the port is taken
+                raise SystemExit(f"error: {exc}") from None
+        else:
+            srv.run("stdio")
     except KeyboardInterrupt:  # pragma: no cover - interactive stop
         pass
     finally:
-        if watcher is not None:
-            watcher.stop.set()
+        for w in watchers:
+            w.stop.set()
+
+

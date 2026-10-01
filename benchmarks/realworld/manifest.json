@@ -1,0 +1,98 @@
+{
+  "selected": "2026-10-01",
+  "rule": "Permissive license (MIT or Apache-2.0), over 10k stars, not archived, a recent release tag, about 100-1000 files (no giants); one or two per language. Stars are the count at selection on the date above.",
+  "repos": [
+    {"name": "Graphify-Labs/graphify", "url": "https://github.com/Graphify-Labs/graphify", "tag": "v0.9.73", "sha": "ef4450d9c28acb2b8cdc22d369c1777b77148eef", "license": "Apache-2.0", "stars": 123030, "stars_date": "2026-10-01", "language": "Python", "files_approx": 950,
+     "scenario": {
+       "queries": ["how is the knowledge graph built from the extractions", "how are communities detected in the graph", "how does the extractor read a Python file"],
+       "analyze": ["what happens when the graphify command runs on a folder", "how are god nodes and surprising connections found"],
+       "trace": ["graphify/build.py::build", "graphify/build.py::build_from_json"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"build_from_json\" return a limit 20"],
+       "edit": {"file": "graphify/cluster.py", "after_line": 363, "insert": "_VERINODA_BENCH_EDIT = 1"},
+       "check_file": "graphify/cluster.py"
+     }},
+    {"name": "fastapi/full-stack-fastapi-template", "url": "https://github.com/fastapi/full-stack-fastapi-template", "tag": "0.12.0", "sha": "84c5a9e11a9e58262599e3d772f5386924e02ca7", "license": "MIT", "stars": 45835, "stars_date": "2026-10-01", "language": "Python + TypeScript", "files_approx": 254,
+     "scenario": {
+       "queries": ["how does a user log in and get an access token", "how is the current user read from the token", "how are items created and listed"],
+       "analyze": ["what happens when a client posts to the login endpoint", "how are passwords hashed and verified"],
+       "trace": ["login_access_token", "verify_password"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"get_password_hash\" return a limit 20"],
+       "edit": {"file": "backend/app/crud.py", "after_line": 18, "insert": "_VERINODA_BENCH_EDIT = 1"},
+       "check_file": "backend/app/crud.py"
+     }},
+    {"name": "fastapi/sqlmodel", "url": "https://github.com/fastapi/sqlmodel", "tag": "0.0.47", "sha": "1c46f0decb64762b4beb085e3181428921166349", "license": "MIT", "stars": 18353, "stars_date": "2026-10-01", "language": "Python", "files_approx": 526,
+     "scenario": {
+       "queries": ["how does a table model become a SQLAlchemy table", "how is a model validated from a dict or an object", "how does session exec run a select"],
+       "analyze": ["what happens when a class is declared with table=True", "how are relationships between models set up"],
+       "trace": ["sqlmodel/main.py::model_validate", "sqlmodel_validate"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"get_column_from_field\" return a limit 20"],
+       "edit": {"file": "sqlmodel/main.py", "after_line": 837, "insert": "_VERINODA_BENCH_EDIT = 1"},
+       "check_file": "sqlmodel/main.py"
+     }},
+    {"name": "expressjs/express", "url": "https://github.com/expressjs/express", "tag": "v5.2.1", "sha": "dbac741a49a5a64336b70c06e85c2e2706e36336", "license": "MIT", "stars": 69502, "stars_date": "2026-10-01", "language": "JavaScript", "files_approx": 218,
+     "scenario": {
+       "queries": ["how is a JSON response sent", "how does the application handle an incoming request", "how is a view rendered"],
+       "analyze": ["what happens when res.json is called", "how does express create an application"],
+       "trace": ["lib/response.js::json", "stringify"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"send\" return a limit 20"],
+       "edit": {"file": "lib/response.js", "after_line": 253, "insert": "var verinodaBenchEdit = 1;"}
+     }},
+    {"name": "axios/axios", "url": "https://github.com/axios/axios", "tag": "v1.20.0", "sha": "84a9f3b9a4f3244b8c8e818f557d64c7b964fb25", "license": "MIT", "stars": 109249, "stars_date": "2026-10-01", "language": "JavaScript + TypeScript", "files_approx": 466,
+     "scenario": {
+       "queries": ["how is a request dispatched to the adapter", "how are request configs merged", "how are interceptors run"],
+       "analyze": ["what happens when axios.get is called", "how is a request cancelled"],
+       "trace": ["lib/core/Axios.js::request", "lib/core/dispatchRequest.js::dispatchRequest"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"mergeConfig\" return a limit 20"],
+       "edit": {"file": "lib/core/dispatchRequest.js", "after_line": 26, "insert": "const verinodaBenchEdit = 1;"}
+     }},
+    {"name": "junegunn/fzf", "url": "https://github.com/junegunn/fzf", "tag": "v0.74.4", "sha": "a140afeb4d733cad3c96a56bf6db7e26853b6757", "license": "MIT", "stars": 83344, "stars_date": "2026-10-01", "language": "Go", "files_approx": 161,
+     "scenario": {
+       "queries": ["how does the terminal draw the list of matches", "how is the input read from the default command", "how are results sorted by score"],
+       "analyze": ["how does a keystroke change the query and rerun the matcher", "how are matches ranked"],
+       "trace": ["main.go::main", "NewMatcher"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"scan\" return a limit 20"],
+       "edit": {"file": "src/core.go", "after_line": 55, "insert": "\t_ = opts // verinoda-bench edit"}
+     }},
+    {"name": "gin-gonic/gin", "url": "https://github.com/gin-gonic/gin", "tag": "v1.12.0", "sha": "73726dc606796a025971fe451f0aa6f1b9b847f6", "license": "MIT", "stars": 89264, "stars_date": "2026-10-01", "language": "Go", "files_approx": 130,
+     "scenario": {
+       "queries": ["how is a route registered on a router group", "how does the middleware chain call the next handler", "how is a JSON response rendered"],
+       "analyze": ["what happens when a request arrives at the engine", "how are panics recovered"],
+       "trace": ["gin.go::Default", "LoggerWithConfig"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"Next\" return a limit 20"],
+       "edit": {"file": "gin.go", "after_line": 238, "insert": "\t_ = engine // verinoda-bench edit"}
+     }},
+    {"name": "sharkdp/bat", "url": "https://github.com/sharkdp/bat", "tag": "v0.26.1", "sha": "979ba22628bc9d8171f2cffca2bd5c90c9fc0a9e", "license": "Apache-2.0 OR MIT", "stars": 60627, "stars_date": "2026-10-01", "language": "Rust", "files_approx": 882,
+     "scenario": {
+       "queries": ["how does the controller print each input file", "how is the pager started", "how are syntax and theme assets loaded"],
+       "analyze": ["what happens when bat prints a file", "how are line ranges selected"],
+       "trace": ["src/bin/bat/main.rs::run_controller", "src/controller.rs::run_with_error_handler"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"print_line\" return a limit 20"],
+       "edit": {"file": "src/controller.rs", "after_line": 46, "insert": "    const VERINODA_BENCH_EDIT: u8 = 1;"}
+     }},
+    {"name": "google/gson", "url": "https://github.com/google/gson", "tag": "gson-parent-2.14.0", "sha": "3ff35d6269894901ab8006258395aafc4b9765cd", "license": "Apache-2.0", "stars": 24233, "stars_date": "2026-10-01", "language": "Java", "files_approx": 311,
+     "scenario": {
+       "queries": ["how does Gson choose a type adapter for a type", "how is an object serialized to JSON", "how does the streaming reader read a token"],
+       "analyze": ["what happens when fromJson is called with a class", "how are fields of a class mapped to JSON names"],
+       "trace": ["gson/src/main/java/com/google/gson/stream/JsonReader.java::peek", "doPeek"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"getAdapter\" return a limit 20"],
+       "edit": {"file": "gson/src/main/java/com/google/gson/Gson.java", "after_line": 547, "insert": "  private static final int VERINODA_BENCH_EDIT = 1;"},
+       "check_file": "gson/src/main/java/com/google/gson/Gson.java"
+     }},
+    {"name": "guzzle/guzzle", "url": "https://github.com/guzzle/guzzle", "tag": "8.2.0", "sha": "93939470950a9b11e2e84204166ef5e048c55fe4", "license": "MIT", "stars": 23452, "stars_date": "2026-10-01", "language": "PHP", "files_approx": 176,
+     "scenario": {
+       "queries": ["how does the client send a request", "how is the handler stack built", "how are redirects followed"],
+       "analyze": ["what happens when Client::request is called", "how are request options applied"],
+       "trace": ["src/Client.php::request", "src/Client.php::transfer"],
+       "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"transfer\" return a limit 20"],
+       "edit": {"file": "src/Client.php", "after_line": 332, "insert": "    private const VERINODA_BENCH_EDIT = 1;"}
+     }}
+  ],
+  "rejected": [
+    "spf13/cobra: too small (66 files, 36 .go)",
+    "sinatra/sinatra: no GitHub release to pin",
+    "encode/httpx: latest release 2024-12-06, not recent",
+    "django, react, kubernetes, linux: too large for this machine",
+    "jbogard/MediatR, AutoMapper: moved to commercial licensing",
+    "spring-projects/spring-petclinic: believed under 10k stars, not queried"
+  ]
+}

@@ -1062,7 +1062,8 @@ def _context(X: dict, B: set[str]) -> tuple[list[dict], list[dict]]:
             continue
         c = {"id": node["id"], "label": node.get("label"), "source_file": sf, "file_type": node.get("file_type"),
              "type": node.get("type")}
-        for marker in ("_callable", "_callable_class", "_elixir_module", "_rust_impl_key", "_rust_declaration_count"):
+        for marker in ("_callable", "_callable_class", "_elixir_module", "_no_bare_name", "_rust_impl_key",
+                       "_rust_declaration_count"):
             if node.get(marker):
                 c[marker] = node[marker]
         md = node.get("metadata")
