@@ -91,6 +91,9 @@ class MixinClass:
     name: str
     targets: list[tuple[str, list[str]]] = field(default_factory=list)   # (as written, binary candidates)
     items: list[Item] = field(default_factory=list)
+    priority: int | None = None  # @Mixin(priority = N) as written
+    target_names: list[list[str]] = field(default_factory=list)   # per target: the binary name(s) it may be
+    injections: list[dict] = field(default_factory=list)   # one per injector or @Overwrite: what it names
 
 
 def _line(node) -> int:
@@ -206,10 +209,16 @@ def read_mixins(path: str, src: bytes) -> list[MixinClass]:
             for v in _flat(_element(mixin, src, "value")):
                 if v.type == "class_literal" and v.named_children:
                     w = _type_text(v.named_children[0], src)
-                    mc.targets.append((w, _candidates(w, ctx)))
+                    cands = _candidates(w, ctx)
+                    mc.targets.append((w, cands))
+                    # an imported or fully qualified name is the first candidate; any other may be any of them
+                    sure = w.partition(".")[0] in ctx.single or ("." in w and w[:1].islower())
+                    mc.target_names.append(cands[:1] if sure else cands)
             for _v, s in _strings(mixin, src, "targets", consts):
                 b = s.strip().replace(".", "/") if "/" not in s else s.strip()
                 mc.targets.append((s, [b]))
+                mc.target_names.append([b])
+            mc.priority = _int(_element(mixin, src, "priority"), src)
             ctv = _typevars(ch, src)
             for m in (body.named_children if body is not None else []):
                 if m.type in ("method_declaration", "field_declaration"):
@@ -218,9 +227,71 @@ def read_mixins(path: str, src: bytes) -> list[MixinClass]:
     return out
 
 
+def _int(n, src: bytes) -> int | None:
+    """An int literal (``5``, ``-1``, ``0x10``), else None."""
+    if n is None:
+        return None
+    try:
+        return int(re.sub(r"[\s_lL]", "", _t(n, src)), 0)
+    except ValueError:
+        return None
+
+
+def _value(n, src: bytes, consts: dict[str, str]):
+    """An annotation value as compared with a class file's: a string, a number, true/false, an enum constant's
+    name, a nested annotation as ``{"type": simple name, "values": {...}}``, a list; the text when unread."""
+    if n is None:
+        return None
+    if n.type in ("element_value_array_initializer", "array_initializer"):
+        return [_value(c, src, consts) for c in n.named_children if c.type not in _COMMENTS]
+    if n.type in ("annotation", "marker_annotation"):
+        args = n.child_by_field_name("arguments")
+        vals: dict = {}
+        for ch in (args.named_children if args is not None else []):
+            if ch.type == "element_value_pair":
+                vals[_t(ch.child_by_field_name("key"), src)] = _value(ch.child_by_field_name("value"), src, consts)
+            elif ch.type not in _COMMENTS:
+                vals["value"] = _value(ch, src, consts)
+        return {"type": _t(n.child_by_field_name("name"), src).rsplit(".", 1)[-1], "values": vals}
+    s = _str(n, src, consts)
+    if s is not None:
+        return s
+    text = _t(n, src).strip()
+    if text in ("true", "false"):
+        return text == "true"
+    num = _int(n, src)
+    if num is not None:
+        return num
+    try:
+        return float(re.sub(r"[fFdD]$", "", text))
+    except ValueError:
+        return text.rsplit(".", 1)[-1]   # an enum constant (Opcodes.GETFIELD) or a name this reader does not resolve
+
+
+def _injection(aname: str, a, m, src: bytes, consts: dict[str, str]) -> dict:
+    """What an injector (or ``@Overwrite``) names: its target method selectors, its ``@At`` points and the
+    values that pick a slot (``ordinal``, ``index``, ``name``, ``constant``, ``cancellable``)."""
+    nm = m.child_by_field_name("name")
+    member = _t(nm, src) if nm is not None else "?"
+    args = a.child_by_field_name("arguments") if a.type == "annotation" else None
+    vals: dict = {}
+    for ch in (args.named_children if args is not None else []):
+        if ch.type == "element_value_pair":
+            vals[_t(ch.child_by_field_name("key"), src)] = _value(ch.child_by_field_name("value"), src, consts)
+    sels = vals.get("method")
+    sels = sels if isinstance(sels, list) else [sels] if sels is not None else []
+    if aname == "Overwrite":
+        sels = [member]
+    return {"kind": aname, "line": _line(a), "member": member, "values": vals,
+            "selectors": [s for s in sels if isinstance(s, str)],
+            "unread": any(not isinstance(s, str) for s in sels)}
+
+
 def _member_items(mc: MixinClass, m, src: bytes, consts: dict[str, str], ctv: set[str]) -> None:
     mods = next((c for c in m.named_children if c.type == "modifiers"), None)
     for aname, a in _annotations(mods, src):
+        if m.type == "method_declaration" and (aname in MIXIN_INJECTORS or aname == "Overwrite"):
+            mc.injections.append(_injection(aname, a, m, src, consts))
         if aname in MIXIN_INJECTORS:
             sels = _strings(a, src, "method", consts)
             for node, s in sels:
