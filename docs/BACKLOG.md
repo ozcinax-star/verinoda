@@ -64,7 +64,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 5.1 | **Session dedup** | Within one agent session, passages already returned are not returned again | Probe, Ref | a repeated query in one MCP session returns only new passages |
 | 5.3 | **Hybrid lexical and embedding search (opt-in)** | A local embedding model adds leads fused with BM25 (reciprocal-rank fusion); leads only, never evidence | GitNexus, claude-context, Codanna, cocoindex-code, Augment | benchmark sets gain facts with no fact lost |
 
 ## 6 - Graph metrics and dependency health
