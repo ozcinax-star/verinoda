@@ -73,7 +73,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 7.5 | **DSM view and C4 model check** | Dependency structure matrix; a C4 model compared with the real graph | Lattix, NDepend, IntelliJ, Structurizr | the matrix in `ui`; model edges without code edges listed |
 
 ## 8 - Change review extensions
 
@@ -108,7 +107,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 13.1 | **Hooks on the agent's own tool calls** | PreToolUse and PostToolUse hooks add graph context to the agent's Grep and Read in Claude Code, Codex and Cursor | GitNexus, Codanna, CodeGraph | a Grep in Claude Code returns the matching symbols' callers without a Verinoda call |
 | 13.4 | **Package existence and slopsquatting check (opt-in)** | A new dependency checked against its registry: exists, age, downloads, malware signals | Socket MCP, Endor Labs | `check` flags a dependency name the registry does not have |
 
 ## 14 - Outputs and views

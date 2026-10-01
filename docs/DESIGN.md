@@ -11485,6 +11485,216 @@ its missing fields absent; the nearest of an `@At` in a method of 3,000 calls; t
 unknown with the next step; edit-distance nearest and the selector / member parsers; the CLI's text, `--json`, exit codes and
 the `no_mixins` note for named files. `tests/jvmfixtures.py` can now write a method's `Code` attribute.
 
+## 115. Dependency structure matrix and C4 model check (D142, 2026-10-01)
+
+### 115.1 Why
+
+The dependencies view lists the heaviest file-to-file dependencies and the cycles view the rings between files, but
+neither shows the shape of a whole project at a glance: which parts use which, in what order, and where that order
+is broken. A dependency structure matrix (Lattix, NDepend, IntelliJ) does: groups on both axes, a count in each
+cell, ordered so that every mark against the layering stands out. Teams that draw their architecture as a C4 model
+(Structurizr) also want to know whether the drawing still matches the code: a relation in the model that no code
+makes, and code dependencies the model does not show. Done when: the matrix in `ui`; model edges without code
+edges listed.
+
+### 115.2 Decisions
+
+- **Two map views, no new command:** `verinoda map --view dsm [--group-by folder|tag] [--depth N]` and
+  `verinoda map --view model [--model PATH]` (module `verinoda/dsm.py`), asked for by name like dead and hotspots.
+  MCP `map_view` takes `dsm` (targets `['tag']` groups by tags) and `model` (targets `[DSL path]`); no new tool,
+  the gateway's catalog line grew by the two names (one word shortened elsewhere to keep the core menu under its
+  limit). `--group-by`, `--depth` and `--model` with another view are refused (exit 2).
+- **The same dependencies as the cycles view:** `architecture_map._file_deps` (calls, imports, imports_from,
+  uses, inherits between files; type-only and deferred imports, prose files and standard-library imports the
+  graph resolved to a project module left out), summed between groups. Each cell carries its reference count,
+  EXTRACTED count, relations and up to three reference lines (EXTRACTED first). A cell is `strong_inference` when
+  an EXTRACTED edge is in it, else `weak_inference`: graph edges are extractions, never verification.
+- **Groups:** folders at `--depth` (files at the top in `(root)`); by default the deepest depth (1-8) with at most
+  30 groups. Or the committed `[architecture.tags]` (D95) with `--group-by tag`: a file two tags match counts in
+  the first tag of the table (counted in the limits), untagged files in `(other)`, a tag that matches no code file
+  is a problem, no tags at all is a problem with the next step - never an empty matrix that looks clean.
+- **Order: row uses column, a group before what it uses.** A lexicographic topological order of the condensed
+  group graph (ties in name order); inside a cycle of groups the order that leaves the fewest references pointing
+  back, searched exactly up to 10 groups (dynamic programming over subsets; tested against every permutation),
+  Eades-Lin-Smyth beyond. So a mark below the diagonal (`against_order`, `*` in the text) only exists inside a
+  cycle, and the cycles of groups are listed.
+- **Model sources:** a Structurizr DSL file (`--model`, or `dsl = "path"` in `[architecture.model]` of
+  `verinoda.toml` / `[tool.verinoda.architecture.model]` of `pyproject.toml`), and/or `relations = ["ui -> core"]`
+  there between tags. The DSL subset read: `person`, `softwareSystem`, `container`, `component` and `element`
+  with or without an identifier, nested blocks, `!identifiers hierarchical`, `a -> b "description"` and `-> b`
+  inside an element (`this` too), comments outside strings; views, styles, deployment and other blocks skipped.
+  An element maps to code through its property `"verinoda.code" "glob, glob"`, else through a tag of its id (or
+  the id's last segment). A relation that names no element is a problem with its line. A model path outside the
+  repository is refused.
+- **Judgement:** each file goes to the deepest element whose globs match it (an element's code is its own and its
+  children's). A dependency inside one element, or between an element and one inside it, is not judged. Every
+  model relation is `matched` (code of `from`, or of an element inside it, uses code of `to`; with references and
+  lines), `model_only` (no extracted dependency; `strong_inference`, never verified absence, with the reference
+  count going the other way when there is one), `not_checked` (an end has no code: a person, an external system)
+  or `unknown` (an end's globs match no indexed file, with a next step). Every dependency between two elements no
+  relation covers is `undeclared`, heaviest first, with its lines. The view's status is `unknown` when any
+  relation is, else `differs` or `consistent`; without a model, `no_model` with how to declare one.
+- **ui:** a "Dependency matrix" page (`#/m`, linked from the start page): the matrix as a table shaded by count,
+  marks against the order outlined, a cell's relations and lines (opening the editor) on click, grouping and depth
+  controls, and the committed model's relations and undeclared dependencies below. `/api/dsm` (memoised per
+  snapshot and grouping) and `/api/model`. The exported HTML file carries the matrix by folder at the automatic
+  depth and the committed model.
+
+- **Review round** (one reviewer, eight confirmed findings, all fixed with regression tests): the model's status
+  is `unknown` - never `consistent` - when no relation could be judged, no file is in the model, a relation was
+  dropped (an element name the model does not have, a `relations` entry naming neither an element nor a tag) or
+  a model source was not read; DSL lines of kinds the reader skips are listed (`line not read`) without blocking
+  the verdict. Relationships with an identifier (`r1 = a -> b`), `-> this`, and implied sources inside anonymous
+  elements are read; a line with `->` that is not understood is a problem, never dropped silently. Comments open
+  only at the start of a token, so an unquoted glob (`src/a/*`, `src/b/**/*.py`) is a glob. Statements are split
+  at braces (`workspace { model {`, `} }`). A model path is resolved and must be inside the repository (links
+  out too), and is shown relative to it. `relations` in `[architecture.model]` name DSL elements first
+  (hierarchical ids by their last segment), tags only when no element matches. Cells come back marks against
+  the order first, then the heaviest, so a response cut to size drops light cells, never back marks. Ties in the
+  order follow the given order of the groups. `map save` keeps `--group-by`, `--depth` and `--model` and its
+  rerun command names them; `--depth` with `--group-by tag`, and the three options with `map show` / `list`, are
+  refused; an unreadable `--model` exits 2. The ui memoises the model per snapshot and keeps at most eight
+  groupings.
+
+### 115.3 Measured
+
+On this repository (the main checkout's index of 2026-09-30, 30,971 graph nodes, graph already loaded, three
+runs): the file dependencies 1.2-1.5 s, the dsm view 1.24-1.27 s (26 groups at the automatic depth 2, 38 cells;
+depth 3: 49 groups, 1.26 s). The first run found a cycle of nine groups that ran through `benchmarks/corpora`:
+its back references were INFERRED calls (`verinoda/runtime/trace.py:277 is_test_path(...)`,
+`verinoda/claims.py:642`) the resolver had bound to functions of the same name in an old copy of the project
+under `benchmarks/corpora/heldout_repoatlas_7371990/`. The matrix now sets edges between a detected copy and the
+project apart, as the cycles view does (19 references, named in the limits); the cycle left has eight groups,
+`verinoda` and its subpackages. Two of its back references were read at their lines: `verinoda/references/
+classify.py:568` (`from verinoda.research import (`) and `verinoda/project_index/cache.py:501` (`from verinoda
+import doctext`), both imports of the package from a subpackage. Lines cited in `verinoda/cli.py` had moved since
+the index (203 files changed) and were not used. A hand-written model of Verinoda (CLI, MCP server, UI, core,
+benchmarks) gave 3 matched relations, 2 with no code edge - UI -> MCP server (the UI's code indeed imports
+nothing of `verinoda/mcp`) and core -> benchmarks (its only references were the copy edges set apart; before
+that fix it was counted as matched) - 1 not checked (a person) and 5 undeclared pairs. Not measured: precision or recall against a labelled architecture,
+models of other projects.
+
+### 115.4 Not done
+
+- Edges are what the index extracted: reflection, DI containers, string class loading, HTTP and message calls
+  between services and build-time wiring are not seen, so `model_only` can be a relation the code makes in a way
+  the index cannot see (cross-service calls are a separate backlog item).
+- The DSL reader is a subset: no `!include`, `!ref`, `!element`, implied relationships, groups as elements,
+  deployment nodes or `extends` workspaces; a DSL `properties` value is read only for `verinoda.code`.
+- A file two elements match at the same depth counts in the first defined (a limit with the count).
+- The matrix has no partitioning into layers beyond the order, no transitive marks and no rule overlay (the
+  architecture rules of `decide check` judge edges; the matrix shows them).
+- The text matrix is wide for many groups; `--max-lines` cuts the rows shown, `--json` has every cell.
+- `map --view model` exits 0 whatever it finds: it is a view; a CI gate on the architecture is `decide check`.
+
+### 115.5 Tests
+
+`tests/test_dsm.py` (order and back marks, the exact order against every permutation, folder depth, tag groups,
+the DSL reader, the model check with nested elements, relations between tags, no model, CLI flags and JSON),
+`tests/test_ui.py` (the API), `tests/test_ui_browser.py` (the page in a headless browser, also from the exported
+file), `tests/test_mcp.py` (`map_view` dsm and model).
+
+## 116. Hooks on the agent's own tool calls (D143, 2026-10-01)
+
+### 116.1 Why
+
+D62 built the answer - a Grep's searched symbols with their definition, callers and callees, as a Claude Code
+PostToolUse hook output (MCP `grep_context`), and later `read_context` for a file read - but left it as a template
+nobody installs, for Claude Code's Grep tool only. In the threshold study 22 of 133 searches went through `grep` in
+Bash, which the hook did not see, and Codex (whose only search is the shell) and Cursor got nothing. GitNexus,
+Codanna and CodeGraph install such hooks for the agents. Done when: a Grep in Claude Code returns the matching
+symbols' callers without a Verinoda call.
+
+### 116.2 Decisions
+
+- **`verinoda agent-hooks install|uninstall|status [--agent claude,codex,cursor|all] [--scope project|user]
+  [--dry-run]`** (module `verinoda/agent_hooks.py`), apart from `install` (skills and MCP) and from `hooks` (git
+  hooks): opt-in, since D62's adoption study did not show that the hook pays for every user.
+  - Claude Code, project: `.claude/settings.json` gets the `mcp_tool` entries of
+    `agents/templates/claude_hooks.json` - Grep (`pattern`), Bash (`command`, new) and Read/Edit/MultiEdit/Write
+    (`file_path`) calling `run_tool` `grep_context` / `read_context` on the project's running server: no process
+    per call. A warning when `.mcp.json` registers no `verinoda` server.
+  - Claude Code, user: `~/.claude/settings.json` gets a command hook (`verinoda tool-hook --agent claude`) on
+    Grep|Bash|Read|Edit|MultiEdit|Write: another project may have no server, and the command answers `{}` there.
+  - Codex: `.codex/hooks.json` (user: `$CODEX_HOME` or `~/.codex`), a `PostToolUse` command hook on `^Bash$`;
+    Codex documents `hookSpecificOutput.additionalContext` on PostToolUse as developer context.
+  - Cursor: `.cursor/hooks.json` (`version: 1`), a `postToolUse` command hook with matcher `Grep|Shell|Read|Write`;
+    Cursor reads `additional_context` from its output.
+  - Only Verinoda's own entries are written, replaced or removed: an `mcp_tool` hook on the `verinoda` server
+    calling `grep_context` / `read_context`, or a command running `tool-hook`. Other keys and hooks stay, with the
+    file's indent and line endings; a file that is not a JSON object (or whose `hooks` is not one) is refused
+    (exit 2). Install twice: `unchanged`. Uninstall deletes a file it leaves empty (`{}` or only `version`).
+  - The command names `verinoda` when the one on PATH is this build, else this machine's interpreter (`-P -m
+    verinoda`), with a warning for a project file, which is shared.
+- **`verinoda tool-hook [--agent claude|codex|cursor]`** (module `verinoda/tool_hook.py`): the tool call as JSON
+  on stdin, read as UTF-8 bytes whatever the console code page (a project path with `ş` was lost through the
+  locale decoding before this), the answer as ASCII-escaped JSON on stdout, always exit 0, `{}` for anything it
+  does not answer or any error. `__main__` dispatches it before importing the CLI.
+  - A search is the Grep tool's `pattern`, or the patterns of a shell command: each simple command (split at
+    pipes, `&&`, `||`, `;`) run by `grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack`, `git grep`, `findstr` (`/c:`) or
+    `Select-String` (`-Pattern`); `-e` / `--regexp` values, else the first argument that is not an option, the
+    values of options that take one skipped. A read or edit is the `file_path` / `path` / `target_file`.
+  - The text is D62's, now one function (`grep_text`) that MCP `grep_context` calls too: the longest 4 words of
+    at least 4 characters, regex and language keywords left out, resolved by their exact name; at most 2 lines,
+    450 characters. A word no symbol is named by exactly is dropped before `naming.resolve`, whose fuzzy scorer
+    took seconds on a large graph for an unknown word (the answer is the same: only exact resolutions were used).
+  - A command hook is a new process per call, so each word's line (or its absence) is kept in
+    `.verinoda/index/hook_memo.sqlite`, valid while the graph file has the same size and modification time; the
+    graph is loaded only for a word not seen since the last index build.
+  - The project is the nearest folder with `.verinoda` above the event's `cwd` (Cursor: its first workspace root),
+    else above the working directory; none: `{}`.
+- MCP `grep_context` takes `command` as well as `pattern` (both optional now), for the Bash `mcp_tool` hook.
+
+- **Review round** (one reviewer, eight confirmed findings, all fixed with tests): the memo's stamp covers
+  `receiver_calls.json` as well as `graph.json` (an update can rewrite the receiver-call edges and keep the graph
+  file, as the MCP server's cache already knew); only a command ending in `verinoda... tool-hook --agent NAME`
+  counts as Verinoda's (a user's `my-verinoda-tool-hook-audit.py` hook is kept); a blank hook file is read as
+  empty; the command is written for bash, cmd and PowerShell alike - `verinoda tool-hook ...` when the PATH one is
+  this build, else the program with forward slashes, quoted only for a space (then a warning: PowerShell cannot
+  start a quoted path); Claude Code's `PowerShell` tool is hooked with Bash; each search program has its own
+  options that take a value (`rg -r`, `rg -T`, `ag -G`, ...), a pattern from a file (`-f`, `findstr /g:`) gives
+  none, bundled short options are read (`-ve PAT`, `-A3`); a command is split at newlines and parentheses too, and
+  `git -C dir grep`, `timeout N`, `nice` and `sudo -u user` are looked through; regex escapes (``) and shell
+  variables (`$NAME`) are no names; the home folder (whose `.verinoda` holds the install manifest) is never a
+  project, and a project needs Verinoda's database or config; the working directory is used only when the event
+  names no folder; MCP `grep_context` decides that a shell command searches nothing before waiting for the server
+  lock; a hook file's BOM and tab indentation are kept.
+
+### 116.3 Measured
+
+On this repository's index (2026-09-30, 30,971 graph nodes, a 36 MB graph.json), `python -m verinoda tool-hook`
+as a separate process, wall time including the interpreter's start: a remembered word 0.40-0.43 s (three runs), a
+remembered unknown word 0.40 s, a word not seen since the index 2.8 s (the graph's load); before the exact-name
+check an unknown word took 7.4 s, and before the `__main__` fast path an empty event took 0.65 s. The `mcp_tool`
+path of Claude Code's project hooks keeps D62's figure (about 0.1 s warm, the server holds the graph). Not
+measured: whether the context changes what agents find (D62's study measured the Grep hook: no gain shown).
+
+### 116.4 Not done
+
+- Codex's file reads are shell commands (`cat`, `sed -n`, `Get-Content`): only its searches get context.
+- Cursor's `Grep` tool input is read from `pattern`, `query` or `regex`; Cursor documents the tool names, not every
+  tool's input fields.
+- A shell pattern is read from the command line as written: a pattern from a variable or a file (`-f`), or a
+  search program not listed, is not seen.
+- A word the graph does not know exactly adds nothing (no fuzzy guess); a renamed symbol is known after the next
+  index build. The memo does not expire within one index build.
+- The first search of each new word in a large project waits for the graph to load (2.8 s on 31,000 nodes), within
+  the hook's 15 s timeout.
+- Codex loads a project's `.codex/hooks.json` only when that project's `.codex` layer is trusted.
+- The `verinoda` console script reaches the CLI first (about 70 ms more than `python -m verinoda`); the command
+  hooks Verinoda writes use whichever the PATH has.
+- Uninstall deletes a hook file it leaves empty, also one that held only Verinoda's entries before the install.
+- `setup` does not install these hooks (opt-in, as D62 decided); Gemini CLI, Copilot, Kiro and others are not
+  covered.
+
+### 116.5 Tests
+
+`tests/test_tool_hook.py` (shell patterns of 11 command forms, tool calls told apart, the answer in each agent's
+shape on a scanned project under a non-ASCII path, the memo kept and cleared with the index, a read, no project,
+the command as a subprocess with UTF-8 input, install/uninstall/status for the three agents keeping other hooks,
+user scope, a broken file refused, dry run and CLI), `tests/test_mcp.py` (`grep_context` with a shell command; the
+template's Bash entry; the gateway's parameters).
+
 ## Sources
 
 - **Retrieval:**

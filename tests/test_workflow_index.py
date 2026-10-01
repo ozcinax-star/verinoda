@@ -198,7 +198,7 @@ def _relation_claim(st, repo):
 
 def _refuse_updates(monkeypatch, st):
     prev = st.latest_snapshot()
-    monkeypatch.setattr(workflow, "update", lambda store, repo_: {
+    monkeypatch.setattr(workflow, "update", lambda store, repo_, **_kw: {
         "snapshot": prev, "error": "the indexer did not rewrite the graph", "hint": "verinoda scan --force",
         "stale": [], "changed_count": 1, "mode": "index_refused"})
 

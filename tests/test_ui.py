@@ -227,6 +227,18 @@ def test_the_page_and_the_api_are_served_locally(served):
     assert status == 200 and json.loads(body)["records"] == [] and json.loads(body)["mermaid"] == ""
 
 
+def test_the_dependency_matrix_and_the_model_are_served(served):
+    status, _h, body = _get(served, "/api/dsm")
+    m = json.loads(body)
+    assert status == 200 and m["view"] == "dsm" and m["groups"] and m["coverage"]["limits"]
+    assert all({"from", "to", "references", "sites", "against_order"} <= set(c) for c in m["cells"])
+    assert json.loads(_get(served, "/api/dsm?depth=1")[2])["basis"] == "folders at depth 1"
+    assert _get(served, "/api/dsm?depth=x")[0] == 400
+    assert _get(served, "/api/dsm?by=layer")[0] == 400
+    status, _h, body = _get(served, "/api/model")
+    assert status == 200 and json.loads(body)["status"] == "no_model"
+
+
 def test_the_butterfly_of_a_method_is_served(served):
     from urllib.parse import quote
 

@@ -31,7 +31,7 @@ from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
 
-from verinoda import retrieval  # noqa: E402
+from verinoda import retrieval, tool_hook  # noqa: E402
 from verinoda.mcp import server as mcp_server  # noqa: E402
 from verinoda.mcp.server import TOOL_NAMES, AtlasTools, _size, cap_response  # noqa: E402
 
@@ -46,7 +46,7 @@ GOLD_DISCOUNT_TESTS = ["tests/test_pricing.py::test_compute_total",
 
 EXPECTED_PARAMS = {
     "project_query": ({"question", "max_items", "format"}, {"question"}),
-    "grep_context": ({"pattern", "path"}, {"pattern"}),
+    "grep_context": ({"pattern", "path", "command"}, set()),
     "read_context": ({"file_path"}, {"file_path"}),
     "node_inspect": ({"name"}, {"name"}),
     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
@@ -582,6 +582,16 @@ def test_map_view_impact_and_errors(repo, tools):
     assert "note" in git_default
     bad = tools.map_view("galaxy")
     assert bad["error"] == "invalid_argument" and set(bad["valid"]) == set(mcp_server.VIEWS)
+
+
+def test_map_view_dsm_and_model(repo, tools):
+    from verinoda import dsm, index
+
+    res, core = tools.map_view("dsm"), _norm(dsm.dsm(index.load(repo)))
+    assert res["view"] == "dsm" and res["groups"] == core["groups"] and res["cells"] == core["cells"]
+    assert tools.map_view("dsm", targets=["tag"])["problems"]   # orders_app has no [architecture.tags]
+    assert tools.map_view("dsm", targets=["x", "y"])["error"] == "invalid_argument"
+    assert tools.map_view("model")["status"] == "no_model"
 
 
 def test_map_view_respects_small_response_cap(repo, tools):
@@ -1768,19 +1778,26 @@ def test_grep_context_is_a_posttooluse_hook_output_or_nothing(repo):
     ctx = out["hookSpecificOutput"]["additionalContext"]
     assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
     assert "`place_order` is defined at orders/service.py:" in ctx and "called by create_order_handler" in ctx
-    assert len(ctx) <= mcp_server.HOOK_CONTEXT_CHARS
+    assert len(ctx) <= tool_hook.CONTEXT_CHARS
     assert t.grep_context("no_such_name_anywhere") == {} and t.grep_context("") == {}
+    # a search in a shell command: the patterns of grep / rg in it
+    out = t.grep_context(command='cd orders && rg -n "place_order" | head -5')
+    assert "`place_order` is defined at orders/service.py:" in out["hookSpecificOutput"]["additionalContext"]
+    assert t.grep_context(command="ls -la orders") == {}
 
 
 def test_the_hooks_template_calls_grep_context_and_read_context_through_run_tool():
     from importlib import resources
 
     tpl = json.loads(resources.files("verinoda.agents").joinpath("templates/claude_hooks.json").read_text("utf-8"))
-    grep, read = tpl["hooks"]["PostToolUse"]
+    grep, shell, read = tpl["hooks"]["PostToolUse"]
     (hook,) = grep["hooks"]
     assert grep["matcher"] == "Grep" and hook["type"] == "mcp_tool" and hook["server"] == "verinoda"
     assert hook["tool"] == mcp_server.GATEWAY and hook["input"]["name"] == "grep_context"
     assert hook["input"]["arguments"] == {"pattern": "${tool_input.pattern}"}
+    (hook,) = shell["hooks"]
+    assert shell["matcher"] == "Bash|PowerShell" and hook["input"] == {"name": "grep_context",
+                                                            "arguments": {"command": "${tool_input.command}"}}
     (hook,) = read["hooks"]
     assert read["matcher"] == "Read|Edit|MultiEdit|Write" and hook["tool"] == mcp_server.GATEWAY
     assert hook["input"] == {"name": "read_context", "arguments": {"file_path": "${tool_input.file_path}"}}

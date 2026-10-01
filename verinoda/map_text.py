@@ -307,7 +307,14 @@ def _repo(v: dict, cap: int) -> list[str]:
 
 RENDERERS = {"hierarchy": _hierarchy, "dependencies": _dependencies, "dataflow": _dataflow,
              "config": _config, "tests": _tests, "history": _history, "impact": _impact, "cycles": _cycles,
-             "dead": _dead, "hotspots": _hotspots, "sides": _sides, "repo": _repo}
+             "dead": _dead, "hotspots": _hotspots, "sides": _sides, "repo": _repo,
+             "dsm": lambda v, cap: _dsm().render_dsm(v, cap), "model": lambda v, cap: _dsm().render_model(v, cap)}
+
+
+def _dsm():
+    from verinoda import dsm
+
+    return dsm
 
 
 def render(res: dict, cap: int) -> str:
