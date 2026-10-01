@@ -473,13 +473,14 @@ class _without_report_questions:
 
 
 class _distinct_case_ids:
-    """Symbols of one file whose names differ only in case keep distinct ids (:mod:`verinoda.case_ids`).
+    """Symbols of one file whose names mint one id keep distinct ids (:mod:`verinoda.case_ids`).
 
-    The upstream pipeline folds case into every id and merged ``class OrderService`` with ``const
-    orderService``. During a build its corpus extraction (``extract``, whose ids the reconcile of an
-    update keeps or drops by) and its graph builder (``build_from_json``, which also sees the nodes an
-    update kept from the last graph) are wrapped: their nodes and edges pass
-    :func:`verinoda.case_ids.split_case_collisions` first. The same split on both is a no-op the second
+    The upstream pipeline folds case and leading underscores into every id and merged ``class
+    OrderService`` with ``const orderService`` (and ``request`` with ``_request``). During a build
+    its corpus extraction (``extract``, whose ids the reconcile of an update keeps or drops by) and
+    its graph builder (``build_from_json``, which also sees the nodes an update kept from the last
+    graph) are wrapped: their nodes and edges pass :func:`verinoda.case_ids.split_case_collisions`
+    first. The same split on both is a no-op the second
     time.
     """
 
