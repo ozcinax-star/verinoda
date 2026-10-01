@@ -503,7 +503,7 @@ def cmd_hooks(args) -> int:
         if args.hooks_cmd == "install":
             res = githooks.install(repo, dry_run=args.dry_run)
         elif args.hooks_cmd == "uninstall":
-            res = githooks.uninstall(repo, dry_run=args.dry_run)
+            res = githooks.uninstall(repo, gone=args.gone, dry_run=args.dry_run)
         else:
             res = githooks.status(repo)
     except githooks.HookError as exc:
@@ -3101,7 +3101,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-mcp", action="store_true", help="skills only, no MCP registration")
     sp.add_argument("--allow-home", action="store_true", help="allow setting up the home directory itself")
     sp.add_argument("--hooks", action="store_true",
-                    help="also install git hooks (post-commit, post-checkout, post-merge) that run `verinoda update` "
+                    help="also install git hooks (post-commit, post-checkout, post-merge, post-rewrite) that run "
+                         "`verinoda update` "
                          "in the background; `verinoda hooks uninstall` removes them")
     sp.add_argument("--reference", action="append", metavar="PATH[=ALIAS,...]",
                     help="a folder of reference code (an original being ported, a vendored copy) that should rank "
@@ -3109,13 +3110,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("hooks", help="git hooks that run `verinoda update` after a commit, a branch switch or a "
                                        "merge")
     hsub_hooks = sp.add_subparsers(dest="hooks_cmd", required=True)
-    c = add("install", cmd_hooks, "add a marked block to post-commit, post-checkout and post-merge (an existing hook "
+    c = add("install", cmd_hooks, "add a marked block to post-commit, post-checkout, post-merge and post-rewrite (an "
+                                  "existing hook "
                                   "is kept; one managed by core.hooksPath elsewhere is not written: exit 2)",
             parent=hsub_hooks)
     c.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     c.add_argument("--print", action="store_true", help="print the blocks to add by hand, write nothing")
     c = add("uninstall", cmd_hooks, "remove exactly the blocks `hooks install` added", parent=hsub_hooks)
     c.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
+    c.add_argument("--gone", action="store_true",
+                   help="instead remove every block whose project folder no longer exists (a moved project, a "
+                        "removed worktree)")
     add("status", cmd_hooks, "which hooks have this project's block", parent=hsub_hooks)
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
