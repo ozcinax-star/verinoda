@@ -1281,6 +1281,23 @@ def cmd_sarif(args) -> int:
     return 0
 
 
+def cmd_import_findings(args) -> int:
+    from verinoda import jvm_findings as jf
+
+    repo = _repo(args)
+    if args.limit < 1:
+        print("error: --limit must be a positive number", file=sys.stderr)
+        return 2
+    paths = [_rel_in_repo(repo.resolve(), p, "--path") for p in args.path or []]
+    res = jf.report(repo, _report_args(repo, args.files), paths or None, tool=args.tool, limit=args.limit)
+    _emit(args, res, lambda r: _write(jf.render_text(r)))
+    if all(x.get("error") for x in res["inputs"]):
+        print("error: no file read: " + "; ".join(f"{x['file']}: {x.get('error')}" for x in res["inputs"]),
+              file=sys.stderr)
+        return 4
+    return 0
+
+
 def cmd_health(args) -> int:
     from verinoda import health as hl
 
@@ -4481,6 +4498,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("files", nargs="+", metavar="FILE", help="SARIF files to read")
     sp.add_argument("--path", action="append", help="only results in these files or folders (repeatable)")
     sp.add_argument("--limit", type=int, default=40, help="results shown (default 40)")
+    sp = add("import-findings", cmd_import_findings,
+             "JVM checkers' findings read as evidence: Error Prone and NullAway diagnostics from javac, Gradle, Maven "
+             "or Ant logs, jdeps -jdkinternals output, or their SARIF; each a claim at its file:line with the tool "
+             "named, its statement, not checked here; nothing is run; exit 4 = no file read")
+    sp.add_argument("files", nargs="+", metavar="FILE", help="build logs, jdeps output or SARIF files to read")
+    sp.add_argument("--tool", choices=("auto", "errorprone", "nullaway", "jdeps"), default="auto",
+                    help="whose findings to keep from a log (default auto: all three; errorprone includes "
+                         "NullAway, an Error Prone plugin); a SARIF file is read whole")
+    sp.add_argument("--path", action="append", help="only findings in these files or folders (repeatable)")
+    sp.add_argument("--limit", type=int, default=40, help="findings shown (default 40)")
     sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
                                    "parameters, and near-duplicate functions with a similarity score")
     sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
