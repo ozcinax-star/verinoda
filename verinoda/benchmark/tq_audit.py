@@ -188,11 +188,12 @@ def _git(*args: str) -> str | None:
 
 
 def _git_head() -> str | None:
-    """The checkout's commit, with ``+changes`` when the package differs from it (the engine hash is exact)."""
+    """The checkout's commit, ``+changes`` when a tracked package file differs from it (the engine hash is exact)."""
     head = (_git("rev-parse", "--short=12", "HEAD") or "").strip()
     if not head:
         return None
-    dirty = _git("status", "--porcelain", "--", "verinoda")
+    dirty = _git("status", "--porcelain", "--untracked-files=no", "--", "verinoda",
+                 ":(exclude)verinoda/data/tq_calibration.json")
     return head + ("+changes" if dirty else "")
 
 
