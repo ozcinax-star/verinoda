@@ -419,6 +419,11 @@ def _r_derived(r: dict) -> None:
         print(f"  warning: derived data not refreshed: {r['derived']['error']}")
     if r.get("pruned_missing_files"):
         print(f"  pruned from the graph (files no longer exist): {', '.join(r['pruned_missing_files'][:5])}")
+    if r.get("not_extracted"):
+        from verinoda.grammars import describe
+
+        for group in r["not_extracted"]:
+            print(f"  warning: {describe(group)}")
     found = ((r.get("derived") or {}).get("copies") or {}).get("copies") if isinstance(r.get("derived"), dict) else None
     if found:
         print(f"  note: {', '.join(found[:3])}{', ...' if len(found) > 3 else ''} hold a copy of the project's own code; "

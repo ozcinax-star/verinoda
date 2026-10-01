@@ -220,6 +220,36 @@ verinoda doctor
 
 Build the wheel with `uv build --wheel` (or `python -m build --wheel`).
 
+### Languages
+
+The index (the graph behind `query`, `trace`, `map`, `tq` and the rest) reads these with what a plain install
+brings: Python, JavaScript and TypeScript (also in Vue, Svelte and Astro files), Go, Rust, Java, Kotlin, Scala,
+Groovy and Gradle, C, C++, CUDA and Metal, C#, Razor, XAML and .NET project and solution files, Ruby, PHP and
+Blade, Swift, Objective-C, Lua and Luau, Zig, PowerShell, Elixir, Julia, Verilog and SystemVerilog, Fortran,
+Bash, Dart, Pascal and Delphi forms, Apex, COBOL (programs, paragraphs, copybooks, `PERFORM` and `CALL`), JSON,
+Markdown, PDF and Office documents, and Minecraft datapack functions.
+
+These need an optional grammar, one extra each:
+
+| Language | Extra |
+|---|---|
+| VB.NET | `vbnet` |
+| R | `r` |
+| Erlang | `erlang` |
+| Solidity | `solidity` |
+| SQL | `sql` |
+| Terraform / HCL | `terraform` |
+| OCaml | `ocaml` |
+| Common Lisp | `commonlisp` |
+| DreamMaker | `dm` (builds from source outside Windows) |
+| Robot Framework | `robot` |
+
+`pip install "verinoda[languages]"` installs every optional grammar that ships prebuilt wheels (all of the
+above but `dm` and `robot`, plus `tree-sitter-pascal`, which reads Pascal more closely than the built-in
+fallback); R and Erlang come from `tree-sitter-language-pack`, a prebuilt wheel used offline.
+Without its grammar a file is not extracted: `scan` and `update` name such files with the reason and the
+install line (`not_extracted`), and the next `update` after installing the grammar reads them.
+
 **Codex on Windows: use `--link-mode copy`.** With uv's default link mode
 the installed package files are hardlinks into uv's cache. Codex's
 `workspace-write` sandbox on Windows could not read them (`PermissionError`),

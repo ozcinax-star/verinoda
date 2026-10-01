@@ -5,7 +5,9 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This product is a derivative work of Graphify
 (https://github.com/Graphify-Labs/graphify), pinned at upstream commit
-20a20d30d8e7eef77675651f0199d87f913bd3e7 (after tag v0.9.65).
+20a20d30d8e7eef77675651f0199d87f913bd3e7 (after tag v0.9.65). The files
+docs/UPSTREAM.md lists as ported from tag v0.9.73 (commit
+ef4450d9c28acb2b8cdc22d369c1777b77148eef) are taken from that commit instead.
 Verinoda is an independent project and is NOT an official Graphify release,
 nor is it endorsed by the Graphify authors.
 
@@ -28,5 +30,5 @@ Modifications to upstream files:
   (2026) as follows: module paths rewritten from `graphify.*` to
   `verinoda.project_index.*` and distribution-name lookups changed from
   "graphifyy" to "verinoda" by tools/port_upstream.py. Files with further
-  hand edits carry a "Modified by Verinoda" header comment and are listed in
-  docs/UPSTREAM.md.
+  hand edits carry a "Verinoda patch" comment at each edited spot and are
+  listed in docs/UPSTREAM.md.
