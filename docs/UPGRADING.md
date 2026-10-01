@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D145)
+## Upgrading from 0.4.0 (D137-D146)
 
 ### D137: Trigram regex index
 
@@ -98,6 +98,19 @@ on the same target method, the project's and those of the mod jars found locally
 failure of a log (a `.gz` one too) named with its mod. Exit 3: a clash or a failure named with its mod; 4: no
 other mod's Mixins read, a failure's mod not found, or a log that is not text (3 wins over 4); 2: no Mixin. Without these options `mixin-check` is unchanged. `jvmclass.class_annotations()` is
 new; `mixincheck.MixinClass` gains `priority`, `target_names` and `injections`. No MCP tool changes.
+
+### D146: Cross-service edges
+
+New command `verinoda routes [--no-table] [--json]`: the route table and every client call with a URL, each
+linked to the one handler its path and method fit, ambiguous (every candidate listed, no edge), unmatched or a
+method mismatch; tRPC, Python gRPC, GraphQL and named events too. `trace` now crosses these edges when there is
+no call path: a hop with `kind: "cross_service"`, `relation` `requests` / `rpc_calls` / `emits`, INFERRED,
+`derived_by=verinoda.cross_service`, the call in `at` and the handler's declaration in `route_at`; paths found
+before are unchanged, and `--mode any` can report `reachability: "cross_service"`. A no-path result can carry
+`cross_service_ambiguous`. `receiver_calls.json` is version 10 (a `cross_service` block): an older one is
+recomputed on the first load, nothing to migrate. The graph gains edges with three new relations; tools that
+list every relation (`export`, the UI) show them, and `map --view dead` counts a handler reached through one as
+reached. `analyze` flow claims still state calls only: they do not cross these edges.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
