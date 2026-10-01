@@ -1104,7 +1104,7 @@ def cmd_trace_log(args) -> int:
             print(f"  stored {c['id']} [{c['status']}]")
 
     _emit(args, res, render)
-    return 0 if res["traces"] or res["results"] else 2
+    return 0 if res["traces"] or res["results"] or res.get("diagnosis") else 2
 
 
 def cmd_secret_scan(args) -> int:

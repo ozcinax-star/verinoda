@@ -20,7 +20,10 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_FRAME = re.compile(r"^\s*at\s+(?:[\w.$@-]+/{1,2})*(?P<cls>[\w$.]+)\.(?P<meth>[\w$<>]+)\((?P<src>[^)]*)\)")
+# "at TRANSFORMER/examplemod@1.0/com.example.Foo.bar(Foo.java:12)": the module prefix names the mod; a Mixin
+# handler's name may carry a mod id with a dash (handler$zdo000$fabric-lifecycle-events-v1$onStopping)
+_FRAME = re.compile(r"^\s*at\s+(?P<mods>(?:[\w.$@-]+/{1,2})*)(?P<cls>[\w$.]+)\.(?P<meth>[\w$<>-]+)\((?P<src>[^)]*)\)")
+_HIDDEN = re.compile(r"/0x[0-9a-fA-F]+(?=\.[\w$<>-]+\()")  # a hidden class: "Foo$$Lambda$12/0x0000000800c3b440.accept"
 _EXC = re.compile(r"^(?:Exception in thread \"[^\"]*\"\s+)?(?P<exc>(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Exception|Error|"
                   r"Throwable)?)(?::\s*(?P<msg>.*))?$")
 _CAUSED = re.compile(r"^\s*Caused by:\s*(?P<rest>.*)$")
@@ -28,8 +31,9 @@ _JAR = re.compile(r"\)\s*~?\[(?P<jar>[^\]\s/%!]+?\.jar)")  # Forge: "(Foo.java:1
 _MORE = re.compile(r"^\s*\.\.\.\s*(\d+)\s+more")
 _STAMP = re.compile(r"^\[(?P<t>[\d:.]+)\]")
 # a logger's prefix on every line, a stack trace printed through System.out / System.err included:
-# "[20:01:36] [Server thread/INFO] (Minecraft) [STDOUT]: \tat a.B.c(B.java:4)"
-_PREFIX = re.compile(r"^(?:\[[^\]]*\]\s*)+(?:\([^)]*\)\s*)?(?:\[[^\]]*\]\s*)*:\s?")
+# "[20:01:36] [Server thread/INFO] (Minecraft) [STDOUT]: \tat a.B.c(B.java:4)", and Fabric's own lines with no
+# colon: "[11:03:27] [main/ERROR] (FabricLoader) Incompatible mods found!" (a tag after it stays: "(guard) [TAG] ...")
+_PREFIX = re.compile(r"^(?:\[[^\]]*\]\s*)+(?:(?:\([^)]*\)\s*)?(?:\[[^\]]*\]\s*)*:\s?|\([^)]*\)\s+(?!\[))")
 
 
 def _unprefixed(line: str) -> str:
@@ -52,6 +56,7 @@ class Frame:
     project: bool = False
     pos: int = 0                           # 0: the top of its trace or of its `Caused by`
     jar: str | None = None                 # the mod jar a Forge frame names
+    module: str | None = None              # the module a frame names ("TRANSFORMER/examplemod@1.0/...")
 
 
 @dataclass
@@ -73,7 +78,7 @@ def parse(text: str) -> tuple[list[Trace], list[dict]]:
     last_stamp = None
     pos = 0
     for i, raw in enumerate(raw_lines, 1):
-        line = lines[i - 1].rstrip()
+        line = _HIDDEN.sub("", lines[i - 1].rstrip())
         st = _STAMP.match(raw)
         if st:
             last_stamp = st.group("t")
@@ -87,8 +92,10 @@ def parse(text: str) -> tuple[list[Trace], list[dict]]:
             src = fm.group("src")
             f, _, ln = src.partition(":")
             jm = _JAR.search(line, fm.end() - 1)
+            mod = next((m.split("@", 1)[0] for m in reversed(fm.group("mods").split("/")) if "@" in m), None)
             cur.frames.append(Frame(fm.group("cls"), fm.group("meth"), f or None,
-                                    int(ln) if ln.isdigit() else None, i, pos=pos, jar=jm.group("jar") if jm else None))
+                                    int(ln) if ln.isdigit() else None, i, pos=pos, jar=jm.group("jar") if jm else None,
+                                    module=mod or None))
             pos += 1
             continue
         if _MORE.match(line):
@@ -244,7 +251,7 @@ def analyze(g, text: str, *, source: str) -> dict:
                                          "basis": "the test whose result line is nearest"
                                                   + (" at the same time" if r.get("stamp") == t.stamp else "")}
         out.append(entry)
-    rules = crash_rules.diagnose([_unprefixed(ln) for ln in text.splitlines()])
+    rules = crash_rules.diagnose(text.splitlines())
     sus = crash_rules.suspects(traces)
     return {"source": source, "traces": out, "results": rows,
             **({"diagnosis": rules} if rules else {}),
@@ -258,7 +265,7 @@ def render(res: dict) -> str:
     for d in res.get("diagnosis") or []:
         found = ", ".join(f"{k} {v}" for k, v in (d.get("found") or {}).items())
         out.append(f"rule {d['rule']} (log line {d['log_line']}" + (f", {d['hits']} lines" if d["hits"] > 1 else "")
-                   + f"): {d['means']}" + (f" [{found}]" if found else ""))
+                   + f"): {d['means']}" + (f" [{found}]" if found else "") + f" ({d['status']})")
     if res.get("suspects"):
         out.append(f"suspects (strong_inference; score: {res['score']}):")
         for s in res["suspects"]:

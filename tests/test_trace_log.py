@@ -164,3 +164,15 @@ def test_a_log_with_no_crash_pattern_has_no_diagnosis(repo):
     res = trace_log.analyze(index.load(repo), LOG, source="latest.log")
     assert "diagnosis" not in res
     assert [(s["suspect"], s["score"]) for s in res["suspects"]] == [("com.example.guard", 2.5)]
+
+
+def test_a_log_with_only_a_crash_pattern_is_a_finding(repo, tmp_path, capsys):
+    """No stack trace and no test result, only a loader line saying a dependency is missing: exit 0, not 2."""
+    log = tmp_path / "çalış repo" / "latest.log"
+    log.parent.mkdir()
+    log.write_text("[11:03:27] [main/ERROR] (FabricLoader)  - Mod 'Guard Mod' (guardmod) 1.2.0 requires any version "
+                   "of fabric-api, which is missing!\n", encoding="utf-8")
+    assert cli.main(["trace-log", str(log), "--repo", str(repo), "--json", "--no-store"]) == 0
+    (d,) = json.loads(capsys.readouterr().out)["diagnosis"]
+    assert d["rule"] == "missing_dependency" and d["found"]["needs"] == "fabric-api"
+    assert d["evidence"].startswith("- Mod") and d["status"] == "strong_inference"
