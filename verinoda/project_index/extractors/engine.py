@@ -2546,12 +2546,14 @@ def _js_extra_walk(node, source: bytes, file_nid: str, stem: str, str_path: str,
                    scope_parents: dict | None = None,
                    lexical_nids_by_scope: dict | None = None,
                    js_module_owners: dict | None = None,
-                   js_assigned_members: dict | None = None) -> bool:
+                   js_assigned_members: dict | None = None,
+                   js_prototype_members: set | None = None) -> bool:
     """Handle lexical_declaration (arrow functions, CJS requires, module-level const literals) for JS/TS. Returns True if handled.
 
     Verinoda patch: *js_module_owners* (from :func:`_js_module_owner_names`) names the
     module-level bindings whose assigned function members become methods;
-    *js_assigned_members* collects those methods (nid -> owner name) for the call pass.
+    *js_assigned_members* collects those methods (nid -> owner name) for the call pass;
+    *js_prototype_members* collects the nids of ``Foo.prototype.bar = fn`` methods.
     """
     # CommonJS / prototype member assignments whose value is a function:
     #   exports.X = () => {}     → file-contained function  X()
@@ -2687,6 +2689,8 @@ def _js_extra_walk(node, source: bytes, file_nid: str, stem: str, str_path: str,
                             nid = _make_id(owner_nid, member_name)
                             add_node_fn(nid, f".{member_name}()", line)
                             add_edge_fn(owner_nid, nid, "method", line)
+                            if js_prototype_members is not None:  # Verinoda patch
+                                js_prototype_members.add(nid)
                             handled = True
                         elif (nid := _object_member(target, line)) is not None:
                             handled = True
@@ -3864,6 +3868,7 @@ def _extract_generic(
         else {}
     )
     js_assigned_members: dict[str, str] = {}
+    js_prototype_members: set[str] = set()  # `Foo.prototype.bar = fn` methods
     nodes: list[dict] = []
     edges: list[dict] = []
     seen_ids: set[str] = set()
@@ -5838,7 +5843,8 @@ def _extract_generic(
                               scope_parents=scope_parents,
                               lexical_nids_by_scope=lexical_nids_by_scope,
                               js_module_owners=js_module_owners,
-                              js_assigned_members=js_assigned_members):
+                              js_assigned_members=js_assigned_members,
+                              js_prototype_members=js_prototype_members):
                 return
 
         # TS enum members, and namespace / module containers
@@ -5995,6 +6001,11 @@ def _extract_generic(
         normalised = raw.strip("()").lstrip(".")
         # For languages with lexical nesting (Python), nested functions should not overwrite
         # module-level definitions in the module/file-level label_to_nid map (#3405).
+        # Verinoda patch: a JS/TS method assigned to a module object (`res.send = ...`)
+        # is never reached by a bare name, so it never takes a name from (or blocks)
+        # a plain function of the file; its member calls bind through _methods_of.
+        if n["id"] in js_assigned_members:
+            continue
         if n["id"] not in scope_parents:
             label_to_nid[normalised] = n["id"]
             label_to_nid_ci[normalised.lower()] = n["id"]
@@ -7531,6 +7542,16 @@ def _extract_generic(
         _pkg = _kotlin_package_name(root, source)
         if _pkg:
             result["kotlin_package"] = _pkg
+    if config.ts_module in ("tree_sitter_javascript", "tree_sitter_typescript"):
+        # Verinoda patch: a function bound inside a function, and a method assigned
+        # to a module object, are never reached by a bare name from another file
+        # (neither is importable under that name), nor is a `Foo.prototype.bar`
+        # method. The marker keeps them out of extract()'s cross-file bare-name
+        # and by-value candidates.
+        for n in nodes:
+            if (n["id"] in scope_parents or n["id"] in js_assigned_members
+                    or n["id"] in js_prototype_members):
+                n["_no_bare_name"] = True
     if callable_def_nids:
         # Mark function / method / class defs with a `_callable` attribute so the
         # cross-file indirect_call pass can resolve a by-name callback only to a real

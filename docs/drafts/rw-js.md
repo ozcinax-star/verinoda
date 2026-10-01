@@ -38,18 +38,22 @@ function were methods, and only nested `function` declarations were nested symbo
   `res.json`. `this.send()` binds to the owner's `send`: the existing own-receiver rule now applies, because the
   method has an owner. `res.send()` binds when `res` is the module binding and no parameter or local of the caller
   shadows it. `Foo.create()` binds to `Foo.create` through the same rule, which is checked before the
-  upper-case-receiver defer. Any other call that would bind to such a method is refused and left to the cross-file
-  passes. Examples are a bare `send(path)` (in Express, the `send` package) and `app.render()` on another object
-  (which used to make `res.render` call itself). Prototype and exports methods keep their old binding.
+  upper-case-receiver defer. Any other in-file call that would bind to such a method is refused and left to the
+  cross-file passes. Examples are a bare `send(path)` (in Express, the `send` package) and `app.render()` on another
+  object (which used to make `res.render` call itself). Such a method takes no name in the file's bare-name map, so
+  a module function of the same name keeps it whatever the order of the two (see Review round). Exports methods keep
+  their old binding.
 - **Nested functions.** A `variable_declarator` whose value is a function, in any function body, is a nested symbol
   `<parent>_<name>` with label `name()`. One inside an anonymous callback belongs to the nearest named function. It
   has a `contains` edge from the parent, and its own body and calls, the same shape nested `function` declarations
   already had. The scan now also runs on the bodies of `exports.x`, `Foo.prototype.x` and the new object methods.
 - **Scope of nested names.** JS/TS nested symbols are recorded in `scope_parents` / `lexical_nids_by_scope`, as the
   Python extractor does. A bare call binds to the nested function visible from the caller: useAuth's `logout` inside
-  `useAuth`, the module's `logout` elsewhere. A nested function is never reached from outside its scope, and never
-  as a property: `controller.abort()` inside a nested `const abort` is not a self-call. A nested name no longer
-  overwrites a module-level one in the file's name map.
+  `useAuth`, the module's `logout` elsewhere. A bare call from outside its scope does not reach a nested function,
+  in the file or (since the review round) from another file, and a member call never does: `controller.abort()`
+  inside a nested `const abort` is not a self-call. A nested name no longer overwrites a module-level one in the
+  file's name map. A nested function passed by value from elsewhere in the same file can still be bound to it (see
+  Limits).
 - **Closure capture.** A nested function's locals include every non-function name bound in the enclosing body
   (declarators, parameters, `catch` and `for ... in/of` bindings). So `use(config)` in it names the enclosing
   parameter, not a module function `config`. This over-approximates, so it can only drop an indirect edge.
@@ -58,8 +62,27 @@ function were methods, and only nested `function` declarations were nested symbo
   that only one of those methods called was then a `callers_unreached` claim with no dynamic use, so it was
   `strong_inference`. With the new methods, Express's `sendfile` (called only from `res.sendFile`, folded under
   `res`) became such a strong claim. The same was already true for a Python class loaded by name.
-- **Vendored code.** Every extractor change is in `engine.py`, marked "Verinoda patch" and listed in
-  docs/UPSTREAM.md ("Modified"). `cache._AST_CACHE_SCHEMA` goes from 8 to 9.
+- **Vendored code.** The extractor changes are in `engine.py`; the review round adds the cross-file index in
+  `extract.py` and the marker lists in `cli.py` and `watch.py`. All are marked "Verinoda patch" and listed in
+  docs/UPSTREAM.md ("Modified"). `cache._AST_CACHE_SCHEMA` goes from 8 to 10.
+- **Review round.** A review found that the first version overstated how isolated the new symbols were:
+  - In the file, a method `res.send` took the bare name `send` from a module function `send` defined before it.
+    The new refusal then dropped `other() -> send()` with nothing to fall back to, and a `send` passed by value
+    went the same way. A method assigned to a module object now takes no name in the file's bare-name map.
+  - Across files, the shared call pass of `extract()` matched bare calls and names passed by value against every
+    node label, including the new nested functions and methods. So `Form() -> reset()` bound to a hook's nested
+    `reset` when `reset` was the caller's own local, and in axios `stopUnixServer() -> done()` (a Promise
+    executor's parameter) and `factory() -> unsubscribe()` (a local `const`) were false edges. In express,
+    `.path()` and `.use()` of `app` were targets of false `indirect_call` edges from a parameter and a local. The
+    engine now marks JS/TS nested functions, methods assigned to a module object and `Foo.prototype.bar` methods
+    with `_no_bare_name`, and the pass leaves them out of its bare-name and by-value index. None of them can be
+    imported under its bare name. Member calls reach the methods through the member resolvers, which do not read
+    that index. Prototype methods had the same flaw before this change. In express, application.js's
+    `resolve('views')` (node:path's `resolve`) bound to `View.prototype.resolve` once the call was inside the new
+    method `app.defaultConfiguration`.
+  - The extraction diff measured `extract_js` file by file, so it never saw these edges. The cross-file delta is now
+    measured with `extract()` over each whole corpus (see Measured).
+  - The marker is persisted for unchanged files on incremental builds (`cli.py`, `watch.py`), as `_callable` is.
 
 ## Measured
 
@@ -108,12 +131,71 @@ and the template's frontend, plus `tests_upstream/fixtures`:
   is axios `validator.js` `formatMessage`, which is now nested in the method `validators.transitional`.
 - Extraction time over the 494 files, in two runs: 18.8 s before and 15.3 s after, then 23.8 s before and 17.7 s
   after. No slowdown.
+- The review round leaves this per-file output unchanged: `extract_js` over 489 files (the three corpora and
+  `tests_upstream/fixtures`) gives the same 2312 nodes and 4886 edges before and after the round.
+
+Cross-file delta (review round): `extract()` over each whole corpus, so the shared cross-file pass is included. The
+corpora are the JS/TS files of the express, axios and template-frontend clones at their pinned shas, without
+`node_modules`, `dist`, `.min.js` and `.d.ts`. The table counts `calls` and `indirect_call` edges whose two ends are
+in different files: f4ca326 (before), the first version of this change, and the commit after the review round.
+
+| corpus | files | nodes before / after | cross-file, first version vs before | cross-file, after review vs before |
+|---|---:|---:|---|---|
+| express | 142 | 278 / 334 | +11 / -6 | +7 / -2 |
+| axios | 238 | 1204 / 1251 | +10 / -2 | +6 / -2 |
+| template frontend | 100 | 636 / 676 | +26 / -4 | +12 / -4 |
+
+- Every edge of the last column was read.
+  - Express added: 6 calls from the new methods to `lib/utils.js` helpers they import (`.set() -> compileETag`,
+    `compileQueryParser`, `compileTrust`; `.format() -> normalizeType`, `normalizeTypes`; `.send() -> setCharset`),
+    all right. One `indirect_call` moved from the file node of examples/view-locals/user.js to its new method
+    `User.all`: `users` there is user.js's own variable, not index.js's `users()`. It was a false edge before and
+    still is.
+  - Express removed: that same edge's old form, and `examples/resource/index.js -> format()` in
+    content-negotiation (a local `format`), which was false.
+  - Axios added: 6 calls that moved from an outer function to the nested function or method that makes them
+    (`onabort -> CanceledError`, `trackRequestStream -> trackStream`, ...). Removed: the outer form of one of them,
+    and a false `parseParameter -> start()` into a smoke test.
+  - Template added: 12 calls in the generated client that moved to nested functions (`beforeRequest ->
+    mergeHeaders`, `querySerializer -> serializeArrayParam`, ...). Removed: 4 member calls on SDK services
+    (`DeleteUser() -> .deleteUser()`, `useAuth() -> .loginAccessToken()`, ...). They are now made inside nested
+    functions, and plain `extract()` does not bind them from there. `verinoda scan` does: the gold fact
+    `frontend-login-calls-sdk` is a hit.
+- What the review round removed against the first version: express `.path()` and `.use()` targets (a parameter and
+  a local) and `req.signedCookies.js -> .cookie()` (a local `cookie`), all false; `.defaultConfiguration() -> View
+  .resolve()` (it is node:path's `resolve`), false; axios `stopUnixServer -> done()` and `factory -> unsubscribe()`,
+  false; template one `indirect_call` to client.gen.ts's nested `request` (a test fixture's parameter), false. Also
+  gone: two calls from axios throttle.test.js to throttle.js's nested `throttled` and `flush`, and 13 template calls
+  into the hooks' nested `showSuccessToast` and `logout`. These name the right function only because the caller
+  destructures it from the returned value (`const [throttled, flush] = throttle(...)`,
+  `const { logout } = useAuth()`); the pass has no evidence of that, so they are not kept (see Limits).
+- Express also has 4 `indirect_call` edges from tests to examples/view-locals/index.js `count()`, where `count` is a
+  test's local in an anonymous callback. They exist at f4ca326 too. The first version hid them by accident: the new
+  method `User.count` made the name ambiguous.
+
+Benchmark rerun (review round), on the shared clones with `benchmarks/realworld/run.py --repos <name>`, one at a
+time: express gold v1 7/10 and v2 2/2, the template 8/10, axios 7/10 (the same 7 as the 2026-10-02 run). No
+crashes or timeouts, clean after each.
 
 ## Limits
 
-- Calls from another file do not reach the new methods. `res.json(...)` in an app, a test or an Express example is
-  called on a parameter `res` of no known type. `render-reaches-tryrender` misses for the same reason: `res.render`
-  calls `app.render` on `this.req.app`, a local of no known type.
+- Member calls from another file reach the new methods only where a member resolver knows the receiver's type.
+  `res.json(...)` in an app, a test or an Express example is called on a parameter `res` of no known type.
+  `render-reaches-tryrender` misses for the same reason: `res.render` calls `app.render` on `this.req.app`, a local
+  of no known type. Bare calls and names passed by value from another file never reach them, nor a nested function
+  or a prototype method (the `_no_bare_name` marker).
+- A function a hook or factory returns and the caller destructures (`const { logout } = useAuth()`,
+  `const [throttled, flush] = throttle(...)`) is a nested function, so the caller's `logout()` gets no edge. The
+  first version bound these by name alone; they were right in the template but by the same rule that gave the
+  false edges.
+- In the same file, a nested function passed by value (`run(reset)`) from outside its scope can still be bound to
+  it when no module-level function has that name: the by-value lookup does not walk scopes. The nested-scope walk
+  for bare calls also ignores a non-function local of an inner scope that shadows a nested function's name (Python
+  has the same gap).
+- Comma and other sequence forms (`var q = {}; q.z = function () {}, q.w = function () {};`, common in minified
+  code) make no symbol: a sequence expression is not walked.
+- A test's local in an anonymous callback does not shadow a name passed by value from that callback (express tests
+  passing `count` bind to examples/view-locals `count()`); this is older than this change.
 - Only module-level assignments whose receiver the file binds at module level make a symbol. `$.fn.x = fn`,
   `a.b.c = fn`, `app[method] = fn` (Express's `methods.forEach`), `window.x = fn` and an assignment to a parameter
   inside a function make none.
@@ -131,7 +213,7 @@ and the template's frontend, plus `tests_upstream/fixtures`:
 
 ## Upgrading note
 
-The AST cache schema is now 9, so the first `verinoda scan` or `verinoda update` after upgrading extracts every
+The AST cache schema is now 10, so the first `verinoda scan` or `verinoda update` after upgrading extracts every
 file again.
 
 JavaScript and TypeScript graphs gain symbols:
@@ -145,6 +227,10 @@ outer function for such a call now name the inner one. A selector like `lib/resp
 the method instead of a same-named function that differs only in case. In the dead view, code reached only through
 a member of a weak unit is weak as well (`via`).
 
+A bare call or a name passed by value in one file no longer binds to a nested function, an object-assigned method
+or a `Foo.prototype` method of another file. Some cross-file edges therefore go away, including right ones
+to a function a hook returns and the caller destructures (`const { logout } = useAuth()`).
+
 ## Tests
 
 - `tests/test_graph_precision.py`: four new tests on fixtures written to `tmp_path`. The fixtures are an
@@ -154,5 +240,13 @@ a member of a weak unit is weak as well (`via`).
   `test_a_nested_function_is_not_a_property_and_sees_the_enclosing_locals`. All four fail on f4ca326.
 - `tests/test_deadcode.py`: `test_what_a_kept_alive_class_reaches_through_its_members_is_weak_too` (a Python class
   named in a string, whose method alone calls a helper). It fails on f4ca326 (the helper is `strong_inference`).
-- Run: `tests/test_graph_precision.py`, `tests/test_deadcode.py` and `tests/test_docs.py` together: 54 passed (19,
+- Review round, `tests/test_graph_precision.py`: four more tests, each failing on the first version of this change
+  (dd46469):
+  - `test_a_later_assigned_method_does_not_hide_a_module_function_of_the_same_name` (`function send` before
+    `res.send = function send2`: the bare call and the name passed by value bind to the module function);
+  - `test_nested_functions_are_not_bound_from_another_file_by_a_bare_name` (hooks.ts / Form.ts);
+  - `test_assigned_methods_are_not_bound_from_another_file_by_a_bare_name` (lib.js / main.js, with a
+    `View.prototype.resolve` and a bare `resolve()`);
+  - `test_scoped_js_symbols_carry_the_no_bare_name_marker`.
+- Run: `tests/test_graph_precision.py`, `tests/test_deadcode.py` and `tests/test_docs.py` together: 58 passed (23,
   16 and 19).

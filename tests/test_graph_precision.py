@@ -851,3 +851,106 @@ def test_a_nested_function_is_not_a_property_and_sees_the_enclosing_locals(tmp_p
     # the nested `abort` passed by name is an indirect call; `config` is the enclosing parameter, not config()
     assert (unsubscribe, abort, "indirect_call") in edges
     assert not any(s == unsubscribe and t == config for s, t, _ in edges)
+
+
+def _labelled_edges(tmp_path, fixtures: dict[str, str]) -> set[tuple[str, str, str, str]]:
+    """(caller file, caller label, relation, target file:label) for calls and indirect_call."""
+    from verinoda.project_index.extract import extract
+
+    paths = []
+    for name, body in fixtures.items():
+        path = tmp_path / name
+        path.write_text(body, encoding="utf-8")
+        paths.append(path)
+    out = extract(paths, cache_root=tmp_path / "cache", root=tmp_path, parallel=False)
+    by_id = {n["id"]: n for n in out["nodes"]}
+
+    def where(nid: str) -> str:
+        n = by_id.get(nid, {})
+        return f"{Path(str(n.get('source_file') or '')).name}:{n.get('label', nid)}"
+
+    return {(Path(e["source_file"]).name, str(by_id.get(e["source"], {}).get("label")), e["relation"],
+             where(e["target"]))
+            for e in out["edges"] if e["relation"] in ("calls", "indirect_call")}
+
+
+def test_a_later_assigned_method_does_not_hide_a_module_function_of_the_same_name(tmp_path):
+    edges = _labelled_edges(tmp_path, {"one.js": '''function send(x) { return x; }
+var res = {};
+res.send = function send2(b) { return b; };
+function other() { send(1); }
+function useRes() { res.send(2); }
+function pass() { run(send); }
+'''})
+    assert ("one.js", "other()", "calls", "one.js:send()") in edges
+    assert ("one.js", "useRes()", "calls", "one.js:.send()") in edges
+    assert ("one.js", "pass()", "indirect_call", "one.js:send()") in edges
+    assert ("one.js", "other()", "calls", "one.js:.send()") not in edges
+    assert not any(t == "one.js:.send()" for _, src, _, t in edges if src == "pass()")
+
+
+def test_nested_functions_are_not_bound_from_another_file_by_a_bare_name(tmp_path):
+    edges = _labelled_edges(tmp_path, {
+        "hooks.ts": '''export const useForm = () => {
+  const onSubmit = () => 1;
+  const reset = () => 2;
+  return { onSubmit, reset };
+};
+''',
+        "Form.ts": '''import { useForm } from "./hooks"
+
+function Form(props) {
+  const reset = props.reset;
+  reset();
+}
+
+function Other({ onSubmit }) {
+  onSubmit();
+  useForm();
+}
+
+function Passes(cb) {
+  run(reset);
+}
+''',
+    })
+    assert ("Form.ts", "Other()", "calls", "hooks.ts:useForm()") in edges
+    # `reset` / `onSubmit` here are the caller's own local and parameter, and `run(reset)` names
+    # nothing in scope: none of them is useForm's nested function
+    assert not any(t in ("hooks.ts:reset()", "hooks.ts:onSubmit()") for _, _, _, t in edges), edges
+
+
+def test_assigned_methods_are_not_bound_from_another_file_by_a_bare_name(tmp_path):
+    edges = _labelled_edges(tmp_path, {
+        "lib.js": '''var res = Object.create(null);
+module.exports = res;
+res.sendThing = function sendThing(b) { return b; };
+res.use = function use(fn) { return fn; };
+function View() {}
+View.prototype.resolve = function resolve(dir) { return dir; };
+''',
+        "main.js": '''const lib = require('./lib');
+function a(x) { sendThing(1); }
+function b(use) { assert(use); }
+function c() { lib.sendThing(2); }
+function d() { return resolve('views'); }
+''',
+    })
+    # nor is a `View.prototype.resolve` method reached by a bare `resolve()` (Express's application.js)
+    assert not any(src in ("a()", "b()", "d()") and t.startswith("lib.js:") for _, src, _, t in edges), edges
+
+
+def test_scoped_js_symbols_carry_the_no_bare_name_marker(tmp_path):
+    from verinoda.project_index.extract import extract
+
+    path = tmp_path / "m.js"
+    path.write_text('''var res = {};
+res.send = function send(b) { return b; };
+function outer() { const inner = () => 1; return inner(); }
+function plain() { return 1; }
+function Foo() {}
+Foo.prototype.run = function () { return 1; };
+''', encoding="utf-8")
+    out = extract([path], cache_root=tmp_path / "cache", root=tmp_path, parallel=False)
+    marked = {n["label"] for n in out["nodes"] if n.get("_no_bare_name")}
+    assert marked == {".send()", "inner()", ".run()"}

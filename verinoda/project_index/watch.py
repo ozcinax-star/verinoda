@@ -1716,8 +1716,9 @@ def _rebuild_code(
                     # Persisted resolver markers are never re-derived from a
                     # label: callability protects indirect calls (#2438), and
                     # Rust impl identity connects alpha-renamed generic blocks.
+                    # Verinoda patch: _no_bare_name keeps JS/TS scoped symbols out of bare-name matching.
                     for marker in (
-                        "_callable", "_callable_class", "_elixir_module",
+                        "_callable", "_callable_class", "_elixir_module", "_no_bare_name",
                         "_rust_impl_key", "_rust_declaration_count",
                     ):
                         if node.get(marker):
