@@ -3555,8 +3555,12 @@ def cmd_taint(args) -> int:
     scope = []
     for p in args.paths or []:
         q = Path(p)
-        tries = [q] if q.is_absolute() else [repo / q, Path.cwd() / q]
-        found = next((t for t in tries if t.exists()), tries[0])
+        # relative to the working directory first (`taint .` in a sub-folder), else to the project
+        tries = [q] if q.is_absolute() else [Path.cwd() / q, repo / q]
+        found = next((t for t in tries if t.exists()), None)
+        if found is None:
+            print(f"error: {p} does not exist", file=sys.stderr)
+            return 2
         try:
             scope.append(found.resolve().relative_to(repo.resolve()).as_posix())
         except ValueError:

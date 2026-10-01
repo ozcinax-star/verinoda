@@ -1,5 +1,5 @@
 {
-  "about": "Library behaviour as data for `verinoda taint` (Python): where untrusted values enter (sources), calls that must not receive them unchecked (sinks, with the argument that matters), and calls whose result is safe to pass on (sanitizers). A name `a.b` matches an attribute chain or name ending in `.a.b`; `a.b()` matches a call of it; `*.m` any receiver's method `m`. Route handler parameters taken from the request are sources too (verinoda reads the route decorators). A project adds to or replaces these in verinoda.toml [taint]. A source's threat is remote (a request from the network) or local (the user running the program: argv, the environment, input()); local ones are used with --local.",
+  "about": "Library behaviour as data for `verinoda taint` (Python): where untrusted values enter (sources, each remote - a request from the network - or local - the user running the program: argv, the environment, input(); local ones are used with --local), calls that must not receive them unchecked (sinks, with the argument that matters by position and keyword; when_keyword: only with that keyword true; safe_keywords: not with one of these values), and calls whose result is safe to pass on (sanitizers, to every sink or to the kinds listed). A name `a.b` matches an attribute chain or name ending in `.a.b`; `a.b()` matches a call of it; `*.m` any receiver's method `m`. Route handler parameters taken from the request are sources too (verinoda reads the route decorators). A project adds to or replaces these in verinoda.toml [taint].",
   "sources": [
     {
       "match": "request.args",
@@ -90,68 +90,104 @@
       "match": "os.getenv()",
       "kind": "environment",
       "threat": "local"
+    },
+    {
+      "match": "request.COOKIES",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.FILES",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.META",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.get_data()",
+      "kind": "http",
+      "threat": "remote"
+    },
+    {
+      "match": "request.view_args",
+      "kind": "http",
+      "threat": "remote"
     }
   ],
   "sinks": [
     {
       "match": "*.execute",
       "arg": 0,
-      "kind": "sql"
+      "kind": "sql",
+      "keyword": "sql"
     },
     {
       "match": "*.executemany",
       "arg": 0,
-      "kind": "sql"
+      "kind": "sql",
+      "keyword": "sql"
     },
     {
       "match": "*.executescript",
       "arg": 0,
-      "kind": "sql"
+      "kind": "sql",
+      "keyword": "sql_script"
     },
     {
       "match": "*.raw",
       "arg": 0,
-      "kind": "sql"
+      "kind": "sql",
+      "keyword": "raw_query"
     },
     {
       "match": "os.system",
       "arg": 0,
-      "kind": "command"
+      "kind": "command",
+      "keyword": "command"
     },
     {
       "match": "os.popen",
       "arg": 0,
-      "kind": "command"
+      "kind": "command",
+      "keyword": "cmd"
     },
     {
       "match": "subprocess.run",
       "arg": 0,
       "kind": "command",
-      "when_keyword": "shell"
+      "when_keyword": "shell",
+      "keyword": "args"
     },
     {
       "match": "subprocess.call",
       "arg": 0,
       "kind": "command",
-      "when_keyword": "shell"
+      "when_keyword": "shell",
+      "keyword": "args"
     },
     {
       "match": "subprocess.Popen",
       "arg": 0,
       "kind": "command",
-      "when_keyword": "shell"
+      "when_keyword": "shell",
+      "keyword": "args"
     },
     {
       "match": "subprocess.check_output",
       "arg": 0,
       "kind": "command",
-      "when_keyword": "shell"
+      "when_keyword": "shell",
+      "keyword": "args"
     },
     {
       "match": "subprocess.check_call",
       "arg": 0,
       "kind": "command",
-      "when_keyword": "shell"
+      "when_keyword": "shell",
+      "keyword": "args"
     },
     {
       "match": "eval",
@@ -166,57 +202,75 @@
     {
       "match": "pickle.loads",
       "arg": 0,
-      "kind": "deserialization"
+      "kind": "deserialization",
+      "keyword": "data"
     },
     {
       "match": "yaml.load",
       "arg": 0,
-      "kind": "deserialization"
+      "kind": "deserialization",
+      "keyword": "stream",
+      "safe_keywords": {
+        "Loader": [
+          "SafeLoader",
+          "CSafeLoader",
+          "BaseLoader"
+        ]
+      }
     },
     {
       "match": "open",
       "arg": 0,
-      "kind": "path"
+      "kind": "path",
+      "keyword": "file"
     },
     {
       "match": "send_file",
       "arg": 0,
-      "kind": "path"
+      "kind": "path",
+      "keyword": "path_or_file"
     },
     {
       "match": "render_template_string",
       "arg": 0,
-      "kind": "template"
+      "kind": "template",
+      "keyword": "source"
     },
     {
       "match": "redirect",
       "arg": 0,
-      "kind": "redirect"
+      "kind": "redirect",
+      "keyword": "location"
     },
     {
       "match": "requests.get",
       "arg": 0,
-      "kind": "request"
+      "kind": "request",
+      "keyword": "url"
     },
     {
       "match": "requests.post",
       "arg": 0,
-      "kind": "request"
+      "kind": "request",
+      "keyword": "url"
     },
     {
       "match": "urllib.request.urlopen",
       "arg": 0,
-      "kind": "request"
+      "kind": "request",
+      "keyword": "url"
     },
     {
       "match": "subprocess.getoutput",
       "arg": 0,
-      "kind": "command"
+      "kind": "command",
+      "keyword": "cmd"
     },
     {
       "match": "subprocess.getstatusoutput",
       "arg": 0,
-      "kind": "command"
+      "kind": "command",
+      "keyword": "cmd"
     },
     {
       "match": "marshal.loads",
@@ -226,27 +280,32 @@
     {
       "match": "jinja2.Template",
       "arg": 0,
-      "kind": "template"
+      "kind": "template",
+      "keyword": "source"
     },
     {
       "match": "Markup",
       "arg": 0,
-      "kind": "xss"
+      "kind": "xss",
+      "keyword": "base"
     },
     {
       "match": "httpx.get",
       "arg": 0,
-      "kind": "request"
+      "kind": "request",
+      "keyword": "url"
     },
     {
       "match": "httpx.post",
       "arg": 0,
-      "kind": "request"
+      "kind": "request",
+      "keyword": "url"
     },
     {
       "match": "sqlalchemy.text",
       "arg": 0,
-      "kind": "sql"
+      "kind": "sql",
+      "keyword": "text"
     }
   ],
   "sanitizers": [
@@ -254,13 +313,38 @@
     "float()",
     "bool()",
     "len()",
-    "shlex.quote()",
-    "html.escape()",
-    "markupsafe.escape()",
-    "escape()",
-    "os.path.basename()",
-    "secure_filename()",
-    "werkzeug.utils.secure_filename()",
-    "uuid.UUID()"
+    "uuid.UUID()",
+    {
+      "match": "shlex.quote()",
+      "kinds": [
+        "command"
+      ]
+    },
+    {
+      "match": "html.escape()",
+      "kinds": [
+        "template",
+        "xss"
+      ]
+    },
+    {
+      "match": "markupsafe.escape()",
+      "kinds": [
+        "template",
+        "xss"
+      ]
+    },
+    {
+      "match": "os.path.basename()",
+      "kinds": [
+        "path"
+      ]
+    },
+    {
+      "match": "secure_filename()",
+      "kinds": [
+        "path"
+      ]
+    }
   ]
 }

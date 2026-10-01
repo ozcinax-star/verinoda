@@ -268,7 +268,12 @@ def test_the_projects_own_rules(tmp_path):
 
 
 @pytest.mark.parametrize("toml,msg", [
-    ('[taint]\nsinks = ["go"]\n', "each sink is"),
+    ('[taint]\nsinks = ["go"]\n', "a sink is"),
+    ('[taint]\nsanitisers = ["clean()"]\n', "unknown key"),
+    ('[taint]\nsinks = [{match = "go", agr = 1}]\n', "unknown key"),
+    ('[taint]\nsinks = [{match = "go", when_keyword = 1}]\n', "when_keyword is a string"),
+    ('[taint]\nsanitizers = [{match = "x()", kinds = "sql"}]\n', "kinds is a list"),
+    ('[taint]\nsources = [{match = "x()", threat = "far"}]\n', "threat is"),
     ('[taint]\nsources = ["not a name"]\n', "not a name pattern"),
     ('[taint]\nsinks = [{match = "go", arg = -1}]\n', "arg is a position"),
     ('[taint]\nbuiltin = "yes"\n', "builtin is true or false"),
@@ -327,3 +332,219 @@ def test_local_sources_only_when_asked(web):
     assert kinds and not kinds & {"os.environ", "input()", "sys.argv"}
     assert {f["source"]["match"] for f in local["findings"]} >= {"os.environ", "input()"}
     assert len(remote["findings"]) == len(local["findings"]) - 2
+
+
+# -- review round ---------------------------------------------------------------------------------
+
+LIB = """import os
+
+
+def run(cmd):
+    os.system(cmd)
+
+
+def f(cmd=os.environ["X"]):
+    os.system(cmd)
+
+
+def find(n):
+    return n
+"""
+
+MAIN = """import os
+import pickle
+import re
+import html
+import subprocess
+
+import requests
+import yaml
+from flask import request
+
+from lib import f, find, run
+
+
+def handler():
+    run("ls")
+    run(request.args["c"])
+
+
+def two():
+    return run("a") or run(request.args["t"])
+
+
+def defaulted():
+    f()
+
+
+def by_keyword():
+    requests.get(url=request.args["u"])
+    subprocess.run(args=request.args["c"], shell=True)
+
+
+def escapes():
+    x = request.args["x"]
+    os.system("echo " + html.escape(x))
+    os.system("echo " + re.escape(x))
+    return html.escape(x)
+
+
+def comprehension():
+    return [find(n) for n in request.args.getlist("n")]
+
+
+def comp_sink():
+    return [os.system(n) for n in request.args.getlist("n")]
+
+
+def outer():
+    x = request.args["x"]
+
+    def inner():
+        os.system(x)
+    return inner
+
+
+def safe_yaml():
+    return yaml.load(request.data, Loader=yaml.SafeLoader)
+
+
+def unsafe_yaml():
+    return pickle.loads(request.data)
+
+
+def both():
+    y = request.form["y"]
+    os.system(request.args["a"] + y)
+
+
+TOP = request.cookies["t"]
+os.system(TOP)
+"""
+
+LIB2 = """import os
+
+
+def find2(n):
+    os.system(n)
+"""
+
+
+@pytest.fixture(scope="module")
+def round2(tmp_path_factory):
+    from verinoda import workflow
+    from verinoda.store import open_store
+
+    main = MAIN.replace("from lib import f, find, run", "from lib import f, find, run\nfrom lib2 import find2")
+    main = main.replace("return [find(n) for n in", "return [find2(n) for n in")
+    repo = _project(tmp_path_factory.mktemp("taint2") / "r2", {"lib.py": LIB, "lib2.py": LIB2, "main.py": main})
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+    finally:
+        st.close()
+    return repo, taint.run(repo, local=True)
+
+
+def _sinks_from(res, rel_prefix: str, src: str) -> list[dict]:
+    return [f for f in res["findings"] if f["source"]["at"].startswith(rel_prefix) and f["source"]["match"] == src]
+
+
+def _line_of(repo: Path, rel: str, text: str) -> int:
+    return next(i for i, ln in enumerate((repo / rel).read_text(encoding="utf-8").splitlines(), 1) if text in ln)
+
+
+def test_every_call_in_a_caller_is_followed(round2):
+    repo, res = round2
+    at = {f["source"]["at"] for f in res["findings"] if f["sink"]["at"] == f"lib.py:{_line_of(repo, 'lib.py', 'os.system(cmd)')}"}
+    assert f"main.py:{_line_of(repo, 'main.py', 'run(request.args[\"c\"])')}" in at
+    assert f"main.py:{_line_of(repo, 'main.py', 'or run(request.args')}" in at
+
+
+def test_a_default_is_read_in_the_callees_file(round2):
+    repo, res = round2
+    sink = f"lib.py:{_line_of(repo, 'lib.py', 'os.system(cmd)') + 4}"
+    (fd,) = [f for f in res["findings"] if f["sink"]["at"] == sink]
+    first = fd["path"][0]
+    assert first["at"] == f"lib.py:{_line_of(repo, 'lib.py', 'def f(cmd=')}" and first["text"].startswith("def f(")
+    assert first["what"].startswith("source os.environ -> default of cmd in f")
+
+
+def test_keyword_arguments_reach_library_sinks(round2):
+    repo, res = round2
+    kinds = {f["sink"]["kind"] for f in res["findings"]
+             if f["sink"]["at"] in (f"main.py:{_line_of(repo, 'main.py', 'requests.get(url=')}",
+                                    f"main.py:{_line_of(repo, 'main.py', 'subprocess.run(args=')}")}
+    assert kinds == {"request", "command"}
+
+
+def test_a_sanitizer_clears_only_its_own_kinds(round2):
+    repo, res = round2
+    html_line = f"main.py:{_line_of(repo, 'main.py', 'html.escape(x))')}"
+    re_line = f"main.py:{_line_of(repo, 'main.py', 're.escape(x))')}"
+    assert {f["sink"]["at"] for f in res["findings"]} >= {html_line, re_line}   # neither quotes for a shell
+
+
+def test_comprehension_variables_carry_the_taint(round2):
+    repo, res = round2
+    assert [f for f in res["findings"] if f["sink"]["at"] == "lib2.py:5"]
+    assert [f for f in res["findings"] if f["sink"]["at"] == f"main.py:{_line_of(repo, 'main.py', 'os.system(n) for n')}"]
+
+
+def test_closures_and_module_level_code(round2):
+    repo, res = round2
+    inner = [f for f in res["findings"] if f["sink"]["at"] == f"main.py:{_line_of(repo, 'main.py', 'os.system(x)')}"]
+    assert inner and inner[0]["source"]["match"] == "request.args"
+    top = [f for f in res["findings"] if f["sink"]["at"] == f"main.py:{_line_of(repo, 'main.py', 'os.system(TOP)')}"]
+    assert top and top[0]["source"]["match"] == "request.cookies"
+
+
+def test_safe_keyword_values_and_several_sources_into_one_sink(round2):
+    repo, res = round2
+    assert not [f for f in res["findings"] if "SafeLoader" in f["sink"]["call"]]
+    assert [f for f in res["findings"] if f["sink"]["call"].startswith("pickle.loads")]
+    srcs = {f["source"]["match"] for f in res["findings"]
+            if f["sink"]["at"] == f"main.py:{_line_of(repo, 'main.py', 'request.args[\"a\"] + y')}"}
+    assert srcs == {"request.args", "request.form"}
+
+
+def test_project_sinks_come_before_the_librarys_and_sanitizers_are_calls(tmp_path):
+    repo = _project(tmp_path / "own2", {
+        "a.py": "import os\nimport requests\nfrom flask import request\n\n\n"
+                "def g():\n    requests.get(timeout=1, endpoint=request.args['u'])\n"
+                "    os.system(clean(request.args['x']))\n",
+        "verinoda.toml": '[taint]\nsinks = [{match = "requests.get", arg = "endpoint", kind = "request"}]\n'
+                         'sanitizers = ["clean"]\n'})
+    res = taint.run(repo)
+    assert [f["sink"]["call"][:12] for f in res["findings"]] == ["requests.get"]
+
+
+@pytest.mark.parametrize("ann,src", [
+    ("q: str | None = None", True), ("q: Annotated[str | None, Query()] = None", True),
+    ("q: Annotated[str, Depends(get_user)]", False), ("q: str = Security(scheme)", False),
+    ("q: Optional[str] = None", True), ("q: int = 1", False),
+])
+def test_fastapi_parameters(ann, src):
+    import ast
+
+    func = ast.parse(f"@app.get('/x')\ndef h({ann}):\n    pass\n").body[0]
+    assert ("q" in taint.route_params(func)) is src
+
+
+def test_typed_path_parameters_are_parsed_by_the_framework():
+    import ast
+
+    func = ast.parse("@app.get('/c/{item_id}/{name}')\ndef c(item_id: int, name: str):\n    pass\n").body[0]
+    assert set(taint.route_params(func)) == {"name"}
+
+
+def test_cli_paths_that_do_not_exist_and_dot_in_a_subfolder(web, capsys, monkeypatch):
+    from verinoda import cli
+
+    repo, _ = web
+    assert cli.main(["taint", "nosuch.py", "--repo", str(repo)]) == 2
+    assert "does not exist" in capsys.readouterr().err
+    monkeypatch.chdir(repo / "app")
+    assert cli.main(["taint", ".", "--repo", str(repo), "--json"]) in (0, 3)
+    assert json.loads(capsys.readouterr().out)["files"] == 3
