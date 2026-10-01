@@ -768,8 +768,13 @@ def cmd_notes(args) -> int:
     from verinoda import usernotes
 
     repo = Path(args.repo or args.path).resolve() if (args.repo or args.path) else find_repo_root()
+    if sum(map(bool, (args.facts or args.category or args.tag, args.links, args.changed))) > 1:
+        print("error: give one of --facts (with --category / --tag), --links or --changed", file=sys.stderr)
+        return 2
     snap = None
     try:  # with an index, a note whose symbol was renamed or deleted is gone, and --keep knows its lines
+        if (args.facts or args.category or args.tag) and not (args.keep or args.delete):
+            raise FileNotFoundError("the facts need no index")
         from verinoda.ui.data import Atlas
 
         snap = Atlas(repo).snapshot()
@@ -807,13 +812,58 @@ def cmd_notes(args) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         kept.append(subject)
-    notes = [usernotes.as_dict(repo, n, resolves=resolves(n.subject)) for n in usernotes.load_all(repo)]
+    own = usernotes.load_all(repo)
+    if args.facts or args.category or args.tag:
+        cat = (args.category or "").strip().lower()
+        tag = (args.tag or "").strip().lower().lstrip("#")
+        facts = [{"subject": n.subject, "note": n.path.name if n.path else None, **o}
+                 for n in own for o in usernotes.observations(n)
+                 if (not cat or o["category"] == cat) and (not tag or tag in o["tags"])]
+        res = {"dir": str(usernotes.notes_dir(repo)), "facts": facts,
+               "categories": sorted({f["category"] for f in facts}),
+               "tags": sorted({t for f in facts for t in f["tags"]}), "kept": kept, "deleted": deleted,
+               "note": "facts are what you wrote, not claims: no evidence status"}
+        _emit(args, res, _r_note_facts)
+        return 0
+    if args.links:
+        rows = [{"subject": n.subject, "name": lk["name"], "line": lk["line"],
+                 "note": n.path.name if n.path else None,
+                 **usernotes.resolve_link(lk["name"], own, snap, repo)}
+                for n in own for lk in usernotes.links(n)]
+        res = {"dir": str(usernotes.notes_dir(repo)), "links": rows,
+               "unresolved": sum(1 for r in rows if r["to"] is None),
+               "unchecked": sum(1 for r in rows if r["to"] == "unknown"), "index": snap is not None,
+               "kept": kept, "deleted": deleted}
+        _emit(args, res, _r_note_links)
+        return 1 if res["unresolved"] else 3 if res["unchecked"] else 0
+    notes = [usernotes.as_dict(repo, n, resolves=resolves(n.subject)) for n in own]
     bad = [n for n in notes if n["status"] != "fresh"]
     shown = bad if args.changed else notes
     res = {"dir": str(usernotes.notes_dir(repo)), "notes": shown, "changed": len(bad), "kept": kept,
            "deleted": deleted}
     _emit(args, res, _r_notes)
     return 1 if args.changed and bad else 0
+
+
+def _r_note_facts(res: dict) -> None:
+    print(f"{len(res['facts'])} observation(s) in your notes ({res['dir']})"
+          + (f"; categories: {', '.join(res['categories'])}" if res["categories"] else ""))
+    for f in res["facts"][:200]:
+        print(f"  [{f['category']}] {f['text']}  - {f['subject']} ({f['note']}:{f['line']})")
+
+
+def _r_note_links(res: dict) -> None:
+    print(f"{len(res['links'])} link(s) in your notes, {res['unresolved']} leading nowhere"
+          + (f", {res['unchecked']} not checked" if res["unchecked"] else "")
+          + ("" if res["index"] else " (no index: only links to your own notes resolve)"))
+    for r in res["links"][:200]:
+        where = (f"note {r['subject']!r}" if r["to"] == "note" else
+                 f"{r['kind']} {r['title']} at {r['at']}" + (f" (+{r['also']} other match(es)"
+                                                            + (", ambiguous" if r.get("ambiguous") else "") + ")"
+                                                            if r.get("also") else "")
+                 if r["to"] == "code" else f"NOT CHECKED: {r['why']}" if r["to"] == "unknown"
+                 else f"NOWHERE: {r['why']}")
+        print(f"  [[{r['name']}]] in {r['note']}:{r['line']} -> {where}")
 
 
 MAP_ACTIONS = ("save", "show", "list")  # `map save NAME`: a project folder with such a name is passed as ./save
@@ -3599,6 +3649,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="after reading a changed note again: anchor it to the code as it is now; repeatable")
     sp.add_argument("--delete", action="append", metavar="SUBJECT",
                     help="delete a note (one whose code is gone, for instance); repeatable")
+    sp.add_argument("--facts", action="store_true",
+                    help="list the `[category] fact #tag` lines of your notes (with --category / --tag to filter); "
+                         "what you wrote, not claims: no evidence status")
+    sp.add_argument("--category", help="with --facts: only this category")
+    sp.add_argument("--tag", help="with --facts: only facts with this #tag")
+    sp.add_argument("--links", action="store_true",
+                    help="list every [[Name]] link with where it leads (a note of yours, or a name in the index); "
+                         "exit 1 when one leads nowhere, 3 when one could not be checked (no index, or a changed "
+                         "file)")
     sp = add("map", cmd_map, "top-down architecture views; `map save NAME [--trace SOURCE TARGET | --view V]` keeps "
                              "one under a name, `map show NAME` reads it back with whether the files it cites "
                              "changed since (exit 1 = stale), `map list` lists them", repo=False)
