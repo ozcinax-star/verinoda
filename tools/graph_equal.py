@@ -27,8 +27,17 @@ def _clean(d: dict) -> dict:
     return {k: v for k, v in d.items() if k not in HISTORY_FIELDS}
 
 
+def _clean_node(n: dict) -> dict:
+    d = _clean({k: v for k, v in n.items() if k != "id"})
+    if d.get("external"):
+        # an external stub is made again by every build; the reconcile stamps `_origin` on the copy it keeps from the
+        # previous graph (and the "graph unchanged" keeper relies on that stamp), a fresh build has none: history
+        d.pop("_origin", None)
+    return d
+
+
 def canonical(data: dict) -> tuple[dict, Counter]:
-    nodes = {n["id"]: _clean({k: v for k, v in n.items() if k != "id"}) for n in data.get("nodes") or []}
+    nodes = {n["id"]: _clean_node(n) for n in data.get("nodes") or []}
     key = "links" if "links" in data else "edges"
     edges: Counter = Counter()
     for e in data.get(key) or []:
