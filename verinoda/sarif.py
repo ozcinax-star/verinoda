@@ -215,8 +215,8 @@ def from_check(res: dict) -> dict:
             status = "strong_inference"   # judged against what is installed or built here
         run.add(f"check/{v}/{s.get('kind')}", f"{v} {s.get('kind')}",
                 f"{v} {s.get('kind')} {s.get('expr') or ''}" + (f": {detail}" if detail else ""), status,
-                s.get("at"), props={"verdict": v, "rank": s.get("rank"), "source": s.get("source"), "evidence_at": [s["at"]] if s.get("at")
-                                    else None})
+                s.get("at"), props={"verdict": v, "rank": s.get("rank"), "source": s.get("source"),
+                                    "evidence_at": [s["at"]] if s.get("at") else None})
     return run.log(res.get("exit"))
 
 
