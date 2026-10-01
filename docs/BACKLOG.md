@@ -29,7 +29,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 1.1 | **Update proportional to the change** | Per-file hashes, re-extract only changed files and patch their nodes and edges into the graph, no whole-corpus rebuild; branch switch detected | claude-context, narsil-mcp, codebase-memory-mcp, CodeGraph, GitHub Stack Graphs | an update of one edited file on Verinoda's own repository takes seconds, and its graph equals a full scan's node for node and edge for edge |
-| 1.5 | **Daemon and multi-project server** | One MCP server over several indexed projects; HTTP transport with a token; `list_projects`, `index_status` | Graphify, codebase-memory-mcp, Codanna, Kodit | two projects answered from one server process |
 | 1.6 | **Multi-repository index** | Index several local repositories as one group with cross-repo symbol links | Sourcegraph, Graphify merge-graphs, GitNexus | a call from repo A to a function in repo B is an edge with its call site |
 
 ## 2 - Precise resolution layer

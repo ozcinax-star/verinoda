@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D163)
+## Upgrading from 0.4.0 (D137-D164)
 
 ### D137: Trigram regex index
 
@@ -304,6 +304,26 @@ projects every tool takes `project`, and a client config that registered one ser
 by one entry with `--projects`. The HTTP transport binds 127.0.0.1:8765 by default and every request needs
 `Authorization: Bearer <token>` from `verinoda mcp token`. `AtlasTools` takes an optional `lock=` and gains
 `drop_caches()`, `graph_loaded`, `list_projects()` and `index_status()`. `build_server` takes `hub=`.
+
+### D164: Several projects from one MCP server, HTTP transport and daemon
+
+Nothing to migrate. A single-project server (`mcp serve`, `--repo`, `--repo-of`) lists the same core menu as before.
+
+- **New tools.** Two new MCP tools, `list_projects` and `index_status`, bring the count to 43. A single-project
+  server lists them only in the full profile; a core server over several projects reaches them through
+  `run_tool`.
+- **New options.** `mcp serve --projects A,B`, `--all-projects`, `--max-loaded N`, and `--transport http` with
+  `--host` / `--port`.
+- **New commands.** `verinoda mcp daemon start|status|stop`, `verinoda mcp token [--rotate]` and
+  `verinoda projects add|list|remove`.
+- **New files.** The user config folder gains `projects.json`, `mcp-token`, `mcp-daemon.json` and
+  `mcp-daemon.log`.
+- **Client configs.** A config that registered one server per project can be replaced by one entry with
+  `--projects`. In that server, pass `project` in tool calls.
+- **Library API.** `AtlasTools(..., lock=)`, plus `drop_caches()`, `graph_loaded`, `list_projects()`,
+  `index_status()` and `project_entry()`; `build_server(None, hub=ProjectHub(...))`; `listed_of()` and
+  `index_state()` in `verinoda.mcp.server`. `serve()` takes `projects=`, `max_loaded=`, `transport=`, `host=`,
+  `port=` and `state_file=`.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
