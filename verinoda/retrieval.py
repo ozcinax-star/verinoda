@@ -932,9 +932,22 @@ def _stem_path(f: str) -> str:
     return f.rpartition(".")[0] if "." in PurePosixPath(f).name else f
 
 
+def bare_name(g: Graph, node: str) -> str | None:
+    """The name a symbol is asked for by when its label carries more: an Erlang function labelled ``name/arity``
+    (``checkout/1``) is ``checkout``; None for every other node."""
+    md = g.G.nodes[node].get("metadata") if node in g.G else None
+    if isinstance(md, dict) and md.get("language") == "erlang" and md.get("kind") == "function" \
+            and isinstance(md.get("name"), str):
+        return md["name"]
+    return None
+
+
 def _names_symbol(g: Graph, name: str, node: str) -> bool:
     label = fold_tr(g.label(node).strip().lstrip(".").split("(")[0])
     if label == fold_tr(name):
+        return True
+    alt = bare_name(g, node)
+    if alt is not None and fold_tr(alt) == fold_tr(name):
         return True
     owner, _, last = name.rpartition(".")
     if not owner or label != fold_tr(last):

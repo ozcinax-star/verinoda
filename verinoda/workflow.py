@@ -206,6 +206,9 @@ def _scan(store: Store, repo: Path, *, force: bool) -> dict:
            "index_seconds": round(t_index, 3), "stale": stale,
            "derived": _derive(store, repo, changed=None, all_files=sorted(files), file_hashes=files,
                               tree=snap.get("tree_hash"))}
+    skipped = _not_extracted(repo, files)
+    if skipped:
+        out["not_extracted"] = skipped
     if missing_before:
         out["forced_for_deleted_files"] = missing_before[:20]
     if pruned:
@@ -215,6 +218,17 @@ def _scan(store: Store, repo: Path, *, force: bool) -> dict:
     if stats.get("own_files_dropped"):  # Verinoda's own files the build still had nodes of (D68)
         out["own_files_dropped"] = stats["own_files_dropped"][:20]
     return out
+
+
+def _not_extracted(repo: Path, files) -> list[dict]:
+    """The project's files the graph has no node from because the optional grammar their language needs does not
+    load here (:func:`verinoda.grammars.not_extracted`); [] when that cannot be told."""
+    from verinoda import grammars
+
+    try:
+        return grammars.not_extracted(files, lambda: index.graph_source_files(repo))
+    except Exception:  # noqa: BLE001 - a report about the build, never a reason for it to fail
+        return []
 
 
 def _config_digests(repo: Path, files=None) -> dict[str, str]:
@@ -451,6 +465,10 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
         files = store.snapshot_files(snap["id"])
         out["derived"] = _derive(store, repo, changed=changed, all_files=sorted(files), file_hashes=files,
                                  tree=snap.get("tree_hash"))
+    if stats is not None:  # the graph was rebuilt: the files it could not read for want of a grammar
+        skipped = _not_extracted(repo, store.snapshot_files(snap["id"]))
+        if skipped:
+            out["not_extracted"] = skipped
     if pruned:
         out["pruned_missing_files"] = pruned[:20]
     if dangling:

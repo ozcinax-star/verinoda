@@ -49,7 +49,8 @@ VENDORED_DIRS = frozenset({"vendor", "vendored", "third_party", "third-party", "
                            "bower_components"})
 CODE_SUFFIXES = frozenset({".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte", ".go",
                            ".rs", ".java", ".kt", ".kts", ".scala", ".groovy", ".rb", ".php", ".cs", ".c", ".h",
-                           ".cc", ".cpp", ".hpp", ".swift", ".lua", ".dart", ".m", ".ex", ".exs", ".jl", ".zig"})
+                           ".cc", ".cpp", ".hpp", ".swift", ".lua", ".dart", ".m", ".ex", ".exs", ".jl", ".zig",
+                           ".cbl", ".cob", ".cobol", ".cpy", ".erl", ".hrl", ".escript", ".r", ".sol", ".vb"})
 DEFINE_INTENTS = frozenset({"locate", "define"})
 LOCATION_ANSWERS = DEFINE_INTENTS | {"config"}   # intents a definition or a quoted line can answer
 

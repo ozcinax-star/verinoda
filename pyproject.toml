@@ -160,6 +160,33 @@ commonlisp = [
 robot = [
     "robotframework>=4.0",
 ]
+# The grammars of the extractors ported from Graphify v0.9.73, pinned as upstream pins them. Without one, its
+# files are reported as not extracted (verinoda/grammars.py); nothing breaks. tree-sitter-language-pack is a
+# prebuilt wheel that bundles R and Erlang (no standalone wheel exists) and is used offline.
+vbnet = [
+    "tree-sitter-vb-dotnet==0.3.0",
+]
+r = [
+    "tree-sitter-language-pack==0.11.0",
+]
+erlang = [
+    "tree-sitter-language-pack==0.11.0",
+]
+solidity = [
+    "tree-sitter-solidity==1.2.13",
+]
+# every optional grammar with prebuilt wheels for Windows, macOS and Linux (tree-sitter-dm is left out: it builds
+# from source outside Windows)
+languages = [
+    "tree-sitter-vb-dotnet==0.3.0",
+    "tree-sitter-language-pack==0.11.0",
+    "tree-sitter-solidity==1.2.13",
+    "tree-sitter-sql",
+    "tree-sitter-hcl",
+    "tree-sitter-pascal",
+    "tree-sitter-ocaml",
+    "tree-sitter-commonlisp",
+]
 all = [
     "mcp>=1,<3",
     "starlette>=1.3.1,<2",
@@ -192,6 +219,9 @@ all = [
     "tree-sitter-ocaml",
     "tree-sitter-commonlisp",
     "robotframework>=4.0",
+    "tree-sitter-vb-dotnet==0.3.0",
+    "tree-sitter-language-pack==0.11.0",
+    "tree-sitter-solidity==1.2.13",
 ]
 
 [project.urls]
