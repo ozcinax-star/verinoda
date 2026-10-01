@@ -23,6 +23,12 @@ the code it was written about:
   whitespace, comments and moving it change nothing;
 * anything else: a hash of its lines.
 
+Inside a note, Basic Memory's conventions are read: a line ``- [category] fact #tag #other`` is an observation
+(:func:`observations`: its category, its text, its tags and its line in the note file; a task box ``[ ]`` /
+``[x]`` is not one), and ``[[Name]]`` is a link (:func:`links`) to another note or to the code
+(``verinoda notes --links`` resolves each one). Nothing is cached: the files are read on every call, so a note
+edited in an editor is what the next command reads.
+
 Read back, a note is ``fresh`` (the code is as it was; ``now`` says where it is), ``changed`` (the
 code was edited since, or can no longer be read as code: read the note again, then *keep* it,
 which anchors it to the code as it is now) or ``gone`` (the symbol, section or file is no longer
@@ -43,6 +49,10 @@ MAX_TEXT = 64_000
 NOTE_SUFFIX = ".md"
 STATUSES = ("fresh", "changed", "gone")
 REGION_TABLES = (("sym", "symbols", "full"), ("mod", "module", "h"), ("sec", "sections", "h"))
+_OBS = re.compile(r"^\s*(?:[-*+]\s+)?\[([A-Za-z][\w -]{0,39}?)\]\s+(\S.*?)\s*$")
+_TAG = re.compile(r"(?<![\w&/#])#([A-Za-z][\w/-]{0,59})")
+_WIKI = re.compile(r"\[\[([^\]|#\n]+)(?:[|#][^\]\n]*)?\]\]")
+_FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 
 @dataclass
@@ -104,6 +114,81 @@ def _parse(path: Path) -> UserNote | None:
         anchor = {}
     return UserNote(subject, file, int(m.group(1)), int(m.group(2)), body.strip("\n"),
                     anchor if isinstance(anchor, dict) else {}, meta.get("written") or "", path)
+
+
+def _body_lines(note: UserNote) -> list[tuple[int, str]]:
+    """``(line in the note file, text)`` for the note's body, fenced code left out."""
+    try:
+        raw = note.path.read_text(encoding="utf-8-sig").replace("\r\n", "\n") if note.path else None
+    except (OSError, UnicodeDecodeError):
+        raw = None
+    if raw is None:
+        rows = list(enumerate(note.text.split("\n"), 1))
+    else:
+        lines = raw.split("\n")
+        end = next((k for k in range(1, len(lines)) if lines[k] == "---"), 0)
+        rows = [(k + 1, lines[k]) for k in range(end + 1, len(lines))]
+    out, fence = [], None
+    for n, line in rows:
+        m = _FENCE.match(line)
+        if m:
+            if fence is None:
+                fence = m.group(1)
+            elif m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                fence = None
+            continue
+        if fence is None:
+            out.append((n, line))
+    return out
+
+
+def observations(note: UserNote) -> list[dict]:
+    """The note's ``[category] fact #tag`` lines: category (lower case), text, tags and the line in the note file."""
+    out = []
+    for n, line in _body_lines(note):
+        m = _OBS.match(line)
+        if not m or m.group(1).strip().lower() == "x":      # a task box, not a category
+            continue
+        text = m.group(2)
+        out.append({"category": " ".join(m.group(1).lower().split()), "text": text,
+                    "tags": sorted({t.lower() for t in _TAG.findall(text)}), "line": n})
+    return out
+
+
+def links(note: UserNote) -> list[dict]:
+    """The note's ``[[Name]]`` links, each with the line it is on (once per name)."""
+    seen, out = set(), []
+    for n, line in _body_lines(note):
+        for m in _WIKI.finditer(line):
+            name = m.group(1).strip()
+            if name and name not in seen:
+                seen.add(name)
+                out.append({"name": name, "line": n})
+    return out
+
+
+def _bare(name: str) -> str:
+    return name.strip().removesuffix("()").lower()
+
+
+def resolve_link(name: str, notes: list[UserNote], snap=None) -> dict:
+    """Where ``[[name]]`` leads: a note of yours (its subject, or the name after ``::``), else a symbol, file or
+    section of the index whose name is ``name`` (exactly or after a module prefix, ignoring ``()`` and case), else
+    nothing."""
+    want = _bare(name)
+    for n in notes:
+        if _bare(n.subject) == want or _bare(n.subject.rpartition("::")[2]) == want:
+            return {"to": "note", "subject": n.subject, "at": f"{n.file}:{n.start}"}
+    if snap is None:
+        return {"to": None, "why": "no index to look the name up in (run `verinoda scan`)"}
+    hits = [h for h in (snap.search(name.strip().removesuffix("()")).get("results") or [])
+            if _bare(h.get("title") or "") == want or _bare(h.get("title") or "").endswith("." + want)]
+    if not hits:
+        return {"to": None, "why": "no note of yours and no name in the index is called that"}
+    h = hits[0]
+    at = f"{h['file']}:{h['line']}" if h.get("file") and h.get("line") else h.get("file")
+    return {"to": "code", "title": h["title"], "kind": h.get("kind"), "at": at,
+            **({"also": len(hits) - 1} if len(hits) > 1 else {})}
 
 
 def load_all(repo: Path) -> list[UserNote]:
