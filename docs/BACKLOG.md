@@ -126,7 +126,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 17.4 | **Mixin debug export as evidence** | `.mixin.out` classes and audit reports read as what a Mixin really changed | SpongePowered Mixin | a Mixin claim cites the exported class |
 | 17.5 | **Command syntax and JSON schemas per version** | Commands, resource locations, NBT paths, loot tables and predicates checked against vanilla-mcdoc | Spyglass, Datapack Helper Plus | a malformed command is reported with its line |
 
 ## 18 - Flow analysis
