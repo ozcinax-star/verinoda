@@ -1008,8 +1008,8 @@ def _classify(ctx: _Ctx, fd: FileDiff) -> tuple[list[Change], dict]:
             if suffix in anchors.TS_LANGS:
                 # the facts' signature hash stops at a field named "body"; grammars without that field (Kotlin)
                 # hash the whole definition: compare the text before the body instead
-                ho = rr.ts_header(ctx.tstree(rel, "old"), a["def"])
-                if ho is not None and ho == rr.ts_header(ctx.tstree(rel, "new"), b["def"]):
+                ho = rr.ts_header(ctx.tstree(rel, "old"), a["def"], _last(q))
+                if ho is not None and ho == rr.ts_header(ctx.tstree(rel, "new"), b["def"], _last(q)):
                     kind = "body"
         elif a["body"] != b["body"]:
             kind = "body"
@@ -1521,8 +1521,8 @@ def _new_calls(ctx: _Ctx, c: Change) -> set[tuple[int, str]] | None:
                 continue
             out.add((k.lineno, rr.call_name(k) or "?"))
         return out
-    np_ = rr.ts_param_names(ctx.tstree(c.file), c.def_line or -1)
-    op_ = rr.ts_param_names(ctx.tstree(c.file, "old"), c.old_def_line)
+    np_ = rr.ts_param_names(ctx.tstree(c.file), c.def_line or -1, _last(c.qual) if c.qual else None)
+    op_ = rr.ts_param_names(ctx.tstree(c.file, "old"), c.old_def_line, _last(c.qual) if c.qual else None)
     ocode = ctx.code(c.file, "old")
     old = {}
     for _o, _n, key in _jvm_call_keys("\n".join(ocode[c.old_lines[0] - 1: c.old_lines[1]]), op_):
@@ -2033,7 +2033,7 @@ def _params_of(ctx: _Ctx, c: Change, side: str) -> list[str]:
         return []
     if _suffix(c.file) in (".py", ".pyi"):
         return rr.py_param_names(rr.py_def_at(ctx.pytree(c.file, side), def_line))
-    return rr.ts_param_names(ctx.tstree(c.file, side), def_line)
+    return rr.ts_param_names(ctx.tstree(c.file, side), def_line, _last(c.qual) if c.qual else None)
 
 
 def _guard_rows(ctx: _Ctx, c: Change, side: str) -> list[dict]:
@@ -2171,7 +2171,7 @@ def _helper_return(ctx: _Ctx, c: Change, name: str, changes: list[Change]) -> tu
                 params = [p for p in r[0] if p not in ("self", "cls")]
                 return params, rr._unparse(r[1]), f"{rel}:{s['def']}"
         elif _suffix(rel) in anchors.TS_LANGS:
-            r2 = rr.ts_single_return(ctx.tstree(rel), s["def"])
+            r2 = rr.ts_single_return(ctx.tstree(rel), s["def"], _last(qual))
             if r2:
                 return r2[0], r2[1], f"{rel}:{s['def']}"
     return None
@@ -3063,8 +3063,8 @@ def _shape_verdict(ctx: _Ctx, c: Change) -> tuple[str, list[str], str]:
         return ("breaking" if why else "compatible"), why, \
             "parameter names, order, defaults, *args and **kwargs of both versions (syntax trees)"
     if _suffix(c.file) in _JVM_SUFFIXES and c.old_def_line and c.def_line:
-        o = rr.ts_param_count(ctx.tstree(c.file, "old"), c.old_def_line)
-        n = rr.ts_param_count(ctx.tstree(c.file), c.def_line)
+        o = rr.ts_param_count(ctx.tstree(c.file, "old"), c.old_def_line, _last(c.qual) if c.qual else None)
+        n = rr.ts_param_count(ctx.tstree(c.file), c.def_line, _last(c.qual) if c.qual else None)
         if o and n:
             (o_req, o_tot, o_va), (n_req, n_tot, n_va) = o, n
             why = []
@@ -3327,7 +3327,7 @@ def _jvm_arity(ctx: _Ctx, c: Change) -> list[dict]:
     s = ctx.sym(c.file, c.qual)
     if s is None:
         return []
-    shape = rr.ts_param_count(ctx.tstree(c.file), s["def"])
+    shape = rr.ts_param_count(ctx.tstree(c.file), s["def"], _last(c.qual))
     owner = _last(c.qual.rpartition(".")[0]) if "." in c.qual else ""
     overloads = [q for q in ((ctx.facts(c.file) or {}).get("symbols") or {}) if q.split("#")[0] == c.qual.split("#")[0]]
     sites = _jvm_call_sites(ctx, c, owner)

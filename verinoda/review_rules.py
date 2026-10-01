@@ -1203,18 +1203,32 @@ def _defined_on(n, def_line: int) -> bool:
     return def_line in (n.start_point[0] + 1, ts_name_line(n))
 
 
-def _ts_def_at(tree, def_line: int):
-    from verinoda.anchors import TS_DEF_TYPES
+def _ts_def_at(tree, def_line: int, name: str | None = None, types=None):
+    """The definition cited at ``def_line``. Several can be: a member declared on the name line of an annotated
+    type (``@FunctionalInterface`` / ``public interface Fn { void apply(int x); }``) has the type's name line as its
+    own first and name line. With ``name``, a definition of that name wins; then one whose first line and name line
+    are both ``def_line`` (the innermost), then one whose name line is ``def_line``, then one starting there (facts
+    made before definitions were cited at their name line)."""
+    from verinoda.anchors import TS_DEF_TYPES, _ts_name, ts_name_line
 
-    for n in ts_walk(tree.root_node) if tree is not None else ():
-        if n.type in TS_DEF_TYPES and _defined_on(n, def_line):
-            return n
-    return None
+    if tree is None:
+        return None
+    types = TS_DEF_TYPES if types is None else types
+    best, best_rank = None, None
+    for n in ts_walk(tree.root_node):
+        if not n.is_named or n.type not in types or not _defined_on(n, def_line):
+            continue
+        first, named = n.start_point[0] + 1, ts_name_line(n)
+        rank = (0 if name is not None and _ts_name(n) == name else 1,
+                0 if first == named == def_line else 1 if named == def_line else 2)
+        if best_rank is None or rank <= best_rank:  # pre-order: on a tie the later (inner) node wins
+            best, best_rank = n, rank
+    return best
 
 
-def ts_param_names(tree, def_line: int) -> list[str]:
-    """Parameter names of the Java / Kotlin / JS method declared on ``def_line``."""
-    n = _ts_def_at(tree, def_line)
+def ts_param_names(tree, def_line: int, name: str | None = None) -> list[str]:
+    """Parameter names of the Java / Kotlin / JS method declared on ``def_line`` (named ``name`` when given)."""
+    n = _ts_def_at(tree, def_line, name)
     out: list[str] = []
     if n is None:
         return out
@@ -1231,10 +1245,10 @@ def ts_param_names(tree, def_line: int) -> list[str]:
     return out
 
 
-def ts_single_return(tree, def_line: int) -> tuple[list[str], str] | None:
+def ts_single_return(tree, def_line: int, name: str | None = None) -> tuple[list[str], str] | None:
     """``(parameters, returned expression text)`` of a method whose body is one ``return <expr>`` (Java,
     Kotlin block body or expression body, JS / TS), else None."""
-    n = _ts_def_at(tree, def_line)
+    n = _ts_def_at(tree, def_line, name)
     if n is None:
         return None
     body = n.child_by_field_name("body") or next((c for c in n.children if c.type in _TS_BODY), None)
@@ -1249,7 +1263,7 @@ def ts_single_return(tree, def_line: int) -> tuple[list[str], str] | None:
     if s.type in ("return_statement", "jump_expression") and s.text.lstrip().startswith(b"return"):
         vals = [c for c in s.children if c.is_named and "comment" not in c.type]
         if len(vals) == 1:
-            return ts_param_names(tree, def_line), _ts_text(vals[0])
+            return ts_param_names(tree, def_line, name), _ts_text(vals[0])
     return None
 
 
@@ -1272,50 +1286,44 @@ _TS_BODY = {"function_body", "block", "class_body", "constructor_body", "enum_bo
             "body_statement", "enum_class_body"}
 
 
-def ts_header(tree, def_line: int) -> str | None:
-    """The text of the definition starting on ``def_line`` before its body (comments dropped, whitespace
-    collapsed): what a caller sees. None when no definition starts there or it has no body."""
-    if tree is None:
+def ts_header(tree, def_line: int, name: str | None = None) -> str | None:
+    """The text of the definition cited at ``def_line`` (named ``name`` when given) before its body (comments
+    dropped, whitespace collapsed): what a caller sees. None when no definition is there or it has no body."""
+    n = _ts_def_at(tree, def_line, name)
+    if n is None:
         return None
-    from verinoda.anchors import TS_DEF_TYPES
-
-    for n in ts_walk(tree.root_node):
-        if n.type in TS_DEF_TYPES and _defined_on(n, def_line):
-            body = n.child_by_field_name("body") or next((c for c in n.children if c.type in _TS_BODY), None)
-            if body is None:
-                return None
-            parts = []
-            for c in ts_walk(n):
-                if c.start_byte >= body.start_byte:
-                    continue
-                if c.child_count == 0 and "comment" not in c.type:
-                    parts.append(c.text.decode("utf-8", "replace"))
-            return " ".join(parts)
-    return None
-
-
-def ts_param_count(tree, def_line: int) -> tuple[int, int, bool] | None:
-    """``(required, total, varargs)`` parameters of the Java/Kotlin method declared on ``def_line``."""
-    if tree is None:
+    body = n.child_by_field_name("body") or next((c for c in n.children if c.type in _TS_BODY), None)
+    if body is None:
         return None
-    for n in ts_walk(tree.root_node):
-        if n.type in ("method_declaration", "function_declaration", "constructor_declaration") and \
-                _defined_on(n, def_line):
-            for c in n.children:
-                if c.type == "formal_parameters":
-                    ps = [p for p in c.children if p.type in ("formal_parameter", "spread_parameter")]
-                    return len([p for p in ps if p.type == "formal_parameter"]), len(ps), \
-                        any(p.type == "spread_parameter" for p in ps)
-                if c.type == "function_value_parameters":
-                    kids = c.children
-                    total, required = 0, 0
-                    for i, p in enumerate(kids):
-                        if p.type == "parameter":
-                            total += 1
-                            if not (i + 1 < len(kids) and kids[i + 1].type == "="):
-                                required += 1
-                    vararg = any("vararg" in _ts_text(p) for p in kids if p.type == "parameter_modifiers")
-                    return required, total, vararg
+    parts = []
+    for c in ts_walk(n):
+        if c.start_byte >= body.start_byte:
+            continue
+        if c.child_count == 0 and "comment" not in c.type:
+            parts.append(c.text.decode("utf-8", "replace"))
+    return " ".join(parts)
+
+
+def ts_param_count(tree, def_line: int, name: str | None = None) -> tuple[int, int, bool] | None:
+    """``(required, total, varargs)`` parameters of the Java/Kotlin method declared on ``def_line`` (named
+    ``name`` when given)."""
+    n = _ts_def_at(tree, def_line, name, ("method_declaration", "function_declaration", "constructor_declaration"))
+    if n is not None:
+        for c in n.children:
+            if c.type == "formal_parameters":
+                ps = [p for p in c.children if p.type in ("formal_parameter", "spread_parameter")]
+                return len([p for p in ps if p.type == "formal_parameter"]), len(ps), \
+                    any(p.type == "spread_parameter" for p in ps)
+            if c.type == "function_value_parameters":
+                kids = c.children
+                total, required = 0, 0
+                for i, p in enumerate(kids):
+                    if p.type == "parameter":
+                        total += 1
+                        if not (i + 1 < len(kids) and kids[i + 1].type == "="):
+                            required += 1
+                vararg = any("vararg" in _ts_text(p) for p in kids if p.type == "parameter_modifiers")
+                return required, total, vararg
     return None
 
 
