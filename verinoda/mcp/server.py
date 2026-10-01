@@ -122,6 +122,7 @@ QUERY_MAX_CHARS = 6000          # same default as `verinoda query --max-chars` (
 QUERY_MEMO_SIZE = 64            # project_query answers kept, re-validated by stat on every hit
 EXCERPT_MAX_LINES = 30
 EDGE_CAP = 25
+RATIONALE_CAP = 5   # rationale comments node_inspect quotes (each at most 200 characters)
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
 VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline",
@@ -1011,6 +1012,19 @@ class AtlasTools:
                     out["backlog"] = [{"id": x["item"].id, "title": x["item"].title[:120], "at": x["item"].at,
                                        "cited_at": f"{g.file(nid)}:{x['line']}", **({"via": x["via"]} if x["via"]
                                                                                    else {})} for x in cited]
+            if g.file(nid):  # the rationale comments attached to it, quoted (rationale.py)
+                from verinoda import rationale
+
+                if not g.is_file_node(nid) and g.file(nid) in (fresh.get("files") or ()):  # line is the index's
+                    why, out["rationale_note"] = [], rationale.STALE_NOTE
+                else:
+                    why = rationale.for_node(g, nid)
+                if why:
+                    out["rationale"] = [{k: r[k] for k in ("at", "tag", "attach", "status", "attach_status")}
+                                        | {"text": rationale.clip(r["text"], 200)} for r in why[:RATIONALE_CAP]]
+                    if len(why) > RATIONALE_CAP:
+                        out["rationale_total"] = len(why)
+                    out["rationale_note"] = rationale.NOTE
             out.update({
                 "out_edges": outs[:EDGE_CAP], "out_total": len(outs), "out_relations": out_rel,
                 "in_edges": ins[:EDGE_CAP], "in_total": len(ins), "in_relations": in_rel,
