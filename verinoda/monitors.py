@@ -16,12 +16,17 @@ Two kinds of pattern:
 A match is keyed by its file and its line's text (white space collapsed), counted per key, so a line moved by an
 edit above it is the same match and a changed or added line is new (as decision baselines do). ``monitor trend
 ID`` counts a regex monitor's matches at commits spread over the history (``git grep -c`` at each, nothing
-checked out). A search that could not finish (a timeout, a cut list) makes the monitor ``unknown``: a gate never
-passes on a search it did not complete.
+checked out). A search that could not finish (a timeout, a cut list, a file too large or unreadable, a path
+that matches no file, a git error) makes the monitor ``unknown`` (exit 3): a gate never passes on a search it did
+not complete. The monitors file itself is never searched (it holds the patterns and the baselines' text).
+
+``--path`` values are project-relative POSIX paths, read literally (no globs, no pathspec magic) by both kinds of
+search; ``load`` refuses a file whose fields have the wrong shape, since CI reads it.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections import Counter
 from datetime import date
@@ -52,43 +57,112 @@ def load(repo: Path) -> dict:
     if not isinstance(data, dict) or data.get("verinoda-monitors") != FORMAT or not isinstance(data.get("monitors"),
                                                                                                  list):
         raise MonitorError(f"{FILE} is not a monitors file (format {FORMAT})")
+    seen = set()
     for m in data["monitors"]:
-        if not isinstance(m, dict) or not isinstance(m.get("id"), str) or \
-                not (isinstance(m.get("regex"), str) or isinstance(m.get("ast"), str)):
-            raise MonitorError(f"{FILE} has a monitor without an id and a regex or ast pattern: {m!r}"[:300])
+        problem = _shape_problem(m)
+        if problem:
+            raise MonitorError(f"{FILE}: {problem}: {m!r}"[:300])
+        if m["id"] in seen:
+            raise MonitorError(f"{FILE}: two monitors are called {m['id']!r}")
+        seen.add(m["id"])
     return data
 
 
+def _strs(v) -> bool:
+    return isinstance(v, list) and all(isinstance(x, str) for x in v)
+
+
+def _shape_problem(m) -> str | None:
+    if not isinstance(m, dict):
+        return "a monitor is not an object"
+    if not isinstance(m.get("id"), str) or not _ID.match(m["id"]):
+        return "a monitor's id is missing or not letters, digits, '.', '_' or '-'"
+    if ("regex" in m) == ("ast" in m) or not isinstance(m.get("regex", m.get("ast")), str):
+        return f"monitor {m['id']} needs exactly one of regex or ast, as a string"
+    for f in ("langs", "paths", "baseline"):
+        if f in m and not _strs(m[f]):
+            return f"monitor {m['id']}: {f} is not a list of strings"
+    if any("\t" not in b for b in m.get("baseline") or []):
+        return f"monitor {m['id']}: a baseline entry is not 'file<TAB>text'"
+    for x in m.get("paths") or []:
+        bad = _path_problem(x)
+        if bad:
+            return f"monitor {m['id']}: {bad}"
+    if "message" in m and not isinstance(m["message"], str):
+        return f"monitor {m['id']}: message is not a string"
+    return None
+
+
+def _path_problem(x: str) -> str | None:
+    if not x or x != x.strip() or x.startswith((":", "/")) or "\\" in x or re.match(r"^[A-Za-z]:", x):
+        return f"path {x!r} is not a project-relative path with '/' (no pathspec magic)"
+    if ".." in x.split("/") or x.startswith("./") or x.endswith("/") or "//" in x:
+        return f"path {x!r} is not a normalised project-relative path"
+    return None
+
+
+def norm_path(repo: Path, x: str, cwd: Path | None = None) -> str:
+    """A ``--path`` as given (relative to ``cwd``, default the project's top) -> a project-relative POSIX path;
+    a path outside the project is an error."""
+    repo = Path(repo).resolve()
+    q = Path(x)
+    full = (q if q.is_absolute() else Path(cwd or repo) / q).resolve()
+    try:
+        rel = full.relative_to(repo).as_posix()
+    except ValueError:
+        raise MonitorError(f"--path {x!r} is outside the project") from None
+    return "" if rel == "." else rel
+
+
 def _save(repo: Path, data: dict) -> None:
-    path(repo).write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    """Write the file whole or not at all (a temporary file replaced in one step)."""
+    target = path(repo)
+    tmp = target.with_name(f".{FILE}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+        os.replace(tmp, target)
+    except OSError as exc:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise MonitorError(f"{FILE} cannot be written: {exc}") from None
 
 
 def _key(rel: str, text: str) -> str:
     return f"{rel}\t{' '.join(text.split())}"
 
 
-def _grep_args(m: dict) -> list[str]:
+def _pathspecs(m: dict) -> list[str]:
+    """The monitor's paths, literal (a directory covers what is under it), never the monitors file."""
     paths = [p for p in m.get("paths") or [] if p]
-    return ["-E", "-e", m["regex"], "--", *(paths or ["."])]
+    return [*([f":(literal){p}" for p in paths] or ["."]), f":(exclude,literal){FILE}"]
+
+
+def _grep_args(m: dict) -> list[str]:
+    return ["-E", "-e", m["regex"], "--", *_pathspecs(m)]
+
+
+def _missing_paths(repo: Path, m: dict) -> list[str]:
+    return [p for p in m.get("paths") or [] if p and not (Path(repo) / p).exists()]
 
 
 def matches(repo: Path, m: dict) -> dict:
     """The monitor's matches in the working tree: ``{"matches": [{at, text}], "complete": bool, "why"}``."""
     repo = Path(repo)
+    missing = _missing_paths(repo, m)
+    if missing:
+        return {"matches": [], "complete": False, "why": f"no such path: {', '.join(missing)[:200]}"}
     if m.get("regex") is not None:
-        rc, out, err = _git_grep(repo, ["-n", "-I", "--no-color", "--untracked", *_grep_args(m)])
+        rc, rows, err = _git_grep_rows(repo, ["-n", "-z", "-I", "--no-color", "--no-column", "--untracked",
+                                              *_grep_args(m)])
         if rc == 1:            # git grep: 0 matches found, 1 none, anything else an error
             return {"matches": [], "complete": True}
+        if rc == -1:
+            return {"matches": rows, "complete": False, "why": f"more than {MAX_MATCHES} matches"}
         if rc != 0:
             return {"matches": [], "complete": False, "why": f"git grep failed: {err.strip()[:200]}"}
-        rows = []
-        for ln in out.splitlines():
-            rel, _, rest = ln.partition(":")
-            n, _, text = rest.partition(":")
-            if n.isdigit():
-                rows.append({"at": f"{rel}:{n}", "text": text.strip()[:200]})
-        return {"matches": rows[:MAX_MATCHES], "complete": len(rows) <= MAX_MATCHES,
-                **({"why": f"more than {MAX_MATCHES} matches"} if len(rows) > MAX_MATCHES else {})}
+        return {"matches": rows, "complete": True}
     from verinoda import grep_ast
 
     try:
@@ -99,16 +173,26 @@ def matches(repo: Path, m: dict) -> dict:
                            max_results=MAX_MATCHES, files=list_files(repo))
     except grep_ast.PatternError as exc:
         return {"matches": [], "complete": False, "why": f"the pattern cannot be searched: {exc}"}
-    rows = []
+    rows, cache = [], {}
     for x in res["matches"]:
         rel, _, n = x["at"].rpartition(":")
-        lines = _file_lines(repo, rel)
+        if rel == FILE:
+            continue
+        if rel not in cache:
+            cache[rel] = _file_lines(repo, rel)
+        lines = cache[rel]
         k = int(n) if n.isdigit() else 0
         rows.append({"at": x["at"], "text": (lines[k - 1].strip() if 0 < k <= len(lines) else x["text"])[:200]})
-    timed = (res.get("not_searched") or {}).get("timed_out") or []
-    complete = not res.get("truncated") and not timed
-    why = "a cut list" if res.get("truncated") else (f"{len(timed)} file(s) timed out" if timed else None)
-    return {"matches": rows, "complete": complete, **({"why": why} if why else {})}
+    ns = res.get("not_searched") or {}
+    why = [w for w, bad in (
+        ("a cut list", res.get("truncated")),
+        (f"{len(ns.get('timed_out') or [])} file(s) timed out", ns.get("timed_out")),
+        (f"{ns.get('budget_spent')} file(s) not searched in the time budget", ns.get("budget_spent")),
+        (f"{ns.get('too_large')} file(s) too large", ns.get("too_large")),
+        (f"{len(ns.get('unreadable') or [])} file(s) unreadable", ns.get("unreadable")),
+        (f"the pattern does not parse as {', '.join(sorted(ns.get('pattern_not_parsed') or {}))}",
+         m.get("langs") and ns.get("pattern_not_parsed"))) if bad]
+    return {"matches": rows, "complete": not why, **({"why": "; ".join(why)} if why else {})}
 
 
 def _git_grep(repo: Path, args: list[str]) -> tuple[int, str, str]:
@@ -123,6 +207,50 @@ def _git_grep(repo: Path, args: list[str]) -> tuple[int, str, str]:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 2, "", str(exc)
     return r.returncode, r.stdout, r.stderr
+
+
+def _git_grep_rows(repo: Path, args: list[str]) -> tuple[int, list[dict], str]:
+    """``git grep -n -z`` read line by line: (exit code, rows, stderr). Stops at :data:`MAX_MATCHES` + 1 rows
+    (exit code -1, git killed) so a pattern matching everything never fills memory; 2 on a timeout."""
+    import subprocess
+    import threading
+
+    from verinoda.treestate import _GIT_SAFE
+
+    try:
+        proc = subprocess.Popen(["git", "-C", str(repo), *_GIT_SAFE, "grep", *args], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+    except OSError as exc:
+        return 2, [], str(exc)
+    timer = threading.Timer(120, proc.kill)
+    timer.start()
+    err_chunks: list[bytes] = []
+    reader = threading.Thread(target=lambda: err_chunks.append(proc.stderr.read()), daemon=True)
+    reader.start()
+    rows, cut = [], False
+    try:
+        for raw in proc.stdout:
+            rel, n, text = (raw.rstrip(b"\r\n").split(b"\0", 2) + [b"", b""])[:3]
+            if not n.isdigit():
+                continue
+            if len(rows) >= MAX_MATCHES:
+                cut = True
+                proc.kill()
+                break
+            rows.append({"at": f"{rel.decode('utf-8', 'replace')}:{int(n)}",
+                         "text": text.decode("utf-8", "replace").strip()[:200]})
+    finally:
+        proc.stdout.close()
+        rc = proc.wait()
+        timed_out = not timer.is_alive() and not cut
+        timer.cancel()
+        reader.join(5)
+    err = b"".join(err_chunks).decode("utf-8", "replace")
+    if cut:
+        return -1, rows, err
+    if timed_out and rc != 0:
+        return 2, [], "timed out after 120 s"
+    return rc, rows, err
 
 
 def _file_lines(repo: Path, rel: str) -> list[str]:
@@ -143,6 +271,15 @@ def add(repo: Path, mid: str, *, regex: str | None = None, ast: str | None = Non
         raise MonitorError("an id is letters, digits, '.', '_' or '-' (at most 64), starting with a letter or digit")
     if (regex is None) == (ast is None):
         raise MonitorError("give one of --regex or --ast")
+    paths = [p for p in (paths or []) if p]
+    for x in paths:
+        bad = _path_problem(x)
+        if bad:
+            raise MonitorError(bad)
+        if not (Path(repo) / x).exists():
+            raise MonitorError(f"no such path: {x}")
+    if regex is not None and not regex:
+        raise MonitorError("the regex is empty")
     data = load(repo)
     if any(m["id"] == mid for m in data["monitors"]):
         raise MonitorError(f"a monitor {mid!r} exists (`monitor remove {mid}` first)")
@@ -226,7 +363,7 @@ def trend(repo: Path, mid: str, *, points: int = 10) -> dict:
                            "every commit)")
     log = git(Path(repo), "log", "--first-parent", "--format=%H%x1f%cI", "HEAD", timeout=60)
     if not log:
-        raise MonitorError("no git history")
+        raise MonitorError("git log gave no history (no commit yet, or git failed)")
     commits = [ln.split("\x1f") for ln in log.splitlines() if "\x1f" in ln][::-1]   # oldest first
     points = max(2, min(int(points), 50))
     step = max(1, (len(commits) - 1) / (points - 1)) if len(commits) > 1 else 1
@@ -234,7 +371,7 @@ def trend(repo: Path, mid: str, *, points: int = 10) -> dict:
     rows = []
     for i in picks:
         sha, when = commits[i]
-        rc, out, err = _git_grep(Path(repo), ["-c", "-I", *_grep_args(m)[:3], sha, "--", *(m.get("paths") or ["."])])
+        rc, out, err = _git_grep(Path(repo), ["-c", "-I", "-E", "-e", m["regex"], sha, "--", *_pathspecs(m)])
         if rc not in (0, 1):
             raise MonitorError(f"git grep failed at {sha[:12]}: {err.strip()[:200]}")
         n = sum(int(ln.rpartition(":")[2]) for ln in (out or "").splitlines() if ln.rpartition(":")[2].isdigit())
@@ -255,4 +392,8 @@ def render(res: dict) -> str:
             out.append(f"    NEW {n['at']}: {n['text']}" + (f"  ({r['message']})" if r["message"] else ""))
         if len(r["new"]) > 20:
             out.append(f"    ... {len(r['new']) - 20} more (--json)")
+        for g in r["gone"][:10]:
+            out.append(f"    gone {g['file']}: {g['text']}")
+        if len(r["gone"]) > 10:
+            out.append(f"    ... {len(r['gone']) - 10} more gone (--json)")
     return "\n".join(out)

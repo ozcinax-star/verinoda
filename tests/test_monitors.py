@@ -109,3 +109,77 @@ def test_cli(repo, capsys):
     assert cli.main(["monitor", "--repo", r]) == 0
     assert cli.main(["monitor", "remove", "np", "--repo", r]) == 0
     assert cli.main(["monitor", "accept", "--repo", r]) == 2
+
+
+def test_the_monitors_file_is_never_searched(repo):
+    monitors.add(repo, "np", regex=r"print\(")                         # no --path: the whole project
+    assert monitors.check(repo)["exit"] == 0
+    for _ in range(2):                                                 # accept settles
+        assert monitors.accept(repo, "np")["now"] == 3
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "monitors")
+    assert monitors.check(repo)["exit"] == 0
+    assert [p["count"] for p in monitors.trend(repo, "np", points=2)["points"]] == [3, 3]
+
+
+def test_git_config_does_not_change_the_keys(repo):
+    monitors.add(repo, "np", regex=r"print\(", paths=["app"])
+    _git(repo, "config", "grep.column", "true")
+    _git(repo, "config", "grep.fullName", "true")
+    assert monitors.check(repo)["exit"] == 0
+
+
+def test_an_ast_search_that_skipped_files_is_unknown(repo, monkeypatch):
+    monitors.add(repo, "pc", ast="print($$$A)", langs=["python"])
+    _write(repo, "app/big.py", "x = 1\n" * 200_000 + "print('new')\n")   # over grep_ast's size cap
+    res = monitors.check(repo, "pc")
+    assert res["exit"] == 3 and "too large" in res["monitors"][0]["why"] and not res["monitors"][0]["gone"]
+    (repo / "app/big.py").unlink()
+    from verinoda import grep_ast
+    real = grep_ast.run
+    monkeypatch.setattr(grep_ast, "run", lambda *a, **k: real(*a, **{**k, "total_seconds": -1}))
+    res = monitors.check(repo, "pc")
+    assert res["exit"] == 3 and "time budget" in res["monitors"][0]["why"]
+
+
+def test_a_cut_regex_search_is_unknown(repo, monkeypatch):
+    monitors.add(repo, "np", regex=r"print\(", paths=["app"])
+    monkeypatch.setattr(monitors, "MAX_MATCHES", 1)
+    res = monitors.check(repo)
+    assert res["exit"] == 3 and "more than 1" in res["monitors"][0]["why"]
+
+
+def test_paths_are_checked_and_literal(repo):
+    for bad in ("../x", "/abs", ":(top)app", "app\a.py", "./app", "app/"):
+        with pytest.raises(monitors.MonitorError):
+            monitors.add(repo, "p", regex="x", paths=[bad])
+    with pytest.raises(monitors.MonitorError, match="no such path"):
+        monitors.add(repo, "p", regex="x", paths=["nowhere"])
+    assert monitors.norm_path(repo, "a.py", repo / "app") == "app/a.py"
+    with pytest.raises(monitors.MonitorError, match="outside"):
+        monitors.norm_path(repo, "..", repo)
+    monitors.add(repo, "np", regex=r"print\(", paths=["app"])
+    shutil.rmtree(repo / "app")                                        # renamed away: unknown, not green
+    res = monitors.check(repo)
+    assert res["exit"] == 3 and "no such path" in res["monitors"][0]["why"]
+
+
+@pytest.mark.parametrize("bad", [{"baseline": "a.py\tx"}, {"baseline": ["no tab"]}, {"baseline": [1]},
+                                 {"paths": "app"}, {"paths": ["../x"]}, {"regex": 5}, {"ast": "f($A)"},
+                                 {"langs": "python"}, {"id": "bad id"}])
+def test_a_malformed_monitor_is_an_error(repo, bad):
+    m = {"id": "m", "regex": "x", "baseline": [], **bad}
+    (repo / monitors.FILE).write_text(json.dumps({"verinoda-monitors": 1, "monitors": [m]}), encoding="utf-8")
+    with pytest.raises(monitors.MonitorError):
+        monitors.check(repo)
+    assert cli.main(["monitor", "--repo", str(repo)]) == 2
+
+
+def test_cli_path_is_relative_to_the_current_folder(repo, monkeypatch, capsys):
+    monkeypatch.chdir(repo / "app")
+    assert cli.main(["monitor", "add", "np", "--regex", r"print\(", "--path", "a.py", "--repo", str(repo)]) == 0
+    assert monitors.load(repo)["monitors"][0]["paths"] == ["app/a.py"]
+    _write(repo, "app/a.py", "def f():\n    print('old 1')\n")
+    capsys.readouterr()
+    assert cli.main(["monitor", "--repo", str(repo)]) == 0 and "gone app/a.py: print('old 2')" in \
+        capsys.readouterr().out

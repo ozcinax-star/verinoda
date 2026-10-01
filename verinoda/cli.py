@@ -1516,7 +1516,10 @@ def cmd_monitor(args) -> int:
         if act in ("add", "accept", "remove", "trend") and not args.id:
             raise mon.MonitorError(f"`monitor {act}` needs a monitor id")
         if act == "add":
-            res = mon.add(repo, args.id, regex=args.regex, ast=args.ast, langs=args.lang, paths=args.path,
+            cwd = Path.cwd().resolve()
+            inside = cwd == repo.resolve() or repo.resolve() in cwd.parents
+            paths = [mon.norm_path(repo, x, cwd if inside else None) for x in args.path or []]
+            res = mon.add(repo, args.id, regex=args.regex, ast=args.ast, langs=args.lang, paths=paths,
                           message=args.message or "")
             text = f"monitor {res['id']} added to {res['file']} with {res['matches']} match(es) as its baseline"
         elif act == "accept":
@@ -3822,7 +3825,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--regex", help="add: git's extended regular expression (git grep -E)")
     sp.add_argument("--ast", help="add: a structural pattern, as for grep-ast")
     sp.add_argument("--lang", action="append", help="add with --ast: only these languages")
-    sp.add_argument("--path", action="append", help="add: only under this path (repeatable)")
+    sp.add_argument("--path", action="append", help="add: only under this file or folder (repeatable; relative to "
+                                                     "the current folder inside the project, read literally)")
     sp.add_argument("--message", help="add: what to say when it gains a match")
     sp.add_argument("--points", type=int, default=10, help="trend: commits to count at (2-50, default 10)")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
