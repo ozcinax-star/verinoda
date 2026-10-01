@@ -310,7 +310,7 @@ default changes. Nothing is stored; the index format is unchanged.
 
 `verinoda mcp serve` now also answers `prompts/list` and `prompts/get` with four ready workflows (review,
 onboarding, debug, pre_merge); `verinoda mcp prompts` prints them. The tool count (38) and the core menu
-are unchanged, so the tool count in UPGRADING needs no change.
+are unchanged.
 
 ### D86: Breaking vs compatible API change
 
@@ -334,7 +334,7 @@ dependencies not met", plus one line for dependencies the repository alone canno
 `problems.dependencies_not_checked`, `problems.dependencies_unchecked` and `problems.pack_copies`, along with
 `packs` (the number of sources), `with` and `unreadable`. New:
 `datapack packs` and `--with PATH`. A repository with a collision but no datapack functions now gets the summary
-and not `no_datapack` (exit 0 and not 2). `--with` is refused on `datapack tag|score|function`. No new MCP tool, so the tool count in UPGRADING does not change. No
+and not `no_datapack` (exit 0 and not 2). `--with` is refused on `datapack tag|score|function`. No new MCP tool. No
 rescan is needed.
 
 ### D89: Coverage import
@@ -356,15 +356,14 @@ the skills that name it.
 
 `verinoda map --view hotspots` (and MCP `map_view` with `view: hotspots`) ranks code files and functions by
 changes x cyclomatic complexity. `verinoda review` orders `read_first` within each kind by the same score and adds
-`hotspot` to each range it could score; the kinds keep their order. No MCP tool was added: the tool count in
-UPGRADING does not change.
+`hotspot` to each range it could score; the kinds keep their order. No MCP tool was added.
 
 ### D92: Temporal coupling
 
 `map --view impact` (and the MCP `map_view` impact) now also lists `history_coupled`: files that changed together
 with the change in the last 1,000 commits and that no graph edge links to it, each a `strong_inference` claim with
 its commit count and the shared commits as evidence; `history_coupling` says how many commits were read. No new
-command or MCP tool; the tool counts in UPGRADING do not change.
+command or MCP tool.
 
 ### D93: Installed-version library docs
 
@@ -425,8 +424,7 @@ unchanged.
 
 `verinoda butterfly NAME` prints a symbol's callers and callees, or a class's inheritance tree, with the
 line of each link; in `verinoda ui` a *Butterfly* button on a function, method or class note shows the
-same around the note. No re-scan needed. The MCP tool count is unchanged (no UPGRADING tool-count
-change).
+same around the note. No re-scan needed. The MCP tool count is unchanged.
 
 ### D100: Access Widener and Access Transformer
 
@@ -444,15 +442,14 @@ takes `team NAME` / `bossbar ID` lookups. Set `datapack.naming` in `.verinoda/co
 your conventions (off by default). In `--json`, an `objectives remove` site now has kind `remove` (it was
 `define`). On a macro line, a name a macro fills in part (`a_$(x)`) is no longer read as its spelled part:
 `$tag @s add a_$(x)` is a tag a macro fills in (it was the tag `a_`), and `$function ns:do_$(x)` is no longer a
-call to the missing function `ns:do_`. No MCP tool was added; the tool counts in UPGRADING do not change.
+call to the missing function `ns:do_`. No MCP tool was added.
 
 ### D102: Client and server separation
 
 `verinoda map --view sides` (and MCP `map_view` with `view: sides`, through `run_tool`) lists client-only code
 (the `src/client` source set, `@Environment(EnvType.CLIENT)` / `@OnlyIn(Dist.CLIENT)` classes and methods,
 `net.minecraft.client` classes) that the mod's server-side entry points reach, each path a `strong_inference`
-claim at most (`weak_inference` through an inferred edge) with every hop at `file:line`. Plain `verinoda map` is unchanged. No new MCP tool: the tool counts in
-UPGRADING, README and ARCHITECTURE do not change.
+claim at most (`weak_inference` through an inferred edge) with every hop at `file:line`. Plain `verinoda map` is unchanged. No new MCP tool.
 
 ### D103: Violation baseline and ratchet
 
@@ -484,8 +481,7 @@ The cycles view's output is unchanged. The MCP tool count is unchanged.
 
 New command `verinoda brief [--max-chars N] [--json]`: a project brief (name, runtime, build/test/check
 commands, CI commands, layout, conventions) read from the files on every call, each line with `file:line`, under
-a character budget (default 2,000). It is not the decision brief: `verinoda decide brief` is unchanged. No MCP
-change: the tool count in UPGRADING.md stays as it is.
+a character budget (default 2,000). It is not the decision brief: `verinoda decide brief` is unchanged. No MCP change.
 
 ### D108: Docs coupled to code, drift check and trivial auto-fix
 
@@ -519,8 +515,7 @@ the `decide record` command. `verinoda decide dismiss CANDIDATE --reason "..."` 
 
 `review` (CLI and `--json`) and MCP `change_review` gain a `risk` key: a heuristic score out of 100 with every
 part listed (`value`, `weight`, `cap`, `points`, locations) and the inputs not measured named. The summary ends
-with one sentence giving the score. No tool, argument or exit code changes; the tool count in UPGRADING stays as
-it is.
+with one sentence giving the score. No tool, argument or exit code changes.
 
 ### D113: Session dedup
 
@@ -583,7 +578,7 @@ read from the files when asked. The MCP tool count is unchanged.
 New command `verinoda grep-ast PATTERN [PATH ...] [--lang L] [--rule FILE] [--max-results N] [--json]`:
 structural search with `$A` / `$$$REST` metavariables over Python, Java, TypeScript and the other tree-sitter
 languages the index reads; exit 0 with matches, 1 without, 2 on a bad pattern or rule file. No MCP tool was
-added, so the tool count in UPGRADING does not change.
+added.
 
 ### D60-D62
 
