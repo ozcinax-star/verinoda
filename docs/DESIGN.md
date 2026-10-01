@@ -14519,6 +14519,202 @@ One test runs the real Verinoda on a tiny git repository, through every step gro
 marker file if executed. The test asserts that no marker appears, that there are no crashes, that
 the gold hit is found and that the clone is clean afterwards.
 
+## 135. Measured frequencies for typed answers (D162, 2026-10-01)
+
+### 135.1 Why
+
+`verinoda tq` (D159) answers closed questions with a value and a status, but a status is a rule's ceiling, not a
+measured rate: nothing told an agent how often a `calls ... = no | strong_inference` had been right. The spec
+(docs/drafts/13.6-13.8-spec.md, sections 4, 5, 7 and the 13.7 build plan) asks for a frequency where one was
+measured and nothing where it was not: `measured: k/n held-out` on an answer only for a cell of (question type,
+answer, status) with at least 30 held-out answers, from a table keyed by the gold set and by the code that decided
+the answers, so a table measured on other code or another set is never shown. The same run gives the first
+observed precision per status next to `claims.CONFIDENCE_CAP`, which DESIGN line 50 says was never recalibrated.
+
+### 135.2 Decisions
+
+- **A second held-out set, frozen first.** The first set's 34 held-out cases put no cell near 30, so
+  `benchmarks/tq_gold2/` was written and committed on its own (c720287) before `tq` ran on any of its questions:
+  323 cases, all held-out (no dev split), 302 on this repository at c23c483 (the `verinoda/` package without
+  `project_index/` and `benchmark/questions/`, copied by `git archive`) and 21 on `examples/orders_app`.
+  Candidates came from a stdlib-`ast` script with a fixed seed (no Verinoda code): definitions whose name is
+  defined once (top-level, methods, functions nested in functions), absent names made of two words of real names,
+  near misses of real names (`exact_node`), direct, module (`graphquery.run`-style) and `self.m()` calls of a
+  function defined once, calls through `from X import NAME as ALIAS` (and two traps where the alias spells another
+  function's name), callers that never spell a function of their own file, and callers that spell a function's
+  name only as a variable or word. Each case was then checked by hand: the cited line read, the binding import
+  read for each cross-file call, the caller's calls listed and read for each no, each absent name searched as a
+  whole word in every file of the copy. `MANIFEST.json` holds the file's sha256, the repositories' copy specs and
+  the orders_app hashes; a test checks them.
+- **Cells and the display rule.** A cell is (type, answer kind, status); answer kinds are `yes`, `no`, `?`,
+  `count`, `files`, `none`, `rows`, `invalid`. `tq` shows a cell's `k/n held-out @<gold sha8>` only when the cell
+  has n >= 30 held-out answers, the question was asked with options (`depth=`, `scope=`, `as=`, taint's `in=`;
+  `need` and `id` change no answer) that a held-out answer of the cell was asked with, verify is on, its answer is decided (never for `?`), the first set's dev split has an answer in
+  the same cell and its precision lies inside the held-out Wilson 95 % interval (the spec's condition; it can
+  hide a cell whose dev side is better than its held-out side), and both hashes below match. It is a frequency on
+  a named set, never a probability, and it changes no answer and no status. In the text form it follows `via`;
+  in JSON it is the `measured` key the spec reserved.
+- **The gold hash** is the sha256 of the lines `<path> <sha256>` of the frozen held-out files
+  (`tq_gold/held_out.json`, `tq_gold2/held_out.json`), sorted. `tq_measured.GOLD_FILES` names them with their
+  hashes; the table must carry exactly these and their combined hash, and in a source checkout the files on disk
+  must still hash to them (re-checked on every batch, so editing a gold file hides `measured` at once).
+- **The engine hash** is the sha256 of the lines `<path>\0<sha256 of the file's bytes, CRLF read as LF>`, one per
+  file sorted by path relative to the package: `tq.py`, `index.py`, every package module they import at any
+  depth (a static AST walk of every `import` statement, those inside functions included; a name imported from a
+  package counts as its submodule when one exists) and every `.py` under `project_index/`; never
+  `tq_measured.py` (the display rule) or `benchmark/` (the harness that writes the table). Today that is 186
+  files (97 outside `project_index/`), an over-approximation of the code that decides an answer. A missing root
+  gives no hash and nothing is shown. It is computed at run time from the installed sources; the walk is cached
+  per process and re-checked on each batch by the mtime and size of every file in it, the paths its imports
+  probed and did not find, and the file list of `project_index/` (about 50-80 ms per batch on this OneDrive
+  checkout). Any edit to these files hides every `measured` until `benchmark tq-audit` is run again and its
+  table committed. The audit refuses a run during which the hash changed.
+- **The scorer and the code the gold is about.** The table records `score_sha`, the hash of
+  `benchmarks/tq_gold/score.py` (which decides right and wrong); in a source checkout a scorer with another hash
+  hides every `measured`. The audit checks each set's MANIFEST.json `fixtures` (under the set) and `examples`
+  (under the repository) hashes as well as its gold files and stops (exit 2) when one changed.
+- **The runner.** `verinoda benchmark tq-audit` (`verinoda/benchmark/tq_audit.py`) checks every gold file against
+  its MANIFEST.json and `GOLD_FILES`, indexes each repository once through the verdict audit's `base_copy`, asks
+  the questions in batches of 20 with verify on, scores them with `benchmarks/tq_gold/score.py` (`?` is never
+  wrong; a count is right as a lower bound) and writes `verinoda/data/tq_calibration.json` (gold files and hash,
+  engine hash and file count, the commit, every held-out cell with its Wilson interval, the dev cell and
+  `shown`/`why_not_shown`) and `benchmarks/results/tq-audit-DATE/report.{json,md}` (every case, the wrong ones, the
+  cells, the reliability table). Exit 1 when an answer at a verified status is wrong, 2 when a gold file (or a
+  fixture or example it is about) changed. The committed run exits 1 (`v-alias-11`, `v-alias-12`, below).
+- **No cap is changed.** The reliability table lists, per status, the decided held-out answers, how many were
+  right, the Wilson interval and whether `CONFIDENCE_CAP` lies inside, below or above it. Changing a cap stays its
+  own reviewed decision (spec section 5).
+- **Study F (the instructions sentence).** The spec's pre-registered rule adds `Several yes/no or count facts:
+  run_tool tq.` to the core instructions only if a paired agent study (>= 24 tasks over 4 repositories, one model
+  in the loop) shows recall kept, median cache-weighted cost down >= 10 % with a bootstrap CI excluding 0, turns
+  not up and over-trust not up. The study was not run in this build (it needs a model in the loop, which this
+  build does not use). Applying the rule as written: its conditions are not shown, so the sentence is not added;
+  no instructions text was edited (test_mcp's instruction and menu limits pass unchanged). This result belongs in
+  DESIGN 132.
+- **Review round.** The reviewer confirmed two findings, both fixed with regression tests. (1) The engine
+  hash listed twelve modules by hand and missed what they import: `naming.py` folds names with
+  `textnorm.fold_tr`, and with `fold_tr` truncated to four characters the hash did not change, `exists
+  placeholder_xyz` on orders_app flipped to a wrong `yes | statically_verified` that still carried `measured:
+  77/77`. The hash now covers the import closure described above (`textnorm.py`, `evidence.py`, `codecheck.py`,
+  `search_index.py`, `guards.py`, `question_plan.py`, `treestate.py`, `testcode.py`, `snapshot.py`,
+  `python_cross.py`, `python_facts.py` and the rest); tests edit a module reached only through another module
+  and one imported inside a function, and edit `textnorm.py` in a copy of the package and see the committed
+  table's cells disappear. (2) `exists NAME scope=lib` is decided by `codecheck.api` reading the installed
+  library, another engine, yet carried the project index cell's `82/82` because the cell key had no options;
+  no held-out case uses `scope=lib`. A cell now records the options its held-out answers were asked with and is
+  shown only for those (all four n >= 30 cells were measured with no options only, so `calls A B depth=2` and
+  `exists X scope=lib` show nothing); `exists json.no_such_fn_xyz scope=lib` on the orders_app copy now has no
+  `measured`. From the minors: `--no-verify` batches show nothing (the table was measured with verify on); the
+  scorer's hash is in the table and the MANIFEST `fixtures`/`examples` hashes are checked by the audit; the
+  README row names `--json` and says the committed run exits 1. The draft overstated the engine hash ("the
+  modules that decide a tq answer"); it now says what the hash covers. The audit was rerun after the fix on
+  3fda4e1: every count below is unchanged, only the engine hash, commit and time changed.
+- **Fixed on the way.** The held-out run found `calls bisect _rev_list` failing with `TypeError` inside tq: the
+  name resolved to the graph's external module node `bisect` (no file, no span) and the AST check behind a no
+  indexed its span. `_ast_calls` now skips a node without a span (a regression test reproduces it). The answer is
+  now a wrong weak no instead of a failed question; the resolution itself is in Limits.
+
+### 135.3 Measured
+
+All on 2026-10-02, Windows, the repository's `.venv`, commit 3fda4e1 (review round), engine sha256
+06b0e5c6... over 186 files, scorer sha256 c932e489..., gold sha256 4962f768..., verify on. Audit time 75.5 s with
+the indexed copies reused (166.8 s with fresh copies, indexing this repository's copy included). Before the
+review round (commit 4dbc14a, engine 29997d9a... over the hand-listed modules) the same run gave the same counts.
+
+Held-out (34 + 323 = 357 cases): 350 decided, 347 right, 3 wrong, 7 unknown (every unknown with a next step);
+locator hits 166/167 (the miss: `exists tokenize`, see Limits). Dev (the first set's 75): 1 wrong
+(`reaches run_by_name target`, the known `getattr` trap, weak no), 4 unknown.
+
+Cells: 22; 4 reach n >= 30, all decided; 3 are shown.
+
+| type | answer | status | held-out right/n | Wilson 95 % | dev right/n | shown |
+|---|---|---|---|---|---|---|
+| exists | yes | statically_verified | 77/77 | 0.953-1.000 | 7/7 | yes |
+| exists | no | strong_inference | 82/82 | 0.955-1.000 | 3/3 | yes |
+| calls | no | strong_inference | 64/64 | 0.943-1.000 | 7/7 | yes |
+| calls | yes | statically_verified | 75/77 | 0.910-0.993 | 10/10 | no: dev above the interval |
+| calls | no | weak_inference | 24/25 | 0.805-0.993 | 0/0 | no: n < 30 |
+
+The other 17 cells have n <= 6 (callers, which, reaches, route, writes, reads, taint, q, tested, and the unknown
+cells).
+
+Reliability against `CONFIDENCE_CAP` (held-out, decided answers of every type):
+
+| status | cap | right/n | precision | Wilson 95 % | cap vs interval |
+|---|---|---|---|---|---|
+| statically_verified | 0.9 | 154/156 | 0.987 | 0.955-0.997 | below |
+| strong_inference | 0.7 | 157/157 | 1.000 | 0.976-1.000 | below |
+| weak_inference | 0.4 | 36/37 | 0.973 | 0.862-0.995 | below |
+| experiment_verified, primary_source_verified, observed, stale | 0.95, 0.85, 0.9, 0.3 | 0 | - | - | no answer |
+
+Every cap with data lies below the observed interval on this set; no cap was changed.
+
+Wrong answers on held-out:
+
+- `calls diff_file is_test_file` and `calls diff_trees is_test_file`: gold no, answered yes at
+  `statically_verified`. `treestate.py` imports `is_test_or_support_file as is_test_file`; the graph has an
+  EXTRACTED `calls` edge from `diff_file` to `testcode.is_test_file` at treestate.py:754, and the verify re-read
+  confirms it because the line spells `is_test_file(`. This breaks D159's gate A (0 wrong at a verified status)
+  on the new set; the first set's gate still holds. The ten import-alias yes cases (the alias's real target) were
+  all right at `statically_verified`.
+- `calls bisect _rev_list`: gold yes, answered no at `weak_inference` (the name resolved to the module `bisect`).
+
+Shapes on the second set: absent names 60/60 and near misses 18/18 strong no; caller not spelling the callee
+55/55 strong no; spelled but not called 24/24 weak no (1 `?`: `references` names 2 symbols); definitions 66/66
+yes (12 nested, 14 methods; 65 verified, 1 strong); `self` calls 16/16 and alias calls 10/10 verified yes;
+direct and module calls 48/50 yes (1 `?`: `stale_files` at ui/data.py:344 has no edge; 1 the `bisect` miss);
+orders_app 20/20 decided right, 1 `?` (`OrderRepository.__init__`, its constructor call has no edge).
+
+### 135.4 Not done
+
+- Three cells are shown, all on `exists` and `calls`, and two of them are absences. Every other type has fewer
+  than 30 held-out answers; their answers carry no `measured`.
+- One author wrote both the rules and the gold. The second set was frozen before tq ran on it, but its
+  candidates were drawn from shapes the rules were designed around (names defined once, a callee never spelled);
+  the frequencies say how tq does on such questions, not on the questions an agent will ask. 302 of 357 held-out
+  cases are on this repository.
+- The `calls yes statically_verified` cell is hidden by the dev rule (dev 10/10 above 0.910-0.993), not by n; the
+  rule hides a cell whose dev side looks better as well as worse.
+- Found and not fixed (engine changes measured on the held-out set would need a fresh set to measure them):
+  an import alias that spells another function's name gives a wrong `statically_verified` yes; a name that is
+  both a project function and an imported module (`bisect`, `tokenize`) resolves to the external module node,
+  which gave the wrong weak no above and a `tokenize` yes with no location (right by chance).
+- The engine hash follows static `import` statements only: a module loaded with `importlib` or `__import__`
+  is not followed (none of the package's own modules is loaded that way today; `anchors.py` loads
+  tree-sitter grammars and `codecheck_env.py` the inspected library's modules with `importlib`; a grammar
+  package's version is not hashed), and non-Python data files the engine reads (the
+  packaged `data/`) are not hashed. It is also wide: 186 files, so most edits to the package hide `measured`
+  until the audit is rerun and its table committed.
+- The cells carry no integrity hash: `shown_cells` trusts the committed table's `shown`, `n` and `right`, so a
+  hand edit to `tq_calibration.json` is not detected (only the gold, scorer and engine hashes are checked).
+- A cell's options are a list of those seen, not counts per option: a cell measured on 40 default questions and
+  one `depth=3` question would show its whole k/n for `depth=3`. Today every n >= 30 cell has only the default
+  options.
+- In an installed wheel the gold files and the scorer are absent, so only the recorded hashes are compared; the
+  on-disk re-hash runs in a source checkout only.
+- Study F was not run; the instructions sentence is not added.
+- The audit needs a source checkout with c23c483 in its history; without it the second set's cases on this
+  repository are skipped.
+
+### 135.5 Tests
+
+- `tests/test_tq_measured.py` (16; with test_mcp.py and test_docs.py 110 passed in the review round): the second set is frozen (MANIFEST hash, ids, repositories, pinned commit,
+  orders_app hashes) and `GOLD_FILES` names both frozen held-out files; every case parses and a yes cites a line;
+  the engine hash covers the import closure of `tq.py` (a module reached through another, one imported inside a
+  function, a module created where an import pointed, a new `project_index/` file; never `tq_measured.py`,
+  `benchmark/` or an unrelated module), ignores CRLF and is None without a root; on the real package it reaches
+  `textnorm.py`, `evidence.py`, `codecheck.py` and `search_index.py`, and an edit to `textnorm.py` in a copy of
+  the package hides the committed table's cells; the gold hash is order-free; Wilson values; the display rule (n >= 30, `shown`, decided only); a doctored
+  engine hash, a changed or missing scorer hash, a changed gold hash, other gold files, another schema, an engine edit after the table, a gold file
+  changed or missing on disk, a missing or broken table each hide `measured`; `tq.ask` shows `measured` in JSON and
+  text only for the cell and its measured options (not for `depth=2`, `scope=lib` or a `--no-verify` batch) and
+  survives an unreadable table; the calibration rule (n, decided, dev inside the
+  interval) and the reliability table against the caps; a changed gold file stops the audit; an end-to-end audit
+  on a tiny frozen set (verdicts, summary, table, report written, a table of another gold set never shown); the
+  CLI's exit codes 0/1/2; the committed table's hashes, intervals and shown cells, and its report.
+- `tests/test_tq.py`: a name resolved to a node without a span no longer fails the question (fails without the
+  fix); the MCP text test allows a `measured` part before `why`.
+
 ## Sources
 
 - **Retrieval:**

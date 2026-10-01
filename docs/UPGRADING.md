@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D161)
+## Upgrading from 0.4.0 (D137-D162)
 
 ### D137: Trigram regex index
 
@@ -263,6 +263,19 @@ before running:
   small repositories (clones and their `.verinoda/`) and a few hundred MB for all ten.
 - **Network.** Cloning needs the network. The tests do not.
 - **Python.** The runner needs Python 3.11 or later (`python -P`) and refuses an older one.
+
+### D162: Measured frequencies for typed answers
+
+`verinoda tq` answers may carry `measured: k/n held-out @<gold sha8>` (JSON key `measured`, text part after
+`via`) when the answer's cell of (type, answer, status) was measured on the frozen held-out gold sets with at least
+30 answers, the question was asked with options such a held-out answer used (never `scope=lib`), verify is on,
+and the installed code is the code that was measured (`tq.py`, `index.py`, every package module they import and
+`project_index/`). It is a frequency on that set, not a probability,
+and it changes no answer or status; any edit to the engine files hides it until `verinoda benchmark tq-audit` is
+run again. New: `verinoda benchmark tq-audit [--work DIR] [--table PATH] [--report-dir DIR] [--no-write]
+[--json]` (source checkout only), the packaged table `verinoda/data/tq_calibration.json`, the held-out set
+`benchmarks/tq_gold2/` and the report `benchmarks/results/tq-audit-2026-10-02/`. No MCP tool, menu or
+instructions change (41 tools).
 
 ## Upgrading from 0.3.2 (D60-D136)
 
