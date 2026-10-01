@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D116)
+## Upgrading from 0.3.2 (D60-D117)
 
 ### D63: Running a project's own tests safely
 
@@ -549,6 +549,18 @@ New: `verinoda sarif FILE...` reads a linter's or CodeQL's SARIF as evidence (th
 `strong_inference`), and `review`, `check` and `decide check` take `--sarif` to print their findings as a SARIF
 2.1.0 log for GitHub code scanning (`github/codeql-action/upload-sarif`); exit codes are unchanged. No MCP change:
 the tool count stays the same.
+
+### D117: Flaky test history
+
+Schema v7: `atlas.db` gains `test_runs` and `test_quarantine` (migrated on first open; an older Verinoda refuses
+the database as written by a newer one). New `verinoda debug flaky` and `verinoda debug quarantine`; every
+debug-ledger run Verinoda makes now keeps each test's outcome, and runs recorded before the upgrade are added
+the first time `debug flaky` reads the history. `debug rerun --json` gains `tests_both_outcomes` when a series
+saw a test both pass and fail. No MCP tool added; the tool count is unchanged.
+
+docs/UPGRADING.md must mention **v7** for `tests/test_docs.py::test_schema_version_and_mcp_tool_count_match_the_code`
+to pass (it asserts `v{SCHEMA_VERSION}` appears there); this branch could not edit UPGRADING.md, so that one
+test fails until the upgrading note is merged.
 
 ### D60-D62
 

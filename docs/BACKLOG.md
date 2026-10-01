@@ -93,7 +93,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 9.2 | **Persistent test-to-code map and affected tests** | A stored map from each test to the code it runs, updated on every observed run; "run only these tests" | pytest-testmon, Datadog Test Impact Analysis | `review` prints the command that runs the affected tests |
 | 9.3 | **Mutation testing scoped to the diff** | Surviving mutants on changed lines: do the reaching tests actually check the change? | mutmut, cosmic-ray, PIT, cargo-mutants, Stryker | surviving mutants reported with their line |
-| 9.4 | **Flaky test history** | Per-test pass rate over recorded runs; quarantine list; a fix verified by N reruns | Datadog Test Optimization | `debug rerun` results persist per test |
 
 ## 10 - New graph edges
 
