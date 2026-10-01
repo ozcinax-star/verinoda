@@ -2939,7 +2939,60 @@ def _observe_summary(res: dict, g, symbols: list[str], selected: list[str] | Non
             out[k] = res[k]
     if res.get("logs"):
         out["logs"] = res["logs"].get("stderr")
+    if res.get("runtime_flaws") is not None:
+        out["runtime_flaws"] = _flaws_summary(res["runtime_flaws"])
     return {k: v for k, v in out.items() if v is not None}
+
+
+def _flaws_summary(block: dict) -> dict:
+    """The observe run's ``runtime_flaws`` block, capped, findings without their evidence records."""
+    from verinoda.runtime import flaws as flawmod
+
+    out = flawmod.without_evidence(block)
+    for k in flawmod.FINDING_KEYS:
+        if k in out:
+            out[k] = [{**f, "tests": f["tests"][:3]} if "tests" in f else f for f in out[k][:OBSERVE_LIST_CAP]]
+    return out
+
+
+def _r_flaws(fl: dict) -> None:
+    if not fl.get("recorded"):
+        print(f"  runtime flaws: not recorded - {fl.get('why')}")
+        return
+    n1, rep, slow = fl.get("n_plus_one") or [], fl.get("repeated_sql") or [], fl.get("slow_paths") or []
+    sql = fl.get("sql") or {}
+    print(f"  runtime flaws of run {fl.get('run_id')} (observed in this run, not 'always'): "
+          f"{fl.get('n_plus_one_total', 0)} N+1, {fl.get('repeated_sql_total', 0)} repeated SQL, "
+          f"{fl.get('slow_paths_total', 0)} slow path(s); {sql.get('executions', 0)} SQL execution(s)"
+          + ("" if fl.get("complete") else " - INCOMPLETE recording, counts are lower bounds"))
+
+    def path(f: dict) -> str:
+        p = " -> ".join(f"{x['qual']} ({x['path']}:{x['line']})" for x in f.get("call_path") or [])
+        return p + (" (middle frames cut)" if f.get("call_path_cut") else "")
+
+    for f in n1:
+        it = f["interpretation"]
+        more = f" (+{f['n_tests'] - 1} more test(s))" if f.get("n_tests", 1) > 1 else ""
+        print(f"  N+1: `{f['statement']}` ran {f['executions']} times in {f['test']}{more}, from the "
+              f"{f['loop']['kind']} loop at {f['loop']['path']}:{f['loop']['line']}")
+        print(f"    call path: {path(f)}")
+        print(f"    {it['status']}: {it['text']}" + (f"; fix: {it['fix']}" if it.get("fix") else ""))
+    for f in rep:
+        also = " (the N+1 above)" if f.get("also_n_plus_one") else ""
+        sites = f.get("n_sites") or 1
+        print(f"  repeated SQL{also}: `{f['statement']}` with the same parameters {f['max_repeats']} times in "
+              f"{f['test']}, at {f['cite']}" + (f" and {sites - 1} other call site(s)" if sites > 1 else ""))
+        print(f"    call path: {path(f)}")
+    for f in slow:
+        fn = f["function"]
+        share = f" ({f['share_of_test']:.0%} of the test phase)" if f.get("share_of_test") is not None else ""
+        print(f"  slow path: {fn['qual']} ({fn['path']}:{fn['line']}) ~{f['total_ms']:.0f} ms total, "
+              f"~{f['self_ms']:.0f} ms self{share} in {f['test']}; hottest line {f['cite']}")
+        print(f"    call path: {path(f)}")
+    if not (n1 or rep or slow):
+        th = fl.get("thresholds") or {}
+        print(f"  no N+1 ({th.get('n_plus_one')}+ reads in a loop), repeated SQL ({th.get('repeated')}+ identical) "
+              f"or slow path ({th.get('slow_ms')} ms and {th.get('slow_share')} of a test phase) in this run")
 
 
 def _r_observe(r: dict) -> None:
@@ -2970,6 +3023,8 @@ def _r_observe(r: dict) -> None:
         print(f"  target {t!r} is not a graph symbol (matched by name only)")
     print(f"  recorded: {r.get('edges_total')} in-repo edge(s), {r.get('boundary_total')} boundary call site(s), "
           f"{r.get('evidence_records')} evidence record(s) (not printed; `--json` for the summary)")
+    if r.get("runtime_flaws") is not None:
+        _r_flaws(r["runtime_flaws"])
     cost = r.get("cost") or {}
     print(f"  cost: cpu {cost.get('cpu_s')} s, wall {cost.get('wall_s')} s, run {cost.get('duration_s')} s")
     for lim in r.get("limits") or []:
@@ -2982,6 +3037,7 @@ def _r_observe(r: dict) -> None:
 
 def cmd_observe(args) -> int:
     from verinoda import index
+    from verinoda.runtime import flaws as flawmod
     from verinoda.runtime import trace as rt
 
     repo = _repo(args)
@@ -3003,8 +3059,14 @@ def cmd_observe(args) -> int:
                                 + (" --for " + " ".join(symbols) if symbols else "") + "`"}
             _emit(args, out, _r_observe)
             return 3
+    th = {"n_plus_one": args.n_plus_one, "repeated": args.repeated, "slow_ms": args.slow_ms,
+          "slow_share": args.slow_share}
+    try:
+        flawmod.thresholds(th)
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from None
     res = rt.observe(st, repo, ids, timeout=args.timeout, snapshot=st.latest_snapshot(), graph=g,
-                     targets=symbols, mode=args.mode)
+                     targets=symbols, mode=args.mode, flaws=not args.no_flaws, flaw_thresholds=th)
     summary = _observe_summary(res, g, symbols, selected)
     _emit(args, summary, _r_observe)
     # 3: the run did not establish what was asked (incomplete trace, or reach asked with the tracer off)
@@ -4811,6 +4873,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--timeout", type=float, help="seconds (default: twice the experiment timeout)")
     sp.add_argument("--mode", choices=TRACE_MODES, default="auto",
                     help="tracer: auto (sys.monitoring, else setprofile), monitoring, setprofile, off (baseline)")
+    sp.add_argument("--no-flaws", action="store_true",
+                    help="do not record SQL statements and sampled stacks (no runtime_flaws block)")
+    sp.add_argument("--n-plus-one", type=int, metavar="N",
+                    help="runtime flaws: a read run N+ times from one loop in a test phase is an N+1 (default 5)")
+    sp.add_argument("--repeated", type=int, metavar="N",
+                    help="runtime flaws: the same statement and parameters N+ times in a test phase (default 3)")
+    sp.add_argument("--slow-ms", type=float, metavar="MS",
+                    help="runtime flaws: a slow path takes MS+ ms of a test phase (default 100) ...")
+    sp.add_argument("--slow-share", type=float, metavar="F",
+                    help="... and at least this share of it, 0..1 (default 0.2)")
     sp = add("probe", cmd_probe, "call one changed Python function on many generated inputs at the base and in the "
                                  "working tree (isolated runs) and report behaviour differences, stated properties "
                                  "that fail and undeclared exceptions (exit 3 unless nothing was found)")
