@@ -25,13 +25,19 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D137)
+## Upgrading from 0.4.0 (D137-D138)
 
 ### D137: Trigram regex index
 
 New command `verinoda search`: exact and regular-expression search narrowed by a trigram index that it builds on
 first use in `.verinoda/index/trigram.db` (disposable; delete it or pass `--rebuild` to start over). No MCP tool
 changes.
+
+### D138: Mutation testing scoped to the diff
+
+New command `verinoda mutate`: mutation testing scoped to the diff (Python). It runs the selected tests once per
+mutant through `experiments.run`, so each mutant is a recorded experiment under `.verinoda/runs/`. Nothing else
+changes; no MCP tool changes.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

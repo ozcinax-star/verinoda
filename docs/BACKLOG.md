@@ -86,7 +86,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 9.3 | **Mutation testing scoped to the diff** | Surviving mutants on changed lines: do the reaching tests actually check the change? | mutmut, cosmic-ray, PIT, cargo-mutants, Stryker | surviving mutants reported with their line |
 
 ## 10 - New graph edges
 
