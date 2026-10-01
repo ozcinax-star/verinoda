@@ -658,11 +658,14 @@ def mixin_files(repo: Path) -> list[str]:
     return sorted(out)
 
 
-def check(repo: Path, paths: list[str] | None = None, config: dict | None = None) -> dict:
+def check(repo: Path, paths: list[str] | None = None, config: dict | None = None,
+          export_paths: list[str] | None = None) -> dict:
     """Every Mixin class of the project's Java sources (or of ``paths``) against the class files of its
-    build's classpath."""
+    build's classpath, and, where Mixin's debug export is found (or given in ``export_paths``), what each one
+    really changed (:mod:`verinoda.mixinexport`)."""
     import time
 
+    from verinoda import mixinexport
     from verinoda.snapshot import listed_files
 
     t0 = time.perf_counter()
@@ -692,6 +695,9 @@ def check(repo: Path, paths: list[str] | None = None, config: dict | None = None
         if found:
             by_root.setdefault(jvmclass.build_root(repo, repo / rel), []).extend(found)
     entries, builds = [], []
+    exports, enotes = mixinexport.find_exports(repo, list(dict.fromkeys([repo, *sorted(by_root)])), export_paths)
+    erows: list[dict] = []
+    eclasses: dict[str, dict] = {}
     for root, group in sorted(by_root.items()):
         try:
             where = root.relative_to(repo).as_posix() or "."
@@ -709,14 +715,40 @@ def check(repo: Path, paths: list[str] | None = None, config: dict | None = None
         try:
             for mc in group:
                 entries += check_mixin(mc, cf, complete, cp.source, java_paths)
+                if exports:
+                    erows += _export_rows(repo, mc, cf, exports, eclasses)
         finally:
             cf.close()
     counts = {v: sum(1 for r in entries if r["verdict"] == v) for v in ("exists", "absent", "unknown")}
+    export = mixinexport.section(exports, enotes, erows, list(eclasses.values()))
     return {"files": files, "builds": builds, "entries": entries, "counts": counts,
-            "notes": list(dict.fromkeys(notes)), "seconds": round(time.perf_counter() - t0, 3)}
+            "notes": list(dict.fromkeys(notes)), "export": export, "seconds": round(time.perf_counter() - t0, 3)}
 
 
-def lookup(repo: Path, paths: list[str] | None = None) -> dict:
+def _export_rows(repo: Path, mc: MixinClass, cf: ClassFiles, exports: list, classes: dict[str, dict]) -> list[dict]:
+    """What the Mixin export says of each injector of ``mc`` on each target, and (once per target class) what
+    the export holds beyond the original class file (:func:`verinoda.mixinexport.changes`)."""
+    from verinoda import mixinexport
+
+    try:
+        mtime = (repo / mc.path).stat().st_mtime
+    except OSError:
+        mtime = None
+    rows = []
+    for _written, cands in mc.targets:
+        binary = mixinexport.resolve(cands, exports, cf.where)
+        shown = binary.replace("/", ".").replace("$", ".")
+        orig = cf.code(binary) if binary in cf.where else None
+        holders = [e for e in exports if e.class_path(binary)]
+        exp = max(holders, key=lambda e: e.class_path(binary).stat().st_mtime) if holders else exports[0]
+        rows += mixinexport.injection_rows(mc, binary, shown, exp, orig, mtime)
+        got = exp.read(binary)
+        if binary not in classes and got and "unreadable" not in got:
+            classes[binary] = mixinexport.changes(got, orig, cf.evidence(binary) if orig else None)
+    return rows
+
+
+def lookup(repo: Path, paths: list[str] | None = None, export_paths: list[str] | None = None) -> dict:
     """``verinoda mixin-check``: the check; ``no_mixins`` when no Java file of the project holds a ``@Mixin``."""
     from verinoda.paths import load_config
 
@@ -724,7 +756,7 @@ def lookup(repo: Path, paths: list[str] | None = None) -> dict:
         config = load_config(repo)
     except Exception:  # noqa: BLE001 - no readable config: the build's own classpath is looked for
         config = None
-    res = check(repo, paths, config)
+    res = check(repo, paths, config, export_paths)
     if not any(f["mixins"] for f in res["files"]):
         where = "the file(s) named" if paths else "the project's Java sources"
         return {"status": "no_mixins", **res, "note": f"no @Mixin class in {where}"}
@@ -751,4 +783,8 @@ def render(res: dict) -> str:
             out.append(f"    nearest (a suggestion, {r['nearest_status']}): {', '.join(r['nearest'])}")
         if r.get("next"):
             out.append(f"    next: {r['next']}")
+    if res.get("export"):
+        from verinoda import mixinexport
+
+        out += mixinexport.render(res["export"])
     return "\n".join(out)

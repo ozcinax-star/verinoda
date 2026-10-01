@@ -946,6 +946,42 @@ _BLOCK_CUE = re.compile(r"\b(?:block|prevent|stop|cancel|forbid|suppress|disabl|
 MIXIN_CLAIMS = 3
 
 
+def _mixin_export_ev(ctx: _Ctx, f: str, ann: int, a: int, b: int, label: str, target_class: str
+                     ) -> tuple[dict | None, list[str]]:
+    """Evidence from Mixin's debug export that the handler at ``f:a-b`` really landed in ``target_class``
+    (:func:`verinoda.mixinexport.claim_evidence`; the handler's lines, recorded as a run's observation that
+    cites the exported class file), or None, and what the export says otherwise."""
+    from verinoda import mixinexport
+
+    member = label.strip().split("(")[0].strip(".").rsplit(".", 1)[-1]
+    try:
+        got = mixinexport.claim_evidence(ctx.repo, f, ann, member, target_class)
+    except Exception:  # noqa: BLE001 - an export this reader cannot read leaves the claim as it was
+        return None, []
+    verdict = got.get("verdict")
+    note = f" ({got['stale']})" if got.get("stale") else ""
+    if verdict in ("applied", "merged"):
+        merged = got.get("merged") or {}
+        locator = (f"{got['evidence']}: {got['handler']} @MixinMerged(mixin = \"{merged.get('mixin')}\", "
+                   f"priority = {merged.get('priority')})"
+                   + (f", called from {', '.join(got['called_from'][:3])}" if got.get("called_from") else ""))
+        ev = evmod.source_evidence(ctx.repo, f, a, b, commit=ctx.commit, source_type="experiment", meta={
+            "kind": "mixin_export", "verdict": verdict, "export": got["evidence"], "handler": got["handler"],
+            "merged": merged, "called_from": got.get("called_from") or [],
+            "scope": "observed in the game run that wrote Mixin's debug export; the export may be older than the "
+                     "source"})
+        seen = f"observed in Mixin's debug export, not in this checkout's build: {got['why']}{note}"
+        if ev is None:   # the handler's lines cannot be cited: the observation stays an uncertainty
+            return None, [seen]
+        ev["locator"] = locator
+        return ev, [seen]
+    if verdict in ("not_applied", "unknown"):
+        return None, [f"Mixin's debug export: {got['why']}{note}" + (f"; next: {got['next']}" if got.get("next")
+                                                                      else "")]
+    return None, ["what it changed at run time is not observed: no Mixin debug export (.mixin.out; start the game "
+                  "with -Dmixin.debug.export=true)"]
+
+
 def _mixin_claims(ctx: _Ctx, sub: _Sub) -> None:
     """Mixin handlers whose injection target the question names (docs/DESIGN.md D48): "what blocks mob spawning"
     -> the ``@Inject`` into ``Mob.checkSpawnRules`` that can cancel it. A target method's name parts must meet the
@@ -971,12 +1007,13 @@ def _mixin_claims(ctx: _Ctx, sub: _Sub) -> None:
         if len(mhit[best] | chit) < 2 and not cancels:  # one shared word ("tick") is not the question's subject
             continue
         score = len(mhit[best] | chit) + (1 if cancels else 0)
-        scored.append((-score, f"{g.file(u)}:{g.line(u)}", u, cls, best, d))
+        full = str(d.get("target_class") or g.label(v))
+        scored.append((-score, f"{g.file(u)}:{g.line(u)}", u, cls, best, full, d))
     if not scored or not _begin(ctx, sub, "mixins"):
         return
     from verinoda import jvm_mixins
 
-    for _s, _at, u, cls, method, d in sorted(scored)[:MIXIN_CLAIMS]:
+    for _s, _at, u, cls, method, full, d in sorted(scored)[:MIXIN_CLAIMS]:
         if not ctx.budget.ok:
             ctx.rec.skipped["mixins"] += 1
             continue
@@ -989,10 +1026,17 @@ def _mixin_claims(ctx: _Ctx, sub: _Sub) -> None:
         point = jvm_mixins.point_words(d.get("at"))
         text_ = (f"`{_disp(g, u)}` runs inside `{cls}.{method}`" + (f" {point}" if point else "")
                  + ("; it can cancel it" if d.get("cancellable") else "") + f" (@{d.get('kind')} at {f}:{ann or a})")
-        ctx.rec.claim(text_, kind="location", status="strong_inference",
-                      evidence=[(_src_ev(ctx.repo, f, a, b, ctx.commit), "supports")],
+        evs = [(_src_ev(ctx.repo, f, a, b, ctx.commit), "supports")]
+        unc = ["read from the Mixin annotation; the target class's bytecode is not checked"]
+        exp_ev, exp_unc = _mixin_export_ev(ctx, f, ann or a, a, b, g.label(u), full)
+        if exp_ev is not None:
+            evs.append((exp_ev, "supports"))
+            unc = (["where in the method it runs, and whether it can cancel, is read from the annotation, not "
+                    "from the exported bytecode"] if point or d.get("cancellable") else [])
+        unc += exp_unc
+        ctx.rec.claim(text_, kind="location", status="strong_inference", evidence=evs,
                       subjects=[f"{f}::{g.label(u)}"], spec={"symbol": g.label(u), "mixin": d.get("context")},
-                      uncertainties=["read from the Mixin annotation; the target class's bytecode is not checked"])
+                      uncertainties=unc)
         ctx.step("mixin", f"{_disp(g, u)} -> {cls}.{method}")
 
 
