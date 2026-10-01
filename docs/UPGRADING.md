@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D120)
+## Upgrading from 0.3.2 (D60-D121)
 
 ### D63: Running a project's own tests safely
 
@@ -577,6 +577,13 @@ New command `verinoda rationale [symbol|path]`: the WHY/NOTE/NB/HACK/IMPORTANT/R
 comments citing a decision record, each with its `file:line`, quoted, and attached to the definition it is above
 or in. MCP `node_inspect` lists the ones of the node under `rationale` (at most 5). Nothing to rebuild: they are
 read from the files when asked. The MCP tool count is unchanged.
+
+### D121: Structural (AST pattern) search
+
+New command `verinoda grep-ast PATTERN [PATH ...] [--lang L] [--rule FILE] [--max-results N] [--json]`:
+structural search with `$A` / `$$$REST` metavariables over Python, Java, TypeScript and the other tree-sitter
+languages the index reads; exit 0 with matches, 1 without, 2 on a bad pattern or rule file. No MCP tool was
+added, so the tool count in UPGRADING does not change.
 
 ### D60-D62
 
