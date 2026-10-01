@@ -540,6 +540,30 @@ def cmd_hooks(args) -> int:
     return 2 if res.get("refused") else 0
 
 
+def cmd_agent_hooks(args) -> int:
+    from verinoda import agent_hooks as ah
+
+    agents = [a.strip() for a in (args.agent or "claude").split(",") if a.strip()]
+    if agents == ["all"]:
+        agents = list(ah.AGENTS)
+    try:
+        res = ah.run(args.agent_hooks_cmd, agents, args.scope, _repo(args), dry_run=getattr(args, "dry_run", False))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: _write(ah.render(r)))
+    return 0 if res["ok"] else 2
+
+
+def cmd_tool_hook(args) -> int:
+    """A PostToolUse hook's call: the tool call as JSON on stdin, the context for it as JSON on stdout (``{}`` for
+    nothing). Always exit 0: a hook never fails the agent's tool call."""
+    from verinoda import tool_hook
+
+    print(tool_hook.run(args.agent))
+    return 0
+
+
 def _scan_precise(st, repo: Path, before: dict[str, str], now_files: dict[str, str]) -> dict:
     """``scan --precise``: resolve every call site of the .py files that changed since the previous snapshot."""
     import time
@@ -3909,6 +3933,23 @@ def build_parser() -> argparse.ArgumentParser:
                    help="instead remove every block whose project folder no longer exists (a moved project, a "
                         "removed worktree)")
     add("status", cmd_hooks, "which hooks have this project's block", parent=hsub_hooks)
+    sp = sub.add_parser("agent-hooks", help="hooks in Claude Code, Codex or Cursor that add graph context after the "
+                                             "agent's own Grep, grep/rg in a shell, and file reads")
+    hsub_agent = sp.add_subparsers(dest="agent_hooks_cmd", required=True)
+    for name, help_ in (("install", "add Verinoda's hooks to the agents' hook files (other hooks are kept)"),
+                        ("uninstall", "remove exactly Verinoda's hooks"),
+                        ("status", "whether Verinoda's hooks are in the agents' hook files")):
+        c = add(name, cmd_agent_hooks, help_, parent=hsub_agent)
+        c.add_argument("--agent", default="claude",
+                       help="claude, codex, cursor, a comma list, or all (default claude)")
+        c.add_argument("--scope", choices=["project", "user"], default="project",
+                       help="the project's files (default) or the user's")
+        if name != "status":
+            c.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
+    sp = add("tool-hook", cmd_tool_hook, "the hook command itself: a tool call as JSON on stdin, graph context as "
+                                         "the agent's hook JSON on stdout", repo=False, js=False)
+    sp.add_argument("--agent", choices=["claude", "codex", "cursor"], default="claude",
+                    help="the output shape (default claude)")
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp = add("trust", cmd_trust, "trust a project: its tests run with process isolation (your privileges) and its "

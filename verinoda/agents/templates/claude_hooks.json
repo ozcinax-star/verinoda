@@ -20,6 +20,24 @@
         ]
       },
       {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "verinoda",
+            "tool": "run_tool",
+            "input": {
+              "name": "grep_context",
+              "arguments": {
+                "command": "${tool_input.command}"
+              }
+            },
+            "timeout": 10,
+            "statusMessage": "verinoda: graph context"
+          }
+        ]
+      },
+      {
         "matcher": "Read|Edit|MultiEdit|Write",
         "hooks": [
           {
