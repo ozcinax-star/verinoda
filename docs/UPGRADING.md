@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D150)
+## Upgrading from 0.4.0 (D137-D151)
 
 ### D137: Trigram regex index
 
@@ -147,6 +147,17 @@ moved to `verinoda.fswatch.Watcher` (still importable from the old place).
 
 New command `verinoda slice PATH:LINE` (`--var`, `--arg`, `--forward`, `--depth`): a backward slice of a Python
 line inside its function, across callers' arguments via the index, or a forward slice. Nothing to migrate.
+
+### D151: Package existence and slopsquatting check
+
+`verinoda check --deps --registry [new|all] --network on|cache` asks PyPI, npm, crates.io, Maven Central and the
+Go proxy whether the dependencies a change adds (and the undeclared imports) exist, are young, little used,
+yanked, deprecated or taken down, and flags look-alike names of popular packages; findings `not_in_registry`,
+`registry_signal` and `lookalike_name`, exit 3; a bad `--diff` revision is exit 2. `decide ask ... --registry`
+does the same for a proposed package. Off by default; only public package names are sent (local, VCS and URL
+sources are skipped, names behind a private registry the project configures are never sent); answers cached in
+`.verinoda/research/package-check.json`. Dependency items of `guards.declared_dependencies` gain `declared`
+(the name as written). Nothing to migrate.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

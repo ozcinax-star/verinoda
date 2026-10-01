@@ -12727,6 +12727,172 @@ nested branches in a forward slice, `--arg` on the outermost call, decorator and
 two timings: reaching definitions on 1,800 nodes and the analyses on 3,900 (each under 3 s; before, 6.3 s for
 reaching definitions on 538 nodes and 26 s for control dependence on 3,964).
 
+## 124. Package existence and slopsquatting check (D151, 2026-10-01)
+
+### 124.1 Why
+
+An assistant that writes `import fastjson_schema_validator` or adds `huggingface-cli-tools` to a manifest may name
+a package that does not exist - and an attacker who registers that name later gets installed (slopsquatting), as
+does one who registers `reqeusts` (typosquatting). Socket MCP and Endor Labs check a new dependency against its
+registry before it is installed. `check --deps` already knew which packages code imports without declaring them,
+but not whether those names exist anywhere. Done when: `check` flags a dependency name the registry does not have.
+
+### 124.2 Decisions
+
+- **Opt-in twice.** `verinoda check --deps --registry [new|all] [--network off|cache|on] [--diff REV]` and
+  `verinoda decide ask SOURCE TARGET --registry [--network ...]`. Without `--registry` (or `--network`) nothing
+  changes. The network mode defaults to `off`, not to `research.network` (whose default is `cache`): the user
+  turns the network on for this check explicitly. With `off` nothing is sent, the registry facts are `unknown`
+  and the next step is `--network on`. CLI only: no MCP tool and no new MCP argument (the menu stays as it is).
+- **Only public package names leave the machine**, only to the public registry of their ecosystem, through
+  `references.transport.LiveTransport` (SSRF-guarded opener, per-host rate-limit blocks, Verinoda's
+  User-Agent, no credentials) with a 10 s timeout. Names behind a private source the project configures are
+  never sent (see the review round).
+- **What is checked:** `new` (default) - the names a manifest declares now and did not declare at REV. The
+  manifests of that commit are written to a temporary folder and read by the same reader
+  (`guards.declared_dependencies`), so a version bump is not new, a name the old file only mentioned (a comment,
+  a script, `name = "mylogger"`) does not hide a new `log`, and `request` next to an old `requests` is new; a
+  manifest that did not exist at REV adds all of its declarations. `all` - every declaration. Both add the
+  `missing` packages of `check --deps` (Python and npm imports no manifest declares). Imports of the Python
+  standard library, Node built-ins, the Go standard library (no dot in the first path element) and Rust's
+  built-in crates and path keywords (`std`, `core`, `alloc`, `proc_macro`, `test`, `crate`, `self`, `super`) are
+  skipped.
+- **Registries, one or two cheap requests each:** PyPI JSON API plus the Simple API JSON for the PEP 792
+  `project-status` (a JSON 404 is called "not found" only when the Simple API also says 404; a quarantined
+  project is reported as quarantined; a project the Simple API knows with no release the JSON API shows exists,
+  with the caution `no_release`); npm package document plus `api.npmjs.org` last-week downloads; crates.io crate
+  API; Maven Central `maven-metadata.xml` (404 = not on Central; a build may use another repository, and the
+  claim says so; an answer whose root is not `<metadata>` is unreadable, not an artifact); Go module proxy
+  `@latest`. Gradle plugins have no lookup (said in the limits).
+- **Registry facts are `observed`**, each with the URL and the time it was read: `not_found` (HTTP 404/410, or
+  npm with every version unpublished), `quarantined`, npm `security_holding` (the `0.0.1-security` placeholder
+  npm publishes for a package removed for malware), `no_release`, `yanked` latest, `deprecated` (npm latest
+  version; PyPI project status), `archived`, `young` (first release under 90 days before the check),
+  `few_downloads` (npm under 100 last week, crates.io under 1,000 in 90 days), `known_vulnerabilities` (PyPI's
+  list). The fact is observed; that it means risk is the reader's inference. Nothing is scraped and no account
+  is used.
+- **Name signals are local** and `strong_inference` at most: `typo_of` (optimal string alignment distance 1 for
+  names of 4-8 characters, 2 from 9) and `separator_confusable` (the same letters with other `-`/`_`/`.`; an npm
+  scope is part of the name, so `@types/express` is not `express`; not for PyPI names PEP 503 makes the same
+  project, nor crate names that differ only in `-`/`_`) against `data/popular_packages.json` (about 500
+  hand-written popular names of PyPI, npm and crates.io, plus a list of established near-names such as `boto`,
+  `jinja`, `preact`, `sha1` that get no signal; `@types/<popular>` gets none either). A look-alike the registry
+  shows widely used (npm 50,000 a week, crates.io 500,000 in 90 days) is a package of its own: `weak_inference`,
+  no caution. `hallucination_style` (a popular name plus a generic word such as `utils`, `py`, `sdk`) is
+  `weak_inference` and changes no verdict. They are computed with the network off too.
+- **Verdict per package:** `flagged` (not found, quarantined, security holding), `caution` (no release, yanked,
+  deprecated, archived, young, few downloads, known vulnerabilities, typo or separator look-alike), `ok`,
+  `unknown`, `skipped`, with a next step ("do not install ...: check the name ...").
+- **In `check --deps`** registry facts and name signals are separate findings, each with its own status:
+  `not_in_registry` (observed: the registry has no such name), `registry_signal` (observed: taken down, no
+  release, yanked, deprecated, young, few downloads, vulnerabilities) with the declaration or import lines and
+  the registry URLs as evidence, and `lookalike_name` (strong_inference, the declaration or import lines). The
+  result gains a `registry` section and the summary three counts; any such finding makes the exit 3. A
+  `--diff` revision that is not a commit is an error (exit 2), and so is `--diff` with `--registry all`. In
+  `decide ask` the `registry` section is added beside the verdict, which stays the guards' verdict.
+- **Cache** `.verinoda/research/package-check.json` (schema `verinoda.package_check/1`), one answer per
+  registry and name (as the registry compares it) with the time observed. `cache` reuses an answer younger than
+  24 hours, else asks; `on` always asks and shows the cached answer (said so) only when the registry cannot be
+  reached; `off` names a cached answer but does not use it. Timeouts, network errors, 5xx, 429 and unreadable
+  answers are never cached and leave the package `unknown`. An entry that is not as written (no answer, a time
+  that is no number, an answer that is no object or has no registry) is a miss. A save reloads the file, merges
+  the new answers into the entries other runs wrote meanwhile, and replaces the file in one step (a temporary
+  file and `os.replace`).
+- **Review round** (a reviewer confirmed 12 defects; all fixed, each with a regression test):
+  1. Dependencies no registry holds were looked up and could be flagged: npm `workspace:` / `file:` / `link:` /
+     `portal:` / git / `github:` / `owner/repo` / tarball URL specs, Cargo `path` / `git` /
+     `workspace = true`, PEP 508 `name @ url`, Poetry and `[tool.uv.sources]` path/git/URL sources, go.mod
+     modules replaced by a local path are now skipped and never sent. An npm alias `x: npm:real@range` is
+     looked up as `real`, a Cargo `json = { package = "serde_json" }` as `serde_json`, a go.mod module replaced
+     by another module as that module (each says what it was declared as).
+  2. Private registries were ignored, so a private name was sent to a public registry (a dependency-confusion
+     leak) and could be flagged. Now read from the project: `.npmrc` (`@scope:registry=` holds that scope back,
+     `registry=` all of npm), requirements `--index-url` / `--extra-index-url` / `--find-links`, `pip.conf` /
+     `pip.ini`, `[[tool.uv.index]]`, `[[tool.poetry.source]]`, `[[tool.pdm.source]]`, `uv.toml`, the
+     `PIP_*` / `UV_*` index variables, `.cargo/config.toml` (a replaced crates.io; a dependency's
+     `registry =`), Poetry `source =`, uv `index =`, and `GOPRIVATE` / `GONOPROXY` (the environment, else
+     `go env` when Go is installed). Such names are `unknown` ("not sent: ...") and never sent. With any extra
+     Python index configured no Python name is sent: which names are private cannot be told.
+  3. The Go standard library (`fmt`, `net/http`) and Rust built-ins (`std::io`, `crate::x`) were looked up and
+     flagged in `decide ask`; they are skipped. A Go package path is read as its module (the longest go.mod
+     require that prefixes it, else `host/owner/repo` on the known hosts); otherwise it is `unknown`, not sent.
+     A Python import of a shared namespace (`google.cloud.storage`) names no distribution: `unknown`, not sent.
+  4. Scoped npm names lost their scope in the separator comparison (`@types/express` vs `express`): the scope
+     is now part of the name, and `@types/<popular>` gets no signal.
+  5. Maven artifacts were looked up in lower case (`org.antlr:ST4` -> a 404 on `.../st4/`): the manifest
+     readers keep the declared spelling (`declared`) beside the lower-cased compare name, and the lookup uses
+     it; `decide ask` keeps the case too.
+  6. npm names were looked up in lower case (`JSONStream` asked as `jsonstream`, another package): the declared
+     name is looked up and cached as written.
+  7. A PyPI JSON 404 with a Simple API 200 was "not found" and cached: it is now `exists` with `no_release`.
+  8. Damaged cache entries crashed `cache` mode: entries are validated, a bad one is a miss.
+  9. Two concurrent runs could lose each other's entries and a reader could see half a file: saves reload and
+     merge, then replace atomically.
+  10. One finding mixed observed facts with heuristics under the status `observed`: observed facts and name
+      signals are now separate findings with their own status.
+  11. An invalid `--diff` with `--registry new` was a limit line and could end in exit 0: it is exit 2; only
+      "not a git work tree" stays a limit (worded without the `--stdin` advice); `--diff` with `all` is exit 2.
+  12. `new` missed a Cargo or Poetry dependency whose name appeared on an earlier line (`name = "mylogger"`
+      hid `log`; `serde_json` hid `serde`), because the key was located by the first line containing it. Keys
+      are now located inside their own table (`^\s*NAME\s*=`, quoted keys, `[dependencies.NAME]`), and `new`
+      compares declared names rather than text.
+  Minors fixed too: crates.io names fold `-` and `_`; a Maven 200 that is not `<metadata>` is unreadable and
+  not cached; the established near-names list.
+
+### 124.3 Measured
+
+Real requests by hand, 2026-10-01, from this machine (one run, `network on`, each package alone, cold cache):
+PyPI `requests` 1,062 ms (two requests: JSON 192 KB and Simple API 123 KB; ok, first release 5,708 days ago);
+PyPI `huggingface-cli-tools-vx` 970 ms, flagged not found; PyPI `reqeusts` 1,023 ms, flagged not found plus
+`typo_of requests`; npm `left-pad` 1,046 ms (document plus downloads: 2,583,163 last week; `caution`, its latest
+version is deprecated on npm); npm `react-query-hooks-pro-vx` 564 ms, flagged not found; crates.io `serde`
+1,171 ms (440 KB answer); Maven Central guava 427 ms; Go proxy `github.com/pkg/errors` 521 ms. The same 8 again
+in `cache` mode: 26 ms in all, 8 from the cache. pypistats.org answered HTTP 429 to its first anonymous request,
+so PyPI download counts are not read. After the review round, also by hand: Maven Central `org.antlr:ST4`
+581 ms, ok (asked in its declared case); npm `JSONStream` 1,564 ms, ok; npm `@types/express` 818 ms, ok with no
+name signal; PyPI `reqeusts` 1,041 ms, flagged (`not_found` observed, `typo_of` strong_inference).
+
+### 124.4 Not done
+
+- Only public registries are asked. Names behind a private source the project configures are held back
+  (`unknown`, never sent); a source configured only outside the project (a user-level `pip.conf` or `.npmrc`, a
+  Gradle or Maven repository other than Central) is not read, so such a name is sent and can look missing
+  (Maven's claim says "not on Maven Central").
+- With an extra Python index configured, no Python name is checked at all: which names are private cannot be
+  told.
+- No registry here scans for malicious code; the signals are what a registry shows without an account. A
+  package with no signal is not shown to be safe.
+- No PyPI download counts (the JSON API has none; pypistats rate-limits). Go and Maven Central give no first
+  release date in one request, so no `young` there. npm's full document can be large (megabytes for big
+  packages).
+- The popular-name list and the established near-names list are small and hand-written: legitimate packages
+  near a popular name that are not on the second list and show no large download count (PyPI shows none) get a
+  `typo_of` caution, and squats of names not on the first list get none.
+- `new` reads the change from git: outside a git work tree it checks only the undeclared imports and says so
+  (`all` needs no git). Cargo `workspace = true` dependencies are skipped (the workspace table is not read).
+- A Go package path on a host other than the known `host/owner/repo` ones, and not required by go.mod, is
+  `unknown`; a Python import of a shared namespace is `unknown`.
+
+### 124.5 Tests
+
+`tests/test_package_check.py` (59 tests, the network replaced by a fake transport; a transport that fails when
+called proves nothing was sent; the environment and `go env` are replaced so the user's own index settings do
+not leak in): PyPI and npm names the registry lacks flagged with URL and time, an old popular package ok, a young
+npm package with few downloads, a yanked PyPI release with vulnerabilities, PyPI quarantine from the Simple API,
+npm deprecated and security holding packages, crates.io / Go / Maven Central (found and not on Central), typo,
+separator and hallucination-style names, standard-library imports skipped, network off (unknown, nothing sent,
+name signals still given), cache reuse and expiry after 24 hours, `on` falling back to the cache, timeouts and
+malformed or 5xx answers unknown and not cached, a JSON 404 without a readable Simple API not called missing,
+the added-dependency reading of a git change, and the CLI: `check --deps --registry` findings, evidence and exit
+3, `--registry all`, argument errors, `decide ask --registry` for a Python and a scoped npm package. Review round
+(30 more): local, workspace, VCS and URL sources never sent and npm alias, Cargo rename and go.mod replace read;
+private npm scopes, six kinds of private Python index, a replaced crates.io and GOPRIVATE; Go and Rust built-ins
+and Go package paths (also through `decide ask`), a namespace import; scoped npm names; Maven and npm case kept;
+PyPI project without a release; six damaged cache entries; merging with another run's entries, a truncated
+file, no temporary file left; separate observed and look-alike findings; a widely used near name only weak; a
+bad revision and `--diff` with `all` exit 2; outside git; Cargo keys located in their table and comments not
+hiding new names; a Poetry key in its table; a Maven HTML answer; crate separators and established near-names.
+
 ## Sources
 
 - **Retrieval:**

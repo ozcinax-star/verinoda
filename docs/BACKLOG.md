@@ -103,7 +103,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 13.4 | **Package existence and slopsquatting check (opt-in)** | A new dependency checked against its registry: exists, age, downloads, malware signals | Socket MCP, Endor Labs | `check` flags a dependency name the registry does not have |
 
 ## 14 - Outputs and views
 
