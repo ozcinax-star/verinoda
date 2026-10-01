@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 
 from verinoda import evidence as evmod
-from verinoda import experiments, failsig, looprules, testcode, treestate
+from verinoda import experiments, failsig, looprules, testcode, testhistory, treestate
 from verinoda.paths import load_config, runs_dir
 from verinoda.scrub import cut, redact
 from verinoda.store import Store, new_id, now
@@ -677,6 +677,7 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
             if attempt_try + 1 >= INSERT_RETRIES:
                 raise
             continue
+        testhistory.record(store, row)  # each test's outcome in this run, for `debug flaky`
         steps["store_s"] = round(time.perf_counter() - t_step, 3)
         break
     if n != run_n:
@@ -1602,6 +1603,14 @@ def rerun(store: Store, repo: Path, session_id: str | None = None, *, times: int
                       "runs of this tree Verinoda made are counted; agent-reported runs are listed, not counted"]}
     if len(trees) > 1:
         out["note"] = "the tree changed during the reruns; the series mixes trees"
+    seen: dict[str, set[str]] = {}
+    for r in res:
+        for t, o in ((rows[r["attempt"]].get("signature") or {}).get("tests") or {}).items():
+            if o in testhistory.OUTCOMES:
+                seen.setdefault(t, set()).add(testhistory.OUTCOMES[o])
+    both = sorted(t for t, o in seen.items() if len(o) == 2)
+    if both:  # the tests that passed and failed in this series (each test's history: `verinoda debug flaky`)
+        out["tests_both_outcomes"] = both[:LIST_CAP]
     series_same = all(looprules.same_result(mine[0], a) for a in mine[1:])
     history_same = all(looprules.same_result(results[0], a) for a in results[1:]) if results else True
     if series_same and history_same:

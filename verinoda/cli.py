@@ -2488,6 +2488,36 @@ def _r_debug_strategy(r: dict) -> None:
         print(f"  limit: {ln}")
 
 
+def _r_debug_flaky(r: dict) -> None:
+    rec = r["recorded"]
+    print(f"recorded: {rec['runs']} run(s), {rec['tests']} test(s); a fix holds after {r['verify_runs']} passes "
+          "in a row on a changed tree")
+    for title, key in (("flaky (both outcomes on one tree)", "flaky"), ("held since the last failure", "held")):
+        if r.get(key):
+            print(f"{title}:")
+        for e in r.get(key) or []:
+            tag = " [quarantined]" if e.get("quarantined") else ""
+            print(f"  {e['test']}{tag}  pass rate {e['pass_rate']} ({e['passed']}/{e['runs']})"
+                  + (f"  at {e['at']}" if e.get("at") else ""))
+            print(f"      {e['finding']}")
+    for p in r.get("pending") or []:
+        print(f"  not yet held: {p['test']} ({p['passes']} of {p['of']} passes)")
+    if r.get("quarantine"):
+        print("quarantine (yours):")
+    for q in r.get("quarantine") or []:
+        state = f"{q.get('now')}, pass rate {q['pass_rate']} over {q['runs']} run(s)" if q["runs"] else "no runs"
+        print(f"  {q['test']}  {state}" + (f"  - {q['reason']}" if q.get("reason") else ""))
+    if r.get("quarantine_candidates"):
+        print(f"  not quarantined: {', '.join(r['quarantine_candidates'][:5])} (`verinoda debug quarantine TEST`)")
+    t = r.get("test")
+    if t:
+        print(f"{t['test']}: {t.get('next_step') or str(t['passed']) + '/' + str(t['runs']) + ' passed'}")
+        for h in t.get("history") or []:
+            print(f"  {h['session']} #{h['attempt']} {h['kind']}: {h['outcome']} (tree {h['tree']})")
+    for ln in r.get("limits") or []:
+        print(f"  limit: {ln}")
+
+
 def _debug_command(args) -> list[str] | None:
     argv = list(getattr(args, "command", None) or [])
     if argv and argv[0] == "--":
@@ -2560,6 +2590,26 @@ def cmd_debug(args) -> int:
                     print(f"  not run: {ln}")
                 if r.get("basis"):
                     print(f"  basis: {r['basis']}")
+            _emit(args, res, render)
+            return 0
+        if sub == "flaky":
+            from verinoda import testhistory
+
+            _emit(args, testhistory.report(st, repo, runs=args.runs, test=args.test), _r_debug_flaky)
+            return 0
+        if sub == "quarantine":
+            from verinoda import testhistory
+
+            try:
+                res = testhistory.quarantine(st, args.test, remove=args.remove, reason=args.reason)
+            except ValueError as exc:
+                raise SystemExit(f"error: {exc}")
+
+            def render(r):
+                print(f"{r['test']}: {'quarantined' if r['quarantined'] else 'off the quarantine list'}"
+                      + ("" if r["changed"] else " (already)"))
+                if r.get("note"):
+                    print(f"  note: {r['note']}")
             _emit(args, res, render)
             return 0
         if sub == "differential":
@@ -3779,6 +3829,16 @@ def build_parser() -> argparse.ArgumentParser:
     c = add("observe", cmd_debug, "strategy: the repro once more under the call tracer (are the edits reached?)",
             parent=dsub)
     c.add_argument("--session")
+    c = add("flaky", cmd_debug, "each test's pass rate over the ledger's recorded runs: flaky tests, fixes that "
+                                "held for N passes, the quarantine list", parent=dsub)
+    c.add_argument("--runs", type=int, metavar="N", help="passes in a row on a changed tree a fix needs "
+                                                         "(default debug.rerun_times)")
+    c.add_argument("--test", metavar="ID", help="also this test's history")
+    c = add("quarantine", cmd_debug, "add a test to your quarantine list (or --remove it); Verinoda never skips "
+                                     "it", parent=dsub)
+    c.add_argument("test", metavar="TEST_ID")
+    c.add_argument("--remove", action="store_true")
+    c.add_argument("--reason")
 
     sp = add("observe", cmd_observe, "run tests under the call tracer (isolated copy) and summarise what they "
                                      "reached (exit 3 when the trace is incomplete)")
