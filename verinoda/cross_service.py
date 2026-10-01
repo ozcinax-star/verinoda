@@ -23,14 +23,14 @@ import ast
 import bisect
 import posixpath
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 ORIGIN = "verinoda.cross_service"
 HTTP_RELATION = "requests"
 RPC_RELATION = "rpc_calls"
 EVENT_RELATION = "emits"
 RELATIONS = frozenset({HTTP_RELATION, RPC_RELATION, EVENT_RELATION})
-FACTS_VERSION = 1
+FACTS_VERSION = 2  # 2: mount prefixes that replace, top-level constants only, per-class JVM prefixes
 
 PY_SUFFIXES = (".py",)
 JS_SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte")
@@ -105,6 +105,41 @@ def _skip_template(text: str, i: int) -> int:
 
 _JS_SPECIAL = re.compile(r"['\"`/]")
 _REGEX_BEFORE = set("(,=:[!&|?{};+-*%<>~^")
+_REGEX_AFTER_WORDS = frozenset({"return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await",
+                                "delete", "throw", "new"})
+
+
+def _regex_start(text: str, i: int) -> bool:
+    """Whether the ``/`` at ``i`` (not a comment) starts a regular expression literal rather than a division: what
+    precedes it is an operator, an opening bracket, a keyword such as ``return``, or nothing."""
+    before = text[max(0, i - 200):i].rstrip()
+    if not before:
+        return True
+    c = before[-1]
+    if c in _REGEX_BEFORE:
+        return True
+    if c.isalpha():
+        m = re.search(r"[A-Za-z_$][\w$]*$", before)
+        return bool(m) and m.group(0) in _REGEX_AFTER_WORDS and not before[:m.start()].rstrip().endswith(".")
+    return False
+
+
+def _skip_regex(text: str, i: int) -> int:
+    """The index after the regular expression literal starting at ``i`` (it ends at its line's end at the latest)."""
+    j, n, in_class = i + 1, len(text), False
+    while j < n and text[j] != "\n":
+        ch = text[j]
+        if ch == "\\":
+            j += 2
+            continue
+        if ch == "[":
+            in_class = True
+        elif ch == "]":
+            in_class = False
+        elif ch == "/" and not in_class:
+            break
+        j += 1
+    return j + 1
 
 
 def strip_js(text: str) -> str:
@@ -134,33 +169,117 @@ def strip_js(text: str) -> str:
             pieces += [text[last:i], re.sub(r"[^\n]", " ", text[i:j])]
             i = last = j
         else:
-            k = i - 1
-            while k >= 0 and text[k] in " \t\r\n":
-                k -= 1
-            if k < 0 or text[k] in _REGEX_BEFORE:  # a regular expression literal
-                j, in_class = i + 1, False
-                while j < n and text[j] != "\n":
-                    ch = text[j]
-                    if ch == "\\":
-                        j += 2
-                        continue
-                    if ch == "[":
-                        in_class = True
-                    elif ch == "]":
-                        in_class = False
-                    elif ch == "/" and not in_class:
-                        break
-                    j += 1
-                i = j + 1
-            else:
-                i += 1
+            i = _skip_regex(text, i) if _regex_start(text, i) else i + 1
     pieces.append(text[last:])
     return "".join(pieces)
 
 
+_TOKEN = re.compile(r"['\"`/()\[\]{}]")
+_OPENER = {")": "(", "]": "[", "}": "{"}
+_SEP_RE = {sep: re.compile("[" + re.escape(sep) + r"'\"`/(\[{]") for sep in (",", "+")}
+
+
+class _Tokens:
+    """One linear pass over comment-free code: for every bracket the index of its partner, for every string,
+    template and regular expression literal the index after it. A call's arguments are then found by lookups;
+    scanning from each call to its closing bracket was quadratic on a file of unclosed or regex-heavy calls.
+    A closing bracket of the wrong kind closes the nearest opener of its kind among the last eight (the openers
+    between stay unclosed), or nothing."""
+
+    def __init__(self, code: str, *, js: bool = True):
+        self.code = code
+        jump: dict[int, int] = {}
+        stack: list[int] = []
+        i = 0
+        while True:
+            m = _TOKEN.search(code, i)
+            if not m:
+                break
+            i = m.start()
+            c = code[i]
+            if c in "'\"":
+                e = _skip_string(code, i)
+            elif c == "`" and js:
+                e = _skip_template(code, i)
+            elif c == "/" and js and _regex_start(code, i):
+                e = _skip_regex(code, i)
+            elif c in "([{":
+                stack.append(i)
+                i += 1
+                continue
+            elif c in ")]}":
+                want = _OPENER[c]
+                for k in range(len(stack) - 1, max(-1, len(stack) - 9), -1):
+                    if code[stack[k]] == want:
+                        jump[stack[k]] = i
+                        del stack[k:]
+                        break
+                i += 1
+                continue
+            else:
+                i += 1
+                continue
+            jump[i] = e
+            i = e
+        self.jump = jump
+
+    def close(self, open_i: int) -> int:
+        """Index of the bracket closing the one at ``open_i``; -1 when it is unclosed."""
+        return self.jump.get(open_i, -1) if self.code[open_i:open_i + 1] in ("(", "[", "{") else -1
+
+    def split(self, a: int, b: int, sep: str = ",") -> list[str]:
+        """``code[a:b]`` split at ``sep`` outside brackets, strings, templates and regular expressions."""
+        code, jump, pat = self.code, self.jump, _SEP_RE[sep]
+        parts, start, i = [], a, a
+        while True:
+            m = pat.search(code, i, b)
+            if not m:
+                break
+            p = m.start()
+            c = code[p]
+            if c == sep:
+                if not (sep == "+" and (code[p + 1:p + 2] == "+" or code[p - 1:p] == "+")):
+                    parts.append(code[start:p])
+                    start = p + 1
+                i = p + 1
+            elif p in jump:
+                i = jump[p] + 1 if c in "([{" else jump[p]
+            else:
+                i = p + 1
+        parts.append(code[start:b])
+        return parts
+
+    def top_level(self, pos: int) -> bool:
+        """Whether ``pos`` is outside every closed bracket pair (a module-level statement)."""
+        spans = self.__dict__.get("_spans")
+        if spans is None:
+            spans, end = [], -1
+            for k in sorted(self.jump):
+                if k > end and self.code[k] in "([{":
+                    spans.append((k, self.jump[k]))
+                    end = self.jump[k]
+            self._spans = spans
+        i = bisect.bisect_right(spans, (pos, float("inf"))) - 1
+        return i < 0 or not (spans[i][0] < pos < spans[i][1])
+
+    def args(self, open_i: int) -> tuple[list[str], int] | None:
+        """The top-level arguments of the call whose ``(`` is at ``open_i``, and the index of its ``)``."""
+        close = self.close(open_i)
+        if close < 0:
+            return None
+        if not self.code[open_i + 1:close].strip():
+            return [], close
+        return [a.strip() for a in self.split(open_i + 1, close) if a.strip()], close
+
+
+_SCAN_LIMIT = 50_000  # how far _close looks for a closing bracket in a small text (a GraphQL document)
+_SMALL = 4_000        # an argument longer than this is no URL or option object worth splitting
+
+
 def _close(code: str, open_i: int) -> int:
-    """Index of the bracket closing the one at ``open_i`` (strings and templates skipped); -1 when unclosed."""
-    depth, i, n = 0, open_i, len(code)
+    """Index of the bracket closing the one at ``open_i`` (strings and templates skipped); -1 when unclosed or
+    further than ``_SCAN_LIMIT`` away. For small texts only: a file's code goes through :class:`_Tokens`."""
+    depth, i, n = 0, open_i, min(len(code), open_i + _SCAN_LIMIT)
     while i < n:
         c = code[i]
         if c in "'\"":
@@ -202,16 +321,6 @@ def _split_top(s: str, sep: str = ",") -> list[str]:
     return parts
 
 
-def _args(code: str, open_i: int) -> tuple[list[str], int] | None:
-    """The top-level arguments of the call whose ``(`` is at ``open_i``, and the index of its ``)``."""
-    close = _close(code, open_i)
-    if close < 0:
-        return None
-    inner = code[open_i + 1:close]
-    args = [a.strip() for a in _split_top(inner)] if inner.strip() else []
-    return [a for a in args if a], close
-
-
 _JS_LIT = re.compile(r"""^(?:'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)")$""", re.S)
 
 
@@ -251,6 +360,8 @@ def _template_pieces(body: str) -> list[list[str]]:
 def js_pieces(expr: str, consts: dict[str, str]) -> list[list[str]] | None:
     """A URL expression as literal and dynamic pieces: ``'/a/' + id``, `` `/a/${id}` ``, a same-file constant."""
     pieces: list[list[str]] = []
+    if len(expr) > _SMALL:
+        return None
     for part in _split_top(expr.strip(), "+"):
         p = part.strip()
         if not p:
@@ -305,8 +416,31 @@ def _dotted(node) -> str | None:
 
 # -- paths --------------------------------------------------------------------------------------------
 
+_ABSOLUTE = re.compile(r"^(?:[A-Za-z][\w+.-]*:)?//")
+
+
+def join_base(base: list[list[str]] | None, pieces: list[list[str]]) -> list[list[str]]:
+    """A client's base URL and a call's URL as the clients join them (axios ``combineURLs``, httpx ``base_url``):
+    an absolute URL keeps no base; otherwise the two are joined with exactly one ``/``."""
+    if not base:
+        return pieces
+    if pieces and pieces[0][0] == "lit" and _ABSOLUTE.match(pieces[0][1]):
+        return pieces
+    b = [list(p) for p in base]
+    u = [list(p) for p in pieces]
+    if b[-1][0] == "lit":
+        b[-1][1] = b[-1][1].rstrip("/")
+    if u and u[0][0] == "lit":
+        u[0][1] = u[0][1].lstrip("/")
+    b = [p for p in b if p[0] == "dyn" or p[1]]
+    u = [p for p in u if p[0] == "dyn" or p[1]]
+    if not u:
+        return b or [["lit", "/"]]
+    return b + [["lit", "/"]] + u
+
 _ORIGIN_RE = re.compile(r"^(?:[A-Za-z][\w+.-]*:)?//[^/?#]*")
 DYN = "\x00"
+MIXED = "\x00mixed"  # a client segment of text and a computed value
 EXTERNAL = "another host"
 _INTERNAL_SUFFIXES = (".local", ".localhost", ".internal", ".svc", ".lan", ".home", ".test", ".localdomain")
 
@@ -346,7 +480,21 @@ def client_path(pieces: list[list[str]] | None) -> tuple[list[str | None] | None
     if not s.startswith("/"):
         return None, ["a relative URL"]
     s = re.split(r"[?#]", s, maxsplit=1)[0]
-    return [None if DYN in seg else seg for seg in s.split("/") if seg], notes
+    raw = [seg for seg in s.split("/") if seg]
+    segs: list[str | None] = []
+    for k, seg in enumerate(raw):
+        if DYN not in seg:
+            segs.append(seg)
+        elif not seg.replace(DYN, ""):
+            segs.append(None)  # wholly computed: any value, matched by a parameter
+        elif k == len(raw) - 1 and not seg.startswith(DYN) and DYN not in seg.rstrip(DYN):
+            # '/api/users' + qs: a value after the last literal is most often a query string or fragment
+            lit = seg.rstrip(DYN)
+            notes.append(f"the value after `{lit}` taken for a query string or fragment")
+            segs.append(lit)
+        else:
+            segs.append(MIXED)  # text and a value in one segment: matches no literal and no parameter
+    return segs, notes
 
 
 _REST = re.compile(r"\*\w*|\*\*|\{\*\w*\}|\(\.\*\)|\{\w+:path\}|<path:\w+>|\{\w+:\.\*\}|:\w+[*+]|\[\.\.\.\w+\]|"
@@ -383,6 +531,8 @@ def match_segments(route: list[list[str]], client: list[str | None]) -> int | No
         if i >= len(client):
             return lits if i == len(route) - 1 and r[0] == "param" and r[2:] == ["opt"] else None
         c = client[i]
+        if c == MIXED:
+            return None
         if r[0] == "lit":
             if c is None or c != r[1]:
                 return None
@@ -476,6 +626,9 @@ def py_facts(text: str, rel: str) -> dict:
             s = _const_str(node.value)
             if s is not None:
                 consts[node.targets[0].id] = s
+    if consts:  # a name bound more than once (anywhere in the module) has no one value to read
+        stores = Counter(n.id for n in nodes if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
+        consts = {k: v for k, v in consts.items() if stores[k] == 1}
 
     def ctor(call) -> str | None:
         f = call.func
@@ -526,20 +679,22 @@ def py_facts(text: str, rel: str) -> dict:
         out["routes"].append({"fw": fw, "obj": obj, "methods": methods, "path": path, "line": line,
                               "handler": handler})
 
-    def mount_record(parent: str, expr, prefix: str, line: int) -> None:
+    def mount_record(parent: str, expr, prefix: str | None, line: int, replaces: bool = False) -> None:
         d = _dotted(expr)
         if not d:
             return
+        # Flask: a url_prefix given to register_blueprint replaces the blueprint's own (None: not given)
+        extra = {"replaces": True} if replaces else {}
         head, _, tail = d.partition(".")
         if tail:   # users.router: the module users (imported) holds router
             origin = imports.get(head, head)
-            out["mounts"].append({"on": parent, "prefix": prefix, "mods": [origin], "obj": tail, "line": line})
+            out["mounts"].append({"on": parent, "prefix": prefix, "mods": [origin], "obj": tail, "line": line, **extra})
         elif d in objs:
-            out["mounts"].append({"on": parent, "prefix": prefix, "local": True, "obj": d, "line": line})
+            out["mounts"].append({"on": parent, "prefix": prefix, "local": True, "obj": d, "line": line, **extra})
         elif d in imports:  # from .routers.users import router
             origin = imports[d]
             out["mounts"].append({"on": parent, "prefix": prefix, "mods": [origin.rpartition(".")[0] or origin],
-                                  "obj": origin.rpartition(".")[2], "line": line})
+                                  "obj": origin.rpartition(".")[2], "line": line, **extra})
 
     for node in nodes:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -568,7 +723,10 @@ def py_facts(text: str, rel: str) -> dict:
                 if attr == "include_router" and node.args:
                     mount_record(recv or "", node.args[0], _const_str(_kw(node, "prefix")) or "", node.lineno)
                 elif attr == "register_blueprint" and node.args:
-                    mount_record(recv or "", node.args[0], _const_str(_kw(node, "url_prefix")) or "", node.lineno)
+                    given = _kw(node, "url_prefix")
+                    if given is None or _const_str(given) is not None:  # a computed prefix: the mount is unknown
+                        mount_record(recv or "", node.args[0], _const_str(given) if given is not None else None,
+                                     node.lineno, replaces=True)
                 elif attr in ("add_url_rule", "add_api_route", "add_route") or attr in tuple("add_" + v for v in _VERBS):
                     h = _kw(node, "view_func", "endpoint", "handler")
                     if h is None:
@@ -622,7 +780,7 @@ def _py_client(node: ast.Call, recv: str, attr: str, client_vars: dict, consts: 
         return
     base = (client_vars.get(recv) or {}).get("base")
     if base:
-        pieces = base + pieces
+        pieces = join_base(base, pieces)
     first = pieces[0]
     if lib == "client" and not (first[0] == "lit" and (first[1].startswith("/") or first[1].startswith("http"))):
         return  # a name that only looks like a client: its first argument must look like a URL
@@ -709,15 +867,14 @@ _GQL_RESOLVERS = re.compile(r"(?<![\w$.])(Query|Mutation|Subscription)\s*:\s*\{"
 _GQL_DOC = re.compile(r"(?<![\w$])(?:gql|graphql)\s*(?:\(\s*)?`")
 
 
-def _key_items(code: str, open_i: int) -> list[tuple[str, int, str]]:
+def _key_items(tok: _Tokens, open_i: int) -> list[tuple[str, int, str]]:
     """``(key, offset, value)`` of the object literal whose ``{`` is at ``open_i`` (method shorthand: value ``(``)."""
-    close = _close(code, open_i)
+    close = tok.close(open_i)
     if close < 0:
         return []
-    inner_start = open_i + 1
     out = []
-    pos = inner_start
-    for part in _split_top(code[inner_start:close]):
+    pos = open_i + 1
+    for part in tok.split(open_i + 1, close):
         m = re.match(r"\s*(?:async\s+)?(?:(['\"])([^'\"]+)\1|([A-Za-z_$][\w$]*))\s*(:|\()", part)
         if m:
             key = m.group(2) or m.group(3)
@@ -726,6 +883,24 @@ def _key_items(code: str, open_i: int) -> list[tuple[str, int, str]]:
             out.append((key, pos + lead, value))
         pos += len(part) + 1
     return out
+
+
+_JS_DECLARED = re.compile(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)")
+_JS_ASSIGNED = re.compile(r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*(?:[-+*/%]|\?\?|\|\||&&)?=(?![=>])")
+
+
+def _js_consts(code: str, tok: _Tokens) -> dict[str, str]:
+    """Module-level ``const NAME = 'text'`` (or let / var) the file never declares again nor assigns: a name
+    declared in two functions, or reassigned, has no one value to read."""
+    found: dict[str, str] = {}
+    for m in _JS_CONST.finditer(code):
+        if tok.top_level(m.start(1)):
+            found[m.group(1)] = m.group(3)
+    if not found:
+        return {}
+    declared = Counter(m.group(1) for m in _JS_DECLARED.finditer(code))
+    assigned = Counter(m.group(1) for m in _JS_ASSIGNED.finditer(code))
+    return {name: value for name, value in found.items() if declared[name] == 1 and assigned[name] == 1}
 
 
 def _js_handler(arg: str, line: int) -> dict:
@@ -744,15 +919,16 @@ def js_facts(text: str, rel: str) -> dict:
     if not (_JS_HINT.search(text) or next_api):
         return {}
     code = strip_js(text)
+    tok = _Tokens(code)
     starts = _line_starts(code)
     out: dict = defaultdict(list)
-    consts = {m.group(1): m.group(3) for m in _JS_CONST.finditer(code)}
+    consts = _js_consts(code, tok)
     framework = bool(_JS_FRAMEWORK.search(code))
     objs: dict[str, dict] = {}
     for m in _JS_SERVER_CTOR.finditer(code):
         kind = "router" if "Router" in m.group(2) else "app"
         prefix = ""
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if a and a[0] and kind == "router":
             pm = re.search(r"prefix\s*:\s*(['\"])([^'\"]*)\1", a[0][0])
             prefix = pm.group(2) if pm else ""
@@ -787,7 +963,7 @@ def js_facts(text: str, rel: str) -> dict:
         verb = m.group(1)
         if not obj or not server(obj):
             continue
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if not a or len(a[0]) < 2:
             continue
         path = _js_literal(a[0][0])
@@ -799,7 +975,7 @@ def js_facts(text: str, rel: str) -> dict:
         out["routes"].append({"fw": objs.get(obj, {}).get("fw") or "express", "obj": obj, "methods": methods,
                               "path": path, "line": ln(m.start()), "handler": _js_handler(a[0][-1], ln(m.start()))})
     for m, obj in found(_JS_ROUTE_CHAIN, has_server):  # router.route('/x').get(h).post(h)
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if not obj or not server(obj) or not a or not a[0]:
             continue
         path = _js_literal(a[0][0])
@@ -810,7 +986,7 @@ def js_facts(text: str, rel: str) -> dict:
             cm = re.compile(r"\s*\.\s*(get|post|put|patch|delete|all|head|options)\s*\(").match(code, i)
             if not cm:
                 break
-            ca = _args(code, cm.end() - 1)
+            ca = tok.args(cm.end() - 1)
             if not ca:
                 break
             if ca[0]:
@@ -820,7 +996,7 @@ def js_facts(text: str, rel: str) -> dict:
                                       "line": ln(cm.start() + 1), "handler": _js_handler(ca[0][-1], ln(cm.start()))})
             i = ca[1] + 1
     for m, obj in found(_JS_USE, has_server):
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if not a or len(a[0]) < 2 or not obj or not server(obj):
             continue
         prefix = _js_literal(a[0][0])
@@ -842,7 +1018,7 @@ def js_facts(text: str, rel: str) -> dict:
     controller = ""
     for m in _JS_DECOR.finditer(code):
         kind = m.group(1)
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if a is None:
             continue
         arg = _js_literal(a[0][0]) if a[0] else ""
@@ -859,7 +1035,7 @@ def js_facts(text: str, rel: str) -> dict:
                 break
             j = dm.end()
             if code[j:j + 1] == "(":
-                c = _close(code, j)
+                c = tok.close(j)
                 j = c + 1 if c > 0 else j
         mm = _JS_METHOD_DECL.match(code, j + len(code[j:]) - len(code[j:].lstrip()))
         if not mm or arg is None:
@@ -883,12 +1059,12 @@ def js_facts(text: str, rel: str) -> dict:
     # clients
     instances: dict[str, list | None] = {}
     for m in _JS_AXIOS_CREATE.finditer(code):
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         base = None
         if a and a[0]:
             bm = re.search(r"baseURL\s*:\s*", a[0][0])
             if bm:
-                rest = _split_top(a[0][0][bm.end():])[0]
+                rest = _split_top(a[0][0][bm.end():bm.end() + _SMALL])[0]
                 base = js_pieces(rest.strip().rstrip("}").strip(), consts)
             else:
                 base = []
@@ -916,7 +1092,7 @@ def js_facts(text: str, rel: str) -> dict:
         out["clients"].append(rec)
 
     for m, _r in found(_JS_FETCH, "fetch" in code):
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if not a or not a[0]:
             continue
         method = "GET"
@@ -937,7 +1113,7 @@ def js_facts(text: str, rel: str) -> dict:
             lib = "client"
         if lib is None:
             continue
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if not a or not a[0]:
             continue
         if verb == "request":
@@ -945,36 +1121,36 @@ def js_facts(text: str, rel: str) -> dict:
             um = re.search(r"\burl\s*:\s*", obj)
             if not obj.startswith("{") or not um:
                 continue
-            url = _split_top(obj[um.end():])[0].strip().rstrip("}").strip()
+            url = _split_top(obj[um.end():um.end() + _SMALL])[0].strip().rstrip("}").strip()
             mm = re.search(r"\bmethod\s*:\s*(['\"`])(\w+)\1", obj)
             method = mm.group(2).upper() if mm else (None if re.search(r"\bmethod\b", obj) else "GET")
             add_client(lib if lib != "instance?" else "client", method, url, m.start(), recv)
         else:
             add_client(lib if lib != "instance?" else "client", verb.upper(), a[0][0], m.start(), recv)
     for m, _r in found(_JS_SUPERTEST, "request" in code):
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if a and a[0]:
             add_client("supertest", m.group(1).upper(), a[0][0], m.start())
     for m, _r in found(_JS_AXIOS_CALL, "axios" in code):
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if not a or not a[0] or not a[0][0].startswith("{"):
             continue
         obj = a[0][0]
         um = re.search(r"\burl\s*:\s*", obj)
         if not um:
             continue
-        url = _split_top(obj[um.end():])[0].strip().rstrip("}").strip()
+        url = _split_top(obj[um.end():um.end() + _SMALL])[0].strip().rstrip("}").strip()
         mm = re.search(r"\bmethod\s*:\s*(['\"`])(\w+)\1", obj)
         method = mm.group(2).upper() if mm else (None if re.search(r"\bmethod\b", obj) else "GET")
         add_client("axios", method, url, m.start())
     # events
     for m, _r in found(_JS_EMIT, "emit" in code):
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         nm = _js_literal(a[0][0]) if a and a[0] else None
         if nm:
             out["events"].append({"role": "emit", "name": nm, "line": ln(m.start())})
     for m, _r in found(_JS_LISTEN, True):
-        a = _args(code, m.end() - 1)
+        a = tok.args(m.end() - 1)
         if not a or len(a[0]) < 2:
             continue
         nm = _js_literal(a[0][0])
@@ -984,7 +1160,7 @@ def js_facts(text: str, rel: str) -> dict:
     # tRPC
     for m, _r in found(_TRPC_ROUTER, "outer" in code):
         keys = []
-        for key, off, value in _key_items(code, m.end() - 1):
+        for key, off, value in _key_items(tok, m.end() - 1):
             if re.fullmatch(r"[A-Za-z_$][\w$]*", value):
                 keys.append({"key": key, "ref": value, "line": ln(off)})
             elif re.search(r"\.\s*(query|mutation|subscription)\s*\(", value):
@@ -1002,7 +1178,7 @@ def js_facts(text: str, rel: str) -> dict:
     # GraphQL
     if "Query" in code or "Mutation" in code or "Subscription" in code:
         for m in _GQL_RESOLVERS.finditer(code):
-            for key, off, _value in _key_items(code, m.end() - 1):
+            for key, off, _value in _key_items(tok, m.end() - 1):
                 out["gql_resolvers"].append({"type": m.group(1), "field": key, "line": ln(off)})
     for m, _r in found(_GQL_DOC, "gql" in code or "graphql" in code):
         tick = m.end() - 1
@@ -1089,8 +1265,37 @@ _JVM_ANN = re.compile(r"@(RequestMapping|GetMapping|PostMapping|PutMapping|Patch
 _JVM_STR = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 
 
-def _skip_annotations(code: str, i: int) -> int:
+_JVM_CLASS = re.compile(r"(?<![\w.])(?:class|interface|object|record|enum)\b")  # not `Pet.class`
+_JVM_BODY = re.compile(r"[{;(=]|\bfun\b|\b(?:class|interface|object)\b")
+
+
+def _jvm_class_bodies(tok: _Tokens) -> list[tuple[int, int, int]]:
+    """``(keyword offset, body start, body end)`` of every class, interface, object, record and enum (Java or
+    Kotlin); a declaration without a body is left out."""
+    code, n, out = tok.code, len(tok.code), []
+    for m in _JVM_CLASS.finditer(code):
+        i = m.end()
+        while True:
+            b = _JVM_BODY.search(code, i)
+            if not b:
+                break
+            c = code[b.start()]
+            if c == "(":  # a Kotlin primary constructor or a super class call
+                e = tok.close(b.start())
+                if e < 0:
+                    break
+                i = e + 1
+                continue
+            if c == "{":
+                e = tok.close(b.start())
+                out.append((m.start(), b.start(), n if e < 0 else e))
+            break
+    return out
+
+
+def _skip_annotations(tok: _Tokens, i: int) -> int:
     """The index after the whitespace, annotations (with their arguments) and modifiers from ``i``."""
+    code = tok.code
     n = len(code)
     while i < n:
         m = re.compile(r"\s*@[\w.]+\s*").match(code, i)
@@ -1103,7 +1308,7 @@ def _skip_annotations(code: str, i: int) -> int:
             continue
         i = m.end()
         if code[i:i + 1] == "(":
-            c = _close(code, i)
+            c = tok.close(i)
             if c < 0:
                 return n
             i = c + 1
@@ -1117,32 +1322,42 @@ def jvm_facts(text: str, rel: str) -> dict:
     from verinoda.jvm_mixins import strip_comments
 
     code = strip_comments(text)
+    tok = _Tokens(code, js=False)
     starts = _line_starts(code)
-    prefix = ""
+    bodies = _jvm_class_bodies(tok)
+    class_prefix: dict[int, str] = {}  # class keyword offset -> its class-level @RequestMapping / @Path
+
+    def prefix_at(pos: int) -> str:
+        """The prefix of the innermost class whose body holds ``pos`` (none: "")."""
+        inner = max((b for b in bodies if b[1] < pos < b[2]), key=lambda b: b[1], default=None)
+        return class_prefix.get(inner[0], "") if inner else ""
+
     methods: dict[int, dict] = {}  # declaration offset -> what its annotations say
     for m in _JVM_ANN.finditer(code):
         name, args, after = m.group(1), "", m.end()
         j = after + len(code[after:after + 200]) - len(code[after:after + 200].lstrip())
         if code[j:j + 1] == "(":
-            close = _close(code, j)
+            close = tok.close(j)
             if close < 0:
                 continue
             args, after = code[j + 1:close], close + 1
-        k = _skip_annotations(code, after)
+        k = _skip_annotations(tok, after)
         hm = re.compile(r"[^({;=]*").match(code, k)
         head = hm.group(0)
         paths = _JVM_STR.findall(re.sub(r"\b(?:produces|consumes|params|headers|name)\s*=\s*(?:\{[^}]*\}|\"[^\"]*\")",
                                         "", args))
-        if re.search(r"\b(?:class|interface|object|record|enum)\b", head):
+        cm = _JVM_CLASS.search(head)
+        if cm:
             if name in ("RequestMapping", "Path"):
-                prefix = paths[0] if paths else ""
+                class_prefix[k + cm.start()] = paths[0] if paths else ""
             continue
         dm = re.search(r"([A-Za-z_$][\w$]*)\s*$", head)
         if not dm or code[hm.end():hm.end() + 1] != "(":
             continue
         pos = k + dm.start(1)
         rec = methods.setdefault(pos, {"paths": None, "verbs": set(), "line": _line_of(starts, m.start()),
-                                       "decl": _line_of(starts, pos), "prefix": prefix, "fw": "spring", "any": False})
+                                       "decl": _line_of(starts, pos), "prefix": prefix_at(pos), "fw": "spring",
+                                       "any": False})
         if name.endswith("Mapping"):
             rec["paths"] = (rec["paths"] or []) + (paths or [""])
             if name == "RequestMapping":
@@ -1303,7 +1518,7 @@ class _Linker:
         for f, fx in self.facts.items():
             for mt in fx.get("mounts") or []:
                 for tf, tobj in self._mount_targets(f, mt):
-                    mounts[(tf, tobj)].append((f, mt.get("on") or "", mt.get("prefix") or ""))
+                    mounts[(tf, tobj)].append((f, mt.get("on") or "", mt.get("prefix"), bool(mt.get("replaces"))))
 
         def prefixes(f: str, obj: str | None, seen: frozenset) -> list[tuple[str, bool]]:
             if obj is None:
@@ -1316,9 +1531,12 @@ class _Linker:
                 kind = info.get("kind") or ("router" if re.search(r"(?i)router|blueprint|^bp$|_bp$", obj) else "app")
                 return [(own, kind != "router")]
             out = []
-            for pf, pobj, mp in ups:
+            for pf, pobj, mp, replaces in ups:
                 for pp, known in prefixes(pf, pobj or None, seen | {(f, obj)}):
-                    out.append((join_path(pp, mp, own), known))
+                    # Flask's register_blueprint(url_prefix=) replaces the blueprint's own prefix; FastAPI's
+                    # include_router(prefix=) and Express's app.use('/p', router) come before it
+                    out.append((join_path(pp, mp) if replaces and mp is not None else join_path(pp, mp or "", own),
+                                known))
             return out
 
         # Django: a URLconf's prefix is the chain of includes that name it
@@ -1406,7 +1624,7 @@ class _Linker:
                 pieces = c["pieces"]
                 base = self._client_base(f, fx, c, instances)
                 if base:
-                    pieces = base + pieces
+                    pieces = join_base(base, pieces)
                 segs, notes = client_path(pieces)
                 at = f"{f}:{c['line']}"
                 if segs is None:
@@ -1650,15 +1868,19 @@ def ambiguous_on_way(g, reach: set[str], target: str, D) -> list[dict]:
     import networkx as nx
 
     for a in g.__dict__.get("_cross_ambiguous") or []:
-        if a.get("caller") not in reach:
+        caller = a.get("caller")
+        cands = [c for c in a.get("candidates") or [] if isinstance(c, dict)]
+        if not isinstance(caller, str) or caller not in reach:
             continue
         hits = []
-        for c in a.get("candidates") or []:
+        for c in cands:
             h = c.get("handler")
+            if not isinstance(h, str):
+                continue
             if h == target or (h in D and target in D and nx.has_path(D, h, target)):
                 hits.append(c)
         if hits:
-            out.append({k: v for k, v in a.items() if k != "candidates"} | {"candidates": a["candidates"]})
+            out.append({k: v for k, v in a.items() if k != "candidates"} | {"candidates": cands})
     return out[:5]
 
 

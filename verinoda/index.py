@@ -2530,10 +2530,15 @@ def _cross_service(g: Graph, old: dict | None = None) -> dict:
 
 
 def _apply_cross_service(g: Graph, block: dict | None) -> None:
-    block = block or {}
-    _apply_edges(g, [(u, v, d) for u, v, d in block.get("edges") or []])
-    g.__dict__["_cross_ambiguous"] = block.get("ambiguous") or []
-    g.__dict__["_has_cross_service"] = bool(block.get("edges"))  # trace skips its edge scan when there are none
+    block = block if isinstance(block, dict) else {}
+    raw = block.get("edges") if isinstance(block.get("edges"), list) else []
+    # a damaged sidecar loses its broken entries, never the load
+    edges = [(e[0], e[1], e[2]) for e in raw if isinstance(e, (list, tuple)) and len(e) == 3
+             and isinstance(e[0], str) and isinstance(e[1], str) and isinstance(e[2], dict)]
+    _apply_edges(g, edges)
+    amb = block.get("ambiguous") if isinstance(block.get("ambiguous"), list) else []
+    g.__dict__["_cross_ambiguous"] = [a for a in amb if isinstance(a, dict)]
+    g.__dict__["_has_cross_service"] = bool(edges)  # trace skips its edge scan when there are none
 
 
 _SIDECAR_FACTS_SINCE = 2   # the per-file facts have this shape since v2 (v3 changed only how edges are made)

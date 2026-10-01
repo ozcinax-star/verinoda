@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
@@ -533,3 +534,253 @@ def test_strip_js_keeps_strings_templates_and_regexes():
     out = cross_service.strip_js(src)
     assert "'x // y'" in out and "gone" not in out and "`http://h/${c /* in */}`" in out
     assert "/\\/\\//" in out and out.count("\n") == src.count("\n")
+
+
+# -- review round ---------------------------------------------------------------------------------------
+
+REVIEW = {
+    "py/srv.py": """from flask import Flask, Blueprint
+
+app = Flask(__name__)
+bp = Blueprint("x", __name__, url_prefix="/x")
+yp = Blueprint("y", __name__, url_prefix="/y")
+
+
+@bp.route("/thing")
+def thing():
+    return "t"
+
+
+@yp.route("/other")
+def other():
+    return "o"
+
+
+app.register_blueprint(bp, url_prefix="/api")
+app.register_blueprint(yp)
+""",
+    "py/caller.py": """import requests
+
+
+def call_thing():
+    return requests.get("http://localhost:5000/api/thing")
+
+
+def call_wrong():
+    return requests.get("http://localhost:5000/api/x/thing")
+
+
+def call_other():
+    return requests.get("http://localhost:5000/y/other")
+""",
+    "py/client.py": """import httpx
+
+client = httpx.Client(base_url="http://localhost:8000")
+
+
+def get_root_things():
+    return client.get("things")
+""",
+    "server/index.js": """const express = require('express');
+const app = express();
+function home(req, res) { res.send('h'); }
+function users(req, res) { res.send('u'); }
+function posts(req, res) { res.send('p'); }
+function userPosts(req, res) { res.send('up'); }
+app.get('/', home);
+app.get('/api/users', users);
+app.get('/api/posts', posts);
+app.get('/api/:id/posts', userPosts);
+module.exports = app;
+""",
+    "web/api.js": """import axios from 'axios';
+const api = axios.create({ baseURL: 'http://localhost:3000' });
+const rel = axios.create({ baseURL: '/api/' });
+const USERS = '/api/users';
+let MOVING = '/api/posts';
+MOVING = '/elsewhere';
+
+export function loadA() {
+  const url = '/api/users';
+  return fetch(url);
+}
+export function loadB() {
+  const url = '/api/posts';
+  return fetch(url);
+}
+export function topLevel() {
+  return fetch(USERS);
+}
+export function moved() {
+  return fetch(MOVING);
+}
+export function listThings() {
+  return api.get('things');
+}
+export function relUsers() {
+  return rel.get('users');
+}
+export function absolute() {
+  return rel.get('http://localhost:3000/api/posts');
+}
+export function search(qs) {
+  return fetch('/api/users' + qs);
+}
+export function mixed(id) {
+  return fetch(`/api/u${id}/posts`);
+}
+""",
+    "srv/Controllers.kt": """package x
+
+@RestController
+@RequestMapping("/a")
+class AController {
+    @GetMapping("/list")
+    fun listA(): String = "a"
+}
+
+@RestController
+class BController {
+    @GetMapping("/items")
+    fun listB(): String = "b"
+}
+""",
+    "srv/Outer.java": """package x;
+
+@RestController
+@RequestMapping("/outer")
+public class Outer {
+    @GetMapping("/o")
+    public String o() { return ""; }
+
+    @RestController
+    @RequestMapping("/inner")
+    public static class Inner {
+        @GetMapping("/i")
+        public String i() { return ""; }
+    }
+
+    @GetMapping("/after")
+    public String after() { return ""; }
+}
+""",
+    "web/c.ts": """export function loadItems() { return fetch('/items'); }
+export function loadAfter() { return fetch('/outer/after'); }
+export function loadInner() { return fetch('/inner/i'); }
+""",
+}
+
+
+@pytest.fixture(scope="module")
+def review(tmp_path_factory) -> Path:
+    return _make(tmp_path_factory, "xs_review", REVIEW)
+
+
+def test_review_round_edges(review):
+    edges = set(_cross(index.load(review)))
+    assert edges == {
+        ("call_thing", "thing"),       # register_blueprint(url_prefix="/api") replaces the blueprint's "/x"
+        ("call_other", "other"),       # no url_prefix given: the blueprint's own "/y"
+        ("topLevel", "users"),         # a module-level constant
+        ("relUsers", "users"),         # baseURL '/api/' + 'users': one slash
+        ("absolute", "posts"),         # an absolute URL keeps no base
+        ("search", "users"),           # '/api/users' + qs: the value is taken for a query string
+        ("loadItems", "listB"),        # BController has no class prefix
+        ("loadAfter", "after"),        # after the nested class, Outer's prefix again
+        ("loadInner", "i"),            # the nested class's own prefix
+    }, sorted(edges)
+
+
+def test_review_round_report(review, capsys):
+    rep = _report(review, capsys)
+    unmatched = {u["at"]: u for u in rep["unmatched"]}
+    assert "py/caller.py:9" in unmatched                      # /api/x/thing is not served
+    assert unmatched["py/client.py:7"]["url"] == "http://localhost:8000/things"
+    assert unmatched["web/api.js:23"]["url"] == "http://localhost:3000/things"   # not '/' on 'localhost:3000things'
+    assert "web/api.js:35" in unmatched                       # `/api/u${id}/posts` does not fit /api/:id/posts
+    paths = {r["path"] for r in rep["route_table"]}
+    assert {"/api/thing", "/y/other", "/a/list", "/items", "/outer/o", "/inner/i", "/outer/after"} <= paths
+    assert "/api/x/thing" not in paths and "/a/items" not in paths and "/inner/after" not in paths
+    assert rep["unresolved_urls"] == 3                        # two function-local `url`s, a reassigned constant
+    search = next(e for e in rep["edges"] if e["from"] == "search()")
+    assert search["notes"] == ["the value after `users` taken for a query string or fragment"]
+
+
+@pytest.mark.parametrize("base, url, joined", [
+    ("http://localhost:3000", "things", "http://localhost:3000/things"),
+    ("http://localhost:3000/", "/things", "http://localhost:3000/things"),
+    ("/api", "users", "/api/users"),
+    ("/api/", "/users", "/api/users"),
+    ("/api", "https://h/x", "https://h/x"),
+    ("/api", "//cdn/x", "//cdn/x"),
+    ("/api", "", "/api"),
+])
+def test_join_base(base, url, joined):
+    pieces = cross_service.join_base([["lit", base]], [["lit", url]])
+    assert "".join(t for _k, t in pieces) == joined
+
+
+@pytest.mark.parametrize("expr, segs", [
+    ("'/api/users' + qs", ["api", "users"]),
+    ("`/api/u${id}/posts`", ["api", cross_service.MIXED, "posts"]),
+    ("`/api/${a}${b}`", ["api", None]),
+    ("`/files/${id}.json`", ["files", cross_service.MIXED]),
+])
+def test_mixed_segments(expr, segs):
+    assert cross_service.client_path(cross_service.js_pieces(expr, {}))[0] == segs
+    route = cross_service.route_segments("/api/:id/posts")
+    assert cross_service.match_segments(route, ["api", cross_service.MIXED, "posts"]) is None
+
+
+def test_constants_are_module_level_and_assigned_once():
+    code = cross_service.strip_js("const A = '/a';\nfunction f() { const B = '/b'; }\nfunction g() { const B = '/c'; }\n"
+                                  "let C = '/c'; C = '/d';\nvar D = '/d';\nfunction h() { var D = '/e'; }\n")
+    assert cross_service._js_consts(code, cross_service._Tokens(code)) == {"A": "/a"}
+    fx = cross_service.file_facts('import requests\nU = "/u"\nV = "/v"\nV = "/w"\n\n\ndef f():\n'
+                                  '    return requests.get(U), requests.get(V)\n', "c.py")
+    assert [c["url"] for c in fx["clients"]] == ["/u", "{V}"]
+
+
+def test_jvm_prefixes_are_per_class():
+    kt = REVIEW["srv/Controllers.kt"]
+    java = REVIEW["srv/Outer.java"]
+    assert {r["path"] for r in cross_service.file_facts(kt, "C.kt")["routes"]} == {"/a/list", "/items"}
+    assert {r["path"] for r in cross_service.file_facts(java, "Outer.java")["routes"]} == {
+        "/outer/o", "/inner/i", "/outer/after"}
+
+
+ODD_JS = {
+    "regex quotes": lambda: "".join(f"x = api.get('/a/{i}', s.replace(/'/g, ''));\n" for i in range(3000)),
+    "unterminated templates": lambda: "api.get(`/x\n" * 6000,
+    "unclosed objects": lambda: "api.get('/x', {\n" * 6000,
+    "unclosed start": lambda: "api.get('/x', (\n" + "".join(f"function f{i}() {{ return api.get('/b/{i}'); }}\n"
+                                                           for i in range(3000)),
+}
+
+
+@pytest.mark.parametrize("name", sorted(ODD_JS))
+def test_odd_javascript_is_linear(name):
+    # each took minutes before the bracket table (a scan from every call to the end of the file)
+    text = ODD_JS[name]()
+    t = time.perf_counter()
+    cross_service.file_facts(text, "odd.js")
+    assert time.perf_counter() - t < 1.0, name
+
+
+def test_tokens_match_brackets_past_strings_and_regexes():
+    code = "f(a, '(', /[)]/g, `)${x(1)}`, {b: [1, 2]})\ng(\n"
+    tok = cross_service._Tokens(code)
+    assert tok.close(1) == code.index("\n") - 1 and tok.close(code.index("g(") + 1) == -1
+    args, _close = tok.args(1)
+    assert args == ["a", "'('", "/[)]/g", "`)${x(1)}`", "{b: [1, 2]}"]
+
+
+def test_a_damaged_sidecar_block_is_skipped(web):
+    g = index.load(web, augment=False)
+    good = next(iter(json.loads(index.receiver_calls_path(web).read_text(encoding="utf-8"))
+                     ["cross_service"]["edges"]))
+    index._apply_cross_service(g, {"edges": [["a"], 5, ["x", "y", {}], None, good],
+                                   "ambiguous": ["bad", {"caller": ["x"], "candidates": "no"}]})
+    assert retrieval.trace(g, "loadItem", "get_item")["status"] == "no directed path"
+    assert retrieval.trace(g, good[0], good[1])["status"] == "found"
+    index._apply_cross_service(g, ["not", "a", "block"])
