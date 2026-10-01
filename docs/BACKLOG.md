@@ -160,7 +160,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 17.3 | **Mixin conflicts across mods** | Several mods injecting into the same method; the mod behind a failed injection | ModLens, MixinConflictHelper | conflicts listed with both Mixins |
 | 17.4 | **Mixin debug export as evidence** | `.mixin.out` classes and audit reports read as what a Mixin really changed | SpongePowered Mixin | a Mixin claim cites the exported class |
 | 17.5 | **Command syntax and JSON schemas per version** | Commands, resource locations, NBT paths, loot tables and predicates checked against vanilla-mcdoc | Spyglass, Datapack Helper Plus | a malformed command is reported with its line |
-| 17.7 | **Crash diagnosis rules and suspect scoring** | Known crash patterns (memory, watchdog, missing dependency, Mixin apply failure, wrong Java) and suspect mods scored from their frames | mclo.gs Codex, mc-crash-doctor, NotEnoughCrashes | `trace-log` names the rule and the suspect with its score |
 | 17.8 | **Shaderpack lint and include graph** | GLSL checked with Iris and OptiFine macros; `#include` edges | mcshader-lsp | `shader --check` reports a GLSL error with its line |
 
 ## 18 - Flow analysis
