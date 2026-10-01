@@ -23,14 +23,15 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
-import subprocess
+import re
 from pathlib import Path
 
 AGENTS = ("claude", "codex", "cursor")
 SCOPES = ("project", "user")
 TIMEOUT = 15
 OURS_TOOLS = {"grep_context", "read_context"}
+# the command hook_command writes: a verinoda program, then exactly `tool-hook --agent NAME`
+OURS_COMMAND = re.compile(r"verinoda\S*\s+tool-hook\s+--agent\s+(?:claude|codex|cursor)\s*$", re.I)
 
 
 def _home(home: Path | None) -> Path:
@@ -50,18 +51,32 @@ def config_path(agent: str, scope: str, project_dir: Path, home: Path | None = N
     raise ValueError(f"unknown agent {agent!r} (one of {', '.join(AGENTS)})")
 
 
+def _word(w: str) -> str:
+    """One word of the command, written so that bash (Git Bash runs Claude Code's hooks on Windows), cmd and
+    PowerShell all read it: forward slashes, quoted only when it has to be."""
+    w = w.replace("\\", "/")
+    return w if re.fullmatch(r"[\w./:@+-]+", w) else '"' + w.replace('"', '\\"') + '"'
+
+
 def hook_command(agent: str, scope: str, launcher: dict | None = None) -> tuple[str, list[str]]:
-    """``(command line, warnings)`` of the command hook. A project file is shared: it names ``verinoda`` when the
-    one on PATH is this build, else this machine's interpreter (said in the warnings)."""
+    """``(command line, warnings)`` of the command hook: ``verinoda tool-hook --agent NAME`` when the
+    ``verinoda`` on PATH is this build, else this machine's program (said in the warnings for a project file,
+    which is shared)."""
     from verinoda.agents.installer import resolve_launcher
 
     launcher = launcher or resolve_launcher()
-    argv = list(launcher["argv"]) + ["tool-hook", "--agent", agent]
     warnings = []
-    if scope == "project" and launcher.get("how") != "path":
-        warnings.append("the hook names this machine's interpreter (" + str(launcher["argv"][0]) + "): the `verinoda` "
-                        "on PATH is not this build, so another machine needs `verinoda agent-hooks install` again")
-    line = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
+    if launcher.get("how") == "path":
+        argv = ["verinoda"]
+    else:
+        argv = list(launcher["argv"])
+        if scope == "project":
+            warnings.append(f"the hook names this machine's interpreter ({argv[0]}): the `verinoda` on PATH is not "
+                            "this build, so another machine needs `verinoda agent-hooks install` again")
+    line = " ".join(_word(w) for w in [*argv, "tool-hook", "--agent", agent])
+    if line.startswith('"'):
+        warnings.append("the program's path has a space: a hook that runs through PowerShell cannot start a quoted "
+                        "path (bash and cmd can)")
     return line, warnings
 
 
@@ -75,7 +90,7 @@ def entries(agent: str, scope: str, command: str) -> tuple[str, list[dict]]:
         return "PostToolUse", tpl["hooks"]["PostToolUse"]
     hook = {"type": "command", "command": command, "timeout": TIMEOUT}
     if agent == "claude":
-        return "PostToolUse", [{"matcher": "Grep|Bash|Read|Edit|MultiEdit|Write", "hooks": [hook]}]
+        return "PostToolUse", [{"matcher": "Grep|Bash|PowerShell|Read|Edit|MultiEdit|Write", "hooks": [hook]}]
     if agent == "codex":
         return "PostToolUse", [{"matcher": "^Bash$", "hooks": [hook]}]
     return "postToolUse", [{"command": command, "matcher": "Grep|Shell|Read|Write", "timeout": TIMEOUT}]
@@ -87,8 +102,7 @@ def _ours_hook(h) -> bool:
     if h.get("type") == "mcp_tool":
         inp = h.get("input") if isinstance(h.get("input"), dict) else {}
         return h.get("server") == "verinoda" and inp.get("name") in OURS_TOOLS
-    cmd = str(h.get("command") or "").lower()
-    return "tool-hook" in cmd and "verinoda" in cmd
+    return bool(OURS_COMMAND.search(str(h.get("command") or "")))
 
 
 def _strip(items: list) -> tuple[list, int]:
@@ -114,13 +128,16 @@ def _read(path: Path) -> tuple[dict | None, str, str | None]:
     if not path.exists():
         return {}, "", None
     try:
-        raw = path.read_bytes().decode("utf-8-sig")
+        data_bytes = path.read_bytes()
+        raw = data_bytes.decode("utf-8-sig")
+        if data_bytes.startswith(b"\xef\xbb\xbf"):
+            raw = "\ufeff" + raw   # kept on write
     except (OSError, UnicodeDecodeError) as exc:
         return None, "", f"{path} cannot be read ({exc})"
     if not raw.strip():
         return {}, raw, None
     try:
-        data = json.loads(raw)
+        data = json.loads(raw.lstrip("\ufeff"))
     except ValueError as exc:
         return None, raw, f"{path} is not valid JSON ({exc}); not changed"
     if not isinstance(data, dict):
@@ -132,8 +149,11 @@ def _read(path: Path) -> tuple[dict | None, str, str | None]:
 
 
 def _dump(data: dict, raw: str) -> str:
-    indent = 2
+    indent: int | str = 2
     for line in raw.splitlines()[1:]:
+        if line.startswith("\t"):
+            indent = "\t"
+            break
         lead = len(line) - len(line.lstrip(" "))
         if lead and line.strip():
             indent = lead
@@ -190,8 +210,8 @@ def _one(op: str, agent: str, scope: str, project_dir: Path, home, dry_run: bool
             if not dry_run:
                 path.unlink()
             return {**res, "result": "removed file", "hooks": found}
-    text = _dump(out, raw)
-    if raw and json.loads(raw) == out:
+    text = ("\ufeff" if raw.startswith("\ufeff") else "") + _dump(out, raw.lstrip("\ufeff"))
+    if raw.strip("\ufeff \t\r\n") and json.loads(raw.lstrip("\ufeff")) == out:
         return {**res, "result": "unchanged"}
     result = ("removed" if op == "uninstall" else "updated" if path.exists() else "created")
     if not dry_run:

@@ -34,6 +34,8 @@ SKIP = {"def", "class", "function", "return", "import", "from", "self", "this", 
         "null", "string", "self."}
 CONTEXT_CHARS = 450   # every search that names a known symbol pays it: about 110 tokens at most
 CALLERS, CALLS = 3, 4
+# regex escapes (\bname\b, \w+) and shell variables ($NAME, ${NAME}) are no symbol names
+_NOT_NAMES = re.compile(r"\\[bBwWsSdDAzZ<>]|\$\{?[A-Za-z_]\w*\}?")
 WORDS_TRIED = 4       # the longest words of a pattern looked up, at most
 WORDS_SAID = 2        # symbols described, at most
 MEMO = "hook_memo.sqlite"
@@ -42,22 +44,38 @@ AGENTS = ("claude", "codex", "cursor")
 SEARCH_TOOLS = {"grep"}                                  # tool names, lower case
 SHELL_TOOLS = {"bash", "shell", "run_shell_command", "powershell"}
 FILE_TOOLS = {"read", "edit", "multiedit", "write"}
-SEARCH_PROGRAMS = {"grep", "egrep", "fgrep", "rg", "ag", "ack", "findstr", "select-string", "sls"}
-# options of the search programs that take a value (the value is not the pattern)
-VALUE_OPTS = {"-A", "-B", "-C", "-m", "-g", "-t", "-f", "-d", "-D", "-j", "-M", "--glob", "--type",
-              "--type-not", "--max-count", "--context", "--after-context", "--before-context", "--file",
-              "--include", "--exclude", "--exclude-dir", "--max-depth", "--threads", "--color", "--colors",
-              "--sort", "--sortr", "--encoding", "--replace", "--max-columns", "--iglob", "--pre"}
-PS_VALUE_OPTS = {"-path", "-literalpath", "-encoding", "-context", "-include", "-exclude"}   # Select-String
+# the options of each search program that take a value (the value is not the pattern), and those that give the
+# pattern itself; a pattern read from a file (-f) is not seen, so such a command gives none
+_COMMON = {"-A", "-B", "-C", "-m", "--context", "--after-context", "--before-context", "--max-count", "--color",
+           "--colors"}
+VALUE_OPTS = {
+    "grep": _COMMON | {"-d", "-D", "--include", "--exclude", "--exclude-dir", "--exclude-from", "--label",
+                       "--binary-files", "--devices", "--directories"},
+    "rg": _COMMON | {"-g", "-t", "-T", "-r", "-E", "-M", "-j", "--glob", "--iglob", "--type", "--type-not",
+                     "--type-add", "--type-clear", "--replace", "--encoding", "--max-columns", "--threads", "--sort",
+                     "--sortr", "--pre", "--pre-glob", "--max-depth", "--max-filesize", "--ignore-file",
+                     "--path-separator", "--context-separator", "--field-match-separator", "--engine"},
+    "ag": _COMMON | {"-G", "-g", "--file-search-regex", "--ignore", "--ignore-dir", "--depth", "--pager"},
+    "ack": _COMMON | {"--type", "--ignore-dir", "--ignore-file", "--match", "--output", "--pager"},
+}
 PATTERN_OPTS = {"-e", "--regexp"}
+FILE_PATTERN_OPTS = {"-f", "--file"}
+PS_VALUE_OPTS = {"-path", "-literalpath", "-encoding", "-context", "-include", "-exclude"}   # Select-String
+FAMILY = {"grep": "grep", "egrep": "grep", "fgrep": "grep", "rg": "rg", "ag": "ag", "ack": "ack",
+          "findstr": "findstr", "select-string": "ps", "sls": "ps"}
+WRAPPERS = {"sudo", "command", "env", "xargs", "nice", "nohup", "time", "exec"}
+WRAPPER_VALUE_OPTS = {"-u", "-g", "-C", "-p", "-U", "-h", "-r", "-t", "-n", "-I", "-L", "-P", "-S"}
+SEPARATORS = "|&;\n()"
 
 
 # -- what the tool call searched for, or read ------------------------------------------------------
 
 def _segments(command: str) -> list[list[str]]:
-    """The simple commands of a shell line (split at pipes, ``&&``, ``||`` and ``;``), each as its words."""
+    """The simple commands of a shell line (split at pipes, ``&&``, ``||``, ``;``, newlines and parentheses
+    outside quotes), each as its words."""
     try:
-        lex = shlex.shlex(command, posix=True, punctuation_chars="|&;")
+        lex = shlex.shlex(command, posix=True, punctuation_chars=SEPARATORS)
+        lex.whitespace = " \t\r"
         lex.whitespace_split = True
         lex.commenters = ""
         toks = list(lex)
@@ -65,7 +83,7 @@ def _segments(command: str) -> list[list[str]]:
         toks = command.split()
     out: list[list[str]] = [[]]
     for tok in toks:
-        if tok and set(tok) <= set("|&;"):
+        if tok and set(tok) <= set(SEPARATORS):
             out.append([])
         else:
             out[-1].append(tok)
@@ -78,46 +96,111 @@ def _program(word: str) -> str:
     return name[:-4] if name.endswith(".exe") else name
 
 
+def _unwrap(words: list[str]) -> list[str]:
+    """The search command inside ``VAR=x``, ``sudo``/``env``/``timeout N``/``nice`` wrappers and ``git [-C dir]
+    grep``."""
+    while words:
+        w = words[0]
+        if "=" in w and not w.startswith("-"):   # VAR=value prefixes
+            words = words[1:]
+        elif _program(w) in WRAPPERS:
+            words = words[1:]
+            while words and words[0].startswith("-"):
+                words = words[2:] if words[0] in WRAPPER_VALUE_OPTS else words[1:]
+        elif _program(w) == "timeout":
+            words = words[1:]
+            while words and words[0].startswith("-"):
+                words = words[1:]
+            words = words[1:]   # the duration
+        else:
+            break
+    if words and _program(words[0]) == "git":
+        i = 1
+        while i < len(words) and words[i].startswith("-"):
+            i += 2 if words[i] in ("-C", "-c", "--git-dir", "--work-tree") else 1
+        if i < len(words) and words[i] == "grep":
+            return ["grep", *words[i + 1:]]
+    return words
+
+
+def _one(family: str, args: list[str]) -> list[str]:
+    """The patterns of one search command's arguments (none when they come from a file)."""
+    given: list[str] = []
+    positional: list[str] = []
+    values = VALUE_OPTS.get(family, set())
+    from_file = False
+    i = 0
+    while i < len(args):
+        w = args[i]
+        low = w.lower()
+        nxt = args[i + 1] if i + 1 < len(args) else None
+        if w == "--":
+            positional += args[i + 1:]
+            break
+        if family == "findstr":
+            if low.startswith("/c:"):
+                given.append(w[3:])
+            elif low.startswith("/g:"):
+                from_file = True
+            elif not w.startswith("/"):
+                positional.append(w)
+        elif family == "ps":
+            if low == "-pattern" and nxt is not None:
+                given.append(nxt)
+                i += 1
+            elif low in PS_VALUE_OPTS:
+                i += 1
+            elif not w.startswith("-"):
+                positional.append(w)
+        elif w in PATTERN_OPTS and nxt is not None:
+            given.append(nxt)
+            i += 1
+        elif w.startswith("--regexp="):
+            given.append(w.split("=", 1)[1])
+        elif w in FILE_PATTERN_OPTS or w.startswith("--file="):
+            from_file = True
+            i += 1 if w in FILE_PATTERN_OPTS else 0
+        elif w in values:
+            i += 1
+        elif w.startswith("--") and "=" in w:
+            pass   # --glob=*.py, --max-count=5
+        elif w.startswith("-") and not w.startswith("--") and len(w) > 2:
+            # bundled short options: -rn, -ie PATTERN, -A3, -e<pattern>
+            for k, ch in enumerate(w[1:], 1):
+                opt = "-" + ch
+                if opt in PATTERN_OPTS:
+                    rest = w[k + 1:]
+                    if rest:
+                        given.append(rest)
+                    elif nxt is not None:
+                        given.append(nxt)
+                        i += 1
+                    break
+                if opt in FILE_PATTERN_OPTS:
+                    from_file = True
+                    if not w[k + 1:]:
+                        i += 1
+                    break
+                if opt in values:
+                    if not w[k + 1:]:
+                        i += 1   # the value is the next word; otherwise it was attached (-A3)
+                    break
+        elif not w.startswith("-"):
+            positional.append(w)
+        i += 1
+    if given:
+        return given
+    return [] if from_file else positional[:1]
+
+
 def shell_patterns(command: str) -> list[str]:
     """The patterns a shell command searches for with a known search program (``git grep`` included)."""
     pats: list[str] = []
     for seg in _segments(command or ""):
-        words = list(seg)
-        while words and "=" in words[0] and not words[0].startswith("-"):   # VAR=value prefixes
-            words.pop(0)
-        if words and _program(words[0]) in ("sudo", "command", "env", "xargs"):
-            words.pop(0)
-        if len(words) >= 2 and _program(words[0]) == "git" and words[1] == "grep":
-            words = words[1:]
-        if not words or _program(words[0]) not in SEARCH_PROGRAMS:
+        words = _unwrap(list(seg))
+        if not words or _program(words[0]) not in FAMILY:
             continue
-        given: list[str] = []
-        positional: list[str] = []
-        i = 1
-        while i < len(words):
-            w = words[i]
-            if w == "--":
-                positional += words[i + 1:]
-                break
-            if w in PATTERN_OPTS or w.lower() == "-pattern":
-                if i + 1 < len(words):
-                    given.append(words[i + 1])
-                i += 2
-                continue
-            if w.startswith("--regexp="):
-                given.append(w.split("=", 1)[1])
-            elif w.startswith("-e") and len(w) > 2 and not w.startswith("--"):
-                given.append(w[2:])
-            elif w in VALUE_OPTS or w.lower() in PS_VALUE_OPTS:
-                i += 2
-                continue
-            elif w.startswith("/") and _program(words[0]) == "findstr" and len(w) > 1:
-                if w[1:3].lower() == "c:":
-                    given.append(w[3:])
-            elif not w.startswith("-"):
-                positional.append(w)
-            i += 1
-        pats += given or positional[:1]
+        pats += _one(FAMILY[_program(words[0])], words[1:])
     return [p for p in pats if p]
 
 
@@ -150,7 +233,8 @@ def event_kind(event: dict) -> tuple[str, list[str]] | None:
 
 def words_of(patterns: list[str]) -> list[str]:
     """The words of the patterns that may name a symbol, longest first (at most :data:`WORDS_TRIED`)."""
-    ws = {w for p in patterns for w in WORD.findall(p or "") if len(w) >= 4 and w.lower() not in SKIP}
+    ws = {w for p in patterns for w in WORD.findall(_NOT_NAMES.sub(" ", p or ""))
+          if len(w) >= 4 and w.lower() not in SKIP}
     return sorted(ws, key=lambda w: (-len(w), w))[:WORDS_TRIED]
 
 
@@ -197,9 +281,19 @@ def grep_text(g, patterns: list[str]) -> str:
 
 # -- the memo (command hooks) ---------------------------------------------------------------------
 
-def _stamp(gp: Path) -> str:
-    st = gp.stat()
-    return f"{st.st_size}:{st.st_mtime_ns}"
+def _stamp(repo: Path) -> str:
+    """The graph file and the receiver-call edges :func:`verinoda.index.load` adds (an update can rewrite those
+    and keep graph.json): any change to either clears the memo."""
+    from verinoda.paths import graph_path, receiver_calls_path
+
+    out = []
+    for p in (graph_path(repo), receiver_calls_path(repo)):
+        try:
+            st = p.stat()
+            out.append(f"{st.st_size}:{st.st_mtime_ns}")
+        except OSError:
+            out.append("-")
+    return "|".join(out)
 
 
 def _memo(repo: Path, stamp: str) -> sqlite3.Connection | None:
@@ -227,7 +321,7 @@ def search_text(repo: Path, patterns: list[str]) -> str:
     gp = graph_path(repo)
     if not words or not gp.exists():
         return ""
-    stamp = _stamp(gp)
+    stamp = _stamp(repo)
     db = _memo(repo, stamp)
     known: dict[str, str] = {}
     if db is not None:
@@ -244,7 +338,7 @@ def search_text(repo: Path, patterns: list[str]) -> str:
                 from verinoda import index   # networkx and the graph: only for a word not remembered
 
                 g = index.load(repo)
-                if _stamp(gp) != stamp:   # rebuilt while loading: the lines are not remembered under the old stamp
+                if _stamp(repo) != stamp:   # rebuilt while loading: the lines are not remembered under the old stamp
                     db = None
             known[w] = word_line(g, w)
             if db is not None:
@@ -282,14 +376,20 @@ def shape(agent: str, text: str) -> dict:
 
 def project_of(event: dict) -> Path | None:
     """The indexed project the tool call ran in: the event's ``cwd`` (Cursor: its first workspace root), else the
-    working directory, up to the nearest folder with ``.verinoda``."""
-    roots = [event.get("cwd")] + list(event.get("workspace_roots") or []) + [os.getcwd()]
+    working directory when it names none, up to the nearest folder whose ``.verinoda`` holds a project (its database or config),
+    below the home folder."""
+    roots = [r for r in [event.get("cwd"), *(event.get("workspace_roots") or [])] if isinstance(r, str) and r]
+    roots = roots or [os.getcwd()]   # the working directory only when the event names no folder
     for r in roots:
         if not isinstance(r, str) or not r:
             continue
         p = Path(r)
+        home = Path.home()
         for d in (p, *p.parents):
-            if (d / ".verinoda").is_dir():
+            if d == home:
+                break
+            v = d / ".verinoda"
+            if (v / "atlas.db").is_file() or (v / "config.json").is_file():
                 return d
     return None
 

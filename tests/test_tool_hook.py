@@ -52,6 +52,19 @@ def repo(tmp_path_factory) -> Path:
     ("rg.exe --regexp=alpha --regexp beta", ["alpha", "beta"]),
     ("ls -la; cat README.md", []),
     ("grep 'unclosed", ["'unclosed"]),
+    # review round: values of each program's own options, patterns from a file, newlines, wrappers
+    ('rg -r resolve_launcher "foo" src', ["foo"]),
+    ("grep -f pats.txt verinoda/naming.py", []),
+    ("rg --type-add web:*.html -tweb needle", ["needle"]),
+    ("cd src\nrg handleRequest", ["handleRequest"]),
+    ("git -C repo grep needle", ["needle"]),
+    ("timeout 5 rg needle", ["needle"]),
+    ("sudo -u me grep needle f", ["needle"]),
+    ("(rg needle)", ["needle"]),
+    ("grep -ve a -e b", ["a", "b"]),
+    ("grep -A3 -rn needle .", ["needle"]),
+    ("ag -G py needle", ["needle"]),
+    ("grep --max-count=5 needle f", ["needle"]),
 ])
 def test_shell_commands_give_their_search_patterns(command, expected):
     assert tool_hook.shell_patterns(command) == expected
@@ -153,7 +166,7 @@ def test_install_writes_each_agents_file_and_keeps_other_hooks(tmp_path):
     assert claude["permissions"] == {"allow": ["Bash(ls)"]} and claude["hooks"]["Stop"] == [{"hooks": [other]}]
     post = claude["hooks"]["PostToolUse"]
     assert post[0] == {"matcher": "Grep", "hooks": [other]}
-    assert [e["matcher"] for e in post[1:]] == ["Grep", "Bash", "Read|Edit|MultiEdit|Write"]
+    assert [e["matcher"] for e in post[1:]] == ["Grep", "Bash|PowerShell", "Read|Edit|MultiEdit|Write"]
     assert all(h["type"] == "mcp_tool" and h["server"] == "verinoda" for e in post[1:] for h in e["hooks"])
     assert (proj / ".claude" / "settings.json").read_text(encoding="utf-8").startswith('{\n    "permissions"')
     assert any(".mcp.json" in w for w in res["results"][0]["warnings"])
@@ -191,7 +204,7 @@ def test_user_scope_uses_the_command_hook_and_the_home_folder(tmp_path, monkeypa
     assert [Path(r["path"]) for r in res["results"]] == [home / ".claude" / "settings.json",
                                                          home / ".codex" / "hooks.json"]
     (entry,) = _hooks(home / ".claude" / "settings.json")["hooks"]["PostToolUse"]
-    assert entry["matcher"] == "Grep|Bash|Read|Edit|MultiEdit|Write"
+    assert entry["matcher"] == "Grep|Bash|PowerShell|Read|Edit|MultiEdit|Write"
     assert entry["hooks"][0]["type"] == "command" and "tool-hook --agent claude" in entry["hooks"][0]["command"]
 
 
@@ -215,3 +228,68 @@ def test_dry_run_and_the_cli(tmp_path, capsys):
     assert cli.main(["agent-hooks", "status", "--agent", "codex", "--repo", str(tmp_path)]) == 0
     assert "absent" in capsys.readouterr().out
     assert cli.main(["agent-hooks", "install", "--agent", "vim", "--repo", str(tmp_path)]) == 2
+
+
+def test_regex_escapes_and_shell_variables_are_no_names():
+    assert tool_hook.words_of([r"\bresolve_launcher\b", "$WORDY ${OTHER_VAR} realname"]) == \
+        ["resolve_launcher", "realname"]
+
+
+def test_the_home_folder_is_no_project(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    (tmp_path / ".verinoda" / "index").mkdir(parents=True)   # the install manifest lives here, no project
+    (tmp_path / "proj").mkdir()
+    assert tool_hook.project_of({"cwd": str(tmp_path / "proj")}) is None
+    (tmp_path / "proj" / ".verinoda").mkdir()
+    (tmp_path / "proj" / ".verinoda" / "config.json").write_text("{}", encoding="utf-8")
+    assert tool_hook.project_of({"cwd": str(tmp_path / "proj" / "sub")}) == tmp_path / "proj"
+
+
+def test_the_memo_follows_the_receiver_call_edges_too(repo):
+    from verinoda.paths import receiver_calls_path
+
+    before = tool_hook._stamp(repo)
+    rc = receiver_calls_path(repo)
+    old = rc.read_bytes() if rc.exists() else None
+    rc.write_bytes((old or b"{}") + b" ")
+    try:
+        assert tool_hook._stamp(repo) != before
+    finally:
+        if old is None:
+            rc.unlink()
+        else:
+            rc.write_bytes(old)
+
+
+def test_only_verinodas_own_command_is_ours(tmp_path):
+    (tmp_path / ".claude").mkdir()
+    mine = {"type": "command", "command": "python ~/bin/my-verinoda-tool-hook-audit.py"}
+    (tmp_path / ".claude" / "settings.json").write_text(json.dumps(
+        {"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [mine]}]}}), encoding="utf-8")
+    agent_hooks.run("install", ["claude"], "user", tmp_path, home=tmp_path)
+    agent_hooks.run("uninstall", ["claude"], "user", tmp_path, home=tmp_path)
+    assert _hooks(tmp_path / ".claude" / "settings.json") == {"hooks": {"PostToolUse": [{"matcher": "Bash",
+                                                                                          "hooks": [mine]}]}}
+
+
+def test_a_blank_file_a_bom_and_tabs_are_handled(tmp_path):
+    (tmp_path / ".cursor").mkdir()
+    blank = tmp_path / ".cursor" / "hooks.json"
+    blank.write_text("\n", encoding="utf-8")
+    assert agent_hooks.run("install", ["cursor"], "project", tmp_path)["results"][0]["result"] == "updated"
+    (tmp_path / ".codex").mkdir()
+    tabbed = tmp_path / ".codex" / "hooks.json"
+    tabbed.write_bytes(b'\xef\xbb\xbf{\n\t"hooks": {}\n}\n')
+    agent_hooks.run("install", ["codex"], "project", tmp_path)
+    assert tabbed.read_bytes().startswith(b'\xef\xbb\xbf{\n\t"hooks"')
+
+
+def test_the_command_reads_in_bash_cmd_and_powershell():
+    line, warns = agent_hooks.hook_command("codex", "project", {"how": "path", "argv": ["C:\\x\\verinoda.exe"]})
+    assert (line, warns) == ("verinoda tool-hook --agent codex", [])
+    line, warns = agent_hooks.hook_command("codex", "user", {"how": "interpreter",
+                                                             "argv": ["C:\\py\\python.exe", "-P", "-m", "verinoda"]})
+    assert line == "C:/py/python.exe -P -m verinoda tool-hook --agent codex" and warns == []
+    line, warns = agent_hooks.hook_command("codex", "user", {"how": "interpreter",
+                                                             "argv": ["C:\\Program Files\\python.exe", "-m", "verinoda"]})
+    assert line.startswith('"C:/Program Files/python.exe"') and "PowerShell" in warns[0]

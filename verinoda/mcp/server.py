@@ -897,12 +897,15 @@ class AtlasTools:
         hook adds nothing; a search is never held up). ``path`` is the Grep's own path argument, unused for now."""
         from verinoda import tool_hook
 
+        try:   # every shell command reaches this: one with no search returns before waiting for the lock
+            pats = ([pattern] if pattern else []) + (tool_hook.shell_patterns(command) if command else [])
+            if not tool_hook.words_of(pats) or not graph_path(self.repo).exists():
+                return {}
+        except Exception:  # noqa: BLE001 - a hook never breaks the agent's Grep
+            return {}
         with self._lock:
             try:
                 with contextlib.redirect_stdout(sys.stderr):
-                    pats = ([pattern] if pattern else []) + (tool_hook.shell_patterns(command) if command else [])
-                    if not pats or not graph_path(self.repo).exists():
-                        return {}
                     return tool_hook.shape("claude", tool_hook.grep_text(self._graph(), pats))
             except Exception:  # noqa: BLE001 - a hook never breaks the agent's Grep
                 return {}

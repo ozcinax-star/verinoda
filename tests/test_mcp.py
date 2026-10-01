@@ -1786,7 +1786,7 @@ def test_the_hooks_template_calls_grep_context_and_read_context_through_run_tool
     assert hook["tool"] == mcp_server.GATEWAY and hook["input"]["name"] == "grep_context"
     assert hook["input"]["arguments"] == {"pattern": "${tool_input.pattern}"}
     (hook,) = shell["hooks"]
-    assert shell["matcher"] == "Bash" and hook["input"] == {"name": "grep_context",
+    assert shell["matcher"] == "Bash|PowerShell" and hook["input"] == {"name": "grep_context",
                                                             "arguments": {"command": "${tool_input.command}"}}
     (hook,) = read["hooks"]
     assert read["matcher"] == "Read|Edit|MultiEdit|Write" and hook["tool"] == mcp_server.GATEWAY
