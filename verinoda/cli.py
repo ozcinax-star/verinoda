@@ -46,6 +46,8 @@ PLAN_EXIT = {"ready": 0, "answered": 0, "invalid": 2, "invalid_plan": 2, "needs_
 TRACE_MODES = ("auto", "monitoring", "setprofile", "off")   # verinoda.runtime.trace.MODES
 NETWORK_CHOICES = ("off", "cache", "on")                      # verinoda.paths.NETWORK_MODES
 OBSERVE_LIST_CAP = 10
+SARIF_HELP = ("print the findings as a SARIF 2.1.0 log (GitHub code scanning: upload it with "
+              "github/codeql-action/upload-sarif); the exit code is unchanged")
 
 
 # -- output helpers -------------------------------------------------------------
@@ -90,6 +92,16 @@ def _emit(args, obj, render=None) -> None:
         _write(_dump(obj))
     else:
         render(obj)
+
+
+def _emit_sarif(args, res: dict, command: str) -> bool:
+    """``--sarif``: the result written as a SARIF 2.1.0 log instead of text or JSON (the exit code is the same)."""
+    if not getattr(args, "sarif", False):
+        return False
+    from verinoda import sarif
+
+    _write(sarif.dumps(sarif.export(res, command)))
+    return True
 
 
 def _repo(args) -> Path:
@@ -900,7 +912,8 @@ def cmd_review(args) -> int:
                         coverage_reports=_report_args(repo, args.coverage), findings=args.findings)
     finally:
         st.close()
-    _emit(args, res, lambda r: _write(rv.render_text(r)))
+    if not _emit_sarif(args, res, "review"):
+        _emit(args, res, lambda r: _write(rv.render_text(r)))
     return int(res["exit"])
 
 
@@ -919,6 +932,23 @@ def cmd_coverage(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 4
     _emit(args, res, lambda r: _write(ci.render_text(r)))
+    return 0
+
+
+def cmd_sarif(args) -> int:
+    from verinoda import sarif
+
+    repo = _repo(args)
+    if args.limit < 1:
+        print("error: --limit must be a positive number", file=sys.stderr)
+        return 2
+    paths = [_rel_in_repo(repo.resolve(), p, "--path") for p in args.path or []]
+    res = sarif.report(repo, _report_args(repo, args.files), paths or None, limit=args.limit)
+    _emit(args, res, lambda r: _write(sarif.render_text(r)))
+    if not any("runs" in x for x in res["sarif"]):
+        print("error: no SARIF file read: " + "; ".join(f"{x['file']}: {x.get('error')}" for x in res["sarif"]),
+              file=sys.stderr)
+        return 4
     return 0
 
 
@@ -1734,7 +1764,8 @@ def _decide_check(args, repo: Path) -> int:
         return 2
     if note:
         res["index"] = note
-    _emit(args, res, _r_decide_check)
+    if not _emit_sarif(args, res, "decide check"):
+        _emit(args, res, _r_decide_check)
     return res["exit"]
 
 
@@ -2783,7 +2814,8 @@ def cmd_check(args) -> int:
             raise SystemExit("error: give PATHs or --diff, not both")
     res = codecheck.check(repo, args.paths or None, diff=args.diff, snippet=snippet, as_path=as_path,
                           env=args.env, include_exists=args.all, use_cache=not args.no_cache)
-    _emit(args, res, _r_check)
+    if not _emit_sarif(args, res, "check"):
+        _emit(args, res, _r_check)
     return int(res["exit"])
 
 
@@ -3263,6 +3295,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--coverage", action="append", metavar="REPORT",
                     help="a coverage report (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON; repeatable): the "
                          "changed lines no test ran (default: the reports found at the usual paths)")
+    sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)
     sp = add("coverage", cmd_coverage, "coverage reports (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON) read "
                                        "into lines and symbols: what ran, what did not, which tests ran it; with "
                                        "--base-report the indirect coverage changes")
@@ -3273,6 +3306,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="the base version's report (repeatable): lines whose coverage changed")
     sp.add_argument("--base", help="with --base-report: the commit the working tree is compared with (default HEAD)")
     sp.add_argument("--limit", type=int, default=40, help="symbols shown (default 40)")
+    sp = add("sarif", cmd_sarif, "SARIF 2.1 files (a linter's, CodeQL's) read as evidence: each result a claim at "
+                                 "its file:line, the named tool's statement, not checked here (strong_inference "
+                                 "while the file is older than the SARIF file, else weak_inference); exit 4 = no "
+                                 "file read")
+    sp.add_argument("files", nargs="+", metavar="FILE", help="SARIF files to read")
+    sp.add_argument("--path", action="append", help="only results in these files or folders (repeatable)")
+    sp.add_argument("--limit", type=int, default=40, help="results shown (default 40)")
     sp = add("health", cmd_health, "code health per function: cyclomatic and cognitive complexity, nesting, length, "
                                    "parameters, and near-duplicate functions with a similarity score")
     sp.add_argument("paths", nargs="*", help="files or folders (default: every code file that is not a test)")
@@ -3577,6 +3617,7 @@ def build_parser() -> argparse.ArgumentParser:
     grp.add_argument("--base", metavar="REF", help="as --changed, against this git revision (e.g. origin/main)")
     c.add_argument("--no-refresh", action="store_true",
                    help="do not update a stale index first (edge guards: no_edge, layers, allow_edges, public)")
+    c.add_argument("--sarif", action="store_true", help=SARIF_HELP)
     c = add("brief", cmd_decide, "what a decision needs, from the code: forces with evidence, what is absent, "
                                  "decisions on record, options, and the questions only the user can answer (no "
                                  "recommendation)", parent=dsub)
@@ -3847,6 +3888,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "something found; exit 4: no manifest read)")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
+    sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)
     sp.add_argument("--no-cache", action="store_true",
                     help="do not read or write .verinoda/cache/check (the environment's name index, kept per "
                          "environment in the user cache, is still used: delete its names-*.txt to rebuild it)")
