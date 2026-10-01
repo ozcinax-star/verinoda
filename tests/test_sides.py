@@ -165,13 +165,13 @@ def _by_subject(v: dict) -> dict[str, dict]:
 def test_a_call_into_the_client_source_set_is_a_path_with_every_hop(view):
     c = _by_subject(view)["Hud.draw"]
     assert c["kind"] == "client_symbol_reached" and c["status"] == "strong_inference"
-    assert c["entry"] == {"symbol": "Mod.onInitialize", "at": f"{MAIN}/Mod.java:6", "basis": "declared"}
+    assert c["entry"] == {"symbol": "Mod.onInitialize", "at": f"{MAIN}/Mod.java:7", "basis": "declared"}
     assert [(h["from"], h["relation"], h["to"], h["at"]) for h in c["path"]] == [
         ("Mod.onInitialize", "calls", "Helper.setup", f"{MAIN}/Mod.java:8"),
         ("Helper.setup", "calls", "Hud.draw", f"{MAIN}/Helper.java:8")]
     assert c["at"] == f"{MAIN}/Helper.java:8"
     assert c["client_only"]["basis"] == "source_set" and c["client_only"]["at"] == f"{CLIENT}/Hud.java:1"
-    assert c["evidence_at"] == [f"{MAIN}/Mod.java:6", f"{MAIN}/Mod.java:8", f"{MAIN}/Helper.java:8",
+    assert c["evidence_at"] == [f"{MAIN}/Mod.java:7", f"{MAIN}/Mod.java:8", f"{MAIN}/Helper.java:8",
                                 f"{CLIENT}/Hud.java:1"]
     assert "reaches client-only symbol `Hud.draw`" in c["claim"] and "client source set" in c["claim"]
 

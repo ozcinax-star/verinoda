@@ -376,6 +376,17 @@ def _ts_parser(suffix: str):
         return None
 
 
+def ts_name_line(node) -> int:
+    """The line a tree-sitter definition is cited at: its name's line, below the annotations or attributes
+    the node starts with (``@Override``, ``[HttpGet]``), as a decorated Python def is cited at its ``def``.
+    The node's first line when it has no ``name`` field inside it."""
+    line = node.start_point[0] + 1
+    name = node.child_by_field_name("name")
+    if name is not None and node.start_byte <= name.start_byte < node.end_byte:
+        return max(line, name.start_point[0] + 1)
+    return line
+
+
 def _ts_name(node) -> str | None:
     for fld in ("name", "declarator"):
         ch = node.child_by_field_name(fld)
@@ -449,7 +460,7 @@ def _ts_facts(text: str, suffix: str) -> dict | None:
         placeholders[n.id] = full
         key = _unique(qual, symbols)
         symbols[key] = {"kind": "class" if is_class else "def", "start": n.start_point[0] + 1,
-                        "def": n.start_point[0] + 1, "end": n.end_point[0] + 1, "sig": hs.hexdigest(),
+                        "def": ts_name_line(n), "end": n.end_point[0] + 1, "sig": hs.hexdigest(),
                         "body": hb.hexdigest(), "full": full, "doc": None}
 
     def _ts_nested(n):
@@ -488,6 +499,14 @@ def _ts_facts(text: str, suffix: str) -> dict | None:
 # =============================================================================
 # public API: facts
 # =============================================================================
+
+def cache_scheme(scheme: str) -> str:
+    """The ``file_facts`` row key of facts made under ``scheme``. Tree-sitter facts made before a symbol's
+    ``def`` became its name line (not the annotation line above it) are cached under the bare scheme and are
+    not read back; the scheme itself, and so every anchor made under it, is unchanged (fingerprints did not
+    change)."""
+    return f"{scheme}.def2" if scheme == TS_SCHEME else scheme
+
 
 def scheme_for(path: str | Path) -> str | None:
     suffix = Path(str(path)).suffix.lower()
@@ -562,7 +581,7 @@ def facts_by_sha(store, rel: str, sha256: str) -> dict | None:
     if hit is not None:
         return hit
     if store is not None:
-        facts = store.file_facts(sha256, scheme)
+        facts = store.file_facts(sha256, cache_scheme(scheme))
         if facts is not None:
             _mem_put(sha256, scheme, facts)
             return facts
@@ -599,7 +618,7 @@ def facts_for(store, repo: Path, rel: str, *, sha256: str | None = None) -> dict
     _mem_put(sha, scheme, facts)
     if store is not None:
         try:
-            store.put_file_facts(sha, scheme, facts)
+            store.put_file_facts(sha, cache_scheme(scheme), facts)
         except Exception:  # a read-only or busy store must not break a check
             pass
     return facts
@@ -649,7 +668,7 @@ def update_facts(store, repo: Path, changed_paths: Iterable[str | Path] | None) 
             out["computed"] += 1
     if store is not None and rows:
         try:
-            store.put_file_facts_many([(sha, scheme, facts) for (sha, scheme), facts in rows.items()])
+            store.put_file_facts_many([(sha, cache_scheme(scheme), facts) for (sha, scheme), facts in rows.items()])
         except Exception:  # a read-only or busy store must not break a scan (facts_for's rule)
             pass
     out["ms"] = round(1000 * (time.perf_counter() - t0), 1)

@@ -27,6 +27,16 @@ def _source_location(line: int | str | None) -> str | None:
         return line if line.startswith("L") else f"L{line}"
     return f"L{line}"
 
+def _declaration_line(node, name_node) -> int:
+    """Verinoda patch: the line a definition is cited at is its name's line. A Java/Kotlin/C# declaration
+    node starts at its annotations or attributes (`@Override` on the line above), while a decorated Python
+    def is cited at its `def` line; the name's line is the same rule for both. The node's own start when the
+    name is not inside it (C/C++ declarators, synthesized names)."""
+    line = node.start_point[0] + 1
+    if name_node is not None and node.start_byte <= name_node.start_byte < node.end_byte:
+        return max(line, name_node.start_point[0] + 1)
+    return line
+
 def _semantic_reference_edge(
     source: str,
     target: str,
@@ -3740,6 +3750,12 @@ def _extract_generic(
     if config.ts_module == "tree_sitter_swift":
         swift_protocol_names, swift_class_names = _swift_pre_scan(root, source)
 
+    # Verinoda patch: Python `@overload` stubs and their implementation share one node; it is cited at the
+    # implementation (the def without `@overload`), the stubs' lines kept as its `overloads` metadata.
+    python_overload_starts: set[int] = set()  # start_byte of each function_definition under @overload
+    python_overload_lines: dict[str, list[int]] = {}  # nid -> its stubs' lines, declaration order
+    python_overload_implemented: set[str] = set()  # nids whose node already sits at the implementation
+
     python_underscore_groups: dict[str, set[str]] = {}
     if config.ts_module == "tree_sitter_python":
         python_underscore_groups = _python_pre_scan_underscore_collisions(root, source, stem)
@@ -3809,6 +3825,27 @@ def _extract_generic(
                 "origin_file": str_path,
             })
         return nid
+
+    def _python_note_overload(nid: str, line: int, is_stub: bool) -> None:
+        # Verinoda patch: see python_overload_starts. The first stub created the node; the implementation
+        # moves it to its own def line (where its body and span are), once.
+        node = next((n for n in nodes if n["id"] == nid), None)
+        if node is None:
+            return
+        meta = dict(node.get("metadata") or {})
+        stubs = python_overload_lines.setdefault(nid, [])
+        if is_stub:
+            stubs.append(line)
+            meta["overloads"] = list(stubs)
+            if nid not in python_overload_implemented and node.get("source_location") == f"L{stubs[0]}":
+                meta["overload_stub"] = True
+        elif nid not in python_overload_implemented and meta.get("overload_stub"):
+            python_overload_implemented.add(nid)
+            node["source_location"] = f"L{line}"
+            meta.pop("overload_stub", None)
+        else:
+            return
+        node["metadata"] = sanitize_metadata(meta)
 
     file_nid = _make_id(str(path))
     add_node(file_nid, path.name, 1)
@@ -3900,7 +3937,7 @@ def _extract_generic(
                 ruby_segments = class_name.split("::")
                 class_name = "::".join(ruby_namespace + ruby_segments)
             class_nid = _make_id(stem, ".".join(namespace_stack), class_name)
-            line = node.start_point[0] + 1
+            line = _declaration_line(node, name_node)
             metadata = None
             ruby_reopened = (
                 config.ts_module == "tree_sitter_ruby" and class_nid in seen_ids
@@ -5037,6 +5074,7 @@ def _extract_generic(
 
         # Function types
         if t in config.function_types:
+            name_node = None
             # Swift deinit/subscript have no name field — resolve before generic fallback
             if t == "deinit_declaration":
                 func_name: str | None = "deinit"
@@ -5070,7 +5108,7 @@ def _extract_generic(
             if not normalize_id(sanitized_name):
                 return
 
-            line = node.start_point[0] + 1
+            line = _declaration_line(node, name_node)
             ruby_method_kind = None
             if config.ts_module == "tree_sitter_ruby" and parent_class_nid:
                 if t == "singleton_method":
@@ -5154,6 +5192,9 @@ def _extract_generic(
                     )
                 add_node(func_nid, f"{func_name}()", line)
                 add_edge(file_nid, func_nid, "contains", line)
+            if config.ts_module == "tree_sitter_python" and (
+                    node.start_byte in python_overload_starts or func_nid in python_overload_lines):
+                _python_note_overload(func_nid, line, node.start_byte in python_overload_starts)
             callable_def_nids.add(func_nid)  # function / method def is callable
             if config.ts_module == "tree_sitter_python":
                 local_bound_names[func_nid] = _python_local_bound_names(node, source)
@@ -5682,6 +5723,11 @@ def _extract_generic(
             # so the edge lands on the node the walk is about to create.
             if config.ts_module == "tree_sitter_python":
                 inner = node.child_by_field_name("definition")
+                if inner is not None and inner.type == "function_definition" and any(
+                    c.type == "decorator" and _python_decorator_name(c, source) == "overload"
+                    for c in node.children
+                ):
+                    python_overload_starts.add(inner.start_byte)
                 inner_name = None
                 if inner is not None:
                     name_node = inner.child_by_field_name("name")
