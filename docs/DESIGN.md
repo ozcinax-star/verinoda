@@ -11695,6 +11695,242 @@ the command as a subprocess with UTF-8 input, install/uninstall/status for the t
 user scope, a broken file refused, dry run and CLI), `tests/test_mcp.py` (`grep_context` with a shell command; the
 template's Bash entry; the gateway's parameters).
 
+## 117. Scripted aggregation over search results (D144, 2026-10-01)
+
+### 117.1 Why
+
+An inventory question - how many places open a connection and never close it, which files call X more than three
+times, which modules use A and B together - is answered by agents today by reading a search's first page and
+estimating. Sourcegraph's MCP evaluator lets the agent run a small sandboxed script over search results instead,
+so the number is computed. Verinoda has an exact, fresh search (the trigram index, D137) but nothing that counts and
+cross-references its hits. Done when: an inventory question answered by a count with its sites.
+
+### 117.2 Decisions
+
+- **New command `verinoda inventory [PATTERN] [-s NAME PATTERN ...] [--where EXPR] [--unit file|line|symbol]
+  [--group-by file|folder|folder:N|ext|symbol|none] [-F] [-i] [--paths P ...] [--max-groups N] [--timeout S]
+  [--json]`** (module `verinoda/inventory.py`). CLI only: no MCP tool (the core menu stays as it is).
+- **Searches are D137's** (`trigram.search`), each kept up to 20,000 hits, with its own total, files matched and
+  status. A bare PATTERN is a search named `match`.
+- **Units:** each hit goes to its file (default), its line, or the innermost symbol of the index that holds it
+  (`Graph.symbol_at`; module level when none). `--unit symbol` and `--group-by symbol` need an index.
+- **The condition is data, not code.** `--where` is parsed with `ast` in `eval` mode and every node checked
+  against a whitelist: names of the searches, whole numbers, `and` / `or` / `not`, comparisons (`<`, `<=`, `>`,
+  `>=`, `==`, `!=`, chained) and parentheses. Anything else - a call, an attribute, a subscript, arithmetic, a
+  string, a float, a name that is no search - is refused (exit 2). The tree is evaluated by walking it on each
+  unit's hit counts (a name is its count; a bare name is true when the count is not zero); `eval` and `exec` are
+  never used. That is the "sandbox": there is nothing in the language that could reach outside it.
+- **Counted by group** (file, folder, folder:N, extension, symbol, or one group), each group with its unit count,
+  its hits per search, its first 5 sites (`path:line [search] text`, in file and line order) and their total,
+  heaviest groups first, at most 50 (`--max-groups`).
+- **Exact, a lower bound, or said to be neither, never an estimate:** the result is `observed` and `exact` only when every search read
+  every file in scope (no time limit hit, no unreadable file) and kept every hit; otherwise `incomplete`, the text
+  says "at least", a note names the search, and the exit is 3.
+- **What is not counted:** only units with a hit of some search exist, so a condition true for a unit with no hit
+  at all (`not close`) cannot count files that never mention either; that is said in the limits whenever the
+  condition would hold for such a unit.
+- **Review round** (one reviewer, four confirmed findings, fixed with tests): the condition is limited to 2,000
+  characters and 40 levels of nesting, checked iteratively before anything recurses, and a parser error of any kind
+  is exit 2 (a deeply nested `not` crashed it); a comparison takes a name or a number on each side (an `and`/`or`
+  gives true or false, not a count); counts of an incomplete search are called lower bounds only when the condition
+  is monotone (no `not`, comparisons only "count at least a number"), else "incomplete: not bounded either way" - a
+  hit lost to the cap can make `conn and not close` true; symbol units are keyed by the index's node, not its label
+  (every `__exit__` was one unit), and shown with their definition line; `--group-by symbol` needs `--unit symbol`
+  or `line`; a search name must be a plain word that is no Python keyword and normalises to itself; the timing
+  includes loading the index.
+- **Exit codes:** 0 something counted, 1 nothing counted, 2 bad argument or pattern, 3 counts are lower bounds.
+
+### 117.3 Measured
+
+On this repository (the main checkout's search index, warm): `inventory -s conn 'sqlite3\.connect\(' -s close
+'\.close\(\)' --where "conn and not close" --paths verinoda --group-by folder` 0.92 s, 32 and 81 hits, 2 files kept
+(both JSON benchmark questions quoting the call; every Python file under `verinoda/` that connects also closes);
+`inventory 'subprocess\.run\(' --unit symbol --group-by folder:2 --paths verinoda` 5.1 s (most of it loading the
+graph), 46 hits in 45 symbols. The first search after many files changed refreshes the trigram index first (19.8 s
+here after the day's merges).
+
+### 117.4 Not done
+
+- Only what the trigram search sees: the project's indexed text files; generated or ignored files are not in it.
+- Counts are of text matches, not of meaning: a match in a comment or a string counts (the sites show which).
+- No absence across files that mention nothing; no join on a captured value (a variable's name in one search
+  matched in another); one condition over counts per unit.
+- Symbols come from the index: a file changed since the index may place a hit in the wrong symbol.
+- `--paths` is read like `search`'s: relative to the working directory, inside the project.
+
+### 117.5 Tests
+
+`tests/test_inventory.py`: files that open and never close counted with their lines, comparisons and grouping by
+folder, folder:N and extension, nine conditions that try to run code or name a missing search refused, bad
+arguments, the hit cap making counts lower bounds, the limit for a condition true without hits, symbols from a
+scanned example, and the CLI's JSON and exit codes.
+
+## 118. Mixin conflicts across mods (D145, 2026-10-01)
+
+### 118.1 Why
+
+Every Mixin the game loads is applied to the same class. Two mods that `@Overwrite` one method, `@Redirect` one
+call or change one constant clash, and neither mod's sources show it: `verinoda mixin-check` checked each of the
+project's Mixins against the target's bytecode, alone. When it goes wrong the game stops at start with an
+`InvalidInjectionException`, a `@Redirect conflict` or a `Method overwrite conflict` in `latest.log`, and the
+question is which Mixin, of which mod, and against whose Mixin. ModLens and MixinConflictHelper answer it from
+the mods folder; this decision does the same locally, from the jars already on the machine, and names the mod
+behind a failure in a log.
+
+### 118.2 Decisions
+
+- No new command: `verinoda mixin-check --conflicts [--with PATH ...] [--log PATH] [--json]` (`--with` and `--log`
+  imply `--conflicts`), in a new module `mixinconflicts.py`. No MCP tool: the core profile keeps its five.
+- The other mods are only what is already on the machine, never downloaded: the jars of the build's classpath
+  (`jvmclass.discover`: Loom's argument files hold its remapped mod dependencies), `.gradle/loom-cache/
+  remapped_mods`, the `run/mods`, `runs/*/mods` and `mods` folders of each build, and the jars or folders given
+  with `--with` (a game instance's `mods` folder). A jar nested in `META-INF/jars` or `META-INF/jarjar` is a mod
+  of its own (Fabric API's modules). Of several copies of one mod id the one read is the one Fabric Loader keeps,
+  the highest version (`packset`'s version order; build metadata does not rank, a version it cannot read ranks
+  last); a skipped copy of another version is a note, nested copies of the same version are counted in one note,
+  and a jar of the project's own mod id is skipped for its sources.
+- A jar's Mixins are the classes its Mixin configs list (`package` + `mixins` / `client` / `server`), the configs
+  being those `fabric.mod.json` `mixins`, `quilt.mod.json` `mixin`, `[neoforge.]mods.toml` `[[mixins]]` or
+  `MANIFEST.MF` `MixinConfigs` name (a jar with no Fabric or Quilt manifest that names none: its root
+  `*mixin*.json` files, marked "named by no manifest read"). Manifests, configs and refmaps are read as the
+  loaders read JSON (a raw newline inside a string accepted). Their class files are read by a new
+  `jvmclass.class_annotations()`: the `RuntimeVisibleAnnotations` and `RuntimeInvisibleAnnotations` of the class
+  and its methods (`@Mixin` has class retention), every element value kind. A selector and an `@At` target are
+  mapped through the config's refmap when it has one; `@Mixin` targets come from the class literals and
+  `targets`.
+- Reading never stops on one bad jar: a damaged, encrypted or oddly compressed entry, an entry over 4 MiB (a
+  nested jar over 64 MiB), a refmap or config of another shape (class lists that are not arrays), a class file the
+  reader cannot read (annotations nested deeper than 32 make it unread, never a `RecursionError`) are each a
+  note, and any other error reading a jar is a note naming it.
+- The project's Mixins come from the same tree-sitter reading as `mixin-check` (`read_mixins()`, which now keeps
+  each injector's and `@Overwrite`'s selectors and annotation values and the `@Mixin` priority); a target class
+  written through a wildcard import may be any of its candidate names. Mod ids come from the project's manifests
+  and the configs they list (one manifest: its id; none naming the config: `project`).
+- Priority: `@Mixin(priority)`, else the config's `mixinPriority`, else 1000, and the row says which.
+- A pair is two injectors (or `@Overwrite`s) of different mods of one loader family (Fabric and Quilt load
+  together, Forge and NeoForge do not load beside them) whose selectors name the same method name of the same
+  target class; two descriptors that differ are different methods. A mod whose loader is not known (no
+  manifest read) is paired with any, and the row says so (`loader_note`). That both name the same method is
+  `statically_verified` when both carry the same descriptor, else `strong_inference` with the reason (a name
+  without a descriptor matches every overload, and the target's class file is not read here).
+- What the pair does at run time is predicted, so every row is `strong_inference`:
+  - `conflict`: two `@Overwrite` (one body survives; the higher priority, "Method overwrite conflict" for the
+    other), an `@Overwrite` and any injector (an `@At` member, constant or instruction target may not be in the new
+    body; a `HEAD` / `RETURN` injector applies into the replacing code), two `@Redirect` of one call ("@Redirect
+    conflict").
+  - `order_dependent`: a `@Redirect` and another injector on the call it replaces, two `@ModifyConstant` of the
+    same written constant, two `@ModifyVariable` of the same written `ordinal` / `index` / `name` at one point
+    (`ordinal = 0` included; a `name` array of one name, as a class file stores it, is that name),
+    two `@ModifyArg` of the same `index` of one call, a cancellable `@Inject` beside another at `HEAD` or
+    `RETURN` / `TAIL`.
+  - `compatible`: anything else, listed once per target method with every Mixin (not one row per pair). MixinExtras'
+    wrapping injectors (`@WrapOperation`, `@WrapWithCondition`, `@ModifyExpressionValue`, `@ModifyReceiver`,
+    `@ModifyReturnValue`, `@WrapMethod`) are taken to chain, also onto a call another Mixin redirects.
+  - One call site is the same `@At` value (`INVOKE_ASSIGN` / `INVOKE_STRING` as `INVOKE`, `RETURN` and `TAIL`
+    overlapping), the same owner, name and descriptor where both write one, and the same `ordinal` where both
+    write one.
+- Each side names the mod (with its manifest as evidence), where it was found, the Mixin class, its config, the
+  handler member, the kind, its `@At` points, `cancellable`, the priority and where it came from, the selector as
+  written and through the refmap, and `path:line` or `jar!entry`. A side whose config has a `plugin` gets a note:
+  a config plugin decides at load time whether its Mixins apply and may skip this one beside the other mod; its
+  code is never run or read.
+- `--log PATH` (a `.gz` log unpacked; a file that is not text is a note and `unknown`, never "no failure") reads
+  Mixin's failure lines (logger prefixes removed), a Mixin written as Mixin 0.8 prints it (`config.json:Class`,
+  or `config.json:Class from mod id`, whose id is the mod the line names): `@Redirect conflict. Skipping A ...
+  already redirected by B` (both named), `Method overwrite conflict for m in A, previously written by B`, `Mixin
+  [A] from phase [...] in config [...] FAILED during ...`, `Mixin apply for mod X failed A -> Target`, and
+  `InvalidInjectionException` / `InjectionError` / `InvalidMixinException` / `Critical injection failure` lines
+  that name a `config.json:Class` (`@Kind annotation on handler`, `could not find any targets matching 'sel' in
+  Target` read too). One row per Mixin, at its first line (`observed`, the line as evidence, `lines` counting
+  the rest). Its mod is the mod whose config of that name lists it (`statically_verified`, the config and its
+  manifest as evidence), else the mod the line names (`observed`), else `unknown` with the next step (several
+  mods with a config of that name: their ids as `candidates`). The pairs found for that Mixin (or the other one
+  the line names) are its `likely_cause`, `strong_inference`.
+- An injector that names its method only by `@Desc` (`target = ...`) is listed under `not_compared`.
+- Exit codes beside D141's: 3 for a `conflict`, an `order_dependent` pair or a failure in the log named with its
+  mod; 4 when no other mod's Mixins were read (conflicts with other mods unknown, with the next step), a
+  failure's mod was not found or the log is not text; 3 wins over 4, as `mixin-check`'s absent wins over
+  unknown; 2 when no Mixin was read anywhere; 0 otherwise.
+- Review round (a second review, on the committed branch): the log reader missed the lines Mixin 0.8 really
+  prints (`config.json:Class from mod id`), and kept the period after `previously written by com.a.B.`; a
+  manifest with a raw newline in a string (entity_model_features, entity_texture_features) lost its mod id and
+  loader, and a mod of no known loader was paired with Forge mods silently; a damaged entry, a refmap or config
+  of another shape and a deeply nested annotation crashed the check; `@ModifyVariable` with `ordinal = 0` or a
+  `name` array never paired; the first copy of a duplicated mod id was read, not the newest; the namespace note
+  fired on ordinary intermediary packs (now counted per mod, over the game's classes only); a `.gz` or binary log
+  gave a clean result; exit 4 for a failure's unknown mod was unreachable; an `@Desc`-only injector, an unreadable
+  class file and an inner class's `$` in a log were dropped or mismatched. Each is fixed with a regression test.
+
+### 118.3 Measured
+
+- A CurseForge instance on this machine (Minecraft 26.2, Fabric, 30 mod jars in `mods/`), `--with` that folder
+  and `--log` its 684-line `latest.log`, from an empty project: 72 mods read (nested jars included; 71 with
+  Mixins, all now read as Fabric mods: before the second review three had no loader and the jar's name as id),
+  1,528 Mixin classes, 1,983 injectors, in about 1 s (four runs after the second review: 1.05, 0.97, 1.04,
+  1.06 s; the very first run of the first version took 1.56 s).
+- 3 `conflict` rows: sodium's `@Overwrite` of `LevelRenderer.prepareChunkRenders` beside Fabric API's
+  (fabric-rendering-v1) `@Inject` at its `RETURN`; ferritecore and lithium both `@Overwrite`
+  `PalettedContainer.acquire()V` and `release()V`. 17 `order_dependent` rows (lithium's `@Redirect` of
+  `HopperBlockEntity.getAttachedContainer` beside fabric-transfer-api-v1's cancellable `@Inject` at that call;
+  iris and sodium-extra cancellable at the `HEAD` of `SkyRenderer` methods), 131 shared targets with compatible
+  kinds, 8 selectors not compared (`*`, a regular expression). 18 of the 20 clash rows carry the config-plugin
+  note (sodium, lithium and ferritecore ship config plugins). Whether they clash in the running game was not
+  checked: the game was not run.
+- The log, a clean start, gave no failure row (no false failure from 684 lines); the newest of its 8 rotated
+  `.log.gz` logs, unpacked, gave none either.
+- Duplicated mod ids: 3 Fabric API modules bundled by sodium or modmenu at an older version than Fabric API's
+  own are notes naming the version read and the one skipped; 10 nested copies of the same version are one note.
+  The earlier "several namespaces" note on this all-Fabric pack is gone. The clash counts did not change.
+- Review round on that folder: a `@WrapOperation` beside a `@Redirect` of the same call was `order_dependent`
+  (now compatible: MixinExtras chains), 13 nested copies of Fabric API modules gave 13 notes (now one), and the
+  `*` selector was called a regular expression. A review of the diff then found a target class imported through
+  a wildcard resolved to the Mixin's own package, `@ModifyArg` without an `index` and `@ModifyConstant` without
+  a `constant` paired as one slot (they pick by the handler's type), and a config name shared by several mods
+  attributed to the first one read; each is fixed and tested.
+
+### 118.4 Not done
+
+- Only jars already on the machine: a mod the game loads from elsewhere (another launcher's folder not given with
+  `--with`, Gradle caches outside the build's classpath) is not seen; without any, conflicts with other mods are
+  `unknown` (exit 4).
+- Names are compared as written (after the refmap): a production jar in intermediary names and the project's
+  sources in named names do not meet (a note names the mods per namespace when their game targets are named in
+  several), and a Forge jar's SRG names are not mapped.
+- An entry over 4 MiB, a nested jar over 64 MiB and a log over 256 MiB (after unpacking) are skipped or cut, with
+  a note for the entries.
+- Mixin config plugins, `@Pseudo`, `require`, `expect`, `allow`, `@Slice`, `shift`, `opcode`, `@Desc`, MixinExtras
+  `@Expression` and injector order (`@InjectorOrder`) are not read; the run-time outcome of a pair is predicted
+  from Mixin's documented behaviour, not observed; that MixinExtras' wrapping injectors chain onto a redirected
+  call is taken from MixinExtras' documentation, not checked.
+- Overloads are told apart only by written descriptors; the target's class file is not read (`mixin-check` does
+  that for the project's own Mixins).
+- A `@ModifyVariable` that picks its local by type, a `@ModifyArg` without `index` and a `@ModifyConstant`
+  without `constant` never pair as one slot (they may be).
+- Pairs are between mods; two Mixins of one mod on one method are not reported.
+- A log's Mixin is matched by its config's file name; a failure line in a form not listed above is not read.
+
+### 118.5 Tests
+
+`tests/test_mixin_conflicts.py`: every annotation value kind read from a class file; the project's `@Inject` at
+an `INVOKE` against a jar's `@Overwrite` a `conflict` with both Mixins (mod, Mixin, member, priority and its
+source, `path:line`, `jar!entry`, the manifest line), a cancellable `@Inject` at `HEAD` beside another
+`order_dependent`, `HEAD` and `TAIL` injects one compatible shared row; two `@Redirect` of one call a `conflict`
+naming both priorities, a `@ModifyArg` on that call `order_dependent`, a `@WrapOperation` on it, a redirect of
+another call and a Forge mod paired with nothing, a config plugin noted; compatible injects exit 0 with the text
+output; a refmap mapping a production selector and a nested jar read as its own mod; a log's `@Redirect
+conflict`, `FAILED during APPLY` with its `Critical injection failure`, a mod only the log names and a config in
+no mod read, each with its status, and the CLI's exit 3; no mod jar found (exit 4, the note), no Mixin anywhere
+(exit 2), a missing log file; a target class through a wildcard import, two `@ModifyArg` without `index`, and a
+config name two mods share. Second review: the log lines Mixin 0.8 prints (`from mod id`, a mod id with dashes,
+the period after an overwrite's class); a manifest with a raw newline in a string, a Fabric and a Forge mod
+never paired, a mod of unknown loader paired with a `loader_note`; a damaged class entry, three refmap shapes, a
+config whose class list is a number, an unreadable class file, an entry over the cap and annotations nested 400
+deep, each a note or None; `@ModifyVariable` with `ordinal = 0` and with a `name` array; the newest copy of a mod
+read, an older one noted, the same version with other build metadata counted as a copy; the namespace note only
+across the game's classes; a `.gz` log, a binary log (exit 4) and a failure of unknown mod (exit 4); an
+`@Desc`-only injector listed as not compared, an inner-class Mixin in a log linked to its pair.
+`tests/jvmfixtures.py` can now write class and method annotations.
+
 ## Sources
 
 - **Retrieval:**

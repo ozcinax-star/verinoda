@@ -1610,7 +1610,16 @@ def cmd_mixin_check(args) -> int:
     missing = [p for p in args.paths if not (Path(p).is_file() or (repo / p).is_file())]
     if missing:
         raise SystemExit(f"error: not a file: {', '.join(missing)}")
-    res = mixincheck.lookup(repo, [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths])
+    paths = [str(Path(p).resolve()) if Path(p).is_file() else p for p in args.paths]
+    if args.conflicts or args.log or args.with_paths:
+        from verinoda import mixinconflicts
+
+        if args.log and not Path(args.log).is_file():
+            raise SystemExit(f"error: not a file: {args.log}")
+        res = mixinconflicts.lookup(repo, paths or None, args.with_paths, Path(args.log) if args.log else None)
+        _emit(args, res, lambda r: print(mixinconflicts.render(r)))
+        return mixinconflicts.exit_code(res)
+    res = mixincheck.lookup(repo, paths)
     _emit(args, res, lambda r: print(mixincheck.render(r)))
     if res["status"] == "no_mixins":
         return 2
@@ -3375,6 +3384,27 @@ def cmd_probe(args) -> int:
     return 0 if res.get("status") in PROBE_QUIET else 3
 
 
+def cmd_inventory(args) -> int:
+    """Named searches counted by unit and group, with a condition over their counts (exit 1: nothing counted, 3:
+    the counts are lower bounds)."""
+    from verinoda import inventory, trigram
+
+    searches = [tuple(s) for s in args.search or []]
+    if args.pattern:
+        searches.insert(0, ("match", args.pattern))
+    try:
+        res = inventory.run(_repo(args), searches, where=args.where, unit=args.unit, group_by=args.group_by,
+                            fixed=args.fixed, ignore_case=args.ignore_case, paths=args.paths or None,
+                            timeout=args.timeout, max_groups=args.max_groups)
+    except (inventory.InventoryError, trigram.SearchError) as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    _emit(args, res, lambda r: _write(inventory.render(r)))
+    if res["status"] != "observed":
+        return 3
+    return 0 if res["units"] else 1
+
+
 def cmd_search(args) -> int:
     """Exact and regular-expression search over the project's text files through the trigram index."""
     from verinoda import trigram
@@ -4271,6 +4301,17 @@ def build_parser() -> argparse.ArgumentParser:
                                              "exists, is absent (with the nearest real ones) or unknown, with its "
                                              "line (exit 3: absent; 4: something unknown; 2: no Mixin)")
     sp.add_argument("paths", nargs="*", help="Java files to check instead of every file with a @Mixin")
+    sp.add_argument("--conflicts", action="store_true",
+                    help="instead: Mixins of several mods on the same target method (the project's and those of the "
+                         "mod jars found: classpath, Loom's remapped mods, run/mods, mods, --with), each pair a "
+                         "conflict, order-dependent or compatible with both Mixins (exit 3: a clash, or a failure "
+                         "in the log named with its mod; 4: no other mod's Mixins read, a failure's mod not found, "
+                         "or a log that is not text; 2: no Mixin)")
+    sp.add_argument("--with", dest="with_paths", action="append", metavar="PATH",
+                    help="a mod jar or a folder of jars to compare with (repeatable; implies --conflicts)")
+    sp.add_argument("--log", metavar="PATH", help="a game log or crash report (.gz too): each Mixin failure in it "
+                                                  "named with its mod, by the config that lists it (implies "
+                                                  "--conflicts)")
     sp = add("lang", cmd_lang, "Minecraft translation keys: keys missing from a locale or only in it, written twice, "
                                "placeholders that differ from the default locale, keys the code asks for that no "
                                "lang file defines, keys nothing names (exit 3 when something is found)")
@@ -4854,6 +4895,25 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--test-file", metavar="PATH",
                     help="the file to write (default tests/test_<name>_<template>.py)")
     sp.add_argument("--no-record", action="store_true", help="do not record claims for the findings")
+    sp = add("inventory", cmd_inventory, "an inventory computed, not estimated: named searches (-s NAME PATTERN), "
+                                         "each hit in its file, line or symbol (--unit), the units a condition "
+                                         "over the counts keeps (--where 'a and not b', 'a >= 3'), counted by "
+                                         "group with their lines (exit 1: none; 3: counts are lower bounds)")
+    sp.add_argument("pattern", nargs="?", help="one search, named `match` (or give -s)")
+    sp.add_argument("-s", "--search", nargs=2, action="append", metavar=("NAME", "PATTERN"),
+                    help="a named search (repeatable); NAME is used in --where")
+    sp.add_argument("--where", help="a condition over the searches' counts per unit: names, whole numbers, "
+                                    "and/or/not, comparisons, parentheses")
+    sp.add_argument("--unit", choices=["file", "line", "symbol"], default="file",
+                    help="what is counted (default file; symbol: the innermost symbol of the index)")
+    sp.add_argument("--group-by", default="file",
+                    help="file (default), folder, folder:N, ext, symbol or none")
+    sp.add_argument("-F", "--fixed", action="store_true", help="the patterns are fixed strings")
+    sp.add_argument("-i", "--ignore-case", action="store_true", help="ignore case")
+    sp.add_argument("--paths", nargs="+", metavar="PATH", help="search only under these files or folders")
+    sp.add_argument("--max-groups", type=int, default=50, help="groups listed at most (default 50)")
+    sp.add_argument("--timeout", type=float, default=60.0,
+                    help="seconds each search may read files (default 60; loading the index for symbols is apart)")
     sp = add("search", cmd_search, "exact or regular-expression search over the project's text files, narrowed by "
                                    "a local trigram index that the search keeps up to date (exit 1: no match; 3: no "
                                    "match, but files were left unread)")

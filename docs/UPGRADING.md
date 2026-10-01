@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D143)
+## Upgrading from 0.4.0 (D137-D145)
 
 ### D137: Trigram regex index
 
@@ -85,6 +85,20 @@ hook command `verinoda tool-hook`. MCP `grep_context` also takes `command` (a sh
 The Claude Code hooks template has a Bash entry. A project that copied the old template keeps working; running
 `agent-hooks install` replaces its entries with the current ones.
 
+### D144: Scripted aggregation over search results
+
+New command `verinoda inventory`: named searches counted by file, line or symbol, a condition over their counts
+(`--where "a and not b"`), grouped with their lines; exact or marked as lower bounds. Nothing to migrate.
+
+### D145: Mixin conflicts across mods
+
+`verinoda mixin-check` gains `--conflicts`, `--with PATH` (repeatable) and `--log PATH`: Mixins of several mods
+on the same target method, the project's and those of the mod jars found locally (never downloaded), each pair
+`conflict`, `order_dependent` or a shared target with compatible kinds (`strong_inference`), and each Mixin
+failure of a log (a `.gz` one too) named with its mod. Exit 3: a clash or a failure named with its mod; 4: no
+other mod's Mixins read, a failure's mod not found, or a log that is not text (3 wins over 4); 2: no Mixin. Without these options `mixin-check` is unchanged. `jvmclass.class_annotations()` is
+new; `mixincheck.MixinClass` gains `priority`, `target_names` and `injections`. No MCP tool changes.
+
 ### Derived facts
 
 Schema v10 (after v9, the test-to-code map): `atlas.db` gains `facts` and the append-only `fact_history`
@@ -92,9 +106,9 @@ Schema v10 (after v9, the test-to-code map): `atlas.db` gains `facts` and the ap
 `.verinoda/atlas.db` first if you may go back). New command `verinoda fact add|list|show|refresh|retire`. `scan`
 and `update` results gain a `facts` key (and a `facts:` line) only in a project that has facts; `update` then
 re-runs stale search facts within 20 facts and 10 s (an `update --fast` that defers the graph only lowers
-them), which `facts.refresh_on_update: false` in `.verinoda/config.json` turns
-off. `query --json`, MCP `project_query` and `analyze` gain a `facts` list when the question names a fact (a
-`facts_error` when they could not be read). No MCP tool added; the tool count is unchanged.
+them), which `facts.refresh_on_update: false` in `.verinoda/config.json` turns off. `query --json`, MCP
+`project_query` and `analyze` gain a `facts` list when the question names a fact (a `facts_error` when they
+could not be read). No MCP tool added; the tool count is unchanged.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
