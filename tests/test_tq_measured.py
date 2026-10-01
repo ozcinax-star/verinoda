@@ -82,31 +82,75 @@ def test_every_second_set_case_is_a_well_formed_question():
 
 def _fake_pkg(tmp_path: Path) -> Path:
     pkg = tmp_path / "pkg"
-    for m in tq_measured.ENGINE_MODULES:
-        (pkg / m).parent.mkdir(parents=True, exist_ok=True)
-        (pkg / m).write_bytes(f"# {m}\nx = 1\n".encode())
-    (pkg / "project_index").mkdir()
-    (pkg / "project_index" / "build.py").write_bytes(b"def build():\n    pass\n")
-    (pkg / "unrelated.py").write_bytes(b"y = 2\n")
+    files = {
+        "__init__.py": "",
+        "tq.py": "from verinoda import naming\n\n\ndef ask():\n    from verinoda.codecheck import api\n"
+                 "    return api\n",
+        "index.py": "import verinoda.store\n",
+        "naming.py": "from . import textnorm\nfrom .sub import deep\n",
+        "textnorm.py": "def fold_tr(text):\n    return text.lower()\n",
+        "codecheck.py": "def api():\n    pass\n",
+        "store.py": "x = 1\n",
+        "sub/__init__.py": "",
+        "sub/deep.py": "from ..tq_measured import measured\n",
+        "tq_measured.py": "def measured():\n    pass\n",
+        "benchmark/tq_audit.py": "from verinoda import tq\n",
+        "unrelated.py": "y = 2\n",
+        "project_index/build.py": "def build():\n    pass\n",
+    }
+    for rel, text in files.items():
+        (pkg / rel).parent.mkdir(parents=True, exist_ok=True)
+        (pkg / rel).write_bytes(text.encode())
     return pkg
 
 
-def test_the_engine_hash_covers_the_engine_files_only_and_ignores_line_endings(tmp_path):
+def test_the_engine_hash_covers_the_import_closure_of_tq_and_ignores_line_endings(tmp_path):
     pkg = _fake_pkg(tmp_path)
-    assert "project_index/build.py" in tq_measured.engine_files(pkg)
-    assert "unrelated.py" not in tq_measured.engine_files(pkg)
+    assert tq_measured.engine_files(pkg) == [
+        "__init__.py", "codecheck.py", "index.py", "naming.py", "project_index/build.py", "store.py",
+        "sub/__init__.py", "sub/deep.py", "textnorm.py", "tq.py"]
     h = tq_measured.engine_sha(pkg)
     assert h and len(h) == 64
-    (pkg / "unrelated.py").write_bytes(b"y = 3\n")
+    for rel in ("unrelated.py", "tq_measured.py", "benchmark/tq_audit.py"):   # outside the engine
+        (pkg / rel).write_bytes(b"z = 3\n")
+        assert tq_measured.engine_sha(pkg) == h, rel
+    (pkg / "tq.py").write_bytes((pkg / "tq.py").read_bytes().replace(b"\n", b"\r\n"))   # CRLF checkout
     assert tq_measured.engine_sha(pkg) == h
-    (pkg / "tq.py").write_bytes(b"# tq.py\r\nx = 1\r\n")   # CRLF checkout of the same text
-    assert tq_measured.engine_sha(pkg) == h
-    (pkg / "graphquery.py").write_bytes(b"# changed\n")
-    assert tq_measured.engine_sha(pkg) != h
+    # a module reached only through another module, and one imported inside a function
+    for rel in ("textnorm.py", "codecheck.py", "sub/deep.py"):
+        before = tq_measured.engine_sha(pkg)
+        (pkg / rel).write_bytes((pkg / rel).read_bytes() + b"# edited\n")
+        assert tq_measured.engine_sha(pkg) != before, rel
+    # a new import pulls a module in; a module created where an import pointed is picked up
+    (pkg / "naming.py").write_bytes(b"from . import textnorm, unrelated\nfrom .sub import deep\n"
+                                    b"import verinoda.later\n")
+    assert "unrelated.py" in tq_measured.engine_files(pkg) and "later.py" not in tq_measured.engine_files(pkg)
+    (pkg / "later.py").write_bytes(b"w = 1\n")
+    assert "later.py" in tq_measured.engine_files(pkg)
+    (pkg / "project_index" / "extra.py").write_bytes(b"v = 1\n")
+    assert "project_index/extra.py" in tq_measured.engine_files(pkg)
     (pkg / "project_index" / "build.py").unlink()
-    h2 = tq_measured.engine_sha(pkg)
-    (pkg / "naming.py").unlink()
-    assert tq_measured.engine_sha(pkg) is None and h2
+    assert tq_measured.engine_sha(pkg)
+    (pkg / "tq.py").unlink()
+    assert tq_measured.engine_sha(pkg) is None
+
+
+def test_the_engine_hash_of_the_package_reaches_what_naming_and_the_scope_lib_path_use():
+    files = tq_measured.engine_files()
+    for rel in ("tq.py", "index.py", "naming.py", "textnorm.py", "entail.py", "evidence.py", "codecheck.py",
+                "search_index.py", "graphquery.py"):
+        assert rel in files, rel
+    assert "tq_measured.py" not in files and not any(f.startswith("benchmark/") for f in files)
+
+
+def test_an_edit_to_a_module_naming_imports_hides_measured(tmp_path):
+    # the committed table is current for this checkout, so its cells show until textnorm.py changes
+    pkg = tmp_path / "verinoda"
+    shutil.copytree(tq_measured.PKG, pkg, ignore=shutil.ignore_patterns("__pycache__"))
+    assert tq_measured.shown_cells(pkg=pkg)
+    p = pkg / "textnorm.py"
+    p.write_bytes(p.read_bytes() + b"\n# edited\n")
+    assert tq_measured.shown_cells(pkg=pkg) == {}
 
 
 def test_the_gold_hash_is_order_free_and_changes_with_any_file():
@@ -128,13 +172,18 @@ def test_wilson_interval():
 
 def _table(tmp_path: Path, pkg: Path, **over) -> Path:
     cells = [{"type": "calls", "answer": "yes", "status": "statically_verified", "n": 40, "right": 39,
-              "shown": True},
-             {"type": "calls", "answer": "no", "status": "weak_inference", "n": 12, "right": 9, "shown": True},
+              "shown": True, "options": ["", "depth=3"]},
+             {"type": "calls", "answer": "no", "status": "weak_inference", "n": 12, "right": 9, "shown": True,
+              "options": [""]},
              {"type": "exists", "answer": "no", "status": "strong_inference", "n": 50, "right": 50,
-              "shown": False},
-             {"type": "exists", "answer": "?", "status": "unknown", "n": 31, "right": 0, "shown": True}]
+              "shown": False, "options": [""]},
+             {"type": "exists", "answer": "yes", "status": "strong_inference", "n": 50, "right": 50,
+              "shown": True},   # no options recorded: never shown
+             {"type": "exists", "answer": "?", "status": "unknown", "n": 31, "right": 0, "shown": True,
+              "options": [""]}]
     data = {"schema": tq_measured.SCHEMA, "gold_files": dict(tq_measured.GOLD_FILES),
-            "gold_sha": tq_measured.GOLD_SHA, "engine": {"sha": tq_measured.engine_sha(pkg)}, "cells": cells}
+            "gold_sha": tq_measured.GOLD_SHA, "engine": {"sha": tq_measured.engine_sha(pkg)},
+            "score_sha": tq_measured.scorer_sha(), "cells": cells}
     data.update(over)
     p = tmp_path / "table.json"
     p.write_text(json.dumps(data), encoding="utf-8")
@@ -145,9 +194,12 @@ def test_only_cells_with_30_decided_answers_marked_shown_are_shown(tmp_path):
     pkg = _fake_pkg(tmp_path)
     cells = tq_measured.shown_cells(_table(tmp_path, pkg), pkg=pkg)
     sha8 = tq_measured.GOLD_SHA[:8]
-    assert cells == {"calls|yes|statically_verified": f"39/40 held-out @{sha8}"}
+    assert cells == {"calls|yes|statically_verified|": f"39/40 held-out @{sha8}",
+                     "calls|yes|statically_verified|depth=3": f"39/40 held-out @{sha8}"}
     row = {"answer": True, "status": "statically_verified"}
     assert tq_measured.measured("calls", row, cells) == f"39/40 held-out @{sha8}"
+    assert tq_measured.measured("calls", row, cells, "depth=3") == f"39/40 held-out @{sha8}"
+    assert tq_measured.measured("calls", row, cells, "depth=2") is None   # no held-out question asked this
     assert tq_measured.measured("calls", {"answer": True, "status": "strong_inference"}, cells) is None
     assert tq_measured.measured("calls", {"answer": None, "status": "unknown"}, cells) is None
 
@@ -162,9 +214,12 @@ def test_a_doctored_engine_hash_or_a_changed_gold_hash_hides_measured(tmp_path):
     assert tq_measured.shown_cells(_table(tmp_path, pkg, gold_files=other, gold_sha=tq_measured.gold_sha(other)),
                                    pkg=pkg) == {}
     assert tq_measured.shown_cells(_table(tmp_path, pkg, schema="other/1"), pkg=pkg) == {}
+    # the scorer that decided right and wrong changed, or the table does not name it
+    assert tq_measured.shown_cells(_table(tmp_path, pkg, score_sha="3" * 64), pkg=pkg) == {}
+    assert tq_measured.shown_cells(_table(tmp_path, pkg, score_sha=None), pkg=pkg) == {}
     # the engine changed after the table was written
     table = _table(tmp_path, pkg)
-    (pkg / "entail.py").write_bytes(b"# edited\n")
+    (pkg / "textnorm.py").write_bytes(b"# edited\n")
     assert tq_measured.shown_cells(table, pkg=pkg) == {}
     # a gold file on disk that no longer has its frozen hash
     pkg2 = _fake_pkg(tmp_path / "b")
@@ -173,6 +228,11 @@ def test_a_doctored_engine_hash_or_a_changed_gold_hash_hides_measured(tmp_path):
     for rel in tq_measured.GOLD_FILES:
         shutil.copytree(ROOT / "benchmarks" / rel.split("/")[0], bench / rel.split("/")[0], dirs_exist_ok=True)
     assert tq_measured.shown_cells(table2, pkg=pkg2, bench=bench)
+    sc = bench / "tq_gold" / "score.py"
+    keep = sc.read_bytes()
+    sc.write_bytes(keep + b"\n# edited\n")
+    assert tq_measured.shown_cells(table2, pkg=pkg2, bench=bench) == {}
+    sc.write_bytes(keep)
     p = bench / "tq_gold2" / "held_out.json"
     p.write_bytes(p.read_bytes() + b"\n")
     assert tq_measured.shown_cells(table2, pkg=pkg2, bench=bench) == {}
@@ -189,13 +249,20 @@ def test_a_doctored_engine_hash_or_a_changed_gold_hash_hides_measured(tmp_path):
 def test_tq_shows_measured_only_for_a_current_table(tmp_path, monkeypatch):
     repo = _scan({"a.py": "def helper():\n    return 1\n\n\ndef use():\n    return helper()\n"}, tmp_path / "r")
     sha8 = tq_measured.GOLD_SHA[:8]
-    cells = {"calls|yes|statically_verified": f"39/40 held-out @{sha8}"}
+    cells = {"calls|yes|statically_verified|": f"39/40 held-out @{sha8}",
+             "exists|no|strong_inference|": f"82/82 held-out @{sha8}"}
     monkeypatch.setattr(tq_measured, "shown_cells", lambda *a, **k: cells)
-    res = tq.ask(repo, ["calls use helper", "calls helper use", "exists nothing_like_it"])
-    yes, no, absent = res["answers"]
+    res = tq.ask(repo, ["calls use helper", "calls helper use", "exists nothing_like_it",
+                        "calls use helper depth=2", "exists json.no_such_fn_xyz scope=lib"])
+    yes, no, absent, deeper, lib = res["answers"]
     assert yes["answer"] is True and yes["status"] == "statically_verified"
     assert yes["measured"] == f"39/40 held-out @{sha8}"
-    assert "measured" not in no and "measured" not in absent
+    assert absent["answer"] is False and absent["measured"] == f"82/82 held-out @{sha8}"
+    assert "measured" not in no
+    # the same cells asked with options no held-out question used show nothing: a deeper call, and an
+    # absence decided by reading the installed library instead of the index
+    assert deeper["answer"] is True and deeper["status"] == "statically_verified" and "measured" not in deeper
+    assert "measured" not in lib
     assert f"measured: 39/40 held-out @{sha8}" in tq.render(res)
     assert list(yes) == [k for k in tq._KEY_ORDER if k in yes]
     monkeypatch.setattr(tq_measured, "shown_cells", lambda *a, **k: {})

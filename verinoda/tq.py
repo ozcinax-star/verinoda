@@ -255,6 +255,23 @@ def echo(spec: dict) -> str:
     return " ".join(parts)
 
 
+def options_of(spec: dict) -> str:
+    """The options a question was asked with that change what it asks (``depth=3 scope=lib``); "" for none.
+    ``need`` and ``id`` are left out: they change no answer."""
+    t = spec["type"]
+    d = _FORMS[t][2]
+    parts = []
+    if d is not None and "depth" in spec and spec["depth"] != d[0]:
+        parts.append(f"depth={spec['depth']}")
+    if spec.get("scope", "project") != "project":
+        parts.append(f"scope={spec['scope']}")
+    if spec.get("as", "bool") != "bool":
+        parts.append(f"as={spec['as']}")
+    if t == "taint" and spec.get("in"):
+        parts.append("in=" + ",".join(spec["in"]))
+    return " ".join(parts)
+
+
 def read_batch(questions) -> list[tuple[str, dict | None, str | None]]:
     """``[(id, spec or None, error or None)]``; :class:`BatchError` when the batch itself is unusable."""
     if not isinstance(questions, list):
@@ -968,7 +985,7 @@ def ask(repo: Path, questions, *, graph=None, verify: bool = True, need: str = "
         elif row["answer"] is not None and not _enough(row["status"], (spec or {}).get("need") or need):
             row["enough"] = False
         if err is None and cells:
-            m = tq_measured.measured(spec["type"], row, cells)
+            m = tq_measured.measured(spec["type"], row, cells, options_of(spec))
             if m:
                 row["measured"] = m
         answers.append(_order_keys(row))

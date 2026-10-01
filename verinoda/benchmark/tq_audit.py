@@ -68,6 +68,16 @@ def load_gold(rel: str, bench: Path | None = None) -> tuple[list[dict], str]:
         raise GoldError(f"{rel} does not match {set_dir}/MANIFEST.json: the gold set changed after it was frozen")
     if rel in tm.GOLD_FILES and tm.GOLD_FILES[rel] != sha:
         raise GoldError(f"{rel} does not match tq_measured.GOLD_FILES")
+    # the code the cases are asked about: the set's fixtures (under the set) and examples (under the repository)
+    for key, root in (("fixtures", bench / set_dir), ("examples", bench.parent)):
+        for frel, fsha in (manifest.get(key) or {}).items():
+            try:
+                got = hashlib.sha256((root / frel).read_bytes()).hexdigest()
+            except OSError:
+                got = None
+            if got != fsha:
+                raise GoldError(f"{frel} does not match {set_dir}/MANIFEST.json ({key}): the code the gold "
+                                "cases are about changed")
     return json.loads(data), sha
 
 
@@ -111,6 +121,7 @@ def run_cases(cases: list[dict], repos: dict, work: Path, *, split: str, gold: s
                              "question": c["question"], "gold": c["answer"], "answer": a.get("answer"),
                              "answer_kind": tm.answer_kind({**a, "type": qtype}), "status": a["status"],
                              "at": a.get("at") or [], "why": a.get("why"), "next": a.get("next"),
+                             "options": tq.options_of(tq.parse_line(c["question"])),
                              "verdict": score.verdict(a, c), "located": score.located(a, c),
                              "shape": c.get("shape")})
             if progress:
@@ -125,9 +136,11 @@ def cells_of(rows: list[dict]) -> dict[str, dict]:
             continue
         key = tm.cell_key(r["type"], r["answer_kind"], r["status"])
         c = out.setdefault(key, {"type": r["type"], "answer": r["answer_kind"], "status": r["status"],
-                                 "n": 0, "right": 0, "wrong": 0, "unknown": 0})
+                                 "n": 0, "right": 0, "wrong": 0, "unknown": 0, "options": []})
         c["n"] += 1
         c[r["verdict"]] += 1
+        if r.get("options", "") not in c["options"]:
+            c["options"] = sorted([*c["options"], r.get("options", "")])
     return out
 
 
@@ -230,8 +243,9 @@ def evaluate(*, work: Path | None = None, bench: Path | None = None, held_out: t
     cells = calibration(held, dev_rows)
     table = {"schema": tm.SCHEMA, "written": _dt.date.today().isoformat(), "commit": _git_head(),
              "gold_files": gold_files, "gold_sha": tm.gold_sha(gold_files), "dev_file": {dev: dev_sha} if dev else {},
-             "engine": {"sha": eng, "files": len(tm.engine_files()), "modules": list(tm.ENGINE_MODULES),
-                        "graph_builder": tm.GRAPH_BUILDER + "/**/*.py"},
+             "score_sha": tm.scorer_sha(bench),
+             "engine": {"sha": eng, "roots": list(tm.ENGINE_ROOTS), "graph_builder": tm.GRAPH_BUILDER + "/**/*.py",
+                        "excluded": list(tm.ENGINE_EXCLUDED), "files": tm.engine_files()},
              "min_n": tm.MIN_N, "interval": "Wilson 95%", "verify": True, "cells": cells}
     decided = [r for r in held if not r.get("skipped") and r["answer_kind"] not in ("?", "invalid")]
     summary = {
