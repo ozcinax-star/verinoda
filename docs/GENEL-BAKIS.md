@@ -1132,8 +1132,8 @@ bir kopyasını tutan bir Verinoda kopyasında plan eşleştirmesi 15 mention'ı
 
 **Ad sorunu**
 
-- Ürünün kalıcı adı "Verinoda" (eski çalışma adı RepoAtlas). 0.1.0 ve 0.2.0 (alfa) 26 Eylül 2026'da, 0.3.0 ve 0.3.2 27 Eylül'de PyPI'da (`verinoda`) ve
-  npm'de (`verinoda`, PyPI sürümünü çalıştıran ince sarmalayıcı) yayımlandı; yayınlar `v0.1.0`, `v0.2.0`, `v0.3.0` ve `v0.3.2` etiketlerinden (`v0.3.1` etiketi iş akışı dosyası bozuk olduğu için hiçbir şey yayımlamadı)
+- Ürünün kalıcı adı "Verinoda" (eski çalışma adı RepoAtlas). 0.1.0 ve 0.2.0 (alfa) 26 Eylül 2026'da, 0.3.0 ve 0.3.2 27 Eylül'de, 0.4.0 (beta) 1 Ekim'de PyPI'da (`verinoda`) ve
+  npm'de (`verinoda`, PyPI sürümünü çalıştıran ince sarmalayıcı) yayımlandı; yayınlar `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.2` ve `v0.4.0` etiketlerinden (`v0.3.1` etiketi iş akışı dosyası bozuk olduğu için hiçbir şey yayımlamadı)
   `.github/workflows/release.yml` ile yapıldı (docs/RELEASING.md).
 
 ---
@@ -1272,7 +1272,7 @@ paketin winget'te bulunduğu kontrol edilerek eklendi; bu makinede uv zaten
 kurulu olduğu için çalıştırılmadı.
 
 Depo herkese açıktır (https://github.com/ozcinax-star/verinoda); paket PyPI'da ve npm'de
-`verinoda` adıyla yayımlanmıştır (0.3.2, alfa). Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.
+`verinoda` adıyla yayımlanmıştır (0.4.0, beta). Graphify'ın (`graphifyy`) ayrıca kurulması gerekmez.
 
 ---
 
