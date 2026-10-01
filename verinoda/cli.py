@@ -3619,6 +3619,50 @@ def cmd_q(args) -> int:
     return 0 if any(r.get("bindings") for r in res["rows"]) else 1
 
 
+def cmd_tq(args) -> int:
+    """Typed questions, batched (exit 0: every answer decided; 1: an unknown or invalid answer; 2: the batch cannot
+    be read; 3: a budget cut the batch)."""
+    from verinoda import tq
+
+    def fail(msg: str) -> int:
+        _emit(args, {"status": "error", "error": msg}, lambda r: print(f"error: {msg}", file=sys.stderr))
+        return 2
+
+    questions: list = list(args.questions or [])
+    if args.file:
+        try:
+            text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            return fail(f"cannot read {args.file}: {exc}")
+        for k, line in enumerate(text.splitlines(), 1):
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if s.startswith("{"):
+                try:
+                    questions.append(json.loads(s))
+                except json.JSONDecodeError as exc:
+                    return fail(f"line {k} of {args.file} is not JSON: {exc.msg}")
+            else:
+                questions.append(s)
+    try:
+        tq.read_batch(questions)   # an unusable batch is refused before the index is touched
+    except tq.BatchError as exc:
+        return fail(str(exc))
+    repo = _repo(args)
+    _need_graph(repo)
+    try:
+        res = tq.ask(repo, questions, verify=args.verify, need=args.need, timeout=args.timeout,
+                     max_expansions=args.max_expansions)
+    except tq.BatchError as exc:
+        return fail(str(exc))
+    _emit(args, tq.compact(res), lambda r: _write(tq.render(res)))
+    if not res["complete"]:
+        return 3
+    decided = all(a["answer"] is not None and a["status"] != "invalid" for a in res["answers"])
+    return 0 if decided and not res.get("truncated") else 1
+
+
 def cmd_taint(args) -> int:
     """Paths from untrusted sources to dangerous calls in the project's Python code."""
     from verinoda import index, slicing, taint
@@ -5309,6 +5353,23 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--verify", action="store_true",
                     help="re-read the cited call sites and definitions; a row whose every part is confirmed in "
                          "Python code becomes statically_verified")
+    sp = add("tq", cmd_tq, "typed questions, batched: up to 20 closed questions (exists, which, calls, reaches, route, "
+                           "writes, reads, callers, taint, tested, q), each answered with one value, its status, "
+                           "file:line and why/next, e.g. 'calls create_order_handler place_order' 'callers "
+                           "place_order' (exit 1: an answer is unknown or a question invalid; 2: the batch cannot be "
+                           "read; 3: cut by a budget)")
+    sp.add_argument("questions", nargs="*", metavar="QUESTION",
+                    help="questions in the line form: TYPE OPERAND... [key=value]; quote operands with spaces")
+    sp.add_argument("-f", "--file", metavar="FILE",
+                    help="one question per line, or one JSON object per line ('-': standard input)")
+    sp.add_argument("--verify", action=argparse.BooleanOptionalAction, default=True,
+                    help="re-read the cited call sites and definitions (default on); --no-verify: graph only")
+    sp.add_argument("--need", choices=["inference", "verified"], default="inference",
+                    help="the bar an answer must reach, else enough: no (default inference: strong_inference "
+                         "or better)")
+    sp.add_argument("--timeout", type=float, default=30.0, help="seconds for the whole batch (default 30)")
+    sp.add_argument("--max-expansions", type=int,
+                    help="graph expansions per question (default min(200,000, 1,000,000 / questions))")
     sp = add("taint", cmd_taint, "paths from untrusted sources (request data, argv, environment, route parameters) "
                                  "to dangerous calls (SQL, shell, eval, file paths, ...) in the project's Python "
                                  "code, every hop at file:line; sources, sinks and sanitizers from the library data "

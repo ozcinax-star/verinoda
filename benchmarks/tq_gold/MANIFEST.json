@@ -1,0 +1,37 @@
+{
+ "written": "2026-10-01",
+ "note": "sha256 of the gold files and fixtures as frozen before any typed-question code was written",
+ "split": "held_out when sha256(id)[0] < 0x56",
+ "files": {
+  "dev.json": "a6605f78c6866994b5d0d4da8c3ca8754149c7552611e7ba66be46fe01bccc42",
+  "held_out.json": "4860547c7c6ce26f0956c71882aa934eec3bc667b4accf1c73eb0202d60e589f"
+ },
+ "fixtures": {
+  "fixtures/qlang/app/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "fixtures/qlang/app/admin.py": "565e5147230e25967ea8cd094195d4923443f274717e7fd3d73dc256132d4180",
+  "fixtures/qlang/app/service.py": "4bbc4f27e47849881fe28616064605fc89f64736741fa90cb08d84246ba9db75",
+  "fixtures/qlang/app/store.py": "caedea4f6ac1227db2d6908ac66ae326b4382d78bf21db804eb8a68fd9b65a7c",
+  "fixtures/qlang/app/web.py": "c3ce1a669291cc825ac3e7fdd9e1c73d3730f624cf8ac53ef6240fa00d5eba14",
+  "fixtures/qlang/dyn.py": "288f2b3d62c946ca3214f443bdeda68013535948c731b383b940e618e886b9b5",
+  "fixtures/qlang/rec.py": "5de51adcb3d199dff4d17954ddca7b66961cca6d027ad0748c474b01360d7be9",
+  "fixtures/qlang/tests/test_service.py": "92177c355c93c815cd3f322b6dfd3181c048cc90b580e9140cc15fa9b516636f"
+ },
+ "counts": {
+  "dev.json": 75,
+  "held_out.json": 34
+ },
+ "examples_note": "examples/orders_app (paths from the repository root), hashed in the review round from the files as they were at b016512; the gold cases of orders_app depend on it",
+ "examples": {
+  "examples/orders_app/README.md": "88cca2ac29707d60d20b77050d92c1c7d7c6ebf71c5103a2965be580efb4bad7",
+  "examples/orders_app/docs/adr/0001-sqlite-persistence.md": "1b57d66019756f5d8d1a86e247b3d24cd97700973d14271be2d4abf233808a30",
+  "examples/orders_app/orders/__init__.py": "96b0503b584de90fef00f1b83b3c56733840f055e4c6981b29d2d922f917e3d1",
+  "examples/orders_app/orders/api.py": "020e6cb48af39a5556dfd96b2cc7ef3949a07713c432ceafc7e13bfe04c2aba1",
+  "examples/orders_app/orders/config.py": "4db85f67251a3fc2f839202f81724459c4707f8146f2ac49f71ffb3646ea2e90",
+  "examples/orders_app/orders/pricing.py": "d318020aef8997cc0aac098f73e2f2e764e2b582545f622aa921d74cd5cc9cfa",
+  "examples/orders_app/orders/repository.py": "e7031e7595ac92b8b490d263291a30dc9c7c7f06b3ce893970a67b6fd8f2c28a",
+  "examples/orders_app/orders/service.py": "eebc97d3379b5a02195de84fefe01ea3902194f759ecbf6b10ca37ed677bc1a7",
+  "examples/orders_app/pyproject.toml": "d8b072a86f866faf2f3da003c514add3eaec583c1d7ef6de40b746ccadd48bfc",
+  "examples/orders_app/tests/test_pricing.py": "69d60fc7862cc45bc01ec9130766c5426a8fdb0c1cb6fd78285b2bba1880c2c1",
+  "examples/orders_app/tests/test_service.py": "1a069c2ccad3c4af177ec71e6b22ad2e03be7054ee06507df88cf92be81970ad"
+ }
+}

@@ -84,6 +84,25 @@ def test_complete_run_replaces_and_incomplete_run_only_adds():
     assert testmap.update(st, "rtr_missing") == {"tests": 0, "functions": 0}
 
 
+def test_mapping_current_is_the_rule_affected_uses():
+    st = Store(":memory:")
+    rid = _run(st, {"t.py::a": CALL, "t.py::b": CALL},
+               [("m.py", "f", ["t.py::a|call"]), ("x.py", "g", ["t.py::a|call", "t.py::b|call"])])
+    testmap.update(st, rid, {"m.py": "m1", "x.py": "x1"})
+    asked: list[str] = []
+
+    def vers(p: str) -> set[str]:
+        asked.append(p)
+        return {"m.py": {"m1"}, "x.py": {"x2"}}[p]
+
+    cache: dict[str, set[str]] = {}
+    assert testmap.mapping_current(st, "t.py::a", vers, cache) is False   # x.py changed since the run
+    assert testmap.mapping_current(st, "t.py::b", vers, cache) is False
+    assert asked.count("x.py") == 1   # each path's versions read once through the cache
+    assert testmap.mapping_current(st, "t.py::a", lambda p: {"m1", "x1"}) is True
+    assert testmap.mapping_current(st, "t.py::never", lambda p: set()) is True   # no row: nothing changed
+
+
 def test_affected_reads_hits_freshness_and_parameter_sets():
     st = Store(":memory:")
     rid = _run(st, {"t.py::a[1]": CALL, "t.py::a[2]": CALL, "t.py::b": CALL, "t.py::c": CALL},
