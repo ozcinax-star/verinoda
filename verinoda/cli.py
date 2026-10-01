@@ -395,6 +395,11 @@ def _r_update(r: dict) -> None:
 
 
 def _r_derived(r: dict) -> None:
+    from verinoda import facts
+
+    line = facts.update_line(r.get("facts"))
+    if line:
+        print(f"  {line}")
     for name, d in (r.get("derived") or {}).items():
         if isinstance(d, dict) and d.get("error"):
             print(f"  warning: derived {name} not refreshed: {d['error']}")
@@ -721,6 +726,13 @@ def cmd_update(args) -> int:
                     st, repo, limit=consolidate.ON_UPDATE_LIMIT, budget=consolidate.ON_UPDATE_BUDGET_S))
             except Exception as exc:     # the update itself succeeded
                 res["consolidated"] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+            if (res.get("consolidated") or {}).get("restored") and isinstance(res.get("facts"), dict):
+                from verinoda import facts   # claims came back: the facts resting on them are recomputed
+
+                try:
+                    res["facts"] = facts.after_consolidate(st, repo, res["facts"])
+                except Exception as exc:  # the update itself succeeded; said, not raised
+                    res["facts"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
     _emit(args, res, _r_update)
     return 1 if res.get("error") else 0
 
@@ -1296,6 +1308,9 @@ def cmd_query(args) -> int:
     except query_filters.FilterError as exc:
         raise SystemExit(f"error: {exc}") from None
     retrieval.attach_freshness(res, g, freshness.check(repo))  # never silently answer from an older tree
+    from verinoda import facts
+
+    facts.attach_leads(res, repo, args.question)  # named facts the question names: leads with their status
     if args.json:
         _write(_dump(res))
     else:  # the skeleton-first plain text a model reads (docs/DESIGN.md D20)
@@ -3610,6 +3625,50 @@ def cmd_memory(args) -> int:
     return 0
 
 
+def cmd_fact(args) -> int:
+    """Named derived facts: add, list, show, refresh, retire (verinoda/facts.py)."""
+    from verinoda import facts
+
+    repo = _repo(args)
+    sub = args.fact_cmd
+    if sub == "refresh" and (args.limit < 0 or args.budget < 0):
+        print("error: --limit and --budget must be 0 or more", file=sys.stderr)
+        return 2
+    st = _store(repo, create=sub == "add")
+    try:
+        if sub == "add":
+            if bool(args.search) == bool(args.from_claim or args.from_fact):
+                raise facts.FactError("give either --from-claim / --from-fact or --search")
+            if args.search:
+                facts.add_search(st, repo, args.name, args.search, fixed=args.fixed, ignore_case=args.ignore_case,
+                                 paths=args.path or None)
+            else:
+                facts.add_derived(st, repo, args.name, claims=args.from_claim, facts=args.from_fact)
+            res, render = facts.show(st, args.name), facts.render_show
+        elif sub == "list":
+            res, render = facts.listing(st, status=args.status), facts.render_list
+        elif sub == "show":
+            res, render = facts.show(st, args.name), facts.render_show
+        elif sub == "retire":
+            res = facts.retire(st, args.name, reason=args.reason)
+            render = (lambda r: print(f"retired {r['retired']}" + (f"; now stale: {', '.join(r['now_stale'])}"
+                                                                     if r["now_stale"] else "")))
+            facts.invalidate(st, repo, actor="fact retire")   # the facts resting on it go stale now
+        else:
+            res = facts.refresh(st, repo, args.name or None, limit=args.limit, budget=args.budget,
+                                verify_claims=not args.no_verify)
+            render = facts.render_refresh
+    except facts.FactError as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    finally:
+        st.close()
+    _emit(args, res, (lambda r: _write(render(r))) if sub != "retire" else render)
+    if sub == "refresh":
+        return 1 if res["errors"] else 0
+    return 0
+
+
 def cmd_install(args) -> int:
     from verinoda import agents
 
@@ -4576,6 +4635,38 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("reference")
     sp.add_argument("--ref")
     sp.add_argument("--topic", required=True)
+
+    sp = sub.add_parser("fact", help="named derived facts: a claim (or several) or a search kept under a name, "
+                                      "with what it rests on; stale when that changes, recomputed on refresh")
+    fsub_facts = sp.add_subparsers(dest="fact_cmd", required=True)
+    c = add("add", cmd_fact, "keep a fact: claims taken together (--from-claim, --from-fact; its status is the "
+                             "weakest of theirs) or a search (--search; its sites and the files it read)",
+            parent=fsub_facts)
+    c.add_argument("name", help="letters, digits, '.', '_' and '-'")
+    c.add_argument("--from-claim", action="append", metavar="ID", help="a claim it rests on (repeatable)")
+    c.add_argument("--from-fact", action="append", metavar="NAME", help="an earlier fact it rests on (repeatable)")
+    c.add_argument("--search", metavar="PATTERN", help="a Python regular expression (a fixed string with --fixed), "
+                                                       "searched as `verinoda search` does")
+    c.add_argument("-F", "--fixed", action="store_true", help="the search pattern is a fixed string")
+    c.add_argument("-i", "--ignore-case", action="store_true", help="the search ignores case")
+    c.add_argument("--path", action="append", metavar="PATH", help="search only under this file or folder "
+                                                                    "(repeatable)")
+    c = add("list", cmd_fact, "the facts with their status now (never stronger than their inputs)", parent=fsub_facts)
+    c.add_argument("--status", help="only the facts with this status")
+    c = add("show", cmd_fact, "a fact: its statement, what it rests on, its sites or evidence, its history",
+            parent=fsub_facts)
+    c.add_argument("name")
+    c = add("refresh", cmd_fact, "recompute stale facts (or the ones named): re-run their search, re-verify their "
+                                 "stale claims (static); a changed result is shown old against new",
+            parent=fsub_facts)
+    c.add_argument("name", nargs="*")
+    c.add_argument("--limit", type=int, default=50, help="facts to recompute at most (default 50)")
+    c.add_argument("--budget", type=float, default=60.0, help="seconds to spend at most (default 60)")
+    c.add_argument("--no-verify", action="store_true", help="read the claims' statuses as they are, run no verify")
+    c = add("retire", cmd_fact, "retire a fact (kept with its history; the facts resting on it go stale)",
+            parent=fsub_facts)
+    c.add_argument("name")
+    c.add_argument("--reason")
 
     sp = sub.add_parser("feedback", help="user critique of earlier claims, processed as hypotheses")
     fsub = sp.add_subparsers(dest="fb_cmd", required=True)

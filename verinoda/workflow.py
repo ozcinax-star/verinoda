@@ -165,9 +165,24 @@ def scan(store: Store, repo: Path, *, force: bool = False, wait: float = buildlo
     repo = Path(repo).resolve()
     try:
         with buildlock.build_lock(repo, wait=wait, purpose=purpose, on_wait=on_wait):
-            return _scan(store, repo, force=force)
+            res = _scan(store, repo, force=force)
     except buildlock.IndexBusy as busy:
         return _busy(store, busy)
+    return _facts_after(store, repo, res)
+
+
+def _facts_after(store: Store, repo: Path, res: dict) -> dict:
+    """The named facts after a scan or an update (verinoda/facts.py): lowered when what they rest on changed,
+    the stale ones recomputed within a small budget. Run after the build lock is released (a fact's search
+    keeps its own index); an error is reported in ``facts``, never raised."""
+    from verinoda import facts
+
+    out = _call_hook(facts.after_update, store, repo, res)
+    if out.get("error"):
+        res["facts"] = {"error": out["error"]}
+    elif "result" not in out:   # None (no fact in the project) comes back as {"result": None}
+        res["facts"] = {k: v for k, v in out.items() if k != "seconds"}
+    return res
 
 
 def _scan(store: Store, repo: Path, *, force: bool) -> dict:
@@ -295,7 +310,7 @@ def update(store: Store, repo: Path, *, wait: float = buildlock.DEFAULT_WAIT_SEC
         return _busy(store, busy)
     if res.get("index_mode") == "deferred":  # after the lock is released: the child takes it
         res["background"] = start_background_update(repo)
-    return res
+    return _facts_after(store, repo, res)
 
 
 _BG_LOG = "background_update.log"

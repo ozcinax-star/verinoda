@@ -641,6 +641,10 @@ def render_text(result: dict, budget_chars: int = 6000, *, seen: dict[str, list[
         add(_clip(_filters_line(fb), 300))
     for line in stale_lines(result):
         add(line)
+    if result.get("facts"):
+        from verinoda.facts import lead_lines
+
+        add(_clip("\n".join(lead_lines(result["facts"])), 1200))
     if rd is None:
         return _render_items(result, out, add, budget_chars)
     g = rd.g

@@ -85,6 +85,16 @@ hook command `verinoda tool-hook`. MCP `grep_context` also takes `command` (a sh
 The Claude Code hooks template has a Bash entry. A project that copied the old template keeps working; running
 `agent-hooks install` replaces its entries with the current ones.
 
+### Derived facts
+
+Schema v10 (after v9, the test-to-code map): `atlas.db` gains `facts` and the append-only `fact_history`
+(migrated on first open; an older Verinoda then refuses the database as written by a newer one, so copy
+`.verinoda/atlas.db` first if you may go back). New command `verinoda fact add|list|show|refresh|retire`. `scan`
+and `update` results gain a `facts` key (and a `facts:` line) only in a project that has facts; `update` then
+re-runs stale search facts within 10 s, which `facts.refresh_on_update: false` in `.verinoda/config.json` turns
+off. `query --json`, MCP `project_query` and `analyze` gain a `facts` list when the question names a fact (a
+`facts_error` when they could not be read). No MCP tool added; the tool count is unchanged.
+
 ## Upgrading from 0.3.2 (D60-D136)
 
 ### D63: Running a project's own tests safely
