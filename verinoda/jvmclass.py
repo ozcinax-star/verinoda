@@ -282,7 +282,8 @@ def _code_refs(code: bytes, ref) -> list[list[str]] | None:
 
 
 def class_code(b: bytes) -> dict | None:
-    """``{"name", "super", "fields": [[name, descriptor, flags]], "methods": [[name, descriptor, flags, refs]]}``:
+    """``{"name", "super", "ifaces", "fields": [[name, descriptor, flags]],
+    "methods": [[name, descriptor, flags, refs]]}``:
     every member of a class file as written, and for each method what its bytecode references
     (:func:`_code_refs`; None for a method with no ``Code`` attribute, ``False`` when its code could not be
     walked), or None when ``b`` is not a class file this reader knows."""
@@ -341,7 +342,8 @@ def class_code(b: bytes) -> dict | None:
 
         out: dict = {"name": cname(u2(i + 2)), "super": cname(u2(i + 4))}
         i += 6
-        i += 2 + 2 * u2(i)   # the interfaces
+        out["ifaces"] = [x for x in (cname(u2(i + 2 + 2 * j)) for j in range(u2(i))) if x]
+        i += 2 + 2 * u2(i)
         for group in ("fields", "methods"):
             rows = []
             count = u2(i)

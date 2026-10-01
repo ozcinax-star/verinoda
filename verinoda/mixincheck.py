@@ -268,7 +268,39 @@ def _value(n, src: bytes, consts: dict[str, str]):
         return text.rsplit(".", 1)[-1]   # an enum constant (Opcodes.GETFIELD) or a name this reader does not resolve
 
 
-def _injection(aname: str, a, m, src: bytes, consts: dict[str, str]) -> dict:
+def _handler_params(m, src: bytes, tvars: set[str]) -> list[str] | None:
+    """The parameter types of a handler method as written, without type arguments or package (``List<String>``
+    -> ``List``; a type variable is ``?``, any reference type once erased); None when one is not read."""
+    ps = m.child_by_field_name("parameters")
+    if ps is None:
+        return None
+    out = []
+    for p in ps.named_children:
+        if p.type == "formal_parameter":
+            text = _type(p.child_by_field_name("type"), src)
+        elif p.type == "spread_parameter":
+            ty = next((c for c in p.named_children if c.type not in ("modifiers", "variable_declarator")), None)
+            if ty is None:
+                return None
+            text = _type(ty, src) + "[]"
+        else:
+            continue
+        base, dims = "".join(text.split()), ""
+        while "<" in base:
+            nxt = re.sub(r"<[^<>]*>", "", base)
+            if nxt == base:
+                return None
+            base = nxt
+        while base.endswith("[]"):
+            base, dims = base[:-2], dims + "[]"
+        base = base.rsplit(".", 1)[-1]
+        if not base:
+            return None
+        out.append(("?" if base in tvars else base) + dims)
+    return out
+
+
+def _injection(aname: str, a, m, src: bytes, consts: dict[str, str], tvars: set[str] = frozenset()) -> dict:
     """What an injector (or ``@Overwrite``) names: its target method selectors, its ``@At`` points and the
     values that pick a slot (``ordinal``, ``index``, ``name``, ``constant``, ``cancellable``)."""
     nm = m.child_by_field_name("name")
@@ -284,14 +316,15 @@ def _injection(aname: str, a, m, src: bytes, consts: dict[str, str]) -> dict:
         sels = [member]
     return {"kind": aname, "line": _line(a), "member": member, "values": vals,
             "selectors": [s for s in sels if isinstance(s, str)],
-            "unread": any(not isinstance(s, str) for s in sels)}
+            "unread": any(not isinstance(s, str) for s in sels),
+            "params": _handler_params(m, src, set(tvars) | _typevars(m, src))}
 
 
 def _member_items(mc: MixinClass, m, src: bytes, consts: dict[str, str], ctv: set[str]) -> None:
     mods = next((c for c in m.named_children if c.type == "modifiers"), None)
     for aname, a in _annotations(mods, src):
         if m.type == "method_declaration" and (aname in MIXIN_INJECTORS or aname == "Overwrite"):
-            mc.injections.append(_injection(aname, a, m, src, consts))
+            mc.injections.append(_injection(aname, a, m, src, consts, ctv))
         if aname in MIXIN_INJECTORS:
             sels = _strings(a, src, "method", consts)
             for node, s in sels:
@@ -658,11 +691,14 @@ def mixin_files(repo: Path) -> list[str]:
     return sorted(out)
 
 
-def check(repo: Path, paths: list[str] | None = None, config: dict | None = None) -> dict:
+def check(repo: Path, paths: list[str] | None = None, config: dict | None = None,
+          export_paths: list[str] | None = None) -> dict:
     """Every Mixin class of the project's Java sources (or of ``paths``) against the class files of its
-    build's classpath."""
+    build's classpath, and, where Mixin's debug export is found (or given in ``export_paths``), what each one
+    really changed (:mod:`verinoda.mixinexport`)."""
     import time
 
+    from verinoda import mixinexport
     from verinoda.snapshot import listed_files
 
     t0 = time.perf_counter()
@@ -692,6 +728,9 @@ def check(repo: Path, paths: list[str] | None = None, config: dict | None = None
         if found:
             by_root.setdefault(jvmclass.build_root(repo, repo / rel), []).extend(found)
     entries, builds = [], []
+    exports, enotes = mixinexport.find_exports(repo, list(dict.fromkeys([repo, *sorted(by_root)])), export_paths)
+    erows: list[dict] = []
+    eclasses: dict[str, dict] = {}
     for root, group in sorted(by_root.items()):
         try:
             where = root.relative_to(repo).as_posix() or "."
@@ -709,14 +748,40 @@ def check(repo: Path, paths: list[str] | None = None, config: dict | None = None
         try:
             for mc in group:
                 entries += check_mixin(mc, cf, complete, cp.source, java_paths)
+                if exports:
+                    erows += _export_rows(repo, mc, cf, exports, eclasses)
         finally:
             cf.close()
     counts = {v: sum(1 for r in entries if r["verdict"] == v) for v in ("exists", "absent", "unknown")}
+    export = mixinexport.section(exports, enotes, erows, list(eclasses.values()))
     return {"files": files, "builds": builds, "entries": entries, "counts": counts,
-            "notes": list(dict.fromkeys(notes)), "seconds": round(time.perf_counter() - t0, 3)}
+            "notes": list(dict.fromkeys(notes)), "export": export, "seconds": round(time.perf_counter() - t0, 3)}
 
 
-def lookup(repo: Path, paths: list[str] | None = None) -> dict:
+def _export_rows(repo: Path, mc: MixinClass, cf: ClassFiles, exports: list, classes: dict[str, dict]) -> list[dict]:
+    """What the Mixin export says of each injector of ``mc`` on each target, and (once per target class) what
+    the export holds beyond the original class file (:func:`verinoda.mixinexport.changes`)."""
+    from verinoda import mixinexport
+
+    try:
+        mtime = (repo / mc.path).stat().st_mtime
+    except OSError:
+        mtime = None
+    rows = []
+    for _written, cands in mc.targets:
+        binary = mixinexport.resolve(cands, exports, cf.where)
+        shown = binary.replace("/", ".").replace("$", ".")
+        orig = cf.code(binary) if binary in cf.where else None
+        holders = [e for e in exports if e.class_path(binary)]
+        exp = max(holders, key=lambda e: e.class_path(binary).stat().st_mtime) if holders else exports[0]
+        rows += mixinexport.injection_rows(mc, binary, shown, exp, orig, mtime)
+        got = exp.read(binary)
+        if binary not in classes and got and "unreadable" not in got:
+            classes[binary] = mixinexport.changes(got, orig, cf.evidence(binary) if orig else None)
+    return rows
+
+
+def lookup(repo: Path, paths: list[str] | None = None, export_paths: list[str] | None = None) -> dict:
     """``verinoda mixin-check``: the check; ``no_mixins`` when no Java file of the project holds a ``@Mixin``."""
     from verinoda.paths import load_config
 
@@ -724,7 +789,7 @@ def lookup(repo: Path, paths: list[str] | None = None) -> dict:
         config = load_config(repo)
     except Exception:  # noqa: BLE001 - no readable config: the build's own classpath is looked for
         config = None
-    res = check(repo, paths, config)
+    res = check(repo, paths, config, export_paths)
     if not any(f["mixins"] for f in res["files"]):
         where = "the file(s) named" if paths else "the project's Java sources"
         return {"status": "no_mixins", **res, "note": f"no @Mixin class in {where}"}
@@ -751,4 +816,8 @@ def render(res: dict) -> str:
             out.append(f"    nearest (a suggestion, {r['nearest_status']}): {', '.join(r['nearest'])}")
         if r.get("next"):
             out.append(f"    next: {r['next']}")
+    if res.get("export"):
+        from verinoda import mixinexport
+
+        out += mixinexport.render(res["export"])
     return "\n".join(out)
