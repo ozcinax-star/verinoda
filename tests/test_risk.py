@@ -159,7 +159,8 @@ def test_a_review_carries_the_score_in_json_text_summary_and_mcp(repo, capsys):
     assert "Risk score:" in capsys.readouterr().out
     m = AtlasTools(repo).change_review()
     assert m["risk"]["score"] == b["score"] and isinstance(m["risk"]["parts"], dict)
-    assert list(m)[:4] == ["summary", "exit", "counts", "risk"]
+    # the score comes right after the counts and the affected tests (both compact), before the findings
+    assert [k for k in m if k != "affected_tests"][:4] == ["summary", "exit", "counts", "risk"]
 
 
 @pytestmark_git
