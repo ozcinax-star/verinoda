@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 class SchemaTooNew(RuntimeError):
@@ -549,11 +549,16 @@ CREATE TRIGGER IF NOT EXISTS no_update_test_quarantine BEFORE UPDATE ON test_qua
 BEGIN SELECT RAISE(ABORT, 'the quarantine log is append-only'); END;
 """
 
-# v8: the persistent test-to-code map (verinoda/testmap.py): per test the run that last mapped it, and the
+# v8: a learning's time-to-live. NULL = never expires; a memory past it is invalidated ("expired"), never deleted.
+_SCHEMA_V8 = """
+ALTER TABLE memory ADD COLUMN expires_at TEXT;
+"""
+
+# v9: the persistent test-to-code map (verinoda/testmap.py): per test the run that last mapped it, and the
 # in-repository functions it ran with each file's content id in that run (and whether it ran in a setup or
 # teardown phase: fixture code a wider-scoped fixture may share with other tests). A derived cache of runtime_calls,
 # rewritten on every observed run (no append-only triggers).
-_SCHEMA_V8 = """
+_SCHEMA_V9 = """
 CREATE TABLE IF NOT EXISTS test_map_tests (
     test TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
@@ -576,7 +581,8 @@ CREATE INDEX IF NOT EXISTS idx_test_map_path ON test_map(path, qual);
 """
 
 _MIGRATIONS: dict[int, str] = {1: _SCHEMA_V1, 2: _SCHEMA_V2, 3: _SCHEMA_V3, 4: _SCHEMA_V4, 5: _SCHEMA_V5,
-                               6: _SCHEMA_V6, 7: _SCHEMA_V7, 8: _SCHEMA_V8}
+                               6: _SCHEMA_V6, 7: _SCHEMA_V7, 8: _SCHEMA_V8,
+                               9: _SCHEMA_V9}
 
 _JSON_COLS = {
     "plan", "check_result", "facts", "header", "tests", "flags", "explicit", "detail",

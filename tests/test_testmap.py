@@ -1,7 +1,7 @@
 """Persistent test-to-code map (verinoda/testmap.py) and the affected tests of a change review.
 
 Unit tests on synthetic traces (update, replace vs merge, fingerprints, parameter sets, the command), a v7 store
-migrating to v8, and one end-to-end run on a copy of orders_app: observe every test, change apply_discount, and
+migrating to v9, and one end-to-end run on a copy of orders_app: observe every test, change apply_discount, and
 the review lists the four tests the map shows reaching it - not test_empty_order_rejected, which the static
 graph reaches - and prints one pytest command that runs exactly those.
 """
@@ -147,17 +147,17 @@ def test_runner_id_and_pytest_command():
     assert small["truncated"] is True and small["by"] == "file"
 
 
-def test_a_v7_store_gains_the_map_tables(tmp_path):
+def test_a_v8_store_gains_the_map_tables(tmp_path):
     p = tmp_path / "atlas.db"
     Store(p).close()
     conn = sqlite3.connect(p)
     conn.execute("DROP TABLE test_map")
     conn.execute("DROP TABLE test_map_tests")
-    conn.execute("UPDATE meta SET value = '7' WHERE key = 'schema_version'")
+    conn.execute("UPDATE meta SET value = '8' WHERE key = 'schema_version'")
     conn.commit()
     conn.close()
     st = Store(p)
-    assert st.one("SELECT value FROM meta WHERE key = 'schema_version'")["value"] == str(SCHEMA_VERSION) == "8"
+    assert st.one("SELECT value FROM meta WHERE key = 'schema_version'")["value"] == str(SCHEMA_VERSION) == "9"
     assert st.all("SELECT * FROM test_map") == [] and st.all("SELECT * FROM test_map_tests") == []
     st.close()
 

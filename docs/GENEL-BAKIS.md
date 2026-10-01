@@ -654,7 +654,11 @@ Bilgiler yalnızca `verinoda memory learn` ile elle, anahtar/değer olarak ve
 sürümlü kaydedilir; analiz bunları otomatik yazmaz. `--claim` ile bir iddiaya
 bağlanan bilgi, o iddia `stale` ya da `contradicted` olunca geçersizleşir
 (silinmez). İddia sonradan yeniden doğrulansa da bilgi kendiliğinden geri
-gelmez. İddiaya bağlanmayan bilgi hiç geçersizleşmez.
+gelmez. `--ttl 30d` (m, h, d ya da w) ile verilen yaşam süresi dolan bilgi
+`expired` olarak, `memory forget KEY` ile kullanıcının söylediği bilgi
+`forgotten` olarak geçersizleşir; ikisi de silinmez. `memory history KEY`
+anahtarın olaylarını (ADD, UPDATE, DELETE, EXPIRE, INVALIDATE; tarihi ve
+nedeniyle) ve sürümlerini verir.
 
 ### 4.12 Ajan entegrasyonu ve MCP (`agents`, `mcp`) — Çalışıyor (yeni protokoller gerçek ajanda denenmedi)
 
