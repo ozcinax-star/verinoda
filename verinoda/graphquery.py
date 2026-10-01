@@ -68,6 +68,7 @@ MAX_EXPANSIONS = 1_000_000
 TIMEOUT_S = 30.0
 LINES_PER_NODE = 3
 EXAMPLES_PER_GROUP = 3
+SMALL_START = 64           # a pattern end with at most this many candidates is walked from without comparing
 STATUS_ORDER = ("statically_verified", "strong_inference", "weak_inference", "unknown")
 
 
@@ -922,7 +923,9 @@ class _Eval:
         elif len(nodes) == 1:
             flip = False
         else:
-            flip = len(self.cheap_cands(last)) < len(self.cheap_cands(first))
+            # a small first end (the handlers, say) is started from without listing the other end's candidates
+            n_first = len(self.cheap_cands(first))
+            flip = n_first > SMALL_START and len(self.cheap_cands(last)) < n_first
         if flip:
             nodes = nodes[::-1]
             rels = [RelPat(r.rels, {"out": "in", "in": "out"}.get(r.direction, "both"), r.lo, r.hi, r.pos)
