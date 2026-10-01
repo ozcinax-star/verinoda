@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D104)
+## Upgrading from 0.3.2 (D60-D108)
 
 ### D63: Running a project's own tests safely
 
@@ -238,8 +238,8 @@ edge's location matter.
   text and, when HEAD has none, the one that last removed it, each a claim with the commit as evidence),
   `history commits [--message RE] [--author RE] [--path P] [--since D] [--until D] [--diff RE] [--limit N]`,
   `history compare BASE [HEAD] [--path P]`. Read only; exit 2 when nothing is found.
-- The MCP server has 38 tools: `history_search` is new, served by the core profile behind `run_tool` and by
-  the full profile. Reinstalled skills allow `verinoda history` and mention it.
+- `history_search` is new (one more MCP tool; `dependency_ask` of D105 is the latest), served by the core profile
+  behind `run_tool` and by the full profile. Reinstalled skills allow `verinoda history` and mention it.
 
 ### D77: Mermaid diagrams and a wiki outline
 
@@ -468,6 +468,31 @@ changes. The MCP tool count is unchanged.
 lines the change modifies (the change's own author left out), the CODEOWNERS owners of the changed files, and the
 earlier commits that changed the same definitions with their messages. Nothing else in the output changes. The
 MCP tool count is unchanged.
+
+### D105: Ask before writing a dependency
+
+- New: `verinoda decide ask SOURCE TARGET` and the MCP tool `dependency_ask` (core, behind `run_tool` in a
+  project with decision records; listed in the full profile). The MCP server now has 39 tools.
+- The core instructions of a project with decision records now name `dependency_ask`.
+
+### D106: What-if refactoring
+
+New: `verinoda what-if --move OLD=NEW` simulates moving or renaming files and folders (nothing is edited) and
+reports the edge-guard findings and the dependency cycles the move would add or remove; exit 3 when it adds some.
+The cycles view's output is unchanged. The MCP tool count is unchanged.
+
+### D107: Project brief
+
+New command `verinoda brief [--max-chars N] [--json]`: a project brief (name, runtime, build/test/check
+commands, CI commands, layout, conventions) read from the files on every call, each line with `file:line`, under
+a character budget (default 2,000). It is not the decision brief: `verinoda decide brief` is unchanged. No MCP
+change: the tool count in UPGRADING.md stays as it is.
+
+### D108: Docs coupled to code, drift check and trivial auto-fix
+
+New: `verinoda docs check [PATHS] [--fix] [--exclude GLOB]` checks the paths and line references in the
+repository's documents against the working tree (exit 1 when one is broken, renamed, moved or changed); `--fix`
+repairs renamed paths and moved line numbers. The MCP tool count is unchanged.
 
 ### D60-D62
 
