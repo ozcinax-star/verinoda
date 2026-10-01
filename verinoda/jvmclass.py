@@ -220,6 +220,150 @@ def parse_class(b: bytes) -> dict | None:
     return out
 
 
+def _op_lengths() -> list[int]:
+    """The length in bytes (opcode included) of every fixed-size JVM instruction; 0 for the variable ones
+    (``tableswitch``, ``lookupswitch``, ``wide``) and for the opcodes the specification does not define."""
+    t = [1] * 0xcb + [0] * (256 - 0xcb)
+    for op in (0x10, 0x12, *range(0x15, 0x1a), *range(0x36, 0x3b), 0xa9, 0xbc):
+        t[op] = 2
+    for op in (0x11, 0x13, 0x14, 0x84, *range(0x99, 0xa9), *range(0xb2, 0xb9), 0xbb, 0xbd, 0xc0, 0xc1, 0xc6, 0xc7):
+        t[op] = 3
+    t[0xc5] = 4
+    for op in (0xb9, 0xba, 0xc8, 0xc9):
+        t[op] = 5
+    for op in (0xaa, 0xab, 0xc4):
+        t[op] = 0
+    return t
+
+
+_OP_LEN = _op_lengths()
+# the instructions that name a member or a class: field reads and writes, calls, object creation
+_REF_KIND = {0xb2: "F", 0xb3: "F", 0xb4: "F", 0xb5: "F", 0xb6: "M", 0xb7: "M", 0xb8: "M", 0xb9: "M", 0xbb: "N"}
+
+
+def _code_refs(code: bytes, ref) -> list[list[str]] | None:
+    """``[kind, owner, name, descriptor]`` of every field access (``F``), call (``M``) and ``new`` (``N``, the
+    class as owner) in a method's bytecode, in order, once each; None when an instruction is not one this reader
+    knows (the rest of the code could not be walked)."""
+    out: list[list[str]] = []
+    seen: set[tuple] = set()
+    i4 = lambda o: struct.unpack(">i", code[o:o + 4])[0]
+    pc, n = 0, len(code)
+    while pc < n:
+        op = code[pc]
+        if op in (0xaa, 0xab):
+            base = pc + 1 + (-(pc + 1)) % 4
+            if base + 12 > n:
+                return None
+            nxt = base + 12 + 4 * (i4(base + 8) - i4(base + 4) + 1) if op == 0xaa else base + 8 + 8 * i4(base + 4)
+            if nxt <= pc or nxt > n:
+                return None
+            pc = nxt
+            continue
+        if op == 0xc4:
+            if pc + 1 >= n:
+                return None
+            pc += 6 if code[pc + 1] == 0x84 else 4
+            continue
+        length = _OP_LEN[op]
+        if not length or pc + length > n:
+            return None
+        kind = _REF_KIND.get(op)
+        if kind:
+            got = ref((code[pc + 1] << 8) | code[pc + 2], kind)
+            if got is None:
+                return None
+            row = [kind, *got]
+            if tuple(row) not in seen:
+                seen.add(tuple(row))
+                out.append(row)
+        pc += length
+    return out
+
+
+def class_code(b: bytes) -> dict | None:
+    """``{"name", "super", "fields": [[name, descriptor, flags]], "methods": [[name, descriptor, flags, refs]]}``:
+    every member of a class file as written, and for each method what its bytecode references
+    (:func:`_code_refs`; None for a method with no ``Code`` attribute, ``False`` when its code could not be
+    walked), or None when ``b`` is not a class file this reader knows."""
+    try:
+        if b[:4] != b"\xca\xfe\xba\xbe":
+            return None
+        u2 = lambda o: (b[o] << 8) | b[o + 1]
+        u4 = lambda o: struct.unpack(">I", b[o:o + 4])[0]
+        n = u2(8)
+        cp: list = [None] * n
+        i, k = 10, 1
+        while k < n:
+            tag = b[i]
+            if tag == 1:
+                ln = u2(i + 1)
+                cp[k] = b[i + 3:i + 3 + ln].decode("utf-8", "replace")
+                i += 3 + ln
+            elif tag == 7:
+                cp[k] = ("class", u2(i + 1))
+                i += 3
+            elif tag in (9, 10, 11):
+                cp[k] = ("ref", u2(i + 1), u2(i + 3))
+                i += 5
+            elif tag == 12:
+                cp[k] = ("nat", u2(i + 1), u2(i + 3))
+                i += 5
+            elif tag in (8, 16, 19, 20):
+                i += 3
+            elif tag in (3, 4, 17, 18):
+                i += 5
+            elif tag in (5, 6):
+                i += 9
+                k += 1
+            elif tag == 15:
+                i += 4
+            else:
+                return None
+            k += 1
+
+        def cname(idx: int) -> str | None:
+            e = cp[idx] if idx else None
+            return cp[e[1]] if isinstance(e, tuple) and e[0] == "class" else None
+
+        def ref(idx: int, kind: str):
+            e = cp[idx] if 0 < idx < n else None
+            if kind == "N":
+                c = cname(idx)
+                return None if c is None else [c, "", ""]
+            if not (isinstance(e, tuple) and e[0] == "ref"):
+                return None
+            nat = cp[e[2]]
+            owner = cname(e[1])
+            if owner is None or not (isinstance(nat, tuple) and nat[0] == "nat"):
+                return None
+            return [owner, cp[nat[1]], cp[nat[2]]]
+
+        out: dict = {"name": cname(u2(i + 2)), "super": cname(u2(i + 4))}
+        i += 6
+        i += 2 + 2 * u2(i)   # the interfaces
+        for group in ("fields", "methods"):
+            rows = []
+            count = u2(i)
+            i += 2
+            for _ in range(count):
+                acc, nm, desc, n_attr = u2(i), u2(i + 2), u2(i + 4), u2(i + 6)
+                i += 8
+                refs = None
+                for _ in range(n_attr):
+                    ln = u4(i + 2)
+                    if group == "methods" and cp[u2(i)] == "Code":
+                        code_len = u4(i + 10)
+                        got = _code_refs(b[i + 14:i + 14 + code_len], ref)
+                        refs = False if got is None else got
+                    i += 6 + ln
+                rows.append([cp[nm], cp[desc], acc] + ([refs] if group == "methods" else []))
+            out[group] = rows
+        return out
+    except (IndexError, struct.error, TypeError, ValueError):
+        return None
+
+
 def _kotlin_metadata_names(b: bytes, o: int, cp: list, u2) -> list[str]:
     """The ``d2`` strings of a ``@kotlin.Metadata`` of a file facade (kind 2, 4 or 5): the Kotlin names of
     the functions and properties it declares, among other strings (an over-approximation, used only to say

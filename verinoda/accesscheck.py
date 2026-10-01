@@ -348,6 +348,21 @@ class ClassFiles:
             self._members[cls] = got
         return self._members[cls]
 
+    def code(self, cls: str) -> dict | None:
+        """:func:`verinoda.jvmclass.class_code` of a class: its members and what each method's bytecode
+        references (read once, kept)."""
+        key = "code:" + cls
+        if key not in self._members:
+            got = None
+            if cls in self.where:
+                jar, nested = self.where[cls]
+                try:
+                    got = jvmclass.class_code(self._zip(jar, nested).read(cls + ".class"))
+                except _ZIP_ERRORS:
+                    got = None
+            self._members[key] = got
+        return self._members[key]
+
     def _index(self) -> None:
         if self._packages is None:
             self._packages, self._simple = {}, {}
