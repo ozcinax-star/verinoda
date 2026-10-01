@@ -650,8 +650,8 @@ accepts `property_refs`; `experiments.run` accepts `PYTHONHASHSEED` in `env_extr
 
 New command `verinoda infra [--file FILE] [--json]`: Dockerfiles, compose services, Kubernetes containers and
 Terraform resources, each linked to the project file its command runs (statically_verified commands;
-strong_inference links through `COPY` lines, weak_inference by name). Read-only; nothing to migrate. The MCP tool
-count is unchanged (no new tool), so UPGRADING's tool count needs no change.
+strong_inference links through `COPY` lines, weak_inference by name). Read-only; nothing to migrate. No MCP tool
+changes.
 
 ### D60-D62
 
