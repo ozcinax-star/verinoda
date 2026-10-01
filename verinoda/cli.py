@@ -3829,7 +3829,7 @@ def cmd_mcp(args) -> int:
         repo = repo_of_config(Path.cwd(), args.repo_of)
     else:
         repo = default_repo(Path.cwd())
-    serve(repo, profile=args.profile)
+    serve(repo, profile=args.profile, watch=args.watch)
     return 0
 
 
@@ -4195,7 +4195,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--open", action="store_true", help="with --export: open the written file in the browser")
     sp.add_argument("--read-only", action="store_true", help="do not let the page write notes of your own")
     sp.add_argument("--watch", action="store_true",
-                    help="run `verinoda update` when files change; the page follows the index either way")
+                    help="run `verinoda update` when files change (operating-system file events, else "
+                         "polling); the page follows the index either way")
     sp = add("notes", cmd_notes, "your own notes on the code and whether the code changed since they were written",
              repo=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
@@ -5135,6 +5136,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="tools to serve: core (default: query, analyze, inspect/trace/map, claims and evidence, "
                         "index_update, code_check, decision_check) or full (all 33); else mcp.profile in "
                         ".verinoda/config.json")
+    c.add_argument("--watch", action="store_true",
+                   help="run a fast `verinoda update` when files change (operating-system file events), so "
+                        "tool calls answer from edited code without index_update")
     c.set_defaults(fn=cmd_mcp)
     where = c.add_mutually_exclusive_group()
     where.add_argument("--repo", help="project root (default: from the folder the server starts in)")
