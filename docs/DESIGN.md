@@ -9905,6 +9905,57 @@ counted as `no_record` (`--status unknown` matches statuses only); weak_inferenc
 and a `Z` parse; older rows with a `verify` rebind rebuilt. `tests/test_store.py`: the history payload carries
 the snapshot (None when unstated).
 
+## 100. Typed notes and wikilinks (D127, 2026-10-01)
+
+### 100.1 Why
+
+Basic Memory keeps knowledge as Markdown files an editor can open, with typed observation lines
+(`- [category] fact #tag`) and `[[Name]]` links, and indexes them as the files change. Verinoda's own notes
+(`verinoda ui`, `verinoda notes`) are already Markdown files with `[[Name]]` links, anchored to the code and
+checked against it, but their facts could not be listed and their links were followed only by clicking in the
+viewer.
+
+### 100.2 Decisions
+
+- **Observations.** A body line `- [category] fact #tag #other` (`-`, `*`, `+` or no bullet) is an observation:
+  its category (lower case, words allowed, any script), its text, its tags and its line in the note file. Fenced
+  code (CommonMark's rules: an opener indented at most three spaces, a closer of the same character with
+  nothing after it) is not read; a task box (`[ ]`, `[x]`) is not a category; a tag starts a word, outside
+  inline code and link targets. `verinoda notes --facts [--category C] [--tag T]` lists them across your notes.
+  They are what you wrote, not claims: they carry no evidence status.
+- **Links.** `[[Name]]` (also `[[Name|label]]`, `[[Name\|label]]` and `[[Name#part]]`) is a link; `![[embed]]`
+  and `[[...]]` inside inline code are not. `verinoda notes --links` resolves each one: a note of yours whose
+  subject, or the name after `::`, is `Name`; else in the index the subject `file::Name` or `file` it names, a
+  symbol or section whose name is `Name` or ends in `.Name` (ignoring `()` and case), or a file by its path or
+  its name without the suffix; the exact name first, and with several matches the others are counted and the
+  link marked ambiguous unless exactly one has that name. Exit 1 when a link leads nowhere (for CI); 3 when one
+  could not be checked: without an index (only links to your own notes resolve), or when the file it found
+  changed since the index was built. The viewer is more lenient: it opens the closest search hit.
+- **One question at a time.** `--facts`, `--links` and `--changed` exclude each other (exit 2).
+- **The files are the index.** Nothing is cached: every command reads the note files, so a note edited in an
+  editor is what the next command sees. The anchors and the fresh / changed / gone checks are unchanged.
+
+### 100.3 Measured
+
+Tests only.
+
+### 100.4 Not done
+
+- Facts are what you wrote, not claims: they carry no evidence status and are not verified.
+- A link resolves to the first name that matches; `also` counts the others (among the first 200 search hits).
+- No full-text search over notes beyond the filters (`verinoda query` does not read them).
+
+### 100.5 Tests
+
+`tests/test_usernotes.py`: observations with categories (one of two words), tags and the note file's line;
+task boxes and fenced code left out; links to code (a module-qualified name), to a note of yours (by the name
+after `::`, also without an index) and nowhere; the CLI filters by category and tag; `--links` exits 1, then 0
+after the note is edited in place. After review: non-ASCII categories and tags, tags not read in inline code,
+link targets or URLs, an over-long tag, a fence not closed by a line with an info string, a four-space fence
+not opened; embeds, inline code and an escaped pipe in links; file links by stem, path and `file::Name`; an
+ambiguous name; a link into a file changed since the index and no index are not checked (exit 3); the flags
+exclude each other; `--facts` reports what `--keep` / `--delete` did.
+
 ## Sources
 
 - **Retrieval:**

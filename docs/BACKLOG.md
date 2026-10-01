@@ -104,7 +104,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 11.3 | **Background consolidation** | Between sessions: re-verify stale claims, merge duplicates | Letta sleep-time agents, Cognee memify | stale claims re-checked by the background update |
-| 11.5 | **Typed notes and wikilinks** | Notes with `[category] fact #tag` lines and `[[symbol]]` links; two-way sync with Markdown files | Basic Memory | a note edited in an editor updates the index |
 
 ## 12 - Docs, decisions and specs
 
