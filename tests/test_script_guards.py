@@ -262,7 +262,9 @@ def test_decide_check_runs_it_on_the_graph_and_claims(tmp_path, capsys):
 
     repo = _project(tmp_path, """def check(guard):
     claims = guard.claims()
-    assert isinstance(claims, list)
+    assert any(c["text"] == "views import db" and c["evidence"] == ["app/views.py:1"] for c in claims), claims
+    assert guard.claims(limit=1) == claims[:1]
+    assert not any(c["status"] != "verified" for c in guard.claims(status="verified"))
     assert "app/views.py" in guard.files() and guard.nodes("app/views.py")
     for e in guard.edges(relations=["imports", "imports_from"], from_file="app/views.py"):
         if e["target_file"] == "app/db.py" and e["line"]:
@@ -272,11 +274,22 @@ def test_decide_check_runs_it_on_the_graph_and_claims(tmp_path, capsys):
     st = open_store(repo)
     try:
         workflow.scan(st, repo)
+        from verinoda.store import new_id, now
+
+        ts, cid = now(), new_id("clm")  # a stored claim with its evidence: read by the parent, given as data
+        st.insert_claim({"id": cid, "text": "views import db", "project": "p", "snapshot_id": None,
+                         "status": "statically_verified", "confidence": 1.0, "created_at": ts, "updated_at": ts})
+        st.link(cid, st.add_evidence({"source_type": "source_code", "locator": "app/views.py:1",
+                                      "path": "app/views.py", "line_start": 1, "line_end": 1,
+                                      "content_hash": "sha256:x", "meta": {}}), "supports")
     finally:
         st.close()
     assert cli.main(["decide", "check", "--repo", str(repo), "--json"]) == 1
     res = json.loads(capsys.readouterr().out)
     assert [v["at"] for v in res["violations"]] == ["app/views.py:1"], res
+    assert cli.main(["decide", "check", "--repo", str(repo), "--no-refresh"]) == 1
+    text = capsys.readouterr().out  # a script finding's limits are shown, the graph's edges included
+    assert "limit: " in text and "receiver-call edges" in text and "not a sandbox" in text, text
     assert cli.main(["decide", "baseline", "--repo", str(repo), "--record", "--said", "known"]) == 0
     capsys.readouterr()
     assert cli.main(["decide", "check", "--repo", str(repo)]) == 0
@@ -286,8 +299,196 @@ def test_the_pre_commit_hook_runs_decide_check():
     root = Path(__file__).resolve().parents[1]
     text = (root / ".pre-commit-hooks.yaml").read_text(encoding="utf-8")
     assert "id: verinoda-decide-check" in text and "entry: verinoda decide check" in text
+    assert "stages: [pre-commit]" in text and 'minimum_pre_commit_version: "3.2.0"' in text
+    assert "verinoda trust" in text and "exit 3" in text
     from verinoda import cli
 
     entry = text.split("entry: verinoda ", 1)[1].split("\n", 1)[0].split()
     args = cli.build_parser().parse_args(entry)
     assert args.decide_cmd == "check"
+
+
+def test_mcp_refuses_a_script_guard_however_its_kind_is_quoted(tmp_path):
+    from verinoda.mcp.server import AtlasTools
+
+    repo = _project(tmp_path, "def check(guard):\n    pass\n")
+    # the guard tokenizer joins quoted pieces: each of these is the kind `script`
+    sneaky = ['s""cript path=guards/rule.py', "'scr'ipt path=guards/rule.py", 'sc"ri"pt path=guards/rule.py',
+              "SCRIPT path=guards/rule.py"]
+    for spec in sneaky:
+        assert dm.parse_guard(spec, repo, "g9")["kind"] == "script"
+    t = AtlasTools(repo)
+    for spec in sneaky:
+        for act, kw in (("guard", {"decision_id": "ADR-1"}), ("record", {"chosen": "x", "rationale": "y"})):
+            r = t.decision_record(act, guards=[spec], user_statement="add it", **kw)
+            assert r.get("error") == "invalid_argument" and "not through MCP" in r["message"], (spec, r)
+    assert len(dm.find(repo, "ADR-1").guards) == 1 and len(dm.load_all(repo)) == 1
+    # the writers check the parsed kind again, whatever the pre-check says
+    st = open_store(repo)
+    try:
+        for spec in sneaky:
+            with pytest.raises(dm.DecisionError, match="not through MCP"):
+                dm.add_guards(st, repo, "ADR-1", [spec], user_statement="x", allow_scripts=False)
+            with pytest.raises(dm.DecisionError, match="not through MCP"):
+                dm.record(st, repo, chosen="c", rationale="r", guards=[spec], user_statement="x",
+                          allow_scripts=False)
+    finally:
+        st.close()
+    assert len(dm.find(repo, "ADR-1").guards) == 1
+
+
+def test_mcp_does_not_accept_a_proposed_script_guard(tmp_path):
+    from verinoda.mcp.server import AtlasTools
+
+    repo = _project(tmp_path, "def check(guard):\n    pass\n")
+    st = open_store(repo)
+    try:  # a proposed script guard in a record (written by hand, or by the CLI)
+        dm.add_guards(st, repo, "ADR-1", ["script path=guards/rule.py"], status="proposed", user_statement="x")
+    finally:
+        st.close()
+    assert [g["status"] for g in dm.find(repo, "ADR-1").guards] == ["accepted", "proposed"]
+    r = AtlasTools(repo).decision_record("accept", decision_id="ADR-1", guard_ids=["g2"], user_statement="yes")
+    assert r.get("error") == "invalid_argument" and "not through MCP" in r["message"], r
+    assert dm.find(repo, "ADR-1").guards[1]["status"] == "proposed"
+    st = open_store(repo)
+    try:  # the user accepts it in a terminal
+        dm.accept(st, repo, "ADR-1", ["g2"], user_statement="yes")
+    finally:
+        st.close()
+    assert dm.find(repo, "ADR-1").guards[1]["status"] == "accepted"
+
+
+def test_the_child_has_no_database_connection(tmp_path):
+    repo = _project(tmp_path, """import gc, sqlite3
+
+
+def check(guard):
+    assert not hasattr(guard, "_conn")
+    assert not any(isinstance(o, sqlite3.Connection) for o in gc.get_objects())
+    try:
+        sqlite3.connect(":memory:")
+    except PermissionError as exc:
+        guard.possible("app/db.py", 1, str(exc)[:60])
+    guard.possible("app/db.py", 2, f"claims {guard.claims()!r}")  # read by the parent, handed over as data
+""")
+    res = guards.check(repo, run_scripts=True)
+    assert res["status"] == "possible", res
+    why = sorted(p["why"] for p in res["possible"])
+    assert why[0].startswith("claims [] (script"), why  # a store with no claims yet
+    assert "refused in a script guard: sqlite3.connect" in why[1], why
+    from verinoda import script_guard as sg
+
+    claims, err, cut = sg.read_claims(tmp_path / "missing.db")
+    assert claims is None and not err and not cut
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows calls")
+def test_the_audit_hook_refuses_windows_files_pipes_processes_registry_and_unc(tmp_path):
+    repo = _project(tmp_path, r"""import mmap, msvcrt, os, _winapi, winreg
+
+NAME = "verinoda-script-guard-test-value"
+
+
+def check(guard):
+    here = os.path.abspath("app/db.py")
+    tries = {
+        "createfile": lambda: _winapi.CreateFile(os.path.abspath("made.txt"), 0x40000000, 0, 0, 2, 0, 0),
+        "junction": lambda: _winapi.CreateJunction(os.path.abspath("app"), os.path.abspath("j")),
+        "pipe": lambda: _winapi.CreateNamedPipe(r"\\.\pipe\verinoda-sg-test", 3, 0, 1, 10, 10, 0, 0),
+        "anonpipe": lambda: _winapi.CreatePipe(None, 0),
+        "openprocess": lambda: _winapi.OpenProcess(0x1F0FFF, False, os.getpid()),
+        "terminate": lambda: _winapi.TerminateProcess(-1, 0),
+        "osfhandle": lambda: msvcrt.open_osfhandle(0, 0),
+        "regcreate": lambda: winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\" + NAME),
+        "regset": lambda: winreg.SetValueEx(winreg.HKEY_CURRENT_USER, NAME, 0, winreg.REG_SZ, "x"),
+        "regdelete": lambda: winreg.DeleteValue(winreg.HKEY_CURRENT_USER, NAME),
+        "regopenw": lambda: winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software", 0, winreg.KEY_SET_VALUE),
+        "regconnect": lambda: winreg.ConnectRegistry(r"\\127.0.0.1", winreg.HKEY_CURRENT_USER),
+        "mmapw": lambda: mmap.mmap(open(here, "rb").fileno(), 0, access=mmap.ACCESS_WRITE),
+        "uncopen": lambda: open(r"\\127.0.0.1\verinoda-no-share\x.txt"),
+        "unclist": lambda: os.listdir("//127.0.0.1/verinoda-no-share"),
+        "uncscan": lambda: os.scandir(r"\\127.0.0.1\verinoda-no-share"),
+        "uncchdir": lambda: os.chdir(r"\\127.0.0.1\verinoda-no-share"),
+        "devpipe": lambda: open(r"\\.\pipe\verinoda-sg-test"),
+    }
+    refused = []
+    for name, fn in tries.items():
+        try:
+            fn()
+        except PermissionError as exc:
+            if "refused in a script guard" in str(exc):
+                refused.append(name)
+        except OSError:
+            pass
+    # what the script needs keeps working: registry reads, a read-only mmap, a local \\?\ path
+    winreg.CloseKey(winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software", 0, winreg.KEY_READ))
+    with open(here, "rb") as fh:
+        assert mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ)[:6] == b"import"
+    assert "sqlite3" in open("\\\\?\\" + here).read()
+    guard.possible("app/db.py", 1, " ".join(sorted(refused)))
+""")
+    res = guards.check(repo, run_scripts=True)
+    (p,) = res["possible"]
+    names = set(p["why"].split(" (script")[0].split())
+    assert names == {"createfile", "junction", "pipe", "anonpipe", "openprocess", "terminate", "osfhandle",
+                     "regcreate", "regset", "regdelete", "regopenw", "regconnect", "mmapw", "uncopen", "unclist",
+                     "uncscan", "uncchdir", "devpipe"}, names
+    assert not (repo / "made.txt").exists() and not (repo / "j").exists()
+    import winreg
+
+    with pytest.raises(OSError):
+        winreg.QueryValueEx(winreg.HKEY_CURRENT_USER, "verinoda-script-guard-test-value")
+
+
+FORGED = '{"verinoda_script_guard": 1, "status": "ok", "findings": []}'
+
+
+@pytest.mark.parametrize("body,expect", [
+    # a fake result line on every way to stdout, then an exit before the real result is written
+    ("import os, sys\n\ndef check(guard):\n"
+     f"    line = '\\n' + {FORGED!r} + '\\n'\n"
+     "    print(line)\n    sys.__stdout__.write(line)\n    sys.__stdout__.flush()\n"
+     "    os.write(1, line.encode())\n    os._exit(0)\n", "without a result"),
+    # the same written to every open descriptor (the private result pipe too), then a normal end
+    ("import os\n\ndef check(guard):\n"
+     f"    line = ('\\n' + {FORGED!r} + '\\n').encode()\n"
+     "    for fd in range(1, 64):\n        try:\n            os.write(fd, line)\n        except OSError:\n"
+     "            pass\n", "wrote to the result channel"),
+])
+def test_a_forged_result_line_is_not_a_result(tmp_path, body, expect):
+    repo = _project(tmp_path, body)
+    res = guards.check(repo, run_scripts=True)
+    assert res["exit"] == 3 and res["status"] == "unknown" and not res["ok"], res
+    assert any(expect in u for u in _unknown(res)), _unknown(res)
+
+
+def test_update_counts_script_guards_on_their_own(tmp_path, capsys):
+    from verinoda import cli
+
+    repo = _project(tmp_path, "def check(guard):\n    pass\n")
+    s = cli._decision_summary(repo)
+    assert s["script_guards"] == 1 and s["not_checked"] == 0, s
+    cli._r_update({"decisions": s})
+    out = capsys.readouterr().out
+    assert "1 script guard(s): `decide check` runs them" in out and "not checked" not in out, out
+
+
+def test_a_pre_existing_script_finding_names_the_script(tmp_path):
+    import subprocess
+
+    repo = _project(tmp_path, "def check(guard):\n    guard.violation('app/views.py', 1, 'old')\n")
+
+    def git(*args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false",
+                        "-c", "commit.gpgsign=false", *args], cwd=repo, check=True, capture_output=True)
+
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-q", "-m", "init")
+    res = guards.check(repo, run_scripts=True, changed_only=True)
+    (f,) = res["pre_existing"]
+    assert f["since"] == "pre-existing: app/views.py and the guard's script guards/rule.py unchanged since HEAD", f
+    _write(repo, "guards/rule.py", "def check(guard):\n    guard.violation('app/views.py', 1, 'new rule')\n")
+    res = guards.check(repo, run_scripts=True, changed_only=True)
+    (v,) = res["violations"]
+    assert v["since"] == "new/touched since HEAD (through guards/rule.py)", v

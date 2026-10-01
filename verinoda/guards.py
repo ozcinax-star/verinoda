@@ -2203,6 +2203,9 @@ def check_script(ctx: _Ctx, g: dict) -> tuple[list[tuple[str, str, int, str]], S
     scan.limit(*sg.LIMITS)
     if ctx.graph_stale:
         scan.limit(f"the graph the script read may be older than the working tree: {ctx.graph_stale}")
+    if r.get("claims_left_out"):
+        scan.limit(f"guard.claims() saw the newest {sg.MAX_CLAIMS} stored claims; {r['claims_left_out']} older "
+                   "one(s) were left out")
     if r.get("output"):
         scan.limit(f"the script printed: {r['output'][-400:]}")
     if r["status"] != "ok":
@@ -2412,6 +2415,9 @@ def check(repo: Path, *, graph=None, base: str | None = None, changed_only: bool
                     if touched:
                         f.since = f"new/touched since {base_label}" + \
                             (f" (through {', '.join(touched)})" if rel not in touched else "")
+                    elif g["kind"] == "script":
+                        f.since = f"pre-existing: {rel} and the guard's script {g.get('path')} unchanged since " \
+                                  f"{base_label}"
                     else:
                         f.since = f"pre-existing: {rel}" + \
                             (f" and the {len(via)} file(s) its binding passes through" if via else "") + \

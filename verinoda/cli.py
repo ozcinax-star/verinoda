@@ -369,7 +369,10 @@ def _r_update(r: dict) -> None:
         print(f"  decisions: could not be checked ({dec['error']})" if dec.get("error") else
               f"  decisions: {dec['violations']} violated, {dec['possible']} possible, {dec['reviews']} review, "
               f"{dec['triggers']} trigger" + (f", {dec['not_checked']} not checked" if dec.get("not_checked") else "")
-              + (" - `verinoda decide check` for the sites" if any(dec.values()) else ""))
+              + (f", {dec['script_guards']} script guard(s): `decide check` runs them" if dec.get("script_guards")
+                 else "")
+              + (" - `verinoda decide check` for the sites"
+                 if any(v for k, v in dec.items() if k != "script_guards") else ""))
     _r_derived(r)
     if r.get("error"):
         print(f"error: {r['error']}", file=sys.stderr)
@@ -688,8 +691,12 @@ def _decision_summary(repo: Path, *, noop: bool = False) -> dict | None:
                                "(`verinoda decide check` checks now)"}
         res = guards.check(repo, graph=index.load(repo) if graph_path(repo).exists() else None, records=recs)
         out = {k: len(res[k]) for k in ("violations", "possible", "reviews", "triggers")}
+        # a script guard runs only from `decide check`: counted on its own, not as "not checked" on every update
+        scripts = sum(1 for u in res["unknown"] if u.get("kind") == "script")
         # what was not checked (a file that does not parse, a record that cannot be read) is never "0 violated"
-        out["not_checked"] = len(res["unknown"]) + sum(1 for n in res["not_enforced"] if n.get("problem"))
+        out["not_checked"] = len(res["unknown"]) - scripts + sum(1 for n in res["not_enforced"] if n.get("problem"))
+        if scripts:
+            out["script_guards"] = scripts
         return out
     except Exception as exc:  # noqa: BLE001 - the update itself succeeded; say why the check did not run
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
@@ -1996,6 +2003,9 @@ def _r_decide_check(r: dict) -> None:
                 shown.add(head)
                 pre = "pre-existing " if key == "pre_existing" else ""
                 print(f"{pre}{label} {f['decision']} {f['guard']} {f['kind']} {f.get('what') or ''}")
+                if f["kind"] == "script":  # what a script guard's finding rests on, the graph it read included
+                    for lim in f.get("limits") or []:
+                        print(f"     limit: {lim}")
             tags = ", ".join(x for x in (f.get("status"), f.get("since")) if x)
             print(f"  {f['at']} {f.get('line') or ''}  [{tags}]")
             print(f"     {f['why']}")

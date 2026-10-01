@@ -625,13 +625,29 @@ def _texts(g: dict, key: str, *, paths: bool = False) -> list[str]:
     return v
 
 
+SCRIPT_REFUSED = ("a script guard runs the project's code: the user adds or accepts it with `verinoda decide "
+                  "guard ID --guard \"script path=...\"` / `verinoda decide accept ID GUARD` in a terminal, not "
+                  "through MCP")
+
+
 def refuse_script_guards(specs: list[str] | None) -> None:
     """Raise :class:`DecisionError` when a guard spec is a ``script`` guard: one runs code, so it is added with
-    the CLI (``verinoda decide record`` / ``decide guard``), never through MCP."""
+    the CLI (``verinoda decide record`` / ``decide guard``), never through MCP. The spec is split as
+    :func:`parse_guard` splits it (quotes and all), so ``s""cript`` is the kind ``script`` here too; the
+    writers also check the parsed kind again (``allow_scripts=False``)."""
     for spec in specs or []:
-        if (str(spec).split() or [""])[0].strip("\"'").lower() == "script":
-            raise DecisionError("a script guard runs the project's code: the user adds it with `verinoda decide "
-                                "guard ID --guard \"script path=...\"` in a terminal, not through MCP")
+        try:
+            kind = _kv(str(spec), "guard")[0]
+        except DecisionError:
+            continue  # parse_guard refuses it with the reason
+        if kind == "script":
+            raise DecisionError(SCRIPT_REFUSED)
+
+
+def _no_script(g: dict, allow_scripts: bool) -> dict:
+    if not allow_scripts and g.get("kind") == "script":
+        raise DecisionError(SCRIPT_REFUSED)
+    return g
 
 
 def validate_guard(g: dict) -> dict:
@@ -899,8 +915,10 @@ def _context_md(brief: dict | None, answers: list[dict]) -> str:
 
 def record(store, repo: Path, *, chosen: str, rationale: str, title: str | None = None, brief_id: str | None = None,
            guards: list[str] = (), governs: list[str] = (), revisit_when: list[str] = (),
-           supersedes: str | None = None, user_statement: str | None = None, graph=None) -> dict:
-    """Record the human's choice as a new decision (status accepted, decided-by human)."""
+           supersedes: str | None = None, user_statement: str | None = None, graph=None,
+           allow_scripts: bool = True) -> dict:
+    """Record the human's choice as a new decision (status accepted, decided-by human). ``allow_scripts=False``
+    (MCP) refuses a ``script`` guard."""
     repo = Path(repo).resolve()
     chosen, rationale = str(chosen or "").strip(), str(rationale or "").strip()
     if not chosen or not rationale:
@@ -930,7 +948,7 @@ def record(store, repo: Path, *, chosen: str, rationale: str, title: str | None 
     d = Decision(id=did, number=n, title=title, status="accepted", decided_by=HUMAN, date=_today(),
                  chosen=chosen, brief=brief_id, supersedes=old.id if old else None)
     for spec in guards:
-        d.guards.append(parse_guard(spec, repo, _next_id(d.guards, "g")))
+        d.guards.append(_no_script(parse_guard(spec, repo, _next_id(d.guards, "g")), allow_scripts))
     for spec in revisit_when:
         r = parse_revisit(spec, repo, _next_id(d.revisit_when, "r"))
         from verinoda import guards
@@ -969,17 +987,20 @@ def _refuse_unreadable(d: Decision) -> None:
 
 
 def add_guards(store, repo: Path, did: str, specs: list[str], *, user_statement: str | None = None,
-               status: str = "accepted") -> dict:
-    """Add guards (the human's own: accepted) to an existing record."""
+               status: str = "accepted", allow_scripts: bool = True) -> dict:
+    """Add guards (the human's own: accepted) to an existing record. ``allow_scripts=False`` (MCP) refuses a
+    ``script`` guard."""
     repo = Path(repo).resolve()
     d = _require(repo, did)
     for spec in specs:
-        d.guards.append(parse_guard(spec, repo, _next_id(d.guards, "g"), status=status))
+        d.guards.append(_no_script(parse_guard(spec, repo, _next_id(d.guards, "g"), status=status), allow_scripts))
     return _save(store, repo, d, "guard", user_statement=user_statement)
 
 
-def accept(store, repo: Path, did: str, guard_ids: list[str], *, user_statement: str | None = None) -> dict:
-    """Activate proposed guards (``decide accept ADR-1 g1``)."""
+def accept(store, repo: Path, did: str, guard_ids: list[str], *, user_statement: str | None = None,
+           allow_scripts: bool = True) -> dict:
+    """Activate proposed guards (``decide accept ADR-1 g1``). ``allow_scripts=False`` (MCP) refuses when one of
+    them is a ``script`` guard: a proposed one written into a record by hand is accepted in a terminal."""
     repo = Path(repo).resolve()
     d = _require(repo, did)
     by = {g["id"]: g for g in d.guards}
@@ -987,6 +1008,8 @@ def accept(store, repo: Path, did: str, guard_ids: list[str], *, user_statement:
     if missing or not guard_ids:
         raise DecisionError(f"{d.id} has no guard {', '.join(missing) or '(none given)'}; its guards: "
                             f"{', '.join(by) or 'none'}")
+    for gid in guard_ids:
+        _no_script(by[gid], allow_scripts)
     for gid in guard_ids:
         by[gid]["status"] = "accepted"
     return _save(store, repo, d, "accept", user_statement=user_statement)

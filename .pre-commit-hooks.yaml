@@ -4,10 +4,14 @@
 #     hooks: [{id: verinoda-decide-check}]
 # It checks the decision records' guards (script guards too, in a project the user trusts) against the
 # working tree; only violations new or touched since HEAD stop the commit (exit 1), and a guard that could
-# not be checked stops it too (exit 3).
+# not be checked stops it too (exit 3). Trust is per user and path: a collaborator who has not run
+# `verinoda trust` on their checkout gets exit 3 (script guards unknown) on every commit while the records
+# carry an accepted script guard.
 - id: verinoda-decide-check
   name: verinoda decide check
   entry: verinoda decide check --changed
   language: python
   pass_filenames: false
   always_run: true
+  stages: [pre-commit]
+  minimum_pre_commit_version: "3.2.0"

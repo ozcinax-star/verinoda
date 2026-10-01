@@ -1738,7 +1738,7 @@ class AtlasTools:
                         except ValueError as exc:
                             raise ToolFailure("invalid_argument", str(exc)[:600],
                                               "question ids are listed in the brief's questions_for_human") from None
-                    if act in ("record", "guard"):  # a script guard runs code: the CLI only
+                    if act in ("record", "guard"):  # a script guard runs code: the CLI only (checked again parsed)
                         dm.refuse_script_guards(_str_list(guards, "guards"))
                     if act == "record":
                         g = self._graph() if governs and graph_path(self.repo).exists() else None
@@ -1747,15 +1747,18 @@ class AtlasTools:
                                          brief_id=_opt_text(brief_id), guards=_str_list(guards, "guards"),
                                          governs=_str_list(governs, "governs"),
                                          revisit_when=_str_list(revisit_when, "revisit_when"),
-                                         supersedes=_opt_text(supersedes), user_statement=said, graph=g)
+                                         supersedes=_opt_text(supersedes), user_statement=said, graph=g,
+                                         allow_scripts=False)
                     if act == "import":
                         g = self._graph() if graph_path(self.repo).exists() else None
                         return dm.import_doc(st, self.repo, _text(document, "document"), graph=g, user_statement=said)
                     did = _text(decision_id, "decision_id")
                     if act == "guard":
-                        return dm.add_guards(st, self.repo, did, _str_list(guards, "guards"), user_statement=said)
+                        return dm.add_guards(st, self.repo, did, _str_list(guards, "guards"), user_statement=said,
+                                             allow_scripts=False)
                     if act == "accept":
-                        return dm.accept(st, self.repo, did, _str_list(guard_ids, "guard_ids"), user_statement=said)
+                        return dm.accept(st, self.repo, did, _str_list(guard_ids, "guard_ids"), user_statement=said,
+                                         allow_scripts=False)
                     if act == "supersede":
                         return dm.supersede(st, self.repo, _text(supersedes, "supersedes"), did, user_statement=said)
                     if act == "link":
