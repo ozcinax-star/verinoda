@@ -2198,10 +2198,13 @@ def cmd_analyze(args) -> int:
     question = args.question or ""
     if plan is None and not question.strip():
         raise SystemExit("error: give a question, or a plan file with --plan FILE")
+    if plan is not None and args.intent:
+        raise SystemExit("error: --intent is for a question; a plan's sub-questions carry their own intents")
     b = analysis.Budget(seconds=args.budget_seconds, tool_calls=args.budget_calls,
                         context_tokens=args.budget_tokens)
     res = analysis.analyze(_store(repo), repo, question, plan=plan, budget=b, run_tests=args.run_tests,
-                           challenge=not args.no_challenge, observe=args.observe, refresh=args.refresh)
+                           challenge=not args.no_challenge, observe=args.observe, refresh=args.refresh,
+                           intent=args.intent)
     _emit(args, res, _r_claims)
     return PLAN_EXIT.get(res.get("status"), 0)
 
@@ -4308,6 +4311,8 @@ class _VersionAction(argparse.Action):
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from verinoda.question_plan import INTENTS
+
     p = argparse.ArgumentParser(
         prog="verinoda",
         description="Evidence-first codebase analysis (derived from Graphify; not an official Graphify release).",
@@ -4828,6 +4833,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",
                     help="a checked question plan file (under .verinoda/plans/; never JSON on the command line)")
+    sp.add_argument("--intent", choices=INTENTS, metavar="INTENT",
+                    help="what the question asks for, as the caller reads it (" + ", ".join(INTENTS)
+                         + "); used only when the rule reading agrees, else reported (intent_check); never "
+                           "changes a claim's status")
     sp.add_argument("--run-tests", action="store_true", help="run the tests that reach the answer (isolated)")
     sp.add_argument("--observe", action="store_true",
                     help="observe the selected tests with the call tracer (runtime evidence, isolated run)")

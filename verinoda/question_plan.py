@@ -2650,6 +2650,62 @@ def bare_plan(question: str, lexicon=None, mentions: list[dict] | None = None) -
             "on_ambiguity": "answer_all", "host": "cli", "derived_by": f"{DRAFT_RULES}:bare"}
 
 
+def host_intent(plan: dict, intent: str, lexicon=None) -> tuple[dict | None, dict]:
+    """A drafted plan read with the intent a host gave for the whole question: ``(plan or None, intent_check)``.
+
+    The host's intent is a hint, never an override. It is weighed against the rule reading of the message
+    (:func:`intents_for`): when the rules read intents and the host's is not among them, the two disagree, the
+    rule reading is kept (``None``) and ``intent_check`` holds both. A question asking for a choice in so many
+    words is the user's (:func:`asks_for_choice`): ``decide`` is the only intent that agrees with it, and
+    ``decide`` agrees with no other question. When they agree, the sub-questions the intent names come first;
+    one carrying it only as a secondary intent (else, when none carries it, those the rules gave no intent, read
+    as ``locate`` by default) takes it as its intent, with that intent's ``done_when`` kind and minimum status.
+    The returned plan is a copy (``derived_by`` says what changed) that :func:`check` must still pass with
+    ``source="host"``; it never touches a claim's status, only which handlers a sub-question runs and the
+    verdict's yardstick."""
+    msg = plan.get("user_message") or ""
+    rules = intents_for(msg, lexicon)
+    out = {"given": intent, "read_as": rules, "agrees": True, "applied": False, "sub_questions": []}
+    choice = asks_for_choice(msg)
+    if choice != (intent == "decide"):
+        out.update(agrees=False, why="the question asks for a choice: only 'decide' fits it" if choice else
+                   "'decide' is kept for a question that asks for a choice in so many words")
+        return None, out
+    if rules and intent not in rules:
+        out.update(agrees=False, why=f"the rules read the question as {', '.join(rules)}; their reading is used")
+        return None, out
+    sqs = [dict(sq) for sq in plan.get("sub_questions") or []]
+    primary = [sq for sq in sqs if sq.get("intent") == intent]
+    secondary = [sq for sq in sqs if intent in (sq.get("secondary_intents") or [])]
+    default = [sq for sq in sqs if str(sq.get("derived_by") or "").endswith(":default_locate")]
+    touched = [] if primary else secondary or default
+    for sq in touched:
+        old = sq.get("intent")
+        rest = [i for i in sq.get("secondary_intents") or [] if i != intent]
+        if old and old != intent and not str(sq.get("derived_by") or "").endswith(":default_locate"):
+            rest = [old] + rest
+        if rest:
+            sq["secondary_intents"] = rest
+        else:
+            sq.pop("secondary_intents", None)
+        kind, min_status, detail = DEFAULT_DONE[intent]
+        subjects = list((sq.get("done_when") or {}).get("subjects") or sq.get("mentions") or [])
+        if intent == "compare_reference":
+            subjects += [r for r in sq.get("references") or [] if r not in subjects]
+        sq["intent"] = intent
+        sq["done_when"] = {"kind": kind, "subjects": subjects, "min_status": min_status, "detail": detail}
+        sq["derived_by"] = f"{sq.get('derived_by') or DRAFT_RULES}+host_intent"
+    ids = {sq["id"] for sq in primary or touched}
+    if not ids:  # nothing carries it and nothing was left to the default: the plan stays the rules' own
+        out["why"] = "no sub-question carries this intent or was read by default; the rule reading is used"
+        return None, out
+    sqs.sort(key=lambda sq: sq["id"] not in ids)  # stable: the order among the rest is kept, check's topo keeps deps
+    out.update(applied=True, sub_questions=sorted(ids, key=[sq["id"] for sq in sqs].index))
+    if touched:  # the sub-questions whose intent the host's replaced (the others already had it)
+        out["retyped"] = [sq["id"] for sq in touched]
+    return {**plan, "sub_questions": sqs, "derived_by": f"{plan.get('derived_by') or DRAFT_RULES}+host_intent"}, out
+
+
 def fallback(question: str, graph, repo=None, lexicon=None, drafted: dict | None = None) -> tuple[dict, dict]:
     """``(plan, check)`` for a typed question whose drafted plan failed its own checks (D67).
 
