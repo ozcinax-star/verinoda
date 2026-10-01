@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
@@ -79,8 +80,16 @@ def test_load_tells_an_export_from_a_log():
     assert trace_import.load('{"a": 1}'.encode("utf-16"), name="export.json") == ([{"a": 1}], 0)  # PowerShell's >
     with pytest.raises(ValueError, match=r"not valid JSON \(line 1, column"):
         trace_import.load(b'{"exception": {"values": [', name="event.json")
+    # a file not named as JSON that does not parse is a log, even when it starts with {
+    assert trace_import.load(b'{"exception": oops}', name="paste.txt") is None
+    assert trace_import.load(b"{main} starting\nTraceback (most recent call last):\n  File \"a.py\", line 1\n",
+                             name="run.log") is None
+    assert trace_import.load(b'{"level": "info"}\nTraceback (most recent call last):\n  File "a.py", line 1\n'
+                             b"ValueError: x\n", name="app.log") is None
+    # one event and a cut last line: the event is kept
+    assert trace_import.load(b'{"a": 1}\n{"b": ', name="events.jsonl") == ([{"a": 1}], 1)
     with pytest.raises(ValueError, match="not valid JSON"):
-        trace_import.load(b'{"exception": oops}', name="paste.txt")      # a { starts JSON whatever the name
+        trace_import.load(b'{"a": 1}\n{"b": \n{"c": 3}\n{"d": ', name="events.ndjson")  # half the lines broken
     with pytest.raises(ValueError, match="does not start"):
         trace_import.load(b"Traceback (most recent call last):", name="event.json")
     with pytest.raises(ValueError, match="nested too deeply"):
@@ -127,6 +136,68 @@ def test_sentry_frames_are_mapped_or_said_why_not(repo):
     assert "what that event recorded, not what always happens" in text
 
 
+def test_line_numbers_that_are_not_numbers_are_skipped_not_fatal(repo):
+    assert trace_import._int("12") == 12 and trace_import._int("\u00b2") is None and trace_import._int("9" * 10) is None
+    stack = ("Traceback (most recent call last):\n"
+             f'  File "/srv/app/shop/orders.py", line {"9" * 5000}, in checkout\n'
+             '  File "/srv/app/shop/orders.py", line 7, in place\n'
+             f"\tat com.example.Foo.bar(Foo.java:{'1' * 5000})\n"
+             f"    at handler (/srv/app/web/x.js:{'2' * 5000}:3)\n")
+    rows = trace_import._text_frames(stack, "ev0")
+    assert [(r["path"], r["line"]) for r in rows] == [("/srv/app/shop/orders.py", 7)]
+
+
+def test_function_names_compare_in_linear_time():
+    assert trace_import._short("main.run.func1.func2") == "run"
+    assert trace_import._short("Object.handle(Request req)") == "handle"
+    assert trace_import._short("lambda$tick$2") == "tick"
+    assert trace_import._short("(anonymous)") is None
+    t0 = time.perf_counter()
+    for name in ("a" + ".func1" * 20000 + ".x", "f(" + "(" * 100000 + "x", "g" + "(" * 100000 + ")",
+                 "a.func1" * 50 + ".func"):
+        trace_import._short(name)
+    assert time.perf_counter() - t0 < 0.5
+    assert trace_import._short("x" * (trace_import.MAX_NAME + 1)) is None
+    assert trace_import._short("a" + ".func1" * 80) == "a"
+
+
+def test_jvm_caused_by_blocks_keep_the_root_cause_innermost():
+    stack = ("java.lang.RuntimeException: wrap\n"
+             "\tat com.example.Outer.call(Outer.java:10)\n"
+             "\tat com.example.Main.main(Main.java:3)\n"
+             "Caused by: java.lang.IllegalStateException: closed\n"
+             "\tat com.example.Foo.bar(Foo.java:5)\n"
+             "\tat com.example.Outer.call(Outer.java:9)\n"
+             "\t... 1 more\n")
+    rows = trace_import._text_frames(stack, "ev0")
+    assert [(r["fn"], r["line"]) for r in rows] == [("main", 3), ("call", 10), ("call", 9), ("bar", 5)]
+
+
+def test_code_namespace_without_a_package_builds_no_path(repo):
+    assert trace_import._namespace_path("com.example.Foo")[0] == "com/example/Foo.java"
+    assert trace_import._namespace_path("shop.orders")[0] == "shop/orders.py"
+    for ns in (".", "a.", "Foo", "a..b"):
+        assert trace_import._namespace_path(ns)[0] is None
+    doc = {"resourceSpans": [{"scopeSpans": [{"spans": [
+        {"spanId": "s1", "name": "x", "attributes": [
+            {"key": "code.namespace", "value": {"stringValue": "Foo"}},
+            {"key": "code.function", "value": {"stringValue": "bar"}},
+            {"key": "code.lineno", "value": {"intValue": 4}}]}]}]}]}
+    res = trace_import.analyze(repo, index.load(repo), [doc], source="t.json")
+    row = res["events"][0]["frames"][0]
+    assert row["result"] == "not_in_repo" and "names no package" in row["why"]
+
+
+def test_otel_events_stop_at_the_limit_while_reading():
+    spans = [{"spanId": f"s{i}", "name": "x", "attributes": [
+        {"key": "code.filepath", "value": {"stringValue": "/srv/app/shop/orders.py"}},
+        {"key": "code.lineno", "value": {"intValue": 11}}]} for i in range(1000)]
+    doc = {"resourceSpans": [{"scopeSpans": [{"spans": spans}]}]}
+    assert len(trace_import._otel(doc, "doc", 7)) == 7
+    evs, cut = trace_import.events([doc])
+    assert len(evs) == trace_import.MAX_EVENTS and cut
+
+
 def test_otel_span_attributes_and_exception_stacktrace(repo):
     res = _analyze(repo, "otel_trace.json")
     assert res["format"] == "otel"
@@ -140,7 +211,9 @@ def test_otel_span_attributes_and_exception_stacktrace(repo):
     assert jf["code"]["path"] == "src/main/java/com/example/Foo.java" and jf["code"]["result"] == "mapped"
     assert jf["code"]["path_from"] == "code.namespace as a JVM class"
     assert jf["ev0.f1"]["result"] == "mapped"                         # innermost last: Foo.bar after Thread.run
-    assert java["library"]["frames"] == 1                             # java/lang/Thread.java is not in the repo
+    # java/lang/Thread.java is not in the repo, and the trace text does not say whose it is: not folded as a library
+    assert jf["ev0.f0"]["result"] == "not_in_repo" and "origin unknown" in jf["ev0.f0"]["why"]
+    assert "library" not in java
 
 
 def test_cli_stores_one_observed_claim_per_mapped_frame(repo, capsys):
@@ -150,10 +223,22 @@ def test_cli_stores_one_observed_claim_per_mapped_frame(repo, capsys):
     assert len(out["claims"]) == out["counts"]["mapped"] == 3
     assert all("not what always happens" in c["text"] for c in out["claims"])
     assert all(c["status"] in ("observed", "strong_inference", "weak_inference", "unknown") for c in out["claims"])
+    assert out["mode"] == "export" and "never let it verify" in out["claims_note"]
+    assert {c["status"] for c in out["claims"]} == {"weak_inference"}       # what claims_note says
     kept = list((repo / ".verinoda" / "logs").glob("sentry_events-*.frames.json"))
     assert len(kept) == 1
     body = kept[0].read_text(encoding="utf-8")
     assert "do-not-keep" not in body and "x0.f2" in body               # the frames, not the event's variables
+    # the same export again: the claims are there already, none is added
+    assert cli.main(["trace-log", str(path), "--repo", str(repo), "--json"]) == 0
+    again = json.loads(capsys.readouterr().out)["claims"]
+    assert [c["id"] for c in again] == [c["id"] for c in out["claims"]] and all(c["existing"] for c in again)
+    st = open_store(repo)
+    try:
+        n = st.conn.execute("SELECT COUNT(*) FROM claims WHERE spec LIKE '%trace-import%'").fetchone()[0]
+    finally:
+        st.close()
+    assert n == 3
     assert cli.main(["trace-log", str(path), "--repo", str(repo), "--no-store"]) == 0
     assert "stored" not in capsys.readouterr().out
 
@@ -170,6 +255,15 @@ def test_cli_refuses_a_broken_or_empty_export(repo, tmp_path, capsys):
     log = tmp_path / "structured.log"                                 # JSON lines that are no export: a log
     log.write_text('{"level": "info", "msg": "up"}\n', encoding="utf-8")
     assert cli.main(["trace-log", str(log), "--repo", str(repo), "--no-store"]) == 2
+    capsys.readouterr()
+    assert cli.main(["trace-log", str(log), "--repo", str(repo), "--no-store", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["mode"] == "log"
+    # a log that starts with { and is no JSON: read as a log, not refused
+    braced = tmp_path / "run.log"
+    braced.write_text("{main} starting\nTraceback (most recent call last):\n"
+                      '  File "/srv/app/shop/orders.py", line 7, in place\nValueError: bad qty\n', encoding="utf-8")
+    cli.main(["trace-log", str(braced), "--repo", str(repo), "--no-store", "--json"])
+    assert json.loads(capsys.readouterr().out)["mode"] == "log"
 
 
 def test_hostile_frames_are_not_mapped_by_accident(repo):
@@ -186,15 +280,29 @@ def test_hostile_frames_are_not_mapped_by_accident(repo):
         frame(abs_path="/srv/app/shop/orders.py", lineno="12", function="Object.<anonymous>", in_app=True),
         frame(abs_path="/srv/app/shop/orders.py", lineno=True, function="checkout", in_app=True),
         "not a frame",
+        frame(abs_path="/home/dev/lib/python/shop/orders.py", lineno=12, function="checkout", in_app=True),
+        frame(abs_path="/srv/app/shop/orders.py", lineno=12, function="?"),
+        frame(abs_path="/srv/app/vendor/thing.py", lineno=3, function="go"),
     ]
     ev = {"event_id": "e1", "exception": {"values": [{"type": "E", "stacktrace": {"frames": frames}}]}}
     res = trace_import.analyze(repo, index.load(repo), [ev], source="x.json")
     f = _by_ref(res["events"][0])
-    assert "x0.f0" not in f and "x0.f1" not in f                      # folded with the library frames
-    assert res["events"][0]["library"]["frames"] == 2
+    assert "x0.f0" not in f                                           # folded with the library frames
+    assert res["events"][0]["library"]["frames"] == 1
+    # a library class sharing a project file name: not mapped, and not called a library the export did not name
+    assert f["x0.f1"]["result"] == "not_in_repo" and "origin unknown" in f["x0.f1"]["why"]
+    # in_app true is the export's word: a `/lib/python` path it marks as the application's is still mapped
+    assert (f["x0.f7"]["result"], f["x0.f7"]["path"]) == ("mapped", "shop/orders.py")
+    # nothing but the line's range checked (no source line, no name): said on the row and in what is stored
+    nothing = f["x0.f8"]
+    assert nothing["result"] == "mapped" and nothing["not_checked"] == ["source line", "function name"]
+    assert nothing["why"].startswith("only the line's range was checked")
+    assert f["x0.f9"]["result"] == "not_in_repo" and "origin unknown" in f["x0.f9"]["why"]
     assert (f["x0.f2"]["result"], f["x0.f2"]["path"]) == ("mapped", "shop/orders.py")
     assert f["x0.f3"]["result"] == "stale" and "not a line number" in f["x0.f3"]["why"]
     assert f["x0.f4"]["result"] == "mapped"                           # a string line; an anonymous name unchecked
+    assert f["x0.f4"]["not_checked"] == ["source line", "function name"]
+    assert "not_checked" not in f["x0.f2"] or f["x0.f2"]["not_checked"] == ["source line"]
     assert f["x0.f5"]["result"] == "stale" and f["x0.f5"]["why"] == "no line recorded"
     many = {"exception": {"values": [{"type": "E", "stacktrace": {"frames": [
         {"abs_path": "/srv/app/shop/orders.py", "lineno": 12, "function": "checkout"}] * 5000}}]}}

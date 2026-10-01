@@ -134,9 +134,11 @@ class PathResolver:
         found = self.matches(raw)
         return found[0] if len(found) == 1 else None
 
-    def matches(self, raw: str | None) -> list[str]:
+    def matches(self, raw: str | None, *, foreign_ok: bool = False) -> list[str]:
         """Every repository path :meth:`resolve` weighs equally for ``raw``: one when it resolves, several when the
-        longest whole suffix is shared (the ambiguity), none outside the repository."""
+        longest whole suffix is shared (the ambiguity), none outside the repository. ``foreign_ok``: a path that
+        looks like a library's (``site-packages``, ``/lib/python``, ``internal/``) is matched too - for a frame its
+        source says is the application's."""
         if not raw:
             return []
         s = raw.strip().strip("\"'")
@@ -152,7 +154,7 @@ class PathResolver:
         for r in self.roots:
             if low.startswith(r + "/") and s[len(r) + 1:] in self.files:
                 return [s[len(r) + 1:]]
-        if any(f in low for f in _FOREIGN):
+        if not foreign_ok and any(f in low for f in _FOREIGN):
             return []
         s = re.sub(r"^(?:\./)+", "", s)
         if s in self.files:

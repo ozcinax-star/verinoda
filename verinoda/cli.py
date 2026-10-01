@@ -1347,6 +1347,11 @@ def cmd_datapack(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+TRACE_CLAIMS_NOTE = ("a stored claim's evidence is a file Verinoda did not produce (agent_report): the claim rules "
+                     "never let it verify, so its status (in `claims`) is usually weak_inference, whatever the "
+                     "report's rows say for their own run or event")
+
+
 def _trace_export(args, repo: Path, path: Path) -> int | None:
     """A Sentry or OpenTelemetry JSON export given to ``trace-log``: its frames mapped and reported (the exit
     code), or None when the file is a log after all."""
@@ -1376,11 +1381,13 @@ def _trace_export(args, repo: Path, path: Path) -> int | None:
             res["claims"] = trace_import.store(st, repo, path, res)
         finally:
             st.close()
+        if res["claims"]:
+            res["claims_note"] = TRACE_CLAIMS_NOTE
 
     def render(r: dict) -> None:
         print(trace_import.render(r))
         for c in r.get("claims") or []:
-            print(f"  stored {c['id']} [{c['status']}]")
+            print(f"  {'already stored' if c.get('existing') else 'stored'} {c['id']} [{c['status']}]")
         if any(c["status"] != "observed" for c in r.get("claims") or []):
             print("  (an export Verinoda did not record never verifies: a stored claim keeps the status the claim "
                   "rules allow for it)")
@@ -1400,13 +1407,16 @@ def cmd_trace_log(args) -> int:
     code = _trace_export(args, repo, log)
     if code is not None:
         return code
-    res = trace_log.analyze(index.load(repo), log.read_text(encoding="utf-8", errors="replace"), source=args.file)
+    res = {"mode": "log", **trace_log.analyze(index.load(repo), log.read_text(encoding="utf-8", errors="replace"),
+                                               source=args.file)}
     if not args.no_store and (res["traces"] or res["results"]):
         st = _store(repo)
         try:
             res["claims"] = trace_log.store(st, repo, log, res)
         finally:
             st.close()
+        if res["claims"]:
+            res["claims_note"] = TRACE_CLAIMS_NOTE
 
     def render(r: dict) -> None:
         print(trace_log.render(r))

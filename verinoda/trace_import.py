@@ -11,8 +11,10 @@ Each frame is mapped onto the repository: its path by whole-suffix matching over
 line is checked against the current file (beyond the end, or a recorded ``context_line`` that differs) and against
 the definitions the index puts around that line (the frame's function must be one of them). A frame that passes is
 an ``observed`` claim scoped to that event - what that event recorded, not what always happens; the others are
-reported with the reason they did not map (stale, ambiguous, not in the repository). Library frames (``in_app:
-false``, a ``site-packages`` / ``node_modules`` path) are folded into one count.
+reported with the reason they did not map (stale, ambiguous, not in the repository). A mapped frame that was not
+compared on its source line or its function name says so (``not_checked``). Library frames (``in_app: false``, or a
+``site-packages`` / ``node_modules`` path the export does not mark ``in_app: true``) are folded into one count; a
+frame of unknown origin that matches no file is "not in the repository", not a library's.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ MAX_EVENTS = 200
 MAX_FRAMES = 200                      # per event, the innermost kept
 MAX_CLAIMS = 50                       # stored claims per run
 MAX_STACK_LINES = 5000                # of one exception.stacktrace text
+MAX_NAME = 512                        # a longer function name is not compared
 MAX_CANDIDATES = 20                   # files of a shared suffix checked for the frame's function
 JSON_SUFFIXES = (".json", ".jsonl", ".ndjson")
 SCOPE = "what that event recorded, not what always happens"
@@ -44,8 +47,8 @@ def load(data: bytes, *, name: str) -> tuple[list, int] | None:
     """``(documents, lines skipped)`` of an export - one document, or one per line (a JSON-lines file whose last
     line was cut keeps the others) - or None when the file is not JSON (a log).
 
-    Raises ``ValueError`` for a file meant to be JSON (a ``.json`` name, or text starting with ``{``) that does not
-    parse; a ``[``-led text that does not parse is a log (``[14:02:08] [Server thread/INFO] ...``)."""
+    Raises ``ValueError`` for a file named ``.json`` / ``.jsonl`` / ``.ndjson`` that does not parse; any other
+    file that does not parse is a log (``{main} starting``, ``[14:02:08] [Server thread/INFO] ...``)."""
     meant = name.lower().endswith(JSON_SUFFIXES)
     text = _decode(data)
     s = text.lstrip()
@@ -56,21 +59,27 @@ def load(data: bytes, *, name: str) -> tuple[list, int] | None:
     try:
         return [json.loads(s)], 0
     except RecursionError:
+        if not meant:
+            return None
         raise ValueError("not read: the JSON is nested too deeply") from None
     except ValueError as e:
         first = e
     docs: list = []
     bad = 0
+    last_bad = False
     for ln in text.splitlines():
         if not ln.strip():
             continue
         try:
             docs.append(json.loads(ln))
+            last_bad = False
         except (ValueError, RecursionError):
             bad += 1
-    if docs and len(docs) > bad:
+            last_bad = True
+    # most lines parse, or only the last one does not (an export cut while it was written)
+    if docs and (len(docs) > bad or (bad == 1 and last_bad)):
         return docs, bad
-    if meant or s[0] == "{":
+    if meant:
         where = (f"line {first.lineno}, column {first.colno}: {first.msg}"
                  if isinstance(first, json.JSONDecodeError) else str(first))
         raise ValueError(f"not valid JSON ({where})")
@@ -79,13 +88,19 @@ def load(data: bytes, *, name: str) -> tuple[list, int] | None:
 
 # -- reading the export -----------------------------------------------------------------------------------------------
 
+def _digits(s: str) -> int | None:
+    """``s`` as a line number: ASCII digits only (``isdigit`` alone takes ``²``), at most 9 of them."""
+    s = s.strip()
+    return int(s) if s.isascii() and s.isdigit() and len(s) <= 9 else None
+
+
 def _int(v) -> int | None:
     if isinstance(v, bool):
         return None
     if isinstance(v, int):
         return v
-    if isinstance(v, str) and v.strip().isdigit():
-        return int(v.strip())
+    if isinstance(v, str):
+        return _digits(v)
     return None
 
 
@@ -157,37 +172,64 @@ def _attrs(lst) -> dict:
 
 
 def _text_frames(text: str, ref: str) -> list[dict]:
-    """Python, JVM and Node frames of a stack trace's text, innermost last."""
-    py, jv, nd = [], [], []
+    """Python, JVM and Node frames of a stack trace's text, innermost last. A frame whose line number is not one
+    (more than 9 digits) is skipped."""
+    py, nd = [], []
+    jv: list[list] = [[]]          # one block per exception: the thrown one, then each `Caused by:`
     for ln in text.splitlines()[:MAX_STACK_LINES]:
         m = failsig._TB_FILE.match(ln)
         if m:
-            py.append((m.group(1), int(m.group(2)), m.group(3), None, None))
+            if (n := _digits(m.group(2))) is not None:
+                py.append((m.group(1), n, m.group(3), None, None))
             continue
         m = failsig._J_FRAME.match(ln)
         if m:
             cls, meth = m.group(1).rsplit("/", 1)[-1], m.group(2)
             fm = re.match(r"^([\w$]+\.\w+):(\d+)$", m.group(3))
-            if fm:
-                jv.append((_java_path(cls, fm.group(1)), int(fm.group(2)), meth, cls, "the class's package"))
+            if fm and (n := _digits(fm.group(2))) is not None:
+                jv[-1].append((_java_path(cls, fm.group(1)), n, meth, cls, "the class's package"))
+            continue
+        if ln.lstrip().startswith("Caused by:") and jv[-1]:
+            jv.append([])
             continue
         m = failsig._N_FRAME.match(ln)
-        if m and ("at " in ln or " (" in ln):
-            nd.append((m.group(2), int(m.group(3)), m.group(1), None, None))
-    rows = py + jv[::-1] + nd[::-1]
+        if m and ("at " in ln or " (" in ln) and (n := _digits(m.group(3))) is not None:
+            nd.append((m.group(2), n, m.group(1), None, None))
+    # a JVM block lists its innermost frame first, and the last `Caused by:` is the root cause: each block is
+    # reversed on its own, so the root cause's throwing frame ends the list
+    rows = py + [r for blk in jv for r in blk[::-1]] + nd[::-1]
     return [_frame(f"{ref}.f{j}", p, None, ln, fn, mod, None, None, built)
             for j, (p, ln, fn, mod, built) in enumerate(rows)]
 
 
-def _otel(doc: dict, where: str) -> list[dict]:
-    out = []
+def _namespace_path(ns: str) -> tuple[str | None, str]:
+    """A span's ``code.namespace`` as a path suffix: ``com.example.Foo`` -> ``com/example/Foo.java``,
+    ``shop.orders`` -> ``shop/orders.py``. A name without a package (``Foo``, ``a.``, ``.``) would match any file
+    of that name: ``(None, why)``."""
+    parts = ns.strip().split(".")
+    if len(parts) < 2 or not all(p.strip() for p in parts):
+        return None, f"code.namespace `{ns[:80]}` names no package: no path is built from it"
+    if parts[-1][:1].isupper():
+        return _java_path(ns.strip(), None), "code.namespace as a JVM class"
+    return "/".join(parts) + ".py", "code.namespace as a Python module"
+
+
+def _otel(doc: dict, where: str, budget: int) -> list[dict]:
+    """The spans with frames, at most ``budget`` of them."""
+    out: list[dict] = []
     for r, rs in enumerate(doc.get("resourceSpans") if isinstance(doc.get("resourceSpans"), list) else []):
+        if len(out) >= budget:
+            break
         if not isinstance(rs, dict):
             continue
         scopes = rs.get("scopeSpans") or rs.get("instrumentationLibrarySpans")
         for s, ss in enumerate(scopes if isinstance(scopes, list) else []):
+            if len(out) >= budget:
+                break
             spans = ss.get("spans") if isinstance(ss, dict) else None
             for k, sp in enumerate(spans if isinstance(spans, list) else []):
+                if len(out) >= budget:
+                    break
                 if not isinstance(sp, dict):
                     continue
                 a = _attrs(sp.get("attributes"))
@@ -196,13 +238,13 @@ def _otel(doc: dict, where: str) -> list[dict]:
                 line = a.get("code.lineno") if a.get("code.lineno") is not None else a.get("code.line.number")
                 fn = a.get("code.function") or a.get("code.function.name")
                 ns = _str(a.get("code.namespace"))
-                built = None
+                built = unresolved = None
                 if not _str(path) and ns:
-                    top = ns.rsplit(".", 1)[-1]
-                    path, built = ((_java_path(ns, None), "code.namespace as a JVM class") if top[:1].isupper()
-                                   else (ns.replace(".", "/") + ".py", "code.namespace as a Python module"))
+                    path, why = _namespace_path(ns)
+                    built, unresolved = (why, None) if path else (None, why)
                 if _str(path) or _str(fn):
-                    frames.append(_frame("code", path, None, line, fn, ns, None, None, built))
+                    frames.append(_frame("code", path, None, line, fn, ns, None, None, built)
+                                  | ({"unresolved": unresolved} if unresolved else {}))
                 title = _str(sp.get("name")) or "(unnamed span)"
                 for e, evt in enumerate(sp.get("events") if isinstance(sp.get("events"), list) else []):
                     if not isinstance(evt, dict) or evt.get("name") != "exception":
@@ -240,7 +282,7 @@ def events(docs: list) -> tuple[list[dict], bool]:
         if not isinstance(o, dict):
             return
         if "resourceSpans" in o:
-            out.extend(_otel(o, where))
+            out.extend(_otel(o, where, MAX_EVENTS + 1 - len(out)))  # one past the limit tells it was cut
             return
         ev = _sentry(o, where) if ("exception" in o or "entries" in o) else None
         if ev is not None:
@@ -263,11 +305,18 @@ def _short(fn: str | None) -> str | None:
     if not fn:
         return None
     s = fn.strip()
+    if len(s) > MAX_NAME:          # no function is named that long; the string operations below stay linear
+        return None
     m = re.match(r"^lambda\$([\w]+?)\$\d+$", s)
     if m:
         s = m.group(1)
-    s = re.sub(r"\(.*\)$", "", s)
-    s = re.sub(r"(?:\.func\d+)+$", "", s)
+    if s.endswith(")") and "(" in s:                  # `handle(Request)`: the argument list dropped
+        s = s[:s.index("(")]
+    while True:                                        # Go's closures: `main.run.func1.func2` -> `main.run`
+        head, dot, tail = s.rpartition(".")
+        if not (dot and tail.startswith("func") and tail[4:].isascii() and tail[4:].isdigit()):
+            break
+        s = head
     last = re.split(r"[.:#/]+", s)[-1].strip("()*") if s not in ("<module>", "<init>") else s
     if last in _UNNAMED or (last.startswith("<") and last not in ("<module>", "<init>")):
         return None
@@ -285,10 +334,11 @@ class Mapper:
         self._lines: dict[str, list[str] | None] = {}
         self._folded: tuple | None = None
 
-    def files_for(self, raw: str) -> list[str]:
+    def files_for(self, raw: str, *, own: bool = False) -> list[str]:
         """The repository files ``raw`` names; a Windows path (a drive letter or backslashes) that matches none is
-        compared again with case folded, as its file system does."""
-        found = self.resolver.matches(raw)
+        compared again with case folded, as its file system does. ``own``: the export marks the frame the
+        application's (``in_app: true``), so a library-looking path is still matched."""
+        found = self.resolver.matches(raw, foreign_ok=own)
         if found or not re.match(r"^(?:file:/+)?[A-Za-z]:[\\/]|.*\\", raw):
             return found
         if self._folded is None:
@@ -297,7 +347,7 @@ class Mapper:
                 back.setdefault(f.lower(), []).append(f)
             self._folded = (failsig.PathResolver(back, roots=[str(self.repo).lower()]), back)
         res, back = self._folded
-        return sorted(f for low in res.matches(raw.lower()) for f in back[low])
+        return sorted(f for low in res.matches(raw.lower(), foreign_ok=own) for f in back[low])
 
     def lines(self, rel: str) -> list[str] | None:
         if rel not in self._lines:
@@ -317,32 +367,47 @@ class Mapper:
     def name(self, n: str) -> str:
         return self.g.label(n).strip().strip(".()").split(".")[-1].split("(")[0]
 
-    def check(self, rel: str, fr: dict) -> tuple[str, str, list[str]]:
-        """``(result, why, chain)`` of a frame whose file is ``rel``: ``mapped`` or ``stale``."""
+    def check(self, rel: str, fr: dict) -> tuple[str, str, list[str], list[str]]:
+        """``(result, why, chain, unchecked)`` of a frame whose file is ``rel``: ``mapped`` or ``stale``.
+        ``unchecked``: what a mapped frame was not compared on (``source line``: the frame records none;
+        ``function name``: no name to compare, or no definitions in the file)."""
         line, want = fr["line"], _short(fr["fn"])
         cur = self.lines(rel)
         if cur is None:
-            return "stale", "file missing: the index names it but it is not on disk", []
+            return "stale", "file missing: the index names it but it is not on disk", [], []
         if line is None:
-            return "stale", "no line recorded", []
+            return "stale", "no line recorded", [], []
         if line > len(cur):
-            return "stale", f"line {line} is beyond the end of the file ({len(cur)} lines)", []
+            return "stale", f"line {line} is beyond the end of the file ({len(cur)} lines)", [], []
         if line < 1:
-            return "stale", f"line {line} is not a line number", []
+            return "stale", f"line {line} is not a line number", [], []
         if fr["context"] is not None and fr["context"].strip() != cur[line - 1].strip():
-            return "stale", f"the recorded source line differs from line {line} now", []
+            return "stale", f"the recorded source line differs from line {line} now", [], []
         chain = self.chain(rel, line)
         names = [self.name(n) for n in chain]
-        if want is None or (want == "<module>" and not chain):
-            return "mapped", "", chain
+
+        def mapped(name_why: str | None) -> tuple[str, str, list[str], list[str]]:
+            unchecked = (["source line"] if fr["context"] is None else []) + (["function name"] if name_why else [])
+            if not name_why:
+                return "mapped", "", chain, unchecked
+            why = f"name not checked: {name_why}"
+            if fr["context"] is None:  # nothing but the line's range: said on the row, not left to the reader
+                why = f"only the line's range was checked: source line not checked (none recorded); {why}"
+            return "mapped", why, chain, unchecked
+
+        if want is None:
+            return mapped("the frame names no function to compare" if not fr["fn"]
+                          else f"`{fr['fn'][:60]}` is not a name to compare")
+        if want == "<module>" and not chain:
+            return mapped(None)
         if want == "<init>":  # a JVM constructor: any definition of the class around the line
-            return ("mapped", "", chain) if chain else ("stale", "a constructor frame at module level", chain)
+            return mapped(None) if chain else ("stale", "a constructor frame at module level", chain, [])
         if want in names:
-            return "mapped", "", chain
+            return mapped(None)
         if not self.g.symbols_in(rel):
-            return "mapped", "name not checked: the index has no definitions in this file", chain
+            return mapped("the index has no definitions in this file")
         where = f"inside `{'.'.join(names)}`" if names else "at module level"
-        return "stale", f"function name not at that line: line {line} is {where}, not in `{want}`", chain
+        return "stale", f"function name not at that line: line {line} is {where}, not in `{want}`", chain, []
 
     def map_frame(self, fr: dict) -> dict:
         raw = fr["path"] or fr["alt"]
@@ -351,21 +416,28 @@ class Mapper:
         if fr.get("built"):
             row["path_from"] = fr["built"]
         low = (raw or "").replace("\\", "/").lower()
-        if fr["in_app"] is False or any(f in low for f in failsig._FOREIGN):
+        # a library frame: the export says so, or (when it does not mark the frame its own) the path is a
+        # site-packages / node_modules / stdlib one
+        if fr["in_app"] is False or (fr["in_app"] is not True and any(f in low for f in failsig._FOREIGN)):
             return {**row, "result": "library"}
-        cands = self.files_for(fr["path"]) if fr["path"] else []
+        if not raw:
+            return {**row, "result": "not_in_repo", "why": fr.get("unresolved") or "no file recorded"}
+        own = fr["in_app"] is True
+        cands = self.files_for(fr["path"], own=own) if fr["path"] else []
         if not cands and fr["alt"] and not fr.get("built"):  # a JVM class's own path only: no other `Foo.java`
-            cands = self.files_for(fr["alt"])
+            cands = self.files_for(fr["alt"], own=own)
         if not cands:
             if fr["in_app"] is True:
                 return {**row, "result": "not_in_repo", "why": "file missing: no indexed file ends with that path"}
-            return {**row, "result": "library", "why": "no indexed file ends with that path"}
+            return {**row, "result": "not_in_repo",
+                    "why": "no indexed file ends with that path (origin unknown: the export does not say whether "
+                           "the frame is the application's)"}
         if len(cands) > 1:
             fits = [c for c in cands[:MAX_CANDIDATES] if self.check(c, fr)[0] == "mapped"]
             return {**row, "result": "ambiguous", "why": f"{len(cands)} files end with that path; none is chosen",
                     "candidates": cands[:5], **({"fits": fits[:5]} if fits else {})}
         rel = cands[0]
-        res, why, chain = self.check(rel, fr)
+        res, why, chain, unchecked = self.check(rel, fr)
         row.update(path=rel, line=fr["line"], result=res)
         if chain:
             row["in"] = ".".join(self.name(n) for n in chain)
@@ -374,6 +446,8 @@ class Mapper:
             row["why"] = why
         if res == "mapped":
             row["status"] = "observed"
+            if unchecked:
+                row["not_checked"] = unchecked
         return row
 
 
@@ -398,11 +472,12 @@ def analyze(repo: Path, g, docs: list, *, source: str, skipped: int = 0) -> dict
         out.append({k: v for k, v in ev.items() if k != "frames"} | {"frames": rows,
                    **({"library": {"frames": len(lib), "first": lib[0], "last": lib[-1]}} if lib else {})})
     kinds = {k: sum(1 for e in evs if e["kind"] == k) for k in ("sentry", "otel")}
-    return {"source": source, "format": "+".join(k for k, v in kinds.items() if v), "events": out, "counts": counts,
+    return {"mode": "export", "source": source, "format": "+".join(k for k, v in kinds.items() if v), "events": out,
+            "counts": counts,
             **({"truncated": True} if truncated else {}), **({"skipped_lines": skipped} if skipped else {}),
             "scope": SCOPE,
-            "note": "read from a local export: each mapped frame is observed for its event only; a stale frame's "
-                    "file or line no longer matches the code"}
+            "note": "read from a local export: each mapped frame is observed for its event only (`not_checked` "
+                    "names what it was not compared on); a stale frame's file or line no longer matches the code"}
 
 
 def render(res: dict) -> str:
@@ -440,7 +515,7 @@ def store(st, repo: Path, export: Path, res: dict) -> list[dict]:
     import hashlib
 
     from verinoda import workflow
-    from verinoda.claims import Claims
+    from verinoda.claims import Claims, claim_key
     from verinoda.paths import atlas_dir
     from verinoda.scrub import redact
 
@@ -459,7 +534,7 @@ def store(st, repo: Path, export: Path, res: dict) -> list[dict]:
         dest.write_bytes(data)
     rel = dest.relative_to(repo).as_posix()
     cl = Claims(st, repo)
-    made = []
+    made: list[dict] = []
     for e in res["events"]:
         what = "Sentry event" if e["kind"] == "sentry" else "OpenTelemetry span"
         for r in e["frames"]:
@@ -474,11 +549,22 @@ def store(st, repo: Path, export: Path, res: dict) -> list[dict]:
                   "excerpt": excerpt[:400],
                   "meta": {"run_by": "user", "export": str(export), "kept_at": rel, "event": e["id"],
                            "scope": "an export Verinoda did not produce: it observes one event, never verifies"}}
+            unchecked = r.get("not_checked") or []
             text = (f"The {what} {str(e['id'])[:32]} ({redact(e['title'])[:60]}) recorded a frame at "
-                    f"`{r['path']}:{r['line']}`" + (f" in `{r['in']}`" if r.get("in") else "") + f": {SCOPE}")
+                    f"`{r['path']}:{r['line']}`" + (f" in `{r['in']}`" if r.get("in") else "")
+                    + (f" ({' and '.join(unchecked)} not checked)" if unchecked else "") + f": {SCOPE}")
+            spec = {"free_text": True, "source": "trace-import", "export": rel, "event": e["id"], "ref": r["ref"]}
+            subjects = [f"{r['path']}:{r['line']}"]
+            # the same export imported again: the frame's claim is there already (the kept file's name carries
+            # the hash of what was read)
+            old = st.conn.execute("SELECT id, status, text FROM claims WHERE claim_key = ? AND project = ? "
+                                  "AND status NOT IN ('stale', 'contradicted') ORDER BY created_at LIMIT 1",
+                                  (claim_key("general", spec, subjects, text), snap["project"])).fetchone()
+            if old is not None:
+                made.append({"id": old["id"], "status": old["status"], "text": old["text"], "existing": True})
+                continue
             c = cl.create(text, project=snap["project"], snapshot=snap, status="observed",
-                          evidence=[(ev, "supports")], subjects=[f"{r['path']}:{r['line']}"], kind="general",
-                          spec={"free_text": True, "source": "trace-import", "export": rel, "event": e["id"]},
+                          evidence=[(ev, "supports")], subjects=subjects, kind="general", spec=spec,
                           actor="verinoda")
             made.append({"id": c["id"], "status": c["status"], "text": text})
     return made
