@@ -10,11 +10,13 @@ bytecode of the selected methods actually references (:func:`verinoda.jvmclass.c
 attribute's calls, field accesses and ``new``).
 
 Verdicts per row: ``exists`` (the class file holds it; ``statically_verified``, the evidence ``jar!class``),
-``absent`` (the class file read holds no such method, descriptor, referenced member or shadowed member;
-``statically_verified`` with the same evidence, the claim being about that class file), ``unknown`` (no class file
-to compare with - the target class is on no jar read, a JDK or project class, an incomplete classpath - with the
-next step; an inherited member; a selector or name this reader does not compare). The nearest real names of an
-``absent`` row are found by edit distance: a suggestion, ``strong_inference``.
+``absent`` (the class file read holds no such method, descriptor, referenced member or shadowed member, with the
+same evidence; ``strong_inference`` as in ``access-check``: the classpath is what the last build resolved and may
+be older than the build file, so a name missing from it is not proven wrong for the version the build names),
+``unknown`` (no class file to compare with - the target class is on no jar read, a JDK or project class, an
+incomplete classpath - with the next step; a member that is, or may be, inherited; a selector, target or name
+this reader does not compare). The nearest real names of an ``absent`` row are found by edit distance: a
+suggestion, ``strong_inference``.
 """
 from __future__ import annotations
 
@@ -36,6 +38,12 @@ _COMMENTS = ("line_comment", "block_comment", "comment")
 NEXT_CLASSPATH = ("run the Gradle (Loom) build once, or list the jars in code_check.classpath "
                   "(.verinoda/config.json), then run mixin-check again")
 SUGGESTION = "strong_inference"
+ABSENT_STATUS = "strong_inference"
+SHADOW_PREFIX = "shadow$"           # @Shadow's prefix() when none is written
+# java.lang.Object's methods: a name among them is inherited when Object itself is on no jar read
+_OBJECT_METHODS = {"<init>", "clone", "equals", "finalize", "getClass", "hashCode", "notify", "notifyAll",
+                   "toString", "wait"}
+_NEW_DESC = re.compile(r"^\((?:\[*(?:[BCDFIJSZ]|L[^;()]+;))*\)L[^;()\[]+;$")
 
 
 # -- edit distance ---------------------------------------------------------------------------------------
@@ -73,6 +81,7 @@ class Item:
     name: str | None = None
     types: list[str] = field(default_factory=list)       # shadow: field type, or parameter types then return
     typevars: set[str] = field(default_factory=set)
+    unread: bool = False         # at: a method selector is not a constant string this reader resolves
 
 
 @dataclass
@@ -86,6 +95,15 @@ class MixinClass:
 
 def _line(node) -> int:
     return node.start_point[0] + 1
+
+
+def _type(node, src: bytes) -> str:
+    """A type as written with every array dimension (``int[][]`` -> ``int[][]``; ``_type_text`` keeps one)."""
+    if node is not None and node.type == "array_type":
+        dims = node.child_by_field_name("dimensions")
+        return _type(node.child_by_field_name("element"), src) + "[]" * max(1, _t(dims, src).count("[")
+                                                                             if dims is not None else 1)
+    return _type_text(node, src)
 
 
 def _str(n, src: bytes, consts: dict[str, str]) -> str | None:
@@ -218,11 +236,12 @@ def _member_items(mc: MixinClass, m, src: bytes, consts: dict[str, str], ctv: se
                 if point not in INVOKE_POINTS + ("FIELD", "NEW"):
                     continue
                 mc.items.append(Item("at", _line(tv[0][0]), f"@{aname} @At({point})", tv[0][1], point=point,
-                                     selectors=[s for _n, s in sels]))
+                                     selectors=[s for _n, s in sels],
+                                     unread=len(_flat(_element(a, src, "method"))) > len(sels)))
         elif aname == "Shadow":
-            prefix = next((s for _n, s in _strings(a, src, "prefix", consts)), None)
+            prefix = next((s for _n, s in _strings(a, src, "prefix", consts)), SHADOW_PREFIX)
             aliases = [s for _n, s in _strings(a, src, "aliases", consts)]
-            ty = _type_text(m.child_by_field_name("type"), src)
+            ty = _type(m.child_by_field_name("type"), src)
             if m.type == "field_declaration":
                 for d in m.named_children:
                     if d.type == "variable_declarator":
@@ -245,12 +264,12 @@ def _member_items(mc: MixinClass, m, src: bytes, consts: dict[str, str], ctv: se
                 for p in (ps.named_children if ps is not None else []):
                     if p.type == "formal_parameter":
                         dims = next((c for c in p.named_children if c.type == "dimensions"), None)
-                        params.append(_type_text(p.child_by_field_name("type"), src)
+                        params.append(_type(p.child_by_field_name("type"), src)
                                       + ("[]" * _t(dims, src).count("[") if dims is not None else ""))
                     elif p.type == "spread_parameter":
                         t = next((c for c in p.named_children if c.type not in ("modifiers", "variable_declarator")),
                                  None)
-                        params.append(_type_text(t, src) + "[]")
+                        params.append(_type(t, src) + "[]")
                 mc.items.append(Item("shadow", _line(nm), "@Shadow", f"{name}({', '.join(params)}) -> {ty}",
                                      member="method", name=name, types=params + [ty],
                                      typevars=ctv | _typevars(m, src), selectors=aliases))
@@ -356,14 +375,21 @@ class _Target:
                          "version changed, rebuild so the classpath is the one the build names")
 
     def inherited(self, what: str, name: str) -> str | None:
-        """The super class (read on the classpath) that declares ``name``, if one does."""
+        """Why ``name`` is, or may be, a super class's member rather than absent: the super class (read on the
+        classpath) that declares it, or the first super class this reader could not read; None when every super
+        class was read and none declares it."""
         sup, hops = (self.data or {}).get("super"), 0
-        while sup and sup in self.cf.where and hops < 30:
-            d = self.cf.code(sup)
+        while sup and hops < 30:
+            shown = sup.replace("/", ".").replace("$", ".")
+            d = self.cf.code(sup) if sup in self.cf.where else None
             if d is None:
-                return None
+                if sup == "java/lang/Object":
+                    return (f"{name} is declared in java.lang.Object, a super class, not in {self.shown}"
+                            if what == "methods" and name in _OBJECT_METHODS else None)
+                return (f"{name} may be declared in {shown}, a super class whose class file is not read here "
+                        "(on no jar read, or unreadable)")
             if any(r[0] == name for r in d[what]):
-                return sup
+                return f"{name} is declared in {shown}, a super class, not in {self.shown}"
             sup, hops = d.get("super"), hops + 1
         return None
 
@@ -371,7 +397,8 @@ class _Target:
 def _row(mc: MixinClass, it: Item, t: _Target, verdict: str, why: str, **extra) -> dict:
     row = {"at": f"{mc.path}:{it.line}", "mixin": mc.name, "target_class": t.shown, "kind": it.kind,
            "annotation": it.annotation, "written": it.written, "verdict": verdict,
-           "status": "unknown" if verdict == "unknown" else "statically_verified", "why": why}
+           "status": {"unknown": "unknown", "absent": ABSENT_STATUS}.get(verdict, "statically_verified"),
+           "why": why}
     if t.evidence:
         row["evidence"] = t.evidence
     if extra.get("nearest"):
@@ -388,6 +415,10 @@ def _select(t: _Target, sel: str) -> tuple[list | None, str, str, list[str]]:
     if parsed is None:
         return None, "unknown", "a regular-expression selector is not compared here", []
     name, desc = parsed
+    owner = parse_member(re.sub(r"\{[\d,]*\}$", "", re.sub(r"\s+", "", sel)))[0]
+    if owner and owner != t.binary:
+        return [], "absent", (f"the selector names the owner {owner.replace('/', '.')}, and Mixin matches it only "
+                              f"against the target {t.shown}"), []
     methods = t.data["methods"]
     if name is None:
         got = [m for m in methods if desc is None or m[1] == desc]
@@ -404,8 +435,7 @@ def _select(t: _Target, sel: str) -> tuple[list | None, str, str, list[str]]:
                                                                            [f"{m[0]}{m[1]}" for m in same])
     sup = t.inherited("methods", name)
     if sup:
-        return [], "unknown", (f"{name} is declared in {sup.replace('/', '.')}, a super class, not in "
-                               f"{t.shown}: a Mixin injects only into the target's own methods"), []
+        return [], "unknown", f"{sup}: a Mixin injects only into the target's own methods", []
     if _FOREIGN.match(name):
         return [], "unknown", (f"{name} is an intermediary or SRG name; the classpath read here carries other "
                                "names"), []
@@ -413,32 +443,50 @@ def _select(t: _Target, sel: str) -> tuple[list | None, str, str, list[str]]:
     return [], "absent", f"{t.evidence} declares no method named {name}", nearest(name + (desc or ""), cands)
 
 
-def _check_at(it: Item, t: _Target, matched: list) -> tuple[str, str, list[str]]:
+def _near_refs(written: str, name: str | None, pairs: list[tuple[str, str]], keep: int = 10) -> list[str]:
+    """The nearest of rendered references ``(name, rendered)``: their names are ranked first and only the
+    references of the ``keep`` closest names are compared in full, so a method with thousands of calls stays
+    cheap."""
+    if name and len({n for n, _r in pairs}) > keep:
+        close = set(sorted({n for n, _r in pairs}, key=lambda n: (_distance(name, n), n))[:keep])
+        pairs = [(n, r) for n, r in pairs if n in close]
+    return nearest(written, [r for _n, r in pairs])
+
+
+def _check_at(it: Item, t: _Target, matched: list, uncompared: str | None = None) -> tuple[str, str, list[str]]:
+    """An @At target against the bytecode of the methods its injector's selectors matched; ``uncompared`` says
+    why some (or all) of the selectors were not compared, which keeps a miss ``unknown``."""
     if not matched:
-        return "unknown", ("its injector's method selector matches no method of the class file, so the point is "
-                           "not looked for"), []
-    owner, name, desc = parse_member(it.written)
+        return "unknown", (uncompared or "its injector's method selector matches no method of the class file") + \
+            ", so the point is not looked for", []
+    written = it.written.strip()
+    owner, name, desc = parse_member(written)
     codes = [m[3] for m in matched]
     refs = [r for c in codes if c for r in c]
     if it.point == "NEW":
-        if it.written.strip().startswith("("):
-            cls = jvmclass._descriptor_types(desc[desc.index(")") + 1:])[0] if desc and ")" in desc else ""
-            cdesc = desc[:desc.index(")") + 1] + "V" if desc else ""
+        if written.startswith("("):
+            if not desc or not _NEW_DESC.match(desc):
+                return "unknown", (f"{written} is neither a class name nor a constructor descriptor "
+                                   "((params)Lpkg/Cls;) this reader reads, so it is not looked for"), []
+            close = desc.index(")")
+            cls, cdesc = desc[close + 2:-1], desc[:close + 1] + "V"
             hit = any(r[0] == "N" and r[1] == cls for r in refs) and any(
                 r[0] == "M" and r[1] == cls and r[2] == "<init>" and r[3] == cdesc for r in refs)
-            pool = [r for r in refs if r[0] == "M" and r[2] == "<init>"]
-            shown = [f"({r[3][1:r[3].index(')')]})L{r[1]};" for r in pool]
+            pairs = [(r[1].rsplit("/", 1)[-1], f"({r[3][1:r[3].index(')')]})L{r[1]};")
+                     for r in refs if r[0] == "M" and r[2] == "<init>"]
+            name = cls.rsplit("/", 1)[-1]
         else:
-            cls = it.written.strip()
-            cls = cls[1:-1] if cls.startswith("L") and cls.endswith(";") else cls.replace(".", "/")
+            cls = written[1:-1] if written.startswith("L") and written.endswith(";") else written.replace(".", "/")
             hit = any(r[0] == "N" and r[1] == cls for r in refs)
-            shown = [_render(r, True) if it.written.strip().startswith("L") else r[1] for r in refs if r[0] == "N"]
+            pairs = [(r[1].rsplit("/", 1)[-1], _render(r, True) if written.startswith("L") else r[1])
+                     for r in refs if r[0] == "N"]
+            name = cls.rsplit("/", 1)[-1]
     else:
         kind = "F" if it.point == "FIELD" else "M"
         pool = [r for r in refs if r[0] == kind]
         hit = any((owner is None or r[1] == owner) and (name is None or r[2] == name)
                   and (desc is None or r[3] == desc) for r in pool)
-        shown = [_render(r, owner is not None) for r in pool]
+        pairs = [(r[2], _render(r, owner is not None)) for r in pool]
     where = ", ".join(f"{t.shown.rsplit('.', 1)[-1]}.{m[0]}{m[1]}" for m in matched[:3])
     if hit:
         return "exists", f"the bytecode of {where} ({t.evidence}) references {it.written}", []
@@ -446,8 +494,11 @@ def _check_at(it: Item, t: _Target, matched: list) -> tuple[str, str, list[str]]
         return "unknown", (f"{where} has no bytecode this reader walked (abstract, native, or an instruction it "
                            "does not know)"), []
     what = {"FIELD": "field access", "NEW": "object creation"}.get(it.point or "", "call")
-    return "absent", f"the bytecode of {where} ({t.evidence}) has no {what} {it.written}", nearest(it.written.strip(),
-                                                                                                   shown)
+    if uncompared:
+        return "unknown", (f"the bytecode of {where} ({t.evidence}) has no {what} {it.written}, but {uncompared}, "
+                           "so the methods it selects are not all looked in"), []
+    return "absent", f"the bytecode of {where} ({t.evidence}) has no {what} {it.written}", _near_refs(
+        written, name, pairs)
 
 
 def _check_shadow(it: Item, t: _Target) -> tuple[str, str, list[str]]:
@@ -480,8 +531,7 @@ def _check_shadow(it: Item, t: _Target) -> tuple[str, str, list[str]]:
                           f"{t.evidence} has {real[0]}, not {it.types[0]}"), real[:3]
     sup = t.inherited(what, it.name or "")
     if sup:
-        return "unknown", (f"{it.name} is declared in {sup.replace('/', '.')}, a super class: a @Shadow reaches "
-                           f"only {t.shown}'s own members"), []
+        return "unknown", f"{sup}: a @Shadow reaches only {t.shown}'s own members", []
     if _FOREIGN.match(it.name or ""):
         return "unknown", f"{it.name} is an intermediary or SRG name; the classpath read here carries other names", []
     return "absent", f"{t.evidence} declares no {it.member} named {it.name}", nearest(
@@ -506,7 +556,12 @@ def check_mixin(mc: MixinClass, cf: ClassFiles, complete: bool, source: str, jav
                     if s not in matched:
                         matched[s] = _select(t, s)[0]
                     sel += matched[s] or []
-                verdict, why, near = _check_at(it, t, list({id(m): m for m in sel}.values()))
+                regex = [s for s in it.selectors if matched[s] is None]
+                uncompared = ("a method selector of its injector is not a constant string this reader resolves"
+                              if not it.selectors or it.unread else
+                              f"its injector's selector {regex[0]} is a regular expression, not compared here"
+                              if regex else None)
+                verdict, why, near = _check_at(it, t, list({id(m): m for m in sel}.values()), uncompared)
             else:
                 verdict, why, near = _check_shadow(it, t)
             rows.append(_row(mc, it, t, verdict, why, nearest=near))
@@ -600,7 +655,8 @@ def lookup(repo: Path, paths: list[str] | None = None) -> dict:
         config = None
     res = check(repo, paths, config)
     if not any(f["mixins"] for f in res["files"]):
-        return {"status": "no_mixins", **res, "note": "no @Mixin class in the project's Java sources"}
+        where = "the file(s) named" if paths else "the project's Java sources"
+        return {"status": "no_mixins", **res, "note": f"no @Mixin class in {where}"}
     return {"status": "found", **res}
 
 

@@ -149,7 +149,7 @@ def test_selectors_at_targets_and_shadows_against_the_bytecode(tmp_path):
     assert ok["verdict"] == "exists" and ok["status"] == "statically_verified"
     assert ok["evidence"] == f"mc.jar!{LE}.class"
     typo = by_kind(14, "shadow")
-    assert typo["verdict"] == "absent" and typo["status"] == "statically_verified"
+    assert typo["verdict"] == "absent" and typo["status"] == "strong_inference"
     assert typo["nearest"] == ["health"] and typo["nearest_status"] == "strong_inference"
     wrong_type = by_kind(15, "shadow")
     assert wrong_type["verdict"] == "absent" and wrong_type["nearest"] == ["hurtTime: int"]
@@ -162,7 +162,7 @@ def test_selectors_at_targets_and_shadows_against_the_bytecode(tmp_path):
     assert by_kind(20, "method")["verdict"] == "exists" and by_kind(20, "at")["verdict"] == "exists"
     # a wrong @At target: absent, with the real call as the nearest
     bad_at = by_kind(24, "at")
-    assert bad_at["verdict"] == "absent" and bad_at["status"] == "statically_verified"
+    assert bad_at["verdict"] == "absent" and bad_at["status"] == "strong_inference"
     assert bad_at["nearest"][0] == ("Lnet/minecraft/entity/LivingEntity;isInvulnerableTo"
                                     "(Lnet/minecraft/entity/damage/DamageSource;)Z")
     assert "LivingEntity.damage" in bad_at["why"] and "mc.jar!" in bad_at["why"]
@@ -211,7 +211,7 @@ def test_cli(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert cli.main(["mixin-check", "--repo", str(repo)]) == 3
     out = capsys.readouterr().out
-    assert f"absent [statically_verified] {CHECKED_PATH}:24" in out
+    assert f"absent [strong_inference] {CHECKED_PATH}:24" in out
     assert "nearest (a suggestion, strong_inference): Lnet/minecraft/entity/LivingEntity;isInvulnerableTo(" in out
     fixture_file = "src/main/java/com/example/mixmod/mixin/ServerWorldMixin.java"
     assert cli.main(["mixin-check", "--repo", str(repo), "--json", fixture_file]) == 0
@@ -220,4 +220,133 @@ def test_cli(tmp_path, capsys):
     empty = tmp_path / "empty"
     empty.mkdir()
     assert cli.main(["mixin-check", "--repo", str(empty)]) == 2
-    assert "no @Mixin" in capsys.readouterr().out
+    assert "no @Mixin class in the project's Java sources" in capsys.readouterr().out
+    (repo / "notes.txt").write_text("nothing here", encoding="utf-8")
+    assert cli.main(["mixin-check", "--repo", str(repo), "notes.txt"]) == 2
+    assert "no @Mixin class in the file(s) named" in capsys.readouterr().out
+
+
+# -- review round: forms the first version misread ----------------------------------------------------------
+
+A = "net/minecraft/A"
+EDGE_LIB = {
+    A: class_bytes(A, methods=(
+        ("helper", "(I)V", PUBLIC, []),
+        ("arr", "()[[I", PUBLIC, []),
+        ("tick", "()V", PUBLIC, [("invokevirtual", A, "helper", "(I)V")])),
+        fields=(("grid", "[[I", PRIVATE),)),
+    # its super class is on no jar read
+    "net/minecraft/B": class_bytes("net/minecraft/B", super_="net/other/Base", methods=(("run", "()V", PUBLIC, []),)),
+}
+EDGE = """package m;
+
+import net.minecraft.A;
+import net.minecraft.B;
+import org.spongepowered.asm.mixin.*;
+import org.spongepowered.asm.mixin.injection.*;
+
+@Mixin(A.class)
+abstract class AMixin {
+    @Shadow public abstract void shadow$helper(int i);
+    @Shadow(prefix = "x$") public abstract void x$helper(int i);
+    @Shadow private int[][] grid;
+    @Shadow public abstract int[][] arr();
+    @Shadow public abstract int[] arr2();
+    @Shadow public abstract String toString();
+    @Shadow private int missing;
+    @Inject(method = "/tic.*/", at = @At(value = "INVOKE", target = "Lnet/minecraft/A;nothere(I)V"))
+    private void a() {}
+    @Inject(method = Other.TICK, at = @At(value = "INVOKE", target = "Lnet/minecraft/A;nothere2(I)V"))
+    private void b() {}
+    @Inject(method = "tick", at = @At(value = "NEW", target = "(I)"))
+    private void c() {}
+    @Inject(method = "tick", at = @At(value = "NEW", target = "(I"))
+    private void d() {}
+    @Inject(method = "Lnet/other/Foo;tick()V", at = @At("HEAD"))
+    private void e() {}
+    @Inject(method = "Lnet/minecraft/A;tick()V", at = @At("HEAD"))
+    private void f() {}
+}
+
+@Mixin(B.class)
+abstract class BMixin {
+    @Shadow private int baseField;
+    @Inject(method = "start", at = @At("HEAD"))
+    private void g() {}
+}
+"""
+
+
+def _edge(tmp_path: Path) -> dict:
+    repo = tmp_path / "edge"
+    (repo / "src" / "m").mkdir(parents=True)
+    (repo / "src" / "m" / "EdgeMixin.java").write_text(EDGE, encoding="utf-8")
+    write_jar(repo / "libs" / "mc.jar", EDGE_LIB)        # java.lang.Object is on no jar, as on a real classpath
+    res = mixincheck.check(repo, config={"code_check": {"classpath": ["libs/*.jar"]}})
+    rows: dict = {}
+    for r in res["entries"]:
+        rows.setdefault((r["kind"], r["written"]), r)
+    return rows
+
+
+def test_shadow_default_prefix_and_multi_dimensional_arrays(tmp_path):
+    rows = _edge(tmp_path)
+    assert rows[("shadow", "helper(int) -> void")]["verdict"] == "exists"     # shadow$ stripped by default
+    assert rows[("shadow", "grid: int[][]")]["verdict"] == "exists"
+    assert rows[("shadow", "arr() -> int[][]")]["verdict"] == "exists"
+    assert rows[("shadow", "arr2() -> int[]")]["verdict"] == "absent"
+
+
+def test_inherited_members_when_the_super_class_is_not_read(tmp_path):
+    rows = _edge(tmp_path)
+    obj = rows[("shadow", "toString() -> String")]
+    assert obj["verdict"] == "unknown" and "java.lang.Object" in obj["why"]
+    missing = rows[("shadow", "missing: int")]
+    assert missing["verdict"] == "absent" and missing["status"] == "strong_inference"
+    base = rows[("shadow", "baseField: int")]
+    assert base["verdict"] == "unknown" and "net.other.Base" in base["why"] and "may be declared" in base["why"]
+    assert rows[("method", "start")]["verdict"] == "unknown"
+
+
+def test_at_whose_selector_was_not_compared_says_so(tmp_path):
+    rows = _edge(tmp_path)
+    ats = [rows[("at", "Lnet/minecraft/A;nothere(I)V")], rows[("at", "Lnet/minecraft/A;nothere2(I)V")]]
+    assert rows[("method", "/tic.*/")]["verdict"] == "unknown"
+    whys = sorted(r["why"] for r in ats)
+    assert len(whys) == 2 and all(r["verdict"] == "unknown" for r in ats)
+    assert "not a constant string" in whys[0] and "regular expression" in whys[1]
+    assert not any("matches no method" in w for w in whys)
+
+
+def test_malformed_new_constructor_target_is_unknown_not_a_crash(tmp_path):
+    rows = _edge(tmp_path)
+    for target in ("(I)", "(I"):
+        row = rows[("at", target)]
+        assert row["verdict"] == "unknown" and "constructor descriptor" in row["why"]
+
+
+def test_selector_owner_must_be_the_target(tmp_path):
+    rows = _edge(tmp_path)
+    other = rows[("method", "Lnet/other/Foo;tick()V")]
+    assert other["verdict"] == "absent" and other["status"] == "strong_inference"
+    assert "net.other.Foo" in other["why"]
+    assert rows[("method", "Lnet/minecraft/A;tick()V")]["verdict"] == "exists"
+
+
+def test_nearest_of_a_method_with_thousands_of_calls(tmp_path):
+    calls = [("invokevirtual", f"net/minecraft/x/Owner{i}", f"someMethodName{i:04d}", f"(Lnet/minecraft/a/B{i};I)V")
+             for i in range(3000)]
+    lib = {A: class_bytes(A, methods=(("huge", "()V", PUBLIC, calls),))}
+    repo = tmp_path / "huge"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "HugeMixin.java").write_text(
+        "import net.minecraft.A;\n@Mixin(A.class)\nabstract class HugeMixin {\n"
+        '    @Inject(method = "huge", at = @At(value = "INVOKE", '
+        'target = "Lnet/minecraft/x/Owner12;someMethodName0012(Lnet/minecraft/a/B12;J)V"))\n'
+        "    private void a() {}\n}\n", encoding="utf-8")
+    write_jar(repo / "libs" / "mc.jar", lib)
+    res = mixincheck.check(repo, config={"code_check": {"classpath": ["libs/*.jar"]}})
+    row = next(r for r in res["entries"] if r["kind"] == "at")
+    assert row["verdict"] == "absent"
+    assert row["nearest"][0] == "Lnet/minecraft/x/Owner12;someMethodName0012(Lnet/minecraft/a/B12;I)V"
+    assert res["seconds"] < 10      # the full edit distance runs over the closest names' calls only
