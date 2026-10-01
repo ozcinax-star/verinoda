@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D162)
+## Upgrading from 0.4.0 (D137-D163)
 
 ### D137: Trigram regex index
 
@@ -276,6 +276,21 @@ run again. New: `verinoda benchmark tq-audit [--work DIR] [--table PATH] [--repo
 [--json]` (source checkout only), the packaged table `verinoda/data/tq_calibration.json`, the held-out set
 `benchmarks/tq_gold2/` and the report `benchmarks/results/tq-audit-2026-10-02/`. No MCP tool, menu or
 instructions change (41 tools).
+
+### D163: Broader language coverage from upstream Graphify
+
+Nothing to migrate. The extractor files changed, so the extraction stamp changed and the first `verinoda update`
+after upgrading rebuilds the graph by itself. COBOL files (`.cbl .cob .cobol .cpy`) then enter the graph with no
+extra. For VB.NET, R, Erlang and Solidity, install the grammar: `pip install "verinoda[languages]"` (or
+`[vbnet]`, `[r]`, `[erlang]`, `[solidity]`; with uv: `uv tool install --with "tree-sitter-solidity==1.2.13" ...`),
+then run `verinoda update`. Installing a grammar changes the stamp, so that update reads the skipped files.
+
+`scan` and `update` results have a new key, `not_extracted`: a list of groups, each
+`{language, grammar, count, files (first 5), reason, install}`. The CLI prints each group as a `warning:` line.
+Projects with `.sql`, `.tf`, `.ml`, `.lisp`, `.dm` or `.robot` files and without those grammars now see this
+warning; the files were left out before as well. OCaml classes, `.cshtml` `@functions` methods and the
+redaction of more Terraform secret values change those languages' graphs on the rebuild. The query filter
+accepts `lang:cobol`, `lang:erlang`, `lang:r`, `lang:solidity` and `lang:vbnet`.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
