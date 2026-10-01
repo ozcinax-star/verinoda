@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D129)
+## Upgrading from 0.3.2 (D60-D130)
 
 ### D63: Running a project's own tests safely
 
@@ -628,6 +628,19 @@ pack stage with `glslangValidator` when installed (off by default). The MCP tool
 included) whose tree fails the repro: each recorded tree is rebuilt from the session base and the blob
 store in a throw-away copy and run by Verinoda; the answer names the attempt, its hypothesis, the files it
 changed and the run ids on both sides. `experiments.run` takes `replay=` for that. No tool count change.
+
+### D130: Persistent test-to-code map and affected tests
+
+Schema v9 (after v8, a memory's `expires_at`): `atlas.db` gains `test_map` and `test_map_tests` (migrated on first open; an older Verinoda refuses
+the database as written by a newer one). Every traced run (`observe`, `analyze --observe`, `review --observe`,
+the debug ledger's traced attempts) now updates the test-to-code map; `review` lists the affected tests (observed
+first, static reach as the fallback, each labelled) and prints one pytest command that runs them (`review --json`:
+`tests.affected`); `observe --json` gains `test_map` (tests and functions recorded); MCP `change_review` gains
+the compact `affected_tests` key. No MCP tool added; the tool count is unchanged.
+
+docs/UPGRADING.md must mention **v9** for `tests/test_docs.py::test_schema_version_and_mcp_tool_count_match_the_code`
+to pass (it asserts `v{SCHEMA_VERSION}` appears there); this branch could not edit UPGRADING.md, so that one
+test fails until the upgrading note is merged.
 
 ### D60-D62
 
