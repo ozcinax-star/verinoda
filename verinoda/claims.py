@@ -353,7 +353,10 @@ class Claims:
         assessed = status if status in ORDER else DEFAULT_CEILING
         ts = now()
         cid = new_id("clm")
-        spec_in = {k: v for k, v in (spec or {}).items() if k not in ("ceiling", "assessed", "penalty")}
+        # bookkeeping of one claim (its assessment, a fold, the last consolidation attempt) is never inherited,
+        # e.g. by a correction that copies the spec
+        spec_in = {k: v for k, v in (spec or {}).items()
+                   if k not in ("ceiling", "assessed", "penalty", "duplicate_of", "consolidate_tried")}
         self.store.insert_claim({
             "id": cid, "text": text, "project": project,
             "snapshot_id": snapshot["id"] if snapshot else None,

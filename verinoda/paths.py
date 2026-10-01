@@ -84,7 +84,7 @@ DEFAULT_CONFIG: dict = {
     # gets 4800 characters instead of 6000 (verinoda.retrieval.question_chars; env VERINODA_SHAPE_BUDGET)
     "query": {"shape_budget": False},
     # `verinoda update` also re-verifies stale claims and lists duplicate claims (verinoda.consolidate), as
-    # `update --consolidate` does; so the background updates (git hooks, `ui --watch`) do it too
+    # `update --consolidate` does; so the git hooks' background updates do it too (`ui --watch` does not)
     "claims": {"consolidate_on_update": False},
 }
 

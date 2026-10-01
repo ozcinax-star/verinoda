@@ -657,12 +657,20 @@ class Store:
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
+        """One transaction. Nested ``tx()`` blocks join the outermost one, which alone commits (or rolls
+        everything back when an exception leaves it), so several store calls can be made atomic together."""
+        depth = getattr(self, "_tx_depth", 0)
+        self._tx_depth = depth + 1
         try:
             yield self.conn
-            self.conn.commit()
+            if depth == 0:
+                self.conn.commit()
         except Exception:
-            self.conn.rollback()
+            if depth == 0:
+                self.conn.rollback()
             raise
+        finally:
+            self._tx_depth = depth
 
     # -- generic helpers --------------------------------------------------
     def _insert(self, table: str, row: dict) -> None:

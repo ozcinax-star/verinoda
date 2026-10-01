@@ -373,10 +373,15 @@ def _r_update(r: dict) -> None:
     con = r.get("consolidated")
     if con:
         print(f"  consolidate: could not run ({con['error']})" if con.get("error") else
-              f"  consolidate: {con['restored']} stale claim(s) restored, {con['still_stale']} still stale"
+              f"  consolidate: skipped ({con['skipped']})" if con.get("skipped") else
+              f"  consolidate: {con['restored']} stale claim(s) restored, {con['changed_status']} changed status, "
+              f"{con['still_stale']} still stale"
               + (f", {con['not_reached']} not reached" if con["not_reached"] else "")
+              + (f" ({con['not_run']})" if con.get("not_run") else "")
+              + (f", {con['errors']} error(s) (`verinoda consolidate` lists them)" if con["errors"] else "")
               + (f"; {con['duplicate_groups']} group(s) of duplicates (`verinoda consolidate --merge`)"
-                 if con["duplicate_groups"] else ""))
+                 if con["duplicate_groups"] else "")
+              + (f"; {con['conflicts']} statement(s) both contradicted and not" if con["conflicts"] else ""))
     _r_derived(r)
     if r.get("error"):
         print(f"error: {r['error']}", file=sys.stderr)
@@ -675,7 +680,13 @@ def cmd_update(args) -> int:
         summary = _decision_summary(repo, noop=res.get("mode") == "noop")
         if summary:
             res["decisions"] = summary
-        if getattr(args, "consolidate", False) or _consolidate_on_update(repo):
+        if not (getattr(args, "consolidate", False) or _consolidate_on_update(repo)):
+            pass
+        elif res.get("index_mode") == "deferred":
+            # no snapshot of the tree yet: every verify would start the full build and wait for it
+            res["consolidated"] = {"skipped": "the graph is still being rebuilt in the background; run "
+                                              "`verinoda consolidate` once it ends"}
+        else:
             from verinoda import consolidate
 
             try:
@@ -701,8 +712,8 @@ def cmd_consolidate(args) -> int:
     from verinoda import consolidate
 
     repo = _repo(args)
-    if args.limit < 0:
-        print("error: --limit must be 0 or more", file=sys.stderr)
+    if args.limit < 0 or args.budget < 0:
+        print("error: --limit and --budget must be 0 or more", file=sys.stderr)
         return 2
     st = _store(repo)
     try:
@@ -3738,8 +3749,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("consolidate", cmd_consolidate, "between sessions: re-verify stale claims (verify, static, on the "
                                              "current tree) and find duplicate claims (`--merge` folds each into "
                                              "the one kept); nothing is deleted")
-    sp.add_argument("--limit", type=int, default=50, help="stale claims to re-verify, newest first (default 50)")
-    sp.add_argument("--budget", type=float, default=60.0, help="seconds to spend re-verifying (default 60)")
+    sp.add_argument("--limit", type=int, default=50, help="stale claims to re-verify, never tried first, then the "
+                                                          "longest since the last try (default 50)")
+    sp.add_argument("--budget", type=float, default=60.0, help="seconds to spend re-verifying, an index refresh "
+                                                               "included (default 60)")
     sp.add_argument("--merge", action="store_true", help="fold each duplicate into the claim kept (its evidence "
                                                          "linked there, the duplicate marked, never deleted)")
     sp.add_argument("--dry-run", action="store_true", help="list what would be re-verified and merged")
@@ -3751,7 +3764,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "graph in the background; until it ends, reading commands say which files it is behind on")
     sp.add_argument("--consolidate", action="store_true",
                     help="then re-verify up to 20 stale claims (20 s) and count duplicate claims, as `consolidate` "
-                         "does (always, with claims.consolidate_on_update in .verinoda/config.json)")
+                         "does, never merging (always, with claims.consolidate_on_update in .verinoda/config.json; "
+                         "skipped with --fast while the graph is rebuilt in the background)")
     sp = add("ui", cmd_ui, "notes and graph of the project in the browser (local)", repo=False, js=False)
     sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")

@@ -283,3 +283,18 @@ def test_trust_engine_helpers(st):
     st.conn.rollback()
     st.link(ids["claim"], ids["evidence"], "qualifies", grp="g1")
     assert {e["relation"]: e["grp"] for e in st.claim_evidence(ids["claim"])} == {"supports": None, "qualifies": "g1"}
+
+
+def test_nested_transactions_commit_once_and_roll_back_together(st):
+    ids = _seed(st)
+    eid = st.add_evidence({"source_type": "source_code", "locator": "a.py:2", "path": "a.py", "line_start": 2,
+                           "line_end": 2, "content_hash": "sha256:y", "meta": {}})
+    with pytest.raises(RuntimeError):
+        with st.tx():
+            st.link(ids["claim"], eid, "qualifies")      # an inner tx() joins the outer one: no commit here
+            raise RuntimeError("boom")
+    assert eid not in {e["id"] for e in st.claim_evidence(ids["claim"])}
+    with st.tx():
+        st.link(ids["claim"], eid, "qualifies")
+    assert eid in {e["id"] for e in st.claim_evidence(ids["claim"])}
+    assert st._tx_depth == 0
