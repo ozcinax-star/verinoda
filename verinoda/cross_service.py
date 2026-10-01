@@ -1926,18 +1926,20 @@ class _Linker:
                     scope = self._scope(f)
                     local = [r for r in cands if r["chain"] & scope]
                     other = [r for r in cands if not r["chain"] & scope]
-                    if local and other and (max(lits_of[id(r)] for r in other)
-                                            > max(lits_of[id(r)] for r in local)):
-                        pass  # a route outside names more of the path than any inside: no narrowing, no guess
+                    if (local and other and c["lib"] != "supertest"
+                            and max(lits_of[id(r)] for r in other) > max(lits_of[id(r)] for r in local)):
+                        # a route outside names more of the path than any inside: no narrowing, no guess. A
+                        # supertest request(app) is narrowed anyway: its app is a JavaScript object whose relative
+                        # requires the closure follows; a Python client's scope rests on the graph's imports
+                        pass
                     elif local:
                         cands, dropped = local, len(other)
-                    elif (c["lib"] == "supertest" and (len(scope) > 1 or self._serves(scope))
-                          and all("not found" not in (r.get("mount") or "") for r in cands)):
-                        # request(app): the app is built here or imported, and every route that fits is mounted
-                        # on another app; one whose mount was not found might still be this app's
+                    elif c["lib"] == "supertest" and (len(scope) > 1 or self._serves(scope)):
+                        # request(app): the app is built here or imported. A route the app serves is declared or
+                        # mounted in a file the app imports (the full closure); none of these is
                         self._cap("unmatched", dict(call, why=f"no route read in the app under test fits (this file "
                                                               f"and the {len(scope) - 1} it imports); "
-                                                              f"{len(cands)} on other apps do"))
+                                                              f"{len(cands)} elsewhere do"))
                         continue
                 if not cands:
                     self._cap("unmatched", call)
