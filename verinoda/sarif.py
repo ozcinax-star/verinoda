@@ -224,8 +224,26 @@ def from_check(res: dict) -> dict:
     return run.log(res.get("exit"))
 
 
+def from_taint(res: dict) -> dict:
+    """``taint --json`` as SARIF: one result per source-to-sink path at the sink, its steps as a code flow (source
+    first); ``strong_inference``, so a ``warning``."""
+    run = _Run("taint")
+    for f in res.get("findings") or []:
+        kind = f["sink"].get("kind") or "sink"
+        run.add(f["rule"], f"an untrusted value reaches a {kind} call",
+                f"{f['source']['match']} ({f['source']['at']}) reaches {f['sink']['match']} in {len(f['path'])} "
+                "steps", f["status"], f["sink"]["at"],
+                props={"source_at": f["source"]["at"], "source": f["source"]["match"], "sink": f["sink"]["match"]})
+        locs = [{"location": {**loc, "message": {"text": _clip(s["what"])}}}
+                for s in f["path"] for loc in [_location(s["at"])] if loc]
+        if run.results and run.results[-1]["properties"].get("source_at") == f["source"]["at"] and locs:
+            run.results[-1]["codeFlows"] = [{"threadFlows": [{"locations": locs}]}]
+    return run.log(3 if res.get("findings") else 0, truncated=res.get("truncated"))
+
+
 def export(res: dict, command: str) -> dict:
-    return {"review": from_review, "check": from_check, "decide check": from_decide_check}[command](res)
+    return {"review": from_review, "check": from_check, "decide check": from_decide_check,
+            "taint": from_taint}[command](res)
 
 
 def dumps(log: dict) -> str:
