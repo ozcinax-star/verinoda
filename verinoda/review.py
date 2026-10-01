@@ -4981,6 +4981,16 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
     from verinoda import reviewers
 
     who = reviewers.suggest(repo, changes, None if targets else base_info)
+    from verinoda import affected as aff
+
+    touched = sorted({t.split("::", 1)[0] for t in targets} | {c.file for c in changes}) if targets else \
+        [fd.rel for fd in diffs] + [s["file"] for s in skipped]
+    try:
+        packages = aff.affected(ctx.files(), ctx.text, touched)
+    except Exception as exc:  # noqa: BLE001 - an unreadable manifest must not stop the review
+        packages = {"not_checked": [f"{type(exc).__name__}: {exc}"[:300]]}
+        unknown.append({"kind": "affected_packages", "at": None, "what": "which workspace packages the change "
+                        "affects", "why": packages["not_checked"][0], "next_step": "run `verinoda affected`"})
     rules = None
     if not targets:
         from verinoda import path_rules
@@ -5017,6 +5027,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "decisions": reach,
         "made_stale": stale,
         "reviewers": who,
+        "affected": packages,
         **({"path_rules": rules} if rules else {}),
         "coverage": {"method": "changed definitions from symbol facts of both versions; dependents over the last "
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
@@ -5760,11 +5771,14 @@ def _summary(res: dict) -> str:
     recs = (res.get("decisions") or {}).get("records") or []
     to_read = (f" {len(recs)} decision record(s) to read: " + ", ".join(r["decision"] for r in recs[:5])
                + (" ..." if len(recs) > 5 else "") + ".") if recs else ""
+    from verinoda import affected as aff
+
+    pk = aff.summary_part(res.get("affected") or {})
     if not ch:
         stale = stale_reach.summary_part(res.get("made_stale") or {})
         return (f"Review of {where}: no changed definition (comments, whitespace and docstrings are not changes)."
                 + (f" {len(others)} data or documentation file(s) changed{named}, not reviewed by concern."
-                   if others else "") + to_read + (f" {stale}" if stale else ""))
+                   if others else "") + to_read + (f" {stale}" if stale else "") + (f" {pk}" if pk else ""))
     kinds: dict[str, int] = {}
     for c in ch:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
@@ -5797,6 +5811,8 @@ def _summary(res: dict) -> str:
     stale = stale_reach.summary_part(res.get("made_stale") or {})
     if stale:
         parts.append(stale)
+    if pk:
+        parts.append(pk)
     from verinoda import risk
 
     scored = risk.summary_part(res.get("risk") or {})
@@ -5976,6 +5992,9 @@ def render_text(res: dict) -> str:
     from verinoda import reviewers
 
     out += reviewers.render(res.get("reviewers") or {})
+    from verinoda import affected as aff
+
+    out += aff.render(res.get("affected") or {})
     from verinoda import path_rules
 
     out += path_rules.render_lines(res.get("path_rules") or {})

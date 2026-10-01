@@ -1248,6 +1248,10 @@ class AtlasTools:
                 from verinoda import reviewers
 
                 res["reviewers"] = reviewers.compact(res["reviewers"])
+            if isinstance(res.get("affected"), dict):
+                from verinoda import affected as aff
+
+                res["affected"] = aff.compact(res["affected"])
             if isinstance(res.get("risk"), dict):
                 from verinoda import risk
 
