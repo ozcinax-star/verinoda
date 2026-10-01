@@ -74,7 +74,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 7.5 | **DSM view and C4 model check** | Dependency structure matrix; a C4 model compared with the real graph | Lattix, NDepend, IntelliJ, Structurizr | the matrix in `ui`; model edges without code edges listed |
-| 7.6 | **Guards written as programs** | A decision record's guard as a small script with graph access; a pre-commit hook | Archgate | a script guard runs in `decide check` |
 
 ## 8 - Change review extensions
 

@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D138)
+## Upgrading from 0.4.0 (D137-D139)
 
 ### D137: Trigram regex index
 
@@ -38,6 +38,19 @@ changes.
 New command `verinoda mutate`: mutation testing scoped to the diff (Python). It runs the selected tests once per
 mutant through `experiments.run`, so each mutant is a recorded experiment under `.verinoda/runs/`. Nothing else
 changes; no MCP tool changes.
+
+### D139: Guards written as programs
+
+A decision record may now carry a `script path=FILE.py [timeout=SECONDS]` guard: a Python file in the repository
+that defines `check(guard)` and reports `guard.violation(path, line, why)` or `guard.possible(...)`, reading the
+graph and the stored claims through `guard`. It runs the project's own code with your privileges, like the
+project's tests: `verinoda decide check` and `decide baseline` run it only in a project you trust (`verinoda
+trust`), in a child process with a scrubbed environment, a timeout and an audit hook that is a tripwire against
+accidental network, processes and file writes, not a sandbox. Through MCP, in `update` and in `what-if` a script
+guard is `unknown`, and MCP neither records nor accepts one. A script that raises, exits or times out makes the
+check exit 3. `guards.check` has a new keyword `run_scripts` (default False); `decisions.record`, `add_guards`
+and `accept` have `allow_scripts` (default True). `.pre-commit-hooks.yaml` offers the `verinoda-decide-check`
+hook for the pre-commit framework (3.2.0 or later).
 
 ## Upgrading from 0.3.2 (D60-D136)
 
