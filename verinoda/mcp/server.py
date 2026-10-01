@@ -2597,7 +2597,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
     @register("tq")
     def tq(
-        questions: Annotated[list[str | dict[str, Any]],
+        questions: Annotated[list[Any],
                              Field(description="Up to 20 questions: lines ('calls A B', 'callers F') or objects "
                                                "{type, ...}.")],
         verify: Annotated[bool, Field(description="Re-read call sites and definitions (default true).")] = True,

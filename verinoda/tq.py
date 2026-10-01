@@ -22,6 +22,7 @@ Nothing is written: answers are not stored as claims.
 from __future__ import annotations
 
 import ast
+import fnmatch
 import json
 import re
 import sqlite3
@@ -37,6 +38,7 @@ EXPANSIONS_PER_BATCH = 1_000_000
 TIMEOUT_S = 30.0
 ROWS_SHOWN = 5
 CANDIDATES = 3
+MAX_WHICH = 10
 TYPES = ("exists", "which", "calls", "reaches", "route", "writes", "reads", "callers", "taint", "tested", "q")
 # (positional fields, keys allowed, default depth or None, depth range)
 _FORMS = {
@@ -183,7 +185,9 @@ def normalize(obj: dict) -> dict:
             opts = v.split("|") if isinstance(v, str) else v
             if not isinstance(opts, list) or not opts or not all(isinstance(o, str) and o.strip() for o in opts):
                 raise QuestionError("which needs its files: in A.py|B.py")
-            out[f] = [o.strip().replace("\\", "/").removeprefix("./") for o in opts][:10]
+            if len(opts) > MAX_WHICH:
+                raise QuestionError(f"which takes at most {MAX_WHICH} files")
+            out[f] = [o.strip().replace("\\", "/").removeprefix("./") for o in opts]
             continue
         if not isinstance(v, str) or not v.strip():
             raise QuestionError(f"{typ} needs {f.upper()}")
@@ -305,6 +309,7 @@ class _Batch:
         self.stale = set(fresh.get("files") or [])
         self.memo: dict[str, tuple] = {}
         self.taints: dict[tuple, dict] = {}
+        self.taint_spec: dict | None = None
         self.cut = False
         self.update = "index_update" if mcp else "verinoda update"
 
@@ -335,9 +340,26 @@ class _Batch:
             out = ("unknown", f"`{text}` is spelled at {r.site} but is not a symbol of the index",
                    "pass path/file.py::symbol", self.cand(r.candidates))
         else:   # not_found, unresolved, similar: no exact name (a similar one is never used)
-            out = ("absent", f"no symbol named `{text}` in the index", self.cand(r.candidates))
+            where = self.defined_in_stale(text)
+            out = (("unknown", f"`{text}` is not in the index, but {where} (changed since the index) defines it",
+                    self.update, []) if where else
+                   ("absent", f"no symbol named `{text}` in the index", self.cand(r.candidates)))
         self.memo[text] = out
         return out
+
+    def defined_in_stale(self, text: str) -> str | None:
+        """The first changed Python file whose current text defines the name's last part (def, class, assignment)."""
+        name = _bare(text.rpartition("::")[2])
+        if not name.isidentifier():
+            return None
+        rx = re.compile(rf"^\s*(?:(?:async\s+)?def|class)\s+{re.escape(name)}(?![\w])|^{re.escape(name)}\s*[:=]")
+        for f in sorted(self.stale):
+            if not f.endswith((".py", ".pyi")):
+                continue
+            lines = self.lines(f)
+            if lines and any(rx.match(ln) for ln in lines):
+                return f
+        return None
 
     def need_nodes(self, text: str):
         """The nodes of an exact name, or the unknown answer that stands for them."""
@@ -449,10 +471,40 @@ def _ast_calls(b: _Batch, a_nodes: list[str], token: str) -> tuple[list[str], bo
         if not fns:
             python = False
             continue
-        sites += [f"{f}:{ln}" for ln in entail.calls_in(tree, fns[0], token)]
-        body = lines[fns[0].lineno:(fns[0].end_lineno or fns[0].lineno)]   # past the def line
+        fn = fns[0]
+        sites += [f"{f}:{ln}" for ln in entail.calls_in(tree, fn, token)]
+        # from the def line (defaults, a one-line body) to the end, without the definition's own name
+        body = list(lines[fn.lineno - 1:(fn.end_lineno or fn.lineno)])
+        if body:
+            body[0] = re.sub(rf"\b(def|class)\s+{re.escape(fn.name)}(?![\w])", r"\1 ", body[0], count=1)
         spelled = spelled or any(rx.search(ln) for ln in body)
     return sorted(set(sites)), spelled, python
+
+
+def _dunder(name: str) -> bool:
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
+
+
+def _owner(g, n: str) -> str | None:
+    owners = sorted(u for u, _d in g.in_edges(n, {"method"}))
+    return _bare(g.label(owners[0])) if owners else None
+
+
+def _ast_gap(b: _Batch, a_nodes: list[str], b_nodes: list[str], b_text: str) -> dict | None:
+    """The unknown answer when A's AST has a call that may be B (named B, or B's class for a constructor)."""
+    token = _bare(b.g.label(b_nodes[0]))
+    names = [token]
+    if token in ("__init__", "__new__"):
+        owner = _owner(b.g, b_nodes[0])
+        if owner:
+            names = [owner]
+    for name in names:
+        sites = _ast_calls(b, a_nodes, name)[0]
+        if sites:
+            what = f"a call named {name}" if name == token else f"a call of {name} (its constructor runs {token})"
+            return _ans(why=f"{what} at {sites[0]} has no edge to {b_text} in the graph",
+                        next=f"verinoda resolve-call {sites[0]} {name}")
+    return None
 
 
 def _calls(b: _Batch, s: dict, reaches: bool) -> dict:
@@ -470,11 +522,14 @@ def _calls(b: _Batch, s: dict, reaches: bool) -> dict:
         return _path_answer(b, res["rows"], ceiling="statically_verified", target=s["b"])
     observe = f"verinoda observe --for {s['a']} {s['b']}"
     token = _bare(b.g.label(b_nodes[0]))
+    gap = _ast_gap(b, a_nodes, b_nodes, s["b"])
+    if gap is not None:   # a call the graph did not bind to B: not a "no"
+        return gap
+    if _dunder(token):   # construction, with, operators and the call operator never spell it
+        return _ans(False, "weak_inference", why=f"no calls edge; {token} is called implicitly (constructor, "
+                    "with, operator), which neither the graph nor the name check sees", next=observe)
     if d == 1 and not reaches:
-        sites, spelled, python = _ast_calls(b, a_nodes, token)
-        if sites:   # a call of that name the graph did not bind to B: not a "no"
-            return _ans(why=f"a call named {token} at {sites[0]} has no edge to {s['b']} in the graph",
-                        next=f"verinoda resolve-call {sites[0]} {token}")
+        _sites, spelled, python = _ast_calls(b, a_nodes, token)
         if python and not spelled:
             return _ans(False, "strong_inference", why=f"no call named {token} in {s['a']} (AST) and the name "
                         "is not spelled there; a call through another name is not seen", next=observe)
@@ -488,13 +543,20 @@ def _route(b: _Batch, s: dict) -> dict:
     from verinoda import graphquery as gq
 
     want = s["route"].split()
+    if len(want) > 2:
+        raise QuestionError('a route is "METHOD /path" or "/path"')
     method, rpath = (want[0].upper(), want[1]) if len(want) == 2 else ("ANY", want[0])
+
+    def norm(p: str) -> str:
+        return p.rstrip("/") or "/"
+
+    rpath = norm(rpath)
     table = gq.route_table(b.g, b.ctx)
     hits: dict[str, dict] = {}
     for h, rs in sorted(table.items()):
         for r in rs:
             ms, _, p = r["route"].partition(" ")
-            if p == rpath and (method == "ANY" or ms == "ANY" or method in ms.split("|")):
+            if norm(p) == rpath and (method == "ANY" or ms == "ANY" or method in ms.split("|")):
                 hits.setdefault(h, r)
     if not hits:
         known = sorted({r["route"] for rs in table.values() for r in rs})
@@ -514,6 +576,9 @@ def _route(b: _Batch, s: dict) -> dict:
         row = _best(res["rows"])
         h_id = row["values"]["h"]["id"]
         return _path_answer(b, [row], ceiling="statically_verified", target=s["f"], pre=[hits[h_id]["at"]])
+    gap = _ast_gap(b, sorted(hits), f_nodes, s["f"])
+    if gap is not None:
+        return gap
     return _ans(False, "weak_inference", why=f"no calls path of 0..{s['depth']} edges from the handler in the "
                 "static graph", next=f"verinoda observe --for {s['f']}")
 
@@ -568,8 +633,22 @@ def _callers(b: _Batch, s: dict) -> dict:
     at = [p[0]["at"] for e in row.get("examples", []) for p in e.get("paths", []) if p]
     why = "a call through another name (callback, getattr, DI) is not counted" if n == 0 else None
     if row["status"] == "weak_inference":
-        why = "an INFERRED calls edge is counted"
+        why = "an INFERRED or indirect call edge is counted"
     return _ans(n, weaker(row["status"], "strong_inference"), sorted(at)[:CANDIDATES], bound="at_least", why=why)
+
+
+def _taint_hit(want: str, side: dict) -> bool:
+    """Does an asked source or sink name match a rule or finding side (its pattern, kind or call)?"""
+    m, k = str(side.get("match") or ""), str(side.get("kind") or "")
+    if want in (m, k) or m.startswith(want + ".") or m.endswith("." + want):
+        return True
+    p = m.removesuffix("()")
+    if p.startswith("*."):   # any receiver: the asked name's last segments are the pattern's
+        tail = p[2:]
+        if want == tail or want.endswith("." + tail) or fnmatch.fnmatchcase(want, p):
+            return True
+    c = str(side.get("call") or "").split("(")[0]
+    return bool(c) and (want == c or c.endswith("." + want) or c.startswith(want + "."))
 
 
 def _taint(b: _Batch, s: dict) -> dict:
@@ -577,6 +656,8 @@ def _taint(b: _Batch, s: dict) -> dict:
 
     key = tuple(s.get("in") or ())
     if key not in b.taints:
+        if time.monotonic() >= b.deadline:
+            return b.budget()
         try:
             b.taints[key] = taint.run(b.repo, list(key), graph=b.g, local=True)
         except Exception as exc:  # noqa: BLE001 - taint's own errors (a bad scope) settle this question only
@@ -585,11 +666,7 @@ def _taint(b: _Batch, s: dict) -> dict:
     if "error" in res:
         return _ans(why=res["error"], next="check in=PATH")
 
-    def hit(want: str, side: dict) -> bool:
-        m, k = str(side.get("match") or ""), str(side.get("kind") or "")
-        return want in (m, k) or m.startswith(want + ".") or m.endswith("." + want)
-
-    found = [f for f in res["findings"] if hit(s["s"], f["source"]) and hit(s["k"], f["sink"])]
+    found = [f for f in res["findings"] if _taint_hit(s["s"], f["source"]) and _taint_hit(s["k"], f["sink"])]
     scope = ",".join(key) or "the project"
     if found:
         f = found[0]
@@ -599,15 +676,54 @@ def _taint(b: _Batch, s: dict) -> dict:
         return _ans(why="taint stopped at its finding limit", next="add in=PATH")
     if not res.get("files"):
         return _ans(why=f"no Python file in {scope}", next="check in=PATH")
+    if b.taint_spec is None:
+        try:
+            spec = taint.load_spec(b.repo, None, local=True)
+            b.taint_spec = {"source": list(spec["sources"]), "sink": list(spec["sinks"])}
+        except Exception:  # noqa: BLE001 - without the rules every name counts as unknown to them
+            b.taint_spec = {"source": [], "sink": []}
+    for side, want in (("source", s["s"]), ("sink", s["k"])):
+        if not any(_taint_hit(want, e) for e in b.taint_spec[side] + [f[side] for f in res["findings"]]):
+            seen = sorted({str(f[side].get("match")) for f in res["findings"]} |
+                          {str(f[side].get("kind")) for f in res["findings"] if f[side].get("kind")})
+            return _ans(why=f"`{want}` matches no {side} of the taint rules or of the {len(res['findings'])} "
+                        f"finding(s) in {scope}", next=f"ask with a {side} name the rules use",
+                        candidates=seen[:5])
     deeper = f" --depth {taint.slicing.MAX_DEPTH}" if res.get("depth", 0) < taint.slicing.MAX_DEPTH else ""
     return _ans(False, "weak_inference", why=f"no {s['s']} -> {s['k']} path in {scope} at depth {res['depth']}; "
                 "data flow only, not a proof of safety", next=" ".join(["verinoda taint", *key, *deeper.split()]))
 
 
-def _qual(g, n: str) -> str:
+def _qual(b: _Batch, n: str) -> str:
+    """F's dotted name through every enclosing def and class (the test map's spelling, ``outer.inner``)."""
+    from verinoda import entail
+
+    g = b.g
     name = _bare(g.label(n))
-    owners = [u for u, _d in g.in_edges(n, {"method"})]
-    return f"{_bare(g.label(owners[0]))}.{name}" if owners else name
+    f, sp = g.file(n), g.span(n)
+    lines = b.lines(f) if f and f.endswith((".py", ".pyi")) else None
+    tree = entail._py_tree("\n".join(lines)) if lines is not None else None
+    if tree is not None:
+        at = {g.line(n), sp[0] if sp else None} - {None}
+        defs = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+        def walk(node, stack):
+            for ch in ast.iter_child_nodes(node):
+                if isinstance(ch, defs):
+                    if ch.name == name and ch.lineno in at:
+                        return ".".join([*stack, ch.name])
+                    got = walk(ch, [*stack, ch.name])
+                else:
+                    got = walk(ch, stack)
+                if got:
+                    return got
+            return None
+
+        found = walk(tree, [])
+        if found:
+            return found
+    owner = _owner(g, n)
+    return f"{owner}.{name}" if owner else name
 
 
 def _tested(b: _Batch, s: dict) -> dict:
@@ -648,16 +764,20 @@ def _tested(b: _Batch, s: dict) -> dict:
             return set()
 
     names = {t_["test"] for t_ in tests}
-    ran, fixture_anywhere = False, False
+    ran, fixture_anywhere, alike = False, False, False
     for n in f_nodes:
-        f, qual = b.g.file(n), _qual(b.g, n)
+        f, qual = b.g.file(n), _qual(b, n)
+        bare = _bare(qual)
         for r in conn.execute("SELECT test, qual, fixture FROM test_map WHERE path = ?", (f,)):
-            if testmap._covers(r["qual"], qual):
+            rq = testmap.clean_qual(r["qual"]) or ""
+            if testmap._covers(rq, qual):
                 ran = ran or r["test"] in names
                 fixture_anywhere = fixture_anywhere or bool(r["fixture"])
+            elif r["test"] in names and (rq == bare or rq.endswith("." + bare)):
+                alike = True   # the same name under another owner: not told apart, so never a "no"
     current = all(testmap.mapping_current(_Ro, t_["test"], versions) for t_ in tests)
     conn.close()
-    last = tests[-1]
+    last = max(tests, key=lambda t_: (t_.get("updated_at") or "", t_.get("run_id") or ""))
     via = f"in run {last['run_id']} @ commit {(last['commit_sha'] or '?')[:12]}"
     at = [b.loc(n) for n in f_nodes]
     if ran:
@@ -666,6 +786,9 @@ def _tested(b: _Batch, s: dict) -> dict:
         return _ans(True, "stale", at, via=via, why="a file the test ran changed since that run", next=nxt)
     passed = all(t_["outcome"] == "passed" for t_ in tests)
     complete = all(t_["complete"] for t_ in tests)
+    if alike:
+        return _ans(why=f"the test ran a function named {_bare(s['f'])} recorded under another owner in the same "
+                    "file", next=nxt)
     if passed and complete and current and not fixture_anywhere:
         return _ans(False, "strong_inference", at, via=via, why=testmap.LIMITS[0], next=nxt)
     why = ("the test did not pass (it may have stopped early)" if not passed else
@@ -911,6 +1034,8 @@ def render(res: dict, *, echo_questions: bool = True) -> str:
             parts.append(f"next: {a['next']}")
         if a.get("candidates"):
             parts.append("candidates: " + ", ".join(a["candidates"]))
+        if a.get("truncated"):
+            parts.append(f"first {ROWS_SHOWN} rows shown")
         out.append(" | ".join(parts))
     if res.get("truncated"):
         out.append(f"cut for size: {res['truncated']['next']}")

@@ -88,6 +88,10 @@ def test_the_gold_set_is_frozen():
         assert hashlib.sha256((GOLD / name).read_bytes()).hexdigest() == sha, name
     for rel, sha in manifest["fixtures"].items():
         assert hashlib.sha256((GOLD / rel).read_bytes()).hexdigest() == sha, rel
+    # examples/orders_app, which the orders_app cases run on
+    assert manifest["examples"] and all(r.startswith("examples/orders_app/") for r in manifest["examples"])
+    for rel, sha in manifest["examples"].items():
+        assert hashlib.sha256((ROOT / rel).read_bytes()).hexdigest() == sha, rel
     held = json.loads((GOLD / "held_out.json").read_text(encoding="utf-8"))
     assert len(held) == manifest["counts"]["held_out.json"]
     assert all(hashlib.sha256(c["id"].encode()).digest()[0] < 0x56 for c in held)
@@ -362,3 +366,157 @@ def test_the_mcp_tool(ql):
     assert js["answers"][0]["answer"] == 2 and js["schema"] == "verinoda.tq/1"
     assert t.tq([])["error"] == "invalid_argument"
     assert t.tq(["x"], need="sure")["error"] == "invalid_argument"
+
+
+# -- review round: answers that were "no" and should not be ---------------------------------------------
+
+_REVIEW = {"m.py": """class Order:
+    def __init__(self, n):
+        self.n = n
+
+
+class K:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def __call__(self):
+        return 1
+
+
+def target():
+    return 1
+
+
+def multi_default(cb=target):
+    return cb()
+
+
+def one_default(cb=target): return cb()
+
+
+def plain():
+    return 2
+
+
+def a_ctor():
+    o = Order(1)
+    return o
+
+
+def uses_k():
+    k = K()
+    with k:
+        return k()
+
+
+def a_nested():
+    def inner():
+        return target()
+    return inner()
+
+
+def outer():
+    def inner_fn():
+        return 1
+    return inner_fn()
+
+
+class A:
+    class B:
+        def deep(self):
+            return 1
+"""}
+
+
+@pytest.fixture(scope="module")
+def rv(tmp_path_factory) -> Path:
+    return _scan(_REVIEW, tmp_path_factory.mktemp("tqrv") / "rv")
+
+
+def test_a_name_on_the_def_line_keeps_a_depth_1_no_weak(rv):
+    for a in ("multi_default", "one_default"):
+        got = _one(rv, f"calls {a} target")
+        assert got["status"] != "strong_inference" and got["answer"] is not True, (a, got)
+    # the control: nothing spelled, nothing called
+    assert (lambda g: (g["answer"], g["status"]))(_one(rv, "calls plain target")) == (False, "strong_inference")
+
+
+def test_an_implicit_dunder_call_is_never_a_strong_no(rv):
+    ctor = _one(rv, "calls a_ctor Order.__init__")
+    assert ctor["answer"] is None and ctor["next"] == "verinoda resolve-call m.py:33 Order"
+    for b in ("K.__enter__", "K.__call__"):
+        got = _one(rv, f"calls uses_k {b}")
+        assert (got["answer"], got["status"]) == (False, "weak_inference") and "implicitly" in got["why"], got
+
+
+def test_reaches_uses_the_ast_call_evidence_as_calls_does(rv):
+    res = tq.ask(rv, ["calls a_nested target", "reaches a_nested target"])
+    c, r = res["answers"]
+    assert c["answer"] is None and r["answer"] is None and r["next"] == c["next"]
+    assert r["next"].startswith("verinoda resolve-call m.py:")
+
+
+def test_tested_builds_the_full_qualname_of_nested_definitions(tmp_path):
+    from verinoda import treestate
+
+    repo = _scan(_REVIEW, tmp_path / "tmq")
+    fp = treestate.content_id((repo / "m.py").read_bytes())
+    con = sqlite3.connect(repo / ".verinoda" / "atlas.db")
+    con.execute("INSERT INTO test_map_tests (test, run_id, commit_sha, complete, outcome, functions, updated_at)"
+                " VALUES ('tests/test_m.py::test_it', 'run_1', 'abc', 1, 'passed', 3, 't')")
+    con.executemany("INSERT INTO test_map (test, path, qual, fingerprint, run_id, fixture) "
+                    "VALUES ('tests/test_m.py::test_it', 'm.py', ?, ?, 'run_1', 0)",
+                    [("outer.<locals>.inner_fn", fp), ("A.B.deep", fp), ("Ghost.plain", fp)])
+    con.commit()
+    con.close()
+    res = tq.ask(repo, ["tested tests/test_m.py::test_it inner_fn", "tested tests/test_m.py::test_it deep",
+                        "tested tests/test_m.py::test_it plain", "tested tests/test_m.py::test_it target"])
+    inner, deep, alike, no = res["answers"]
+    assert (inner["answer"], inner["status"]) == (True, "observed")
+    assert (deep["answer"], deep["status"]) == (True, "observed")
+    assert alike["answer"] is None and "another owner" in alike["why"]   # same name elsewhere: not a no
+    assert (no["answer"], no["status"]) == (False, "strong_inference")
+
+
+def test_a_name_defined_in_a_changed_indexed_file_is_unknown_not_absent(tmp_path):
+    repo = _scan(_REVIEW, tmp_path / "st")
+    p = repo / "m.py"
+    p.write_text(p.read_text(encoding="utf-8") + "\n\ndef bee2(): return target()\n", encoding="utf-8",
+                 newline="\n")
+    ex, ca, gone = tq.ask(repo, ["exists bee2", "calls bee2 target", "exists never_defined"])["answers"]
+    assert ex["answer"] is None and ex["next"] == "verinoda update" and "m.py" in ex["why"]
+    assert ca["answer"] is None and ca["next"] == "verinoda update"
+    assert (gone["answer"], gone["status"]) == (False, "strong_inference")
+
+
+def test_taint_matches_the_call_and_any_receiver_patterns(ql):
+    yes = _one(ql, "taint request USERS.execute")
+    assert yes["answer"] is True and yes["at"] == ["app/admin.py:12", "app/admin.py:13"]
+    # a sink name no rule and no finding uses: not a "no path", the names found instead
+    odd = _one(ql, "taint request.args shell")
+    assert odd["answer"] is None and "sql" in odd["candidates"] and "matches no sink" in odd["why"]
+    # a source the rules know, with no flow to the sink: still the weak no
+    assert (lambda g: (g["answer"], g["status"]))(_one(ql, "taint request.json sql")) == (False, "weak_inference")
+
+
+def test_review_minors(ql):
+    many = "|".join(f"f{i}.py" for i in range(11))
+    assert _one(ql, f"which save_order in {many}")["status"] == "invalid"
+    assert _one(ql, 'route "POST /orders extra" save_order')["status"] == "invalid"
+    assert _one(ql, 'route "POST /orders/" save_order')["answer"] is True
+    text = tq.render(tq.ask(ql, ["q 'match (f:function) where f.file = \"rec.py\" return f' as=rows"]))
+    assert f"first {tq.ROWS_SHOWN} rows shown" in text
+
+
+def test_a_question_of_any_json_type_is_invalid_alone_through_run_tool(ql):
+    anyio = pytest.importorskip("anyio")
+    from verinoda.mcp import server as mcp_server
+
+    srv = mcp_server.build_server(ql)
+    res = anyio.run(srv.call_tool, "run_tool",
+                    {"name": "tq", "arguments": {"questions": [5, None, "exists save_order"], "format": "json"}})
+    data = json.loads(res.content[0].text)
+    assert [a["status"] for a in data["answers"]] == ["invalid", "invalid", "statically_verified"]
