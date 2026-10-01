@@ -3516,15 +3516,19 @@ def cmd_slice(args) -> int:
         print("error: give the site as PATH:LINE", file=sys.stderr)
         return 2
     p = Path(path)
-    if p.is_absolute():
-        try:
-            path = p.resolve().relative_to(repo).as_posix()
-        except ValueError:
-            print(f"error: {path} is outside the project {repo}", file=sys.stderr)
-            return 2
-    path = path.replace("\\", "/")
+    # repository-relative, else relative to the working directory; never a file outside the project
+    tries = [p] if p.is_absolute() else [repo / p, Path.cwd() / p]
+    found = next((t for t in tries if t.is_file()), tries[0])
+    try:
+        path = found.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError:
+        print(f"error: {path} is outside the project {repo}", file=sys.stderr)
+        return 2
     if args.forward and (args.arg is not None or args.depth is not None):
         print("error: --arg and --depth go with a backward slice", file=sys.stderr)
+        return 2
+    if args.var and args.arg is not None:
+        print("error: give --var or --arg, not both", file=sys.stderr)
         return 2
     try:
         if args.forward:

@@ -218,3 +218,306 @@ def test_the_cli(scanned, capsys):
     assert cli.main(["slice", "shop/orders.py", "--repo", str(scanned)]) == 2
     assert cli.main(["slice", "shop/orders.py:26", "--forward", "--depth", "1", "--repo", str(scanned)]) == 2
     assert cli.main(["slice", "shop/orders.py:3", "--repo", str(scanned)]) == 2
+
+
+# -- review round: each scenario's slice, line for line ---------------------------------------------
+
+def _slice(tmp_path, text: str, line: int, **kw) -> dict:
+    _write(tmp_path, "m.py", text)
+    return slicing.backward(tmp_path, "m.py", line, depth=0, **kw)
+
+
+def test_an_exception_carries_the_state_before_the_statement_that_raised(tmp_path):
+    res = _slice(tmp_path, """
+    def f():
+        result = None
+        try:
+            result = compute()
+        except Exception:
+            pass
+        return result
+    """, 7)
+    assert set(_lines(res)) == {2, 4, 7}
+    res = _slice(tmp_path, """
+    def g():
+        x = 1
+        try:
+            x = a()
+            x = b()
+        except ValueError:
+            return x
+        return 0
+    """, 7)
+    assert set(_lines(res)) == {2, 4, 5, 7}
+    res = _slice(tmp_path, """
+    def h():
+        x = 1
+        try:
+            x = a()
+        finally:
+            return x
+    """, 6)
+    assert set(_lines(res)) == {2, 4, 6}
+
+
+@pytest.mark.skipif(not hasattr(__import__("ast"), "TryStar"), reason="except* needs Python 3.11")
+def test_an_exception_group_handler_sees_the_state_before_the_raise(tmp_path):
+    res = _slice(tmp_path, """
+    def k():
+        x = 1
+        try:
+            x = a()
+        except* ValueError:
+            pass
+        return x
+    """, 7)
+    assert set(_lines(res)) == {2, 4, 7}
+
+
+def test_a_way_out_of_a_handler_or_else_runs_finally(tmp_path):
+    raise_ = """
+    def f(a):
+        x = 0
+        try:
+            a()
+        except ValueError:
+            x = 1
+            raise
+        finally:
+            log(x)
+    """
+    assert set(_lines(_slice(tmp_path, raise_, 9))) == {2, 4, 6, 9}
+    returns = raise_.replace("            raise\n", "            return x\n") + "        return x\n"
+    assert set(_lines(_slice(tmp_path, returns, 9))) == {2, 4, 6, 9}
+    res = _slice(tmp_path, """
+    def e(a):
+        x = 0
+        try:
+            a()
+        except ValueError:
+            pass
+        else:
+            x = 1
+            return
+        finally:
+            log(x)
+    """, 11)
+    assert set(_lines(res)) == {2, 4, 8, 11}
+
+
+def test_a_nested_class_body_reads_the_function_s_names(tmp_path):
+    res = _slice(tmp_path, """
+    def f(v):
+        class C:
+            x = v
+        return C
+    """, 4)
+    assert set(_lines(res)) == {2, 4}
+    assert [p["name"] for p in res["parameters"]] == ["v"] and res["free"] == []
+
+
+def test_a_nested_function_s_own_names_are_not_reads(tmp_path):
+    res = _slice(tmp_path, """
+    def outer():
+        y = 1
+        def inner():
+            y = 2
+            return y
+        return inner
+    """, 6)
+    assert set(_lines(res)) == {3, 6}
+    res = _slice(tmp_path, """
+    def outer():
+        y = 1
+        def inner():
+            nonlocal y
+            return y
+        return inner
+    """, 6)
+    assert set(_lines(res)) == {2, 3, 6}
+
+
+def test_a_forward_slice_follows_nested_branches(tmp_path):
+    _write(tmp_path, "m.py", """
+    def f(a, other):
+        x = a > 0
+        if x:
+            if other:
+                y = 1
+            return y
+        return 0
+    """)
+    res = slicing.forward(tmp_path, "m.py", 2)
+    assert set(_lines(res)) == {2, 3, 4, 5, 6, 7}
+
+
+def test_arg_takes_the_outermost_call_on_the_line(tmp_path):
+    text = """
+    def f(db, oid, amount, x):
+        save(db, g(oid), amount)
+        save(x, g(oid), amount)
+    """
+    res = _slice(tmp_path, text, 2, arg="2")
+    assert set(_lines(res)) == {2} and [p["name"] for p in res["parameters"]] == ["amount"]
+    res = _slice(tmp_path, text, 3, arg="0")
+    assert [p["name"] for p in res["parameters"]] == ["x"]
+
+
+def test_a_decorator_or_def_header_line_is_the_definition_in_the_function_around(tmp_path):
+    text = """
+    def outer(b, y):
+        @d.wrap
+        def inner(p=y,
+                  q=b):
+            return p
+        return inner
+    """
+    for line in (2, 3, 4):
+        res = _slice(tmp_path, text, line)
+        assert res["criterion"]["function"] == "outer"
+        assert set(_lines(res)) == {3}
+        assert [p["name"] for p in res["parameters"]] == ["b", "y"] and res["free"] == ["d"]
+    assert _lines(_slice(tmp_path, text, 5)) == {5: ["criterion"]}   # the nested function's own body
+
+
+def test_del_ends_a_name_and_changes_a_container(tmp_path):
+    res = _slice(tmp_path, """
+    def f(d, k):
+        del d[k]
+        return d
+    """, 3)
+    assert set(_lines(res)) == {2, 3} and [p["name"] for p in res["parameters"]] == ["d", "k"]
+    res = _slice(tmp_path, """
+    def g(x, c):
+        if c:
+            del x
+        return x
+    """, 4)
+    assert set(_lines(res)) == {2, 3, 4} and _lines(res)[3] == ["def"]
+
+
+def test_var_on_a_tuple_assignment_takes_its_own_part(tmp_path):
+    res = _slice(tmp_path, """
+    def f(x, y):
+        a, b = x, y
+        return a
+    """, 2, var="a")
+    assert [p["name"] for p in res["parameters"]] == ["x"]
+
+
+def test_var_and_arg_together_are_refused(tmp_path):
+    with pytest.raises(slicing.SliceError, match="not both"):
+        _slice(tmp_path, "def f(a):\n    g(a)\n", 2, var="a", arg="0")
+
+
+def test_a_one_line_if_is_listed_once(tmp_path):
+    res = _slice(tmp_path, """
+    def f(a, b):
+        if a: return b
+        return 0
+    """, 2)
+    assert [x["at"] for x in res["lines"]] == ["m.py:2"]
+    assert res["lines"][0]["role"] == ["control", "criterion"]
+
+
+def _big(n: int) -> str:
+    """A function of about 3n statements and n names, each defined from the one before, under branches."""
+    out = ["def big(a, b):", "    v0 = a"]
+    for i in range(1, n + 1):
+        out += [f"    v{i} = v{i - 1} + b", f"    if v{i} > {i}:", "        b = b + 1"]
+    return "\n".join(out + [f"    return v{n} + b"]) + "\n"
+
+
+def test_reaching_definitions_scale_to_large_functions():
+    import ast
+    import time
+
+    func = ast.parse(_big(600)).body[0]
+    cfg = slicing.CFG(func)
+    t0 = time.perf_counter()
+    reach = cfg.reaching()
+    assert time.perf_counter() - t0 < 3.0   # 1,800 nodes; solved against program order, 538 nodes took 6 s
+    last = next(n.id for n in cfg.nodes if n.kind == "return")
+    # every `b = b + 1` reaches the return (the branches after it may all be skipped), and the parameter b
+    assert len(reach.get(last, "b")) == 601 and reach.get(last, "v600") == {last + 3}
+
+
+def test_post_dominators_scale_to_large_functions(tmp_path):
+    import ast
+    import time
+
+    func = ast.parse(_big(1300)).body[0]   # about 3,900 nodes, under the 4,000 limit
+    t0 = time.perf_counter()
+    fn = slicing._Fn("big.py", func, [])
+    assert time.perf_counter() - t0 < 3.0   # control dependence alone took 26 s before
+    assert len(fn.cfg.nodes) > 3900
+    _write(tmp_path, "big.py", _big(300))
+    t0 = time.perf_counter()
+    res = slicing.backward(tmp_path, "big.py", 3 * 300 + 3, depth=0)
+    assert time.perf_counter() - t0 < 3.0
+    assert len(res["lines"]) == 3 * 300 + 2   # every statement: the return depends on all of them
+
+
+def test_the_cli_reads_paths_inside_the_project_only(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    _write(repo, "sub/m.py", "def f(a):\n    b = a\n    return b\n")
+    _write(tmp_path, "out.py", "def f(a):\n    return a\n")
+    monkeypatch.chdir(repo / "sub")
+    assert cli.main(["slice", "m.py:3", "--repo", str(repo), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["criterion"]["at"] == "sub/m.py:3"
+    assert cli.main(["slice", "../../out.py:2", "--repo", str(repo)]) == 2
+    assert "outside the project" in capsys.readouterr().err
+    monkeypatch.chdir(repo)
+    assert cli.main(["slice", "../out.py:2", "--repo", str(repo)]) == 2
+    assert "outside the project" in capsys.readouterr().err
+    assert cli.main(["slice", "sub/m.py:3", "--var", "b", "--arg", "0", "--repo", str(repo)]) == 2
+    assert "not both" in capsys.readouterr().err
+
+
+CALLS = """
+class Acct:
+    def take(self, amount):
+        return amount
+
+
+def helper(x, flag=False):
+    return flag
+
+
+class Box:
+    def __init__(self, v):
+        self.v = v
+
+
+def use(a, raw, opts):
+    Acct.take(a, raw)
+    helper(raw, **opts)
+    return Box(raw)
+"""
+
+
+@pytest.fixture
+def calls(tmp_path) -> Path:
+    from verinoda import workflow
+    from verinoda.store import open_store
+
+    _write(tmp_path, "pkg/calls.py", CALLS)
+    workflow.init(tmp_path)
+    st = open_store(tmp_path)
+    try:
+        workflow.scan(st, tmp_path)
+    finally:
+        st.close()
+    return tmp_path
+
+
+def test_callers_through_a_class_and_spread_keywords(calls):
+    g = index.load(calls)
+    res = slicing.backward(calls, "pkg/calls.py", 3, depth=1, graph=g)
+    (hop,) = res["parameters"][0]["callers"]
+    assert hop["at"] == "pkg/calls.py:16" and hop["argument"] == "raw"   # Acct.take(a, raw): self is a
+    res = slicing.backward(calls, "pkg/calls.py", 7, depth=1, graph=g)
+    (hop,) = res["parameters"][0]["callers"]
+    assert "argument" not in hop and "**kwargs" in hop["unknown"]
+    res = slicing.backward(calls, "pkg/calls.py", 12, var="v", depth=1, graph=g)
+    assert "not followed to __init__" in res["parameters"][0]["note"]
