@@ -922,6 +922,52 @@ def _overlay(repo: Path, dst: Path, paths: list[str], ids: dict[str, str] | None
     return done
 
 
+def _replay(dst: Path, files: dict[str, bytes | None], ids: dict[str, str] | None) -> int:
+    """Write recorded file contents over a commit copy (``None``: the file is left out of the copy).
+
+    Deletions go first; a directory where the recorded tree has a file (or a file where it has a directory)
+    is removed from the copy, since the recorded tree cannot hold both."""
+    clean: dict[str, bytes | None] = {}
+    for rel in files:
+        c = rel.replace("\\", "/").strip()
+        if not c or c.startswith("/") or path_escape(c) or not treestate.safe_path(c):
+            raise ValueError(f"replay path {rel!r} must be a repository-relative file path (not in .git or "
+                             ".verinoda, in any spelling)")
+        clean[c] = files[rel]
+
+    def drop(rel: str) -> None:
+        out = dst / rel
+        if out.is_dir() and not out.is_symlink():
+            shutil.rmtree(out)
+            if ids is not None:
+                for k in [k for k in ids if k.startswith(rel + "/")]:
+                    ids.pop(k)
+        elif out.exists() or out.is_symlink():
+            out.unlink()
+        if ids is not None:
+            ids.pop(rel, None)
+
+    for rel in sorted(p for p, d in clean.items() if d is None):
+        if (dst / rel).is_file() or (dst / rel).is_symlink():
+            drop(rel)
+        elif ids is not None:
+            ids.pop(rel, None)
+    for rel in sorted(p for p, d in clean.items() if d is not None):
+        parts = rel.split("/")
+        for k in range(1, len(parts)):  # a file of the base where the recorded tree has a directory
+            up = "/".join(parts[:k])
+            if (dst / up).is_file() or (dst / up).is_symlink():
+                drop(up)
+        out = dst / rel
+        if out.is_dir() and not out.is_symlink():  # a directory of the base where the recorded tree has a file
+            drop(rel)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(clean[rel])
+        if ids is not None:
+            ids[rel] = treestate.content_id(clean[rel])
+    return len(files)
+
+
 def _posix_limits(cpu_s: int, mem_mb: int):  # pragma: no cover - POSIX only
     """Limits for the child, each one as far as the system allows it.
 
@@ -1245,7 +1291,7 @@ def run(
     timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto",
     commit: str | None = None, plugins: dict[str, bytes] | None = None,
     env_extra: dict[str, str] | None = None, ref: str | None = None, overlay: list[str] | None = None,
-    file_ids: dict[str, str] | None = None,
+    file_ids: dict[str, str] | None = None, replay: dict[str, bytes | None] | None = None,
 ) -> dict:
     """Run one experiment and record it (and its evidence) in the store.
 
@@ -1258,8 +1304,9 @@ def run(
     Source of the copy: the working tree by default; with ``ref`` the regular
     files of that commit (``git archive``-like, read with ``git cat-file``; the
     user's tree, index and ``.git`` are untouched), optionally with
-    working-tree files ``overlay`` copied on top (labelled in ``source``). The
-    same policy and isolation apply either way. ``result["tree"]`` is the
+    working-tree files ``overlay`` copied on top (labelled in ``source``), or
+    with recorded contents ``replay`` ({path: bytes, or None to leave the file
+    out}) written on top: a tree the debug ledger recorded. The same policy and isolation apply either way. ``result["tree"]`` is the
     identity of what ran (:mod:`verinoda.treestate`: tree hash over content
     ids, computed while copying); ``file_ids`` (a dict) receives the per-file
     content ids.
@@ -1275,8 +1322,8 @@ def run(
         sha = treestate.resolve_commit(repo, ref)
         source = {"kind": "commit", "commit": sha, "ref": treestate.check_ref(ref)}
         commit = commit or sha
-    elif overlay:
-        raise ValueError("overlay applies to a commit copy only (give ref)")
+    elif overlay or replay:
+        raise ValueError("overlay and replay apply to a commit copy only (give ref)")
     for name in plugins or {}:
         if not PLUGIN_NAME_RE.match(name):
             raise ValueError(f"plugin file name must be a plain module file name, not {name!r}")
@@ -1351,6 +1398,8 @@ def run(
                 source["skipped_total"] = len(not_written)
             if overlay:
                 source["overlay"] = _overlay(repo, copy, list(overlay), ids)
+            if replay:
+                source["replayed"] = _replay(copy, replay, ids)
             where = f"copy of commit {source['commit'][:12]} of {repo}"
         else:
             not_copied: list[dict] = []
@@ -1503,7 +1552,8 @@ def run(
     on = ""
     if source["kind"] == "commit":
         on = f" (on commit {source['commit'][:12]}" + (f" + working-tree {', '.join(source['overlay'])}"
-                                                       if source.get("overlay") else "") + ")"
+                                                       if source.get("overlay") else "") \
+            + (f" + {source['replayed']} recorded file(s)" if source.get("replayed") else "") + ")"
     ev = {
         "source_type": "test_result" if is_test else "experiment",
         "locator": f"run {eid}{on}: {' '.join(argv)}",
@@ -1536,7 +1586,8 @@ def run(
         # An inconclusive run says nothing about the hypothesis: traceable, never support or refutation.
         # A run of another commit (a commit copy) says nothing about the code the claim describes either.
         claim_commit = (store.claim(claim_id) or {}).get("commit_sha")
-        other_code = source["kind"] == "commit" and (source.get("overlay") or source["commit"] != claim_commit)
+        other_code = source["kind"] == "commit" and (source.get("overlay") or source.get("replayed")
+                                                     or source["commit"] != claim_commit)
         relation = "qualifies" if (inconclusive or other_code) else ("supports" if matches else "refutes")
         Claims(store, repo).attach(claim_id, ev_id, relation,
                                    note=f"experiment {eid}{on}: expected {expect}, got {outcome}"
