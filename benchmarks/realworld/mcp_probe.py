@@ -2,7 +2,9 @@
 
     python -P mcp_probe.py REPO project_query|analyze QUESTION
 
-Run by run.py as a subprocess, so a crash or a hang of the tool is recorded like any other step.
+Run by run.py as a subprocess, so a crash or a hang of the tool is recorded like any other step. A response
+``{"error": ...}`` (the server turns ToolFailure, a missing index or file into one, with no traceback) exits 1,
+so run.py records it as a crash rather than an answer.
 ``analyze`` is called with ``run_tests=False`` and ``observe=False``: the repository's code is never run.
 """
 
@@ -24,9 +26,10 @@ def main(argv: list[str]) -> int:
     else:
         print(f"unknown tool {tool}", file=sys.stderr)
         return 2
-    if isinstance(res, dict) and res.get("error"):
-        print(f"tool error: {str(res['error'])[:500]}", file=sys.stderr)
     print(json.dumps(res, default=str, ensure_ascii=False))
+    if isinstance(res, dict) and res.get("error"):  # no_index, file_not_found, a ToolFailure: a failed step
+        print(f"tool error: {str(res['error'])[:500]}", file=sys.stderr)
+        return 1
     return 0
 
 

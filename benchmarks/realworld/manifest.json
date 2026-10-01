@@ -11,19 +11,17 @@
      "scenario": {
        "queries": ["how does the terminal draw the list of matches", "how is the input read from the default command", "how are results sorted by score"],
        "analyze": ["how does a keystroke change the query and rerun the matcher", "how are matches ranked"],
-       "trace": ["main", "FuzzyMatchV2"],
+       "trace": ["main.go::main", "NewMatcher"],
        "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"scan\" return a limit 20"],
-       "edit": {"file": "src/core.go", "after_line": 55, "insert": "\t_ = opts // verinoda-bench edit"},
-       "check_file": "src/core.go"
+       "edit": {"file": "src/core.go", "after_line": 55, "insert": "\t_ = opts // verinoda-bench edit"}
      }},
     {"name": "gin-gonic/gin", "url": "https://github.com/gin-gonic/gin", "tag": "v1.12.0", "sha": "73726dc606796a025971fe451f0aa6f1b9b847f6", "license": "MIT", "stars": 89264, "stars_date": "2026-10-01", "language": "Go", "files_approx": 130,
      "scenario": {
        "queries": ["how is a route registered on a router group", "how does the middleware chain call the next handler", "how is a JSON response rendered"],
        "analyze": ["what happens when a request arrives at the engine", "how are panics recovered"],
-       "trace": ["Default", "LoggerWithConfig"],
+       "trace": ["gin.go::Default", "LoggerWithConfig"],
        "q": ["match (f:function) return count(f)", "match (a:function)-[calls]->(b:function) where b.name = \"Next\" return a limit 20"],
-       "edit": {"file": "gin.go", "after_line": 238, "insert": "\t_ = engine // verinoda-bench edit"},
-       "check_file": "gin.go"
+       "edit": {"file": "gin.go", "after_line": 238, "insert": "\t_ = engine // verinoda-bench edit"}
      }},
     {"name": "sharkdp/bat", "url": "https://github.com/sharkdp/bat", "tag": "v0.26.1", "sha": "979ba22628bc9d8171f2cffca2bd5c90c9fc0a9e", "license": "Apache-2.0 OR MIT", "stars": 60627, "stars_date": "2026-10-01", "language": "Rust", "files_approx": 882},
     {"name": "google/gson", "url": "https://github.com/google/gson", "tag": "gson-parent-2.14.0", "sha": "3ff35d6269894901ab8006258395aafc4b9765cd", "license": "Apache-2.0", "stars": 24233, "stars_date": "2026-10-01", "language": "Java", "files_approx": 311},

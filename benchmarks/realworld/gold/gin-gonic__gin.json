@@ -64,6 +64,8 @@
       "fact": "Panic recovery middleware lives in recovery.go",
       "source": "recovery.go:35",
       "check": {"kind": "query", "question": "where does the middleware recover from a panic and write a 500", "top_k": 8, "expect_file": "recovery.go"}
-    }
+    },
+    {"id": "default-calls-recovery@v2", "v": 2, "replaces": "default-calls-recovery", "added": "2026-10-01", "why": "v1 named the source 'Default', which names three functions (gin.go:236, binding/binding.go:95, binding/binding_nomsgpack.go:91): Verinoda rightly answered 'ambiguous'. v1's via_files named the target's own file, which a path edge never carries (the call is in gin.go). v2 names gin.go::Default and requires the call edge at gin.go:239 and both ends at their definitions.", "fact": "Default (gin.go:236) installs Recovery at gin.go:239 `engine.Use(Logger(), Recovery())`; Recovery is defined at recovery.go:35", "source": "gin.go:236, gin.go:239, recovery.go:35", "check": {"kind": "trace", "source": "gin.go::Default", "target": "Recovery", "source_at": "gin.go:236", "target_at": "recovery.go:35", "via_at": ["gin.go:239"]}},
+    {"id": "request-reaches-tree@v2", "v": 2, "replaces": "request-reaches-tree", "added": "2026-10-01", "why": "v1's via_files ['tree.go'] could be met by the resolved target alone, and no edge of this path is located in tree.go (both calls are in gin.go). v2 requires the two call edges themselves and both ends at their definitions.", "fact": "ServeHTTP (gin.go:662) calls handleHTTPRequest at gin.go:672, which calls root.getValue at gin.go:715 (getValue defined at tree.go:418)", "source": "gin.go:662, gin.go:672, gin.go:715, tree.go:418", "check": {"kind": "trace", "source": "ServeHTTP", "target": "getValue", "source_at": "gin.go:662", "target_at": "tree.go:418", "via_at": ["gin.go:672", "gin.go:715"]}}
   ]
 }
