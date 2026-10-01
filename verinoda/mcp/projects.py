@@ -350,6 +350,15 @@ class ProjectHub:
         them is refused (a core project's code is not read through a full-profile tool)."""
         served = {p for n, p in self.projects.items() if "group_view" in self.served[n]}
         name = next(iter(self.projects))
+        try:  # answer through a project of the group, so an unrelated project is not loaded or touched
+            from verinoda import repo_group
+
+            paths = {os.path.normcase(os.path.realpath(str(p))) for _, p in repo_group.members_of(
+                repo_group.get(group))}
+            name = next((n for n, p in self.projects.items()
+                         if os.path.normcase(os.path.realpath(str(p))) in paths), name)
+        except Exception:  # noqa: BLE001 - an unknown group is refused by the tool itself
+            pass
         return self._get(name).group_view(group, action, source, target, question, max_items, served=served)
 
     def status(self) -> dict:
