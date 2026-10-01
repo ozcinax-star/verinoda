@@ -168,8 +168,10 @@ def test_decide_check_violations_are_errors_and_baselined_or_waived_ones_suppres
 
 
 CHECK = {"exit": 3, "sites": [
-    {"at": "m.py:3:8", "kind": "attribute", "expr": "os.pathh", "verdict": "absent",
+    {"at": "m.py:3:8", "kind": "attribute", "expr": "os.pathh", "verdict": "absent", "source": "stdlib",
      "message": "not found in os as installed in .venv"},
+    {"at": "m.py:4:1", "kind": "attribute", "expr": "requests.gett", "verdict": "absent",
+     "source": "installed:requests 2.32"},
     {"at": "m.py:1:1", "kind": "import", "expr": "requestz", "verdict": "not_installed", "why": "not installed"},
     {"at": "m.py:5:1", "kind": "attribute", "expr": "x.y", "verdict": "unknown", "rank": "high", "why": "open"},
     {"at": "m.py:6:1", "kind": "import", "expr": "tomllib", "verdict": "guarded"}]}
@@ -179,8 +181,11 @@ def test_check_sites_map_verdicts_to_levels_with_columns():
     run = _valid(sarif.export(CHECK, "check"))
     lv = {r["ruleId"]: r for r in run["results"]}
     assert set(lv) == {"check/absent/attribute", "check/not_installed/import", "check/unknown/attribute"}
-    absent = lv["check/absent/attribute"]
+    absent = next(r for r in run["results"] if r["properties"].get("source") == "stdlib")
     assert absent["level"] == "error" and absent["properties"]["status"] == "statically_verified"
+    # absent from an installed package (or a classpath) is judged against what is installed here: not verified
+    inst = next(r for r in run["results"] if str(r["properties"].get("source")).startswith("installed"))
+    assert inst["level"] == "warning" and inst["properties"]["status"] == "strong_inference"
     assert absent["locations"][0]["physicalLocation"]["region"] == {"startLine": 3, "startColumn": 8}
     assert lv["check/not_installed/import"]["level"] == "warning"
     assert lv["check/unknown/attribute"]["level"] == "note"
@@ -188,7 +193,7 @@ def test_check_sites_map_verdicts_to_levels_with_columns():
 
 def test_a_path_with_spaces_and_non_ascii_is_a_valid_uri():
     run = _valid(sarif.export({"sites": [{"at": "my dir/ğ.py:2:1", "kind": "import", "expr": "x",
-                                          "verdict": "absent"}]}, "check"))
+                                          "verdict": "absent", "source": "project"}]}, "check"))
     uri = run["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
     assert uri == "my%20dir/%C4%9F.py"
 
@@ -298,6 +303,7 @@ def test_an_absolute_ci_path_is_tied_by_its_longest_suffix_and_paths_filter(tmp_
     _sarif_file(r / "e.sarif", [run])
     res = sarif.report(r, ["e.sarif"], ["src"])
     assert [c["at"] for c in res["claims"]] == ["src/app/io.py:4"]
+    assert res["claims"][0]["status"] == "weak_inference" and "path suffix" in res["claims"][0]["claim"]
     assert res["summary"]["outside_paths"] == 1
 
 
@@ -381,6 +387,115 @@ def test_cli_review_sarif_is_a_valid_log_with_the_reviews_exit(tmp_path, capsys)
     run = _valid(json.loads(capsys.readouterr().out))
     n = sum(len(v) for v in res["concerns"].values())
     assert len(run["results"]) + run["properties"]["not_exported"] == n
+    assert len(run["results"]) >= 1   # the new subprocess call is written at its line, not only counted
     assert n >= 1 and all(x["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "cart.py"
                           for x in run["results"])
     assert all(x["level"] in ("warning", "note") for x in run["results"])
+
+
+# -- review round -----------------------------------------------------------------------------------------------
+
+def test_review_cap_and_unknowns_are_counted_and_delta_is_the_baseline_state():
+    f = {"rule": "x", "finding": "f", "status": "strong_inference", "at": "a.py:1", "delta": "preexisting"}
+    res = {"concerns": {"security": [f] * 25, "performance": [{**f, "delta": "introduced"}]},
+           "concerns_truncated": {"security": 40}, "unknown": [{"what": "callers"}, {"what": "tests"}]}
+    run = _valid(sarif.export(res, "review"))
+    assert run["properties"]["not_listed"] == 15 and run["properties"]["unknowns"] == 2
+    states = [r["baselineState"] for r in run["results"]]
+    assert states.count("unchanged") == 25 and states.count("new") == 1
+
+
+def test_a_pre_existing_possible_finding_is_unchanged_not_new():
+    res = {"base": {"ref": "HEAD"}, "possible": [
+        {"decision": "D1", "guard": "g", "kind": "only_in", "level": "POSSIBLE", "at": "a.py:3", "why": "w",
+         "status": "weak_inference", "since": "pre-existing: a.py unchanged since HEAD"},
+        {"decision": "D1", "guard": "g", "kind": "only_in", "level": "POSSIBLE", "at": "b.py:3", "why": "w",
+         "status": "weak_inference", "since": "new/touched since HEAD"}]}
+    run = _valid(sarif.export(res, "decide check"))
+    by = {r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]: r["baselineState"]
+          for r in run["results"]}
+    assert by == {"a.py": "unchanged", "b.py": "new"}
+
+
+def _one(uri: str, **extra) -> dict:
+    return {"ruleId": "R", "message": {"text": "m"}, **extra, "locations": [{"physicalLocation": {
+        "artifactLocation": {"uri": uri}, "region": {"startLine": 1}}}]}
+
+
+def test_codeql_extension_rules_give_the_level_and_message(tmp_path):
+    r = _repo(tmp_path)
+    run = {"tool": {"driver": {"name": "CodeQL"}, "extensions": [{"name": "codeql/python-queries", "rules": [
+        {"id": "py/command-line-injection", "defaultConfiguration": {"level": "error"},
+         "messageStrings": {"m": {"text": "runs {0}"}}},
+        {"id": "py/unused-import", "defaultConfiguration": {"level": "note"}}]}]},
+        "results": [
+            {"ruleId": "py/unused-import", "ruleIndex": 1,
+             "rule": {"id": "py/unused-import", "index": 1, "toolComponent": {"index": 0}},
+             "message": {"text": "unused"}, "locations": _one("other.py")["locations"]},
+            {"ruleId": "py/command-line-injection", "rule": {"index": 0, "toolComponent": {"index": 0}},
+             "message": {"id": "m", "arguments": ["ls"]}, "locations": _one("src/app/io.py")["locations"]}]}
+    _sarif_file(r / "c.sarif", [run])
+    claims = sarif.report(r, ["c.sarif"])["claims"]
+    assert [c["level"] for c in claims] == ["error", "note"]
+    assert "(error): runs ls" in claims[0]["claim"]
+
+
+def test_suffix_ties_only_absolute_paths_from_elsewhere(tmp_path):
+    r = _repo(tmp_path)
+    (r / "pkg").mkdir()
+    (r / "pkg/__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "sibling").mkdir()
+    (tmp_path / "sibling/other.py").write_text("", encoding="utf-8")
+    run = {"tool": {"driver": {"name": "t"}}, "results": [
+        _one((tmp_path / "sibling/other.py").as_uri()),                      # a file on this machine
+        _one("file:///usr/lib/python3.12/site-packages/pkg/__init__.py"),   # a third-party file
+        _one("services/api/other.py"),                                        # relative, not a repository file
+        _one("file:///home/runner/work/proj/proj/pkg/__init__.py")]}          # a CI runner's path
+    _sarif_file(r / "s.sarif", [run])
+    res = sarif.report(r, ["s.sarif"])
+    assert [(c["at"], c["status"]) for c in res["claims"]] == [("pkg/__init__.py:1", "weak_inference")]
+    assert res["summary"]["not_in_repository"] == 3
+
+
+def test_rejected_or_under_review_suppressions_do_not_hide_a_result(tmp_path):
+    r = _repo(tmp_path)
+    run = {"tool": {"driver": {"name": "t"}}, "results": [
+        _one("other.py", suppressions=[{"kind": "inSource", "status": "rejected"}]),
+        _one("other.py", suppressions=[{"kind": "external", "status": "underReview"}]),
+        _one("other.py", suppressions=[{"kind": "external", "status": "accepted"}]),
+        _one("other.py", suppressions=[{"kind": "inSource"}])]}
+    _sarif_file(r / "s.sarif", [run])
+    res = sarif.report(r, ["s.sarif"])
+    assert len(res["claims"]) == 2 and res["summary"]["suppressed"] == 2
+
+
+def test_bad_level_bool_line_and_a_malformed_result_do_not_stop_the_run(tmp_path, capsys):
+    r = _repo(tmp_path)
+    bad = _one("other.py")
+    bad["locations"][0]["physicalLocation"]["region"] = [1]
+    flag = _one("other.py")
+    flag["locations"][0]["physicalLocation"]["region"] = {"startLine": True}
+    run = {"tool": {"driver": {"name": "t", "rules": [{"id": "R", "defaultConfiguration": {"level": "error"}}]}},
+           "results": [_one("other.py", level=["x"]), bad, _one("src/app/io.py", level={"a": 1}), flag]}
+    _sarif_file(r / "s.sarif", [run])
+    assert cli.main(["sarif", "--repo", str(r), "s.sarif"]) == 0
+    assert "1 unreadable" in capsys.readouterr().out
+    res = sarif.report(r, ["s.sarif"])
+    assert res["summary"]["results"] == 4 and res["summary"]["unreadable"] == 1
+    assert sorted(c["at"] for c in res["claims"]) == ["other.py", "other.py:1", "src/app/io.py:1"]
+    assert {c["level"] for c in res["claims"]} == {"error"}   # an invalid level falls back to the rule's
+    assert len(res["sarif"]) == 1 and res["sarif"][0]["runs"][0]["results"] == 4
+
+
+def test_message_arguments_are_filled_in_one_pass_with_escapes():
+    rule = {"messageStrings": {"x": {"text": "a {0} b {1} {{2}}"}}}
+    assert sarif._text({"id": "x", "arguments": ["{1}", "Z"]}, rule) == "a {1} b Z {2}"
+
+
+def test_each_file_is_resolved_once(tmp_path, monkeypatch):
+    r = _repo(tmp_path)
+    calls = []
+    real = sarif._repo_path
+    monkeypatch.setattr(sarif, "_repo_path", lambda *a: calls.append(1) or real(*a))
+    _sarif_file(r / "s.sarif", [{"tool": {"driver": {"name": "t"}}, "results": [_one("other.py")] * 50}])
+    assert sarif.report(r, ["s.sarif"])["summary"]["claims"] == 50 and len(calls) == 1
