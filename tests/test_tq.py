@@ -361,7 +361,8 @@ def test_the_mcp_tool(ql):
     assert res["format"] == "text"
     lines = res["text"].splitlines()
     assert lines[1] == "q1 = yes | statically_verified | app/web.py:11"
-    assert lines[2].startswith("q2 = no | strong_inference | why: ")
+    # a measured frequency, when the committed calibration table is current, comes before why
+    assert lines[2].startswith("q2 = no | strong_inference | ") and " | why: " in lines[2]
     js = t.tq([{"type": "callers", "f": "leaf"}], format="json")
     assert js["answers"][0]["answer"] == 2 and js["schema"] == "verinoda.tq/1"
     assert t.tq([])["error"] == "invalid_argument"
@@ -520,3 +521,13 @@ def test_a_question_of_any_json_type_is_invalid_alone_through_run_tool(ql):
                     {"name": "tq", "arguments": {"questions": [5, None, "exists save_order"], "format": "json"}})
     data = json.loads(res.content[0].text)
     assert [a["status"] for a in data["answers"]] == ["invalid", "invalid", "statically_verified"]
+
+
+def test_a_name_resolved_to_a_node_without_a_span_does_not_fail_the_question(tmp_path):
+    # found by the held-out audit: `bisect` (a project function) resolved to the external module node `bisect`,
+    # which has no file and no span, and the AST check behind a "no" failed on it
+    repo = _scan({"a.py": "import bisect\n\n\ndef user(xs):\n    return bisect.bisect_left(xs, 1)\n",
+                  "b.py": "def bisect():\n    return helper()\n\n\ndef helper():\n    return 1\n"},
+                 tmp_path / "ext")
+    a = _one(repo, "calls bisect helper")
+    assert "this question failed" not in (a.get("why") or "")

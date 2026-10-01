@@ -1,0 +1,2894 @@
+[
+ {
+  "id": "v-exists-01",
+  "repo": "verinoda",
+  "question": "exists _poetry_lock",
+  "answer": true,
+  "at": [
+   "verinoda/references/local.py:159"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-02",
+  "repo": "verinoda",
+  "question": "exists cmd_agent_lint",
+  "answer": true,
+  "at": [
+   "verinoda/cli.py:1545"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-03",
+  "repo": "verinoda",
+  "question": "exists _uri_path",
+  "answer": true,
+  "at": [
+   "verinoda/sarif.py:275"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-04",
+  "repo": "verinoda",
+  "question": "exists _is_generator",
+  "answer": true,
+  "at": [
+   "verinoda/probe.py:531"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-05",
+  "repo": "verinoda",
+  "question": "exists _in_string_or_comment",
+  "answer": true,
+  "at": [
+   "verinoda/verdict_gate.py:271"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-06",
+  "repo": "verinoda",
+  "question": "exists ws_match",
+  "answer": true,
+  "at": [
+   "verinoda/guards.py:1974"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-07",
+  "repo": "verinoda",
+  "question": "exists _edge_key",
+  "answer": true,
+  "at": [
+   "verinoda/graphquery.py:1144"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-08",
+  "repo": "verinoda",
+  "question": "exists plain_caller_encloses",
+  "answer": true,
+  "at": [
+   "verinoda/entail.py:2193"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-09",
+  "repo": "verinoda",
+  "question": "exists discover",
+  "answer": true,
+  "at": [
+   "verinoda/jvmclass.py:705"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-10",
+  "repo": "verinoda",
+  "question": "exists _known",
+  "answer": true,
+  "at": [
+   "verinoda/looprules.py:202"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-11",
+  "repo": "verinoda",
+  "question": "exists phase_outcome",
+  "answer": true,
+  "at": [
+   "verinoda/runtime/trace.py:205"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-12",
+  "repo": "verinoda",
+  "question": "exists _nested_defs",
+  "answer": true,
+  "at": [
+   "verinoda/anchors.py:179"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-13",
+  "repo": "verinoda",
+  "question": "exists tokenize",
+  "answer": true,
+  "at": [
+   "verinoda/graphquery.py:126"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-14",
+  "repo": "verinoda",
+  "question": "exists extra_kind",
+  "answer": true,
+  "at": [
+   "verinoda/testcode.py:368"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-15",
+  "repo": "verinoda",
+  "question": "exists resolve_ref",
+  "answer": true,
+  "at": [
+   "verinoda/specs.py:642"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-16",
+  "repo": "verinoda",
+  "question": "exists load_dismissed",
+  "answer": true,
+  "at": [
+   "verinoda/undocumented.py:319"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-17",
+  "repo": "verinoda",
+  "question": "exists _generic_units",
+  "answer": true,
+  "at": [
+   "verinoda/lexicon.py:282"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-18",
+  "repo": "verinoda",
+  "question": "exists _only_in",
+  "answer": true,
+  "at": [
+   "verinoda/decision_reach.py:247"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-19",
+  "repo": "verinoda",
+  "question": "exists _record_mechanism",
+  "answer": true,
+  "at": [
+   "verinoda/research.py:1629"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-20",
+  "repo": "verinoda",
+  "question": "exists exact_nodes",
+  "answer": true,
+  "at": [
+   "verinoda/naming.py:290"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-21",
+  "repo": "verinoda",
+  "question": "exists _general",
+  "answer": true,
+  "at": [
+   "verinoda/entail.py:2025"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-22",
+  "repo": "verinoda",
+  "question": "exists problems",
+  "answer": true,
+  "at": [
+   "verinoda/datapack.py:862"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-23",
+  "repo": "verinoda",
+  "question": "exists words",
+  "answer": true,
+  "at": [
+   "verinoda/textnorm.py:212"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-24",
+  "repo": "verinoda",
+  "question": "exists _h_tests",
+  "answer": true,
+  "at": [
+   "verinoda/analysis.py:1563"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-25",
+  "repo": "verinoda",
+  "question": "exists cond_key",
+  "answer": true,
+  "at": [
+   "verinoda/review_rules.py:902"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-26",
+  "repo": "verinoda",
+  "question": "exists facts_for_path",
+  "answer": true,
+  "at": [
+   "verinoda/anchors.py:940"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-27",
+  "repo": "verinoda",
+  "question": "exists _ran_no_tests",
+  "answer": true,
+  "at": [
+   "verinoda/experiments.py:1019"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-28",
+  "repo": "verinoda",
+  "question": "exists arxiv_versions",
+  "answer": true,
+  "at": [
+   "verinoda/references/registries.py:220"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-29",
+  "repo": "verinoda",
+  "question": "exists _installed_meta",
+  "answer": true,
+  "at": [
+   "verinoda/decision_brief.py:740"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-30",
+  "repo": "verinoda",
+  "question": "exists _accessor",
+  "answer": true,
+  "at": [
+   "verinoda/affected.py:371"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-31",
+  "repo": "verinoda",
+  "question": "exists _cell_value",
+  "answer": true,
+  "at": [
+   "verinoda/doctext.py:355"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-32",
+  "repo": "verinoda",
+  "question": "exists _block_at",
+  "answer": true,
+  "at": [
+   "verinoda/anchors.py:847"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-33",
+  "repo": "verinoda",
+  "question": "exists _ts_text",
+  "answer": true,
+  "at": [
+   "verinoda/review_rules.py:1106"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-34",
+  "repo": "verinoda",
+  "question": "exists record_location",
+  "answer": true,
+  "at": [
+   "verinoda/evidence.py:264"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-35",
+  "repo": "verinoda",
+  "question": "exists _run_python",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_external.py:898"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-36",
+  "repo": "verinoda",
+  "question": "exists _callees",
+  "answer": true,
+  "at": [
+   "verinoda/diagrams.py:269"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-37",
+  "repo": "verinoda",
+  "question": "exists _class_names",
+  "answer": true,
+  "at": [
+   "verinoda/slicing.py:629"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-38",
+  "repo": "verinoda",
+  "question": "exists _target_name",
+  "answer": true,
+  "at": [
+   "verinoda/cross_service.py:595"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-39",
+  "repo": "verinoda",
+  "question": "exists _line_no",
+  "answer": true,
+  "at": [
+   "verinoda/baseline.py:48"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-40",
+  "repo": "verinoda",
+  "question": "exists remove_member",
+  "answer": true,
+  "at": [
+   "verinoda/agents/_jsonedit.py:156"
+  ],
+  "shape": "func"
+ },
+ {
+  "id": "v-exists-41",
+  "repo": "verinoda",
+  "question": "exists _FileCheck.check_mixin_member",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_java.py:1426"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-42",
+  "repo": "verinoda",
+  "question": "exists _Reader.kind",
+  "answer": true,
+  "at": [
+   "verinoda/infra.py:734"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-43",
+  "repo": "verinoda",
+  "question": "exists _Batch.need_nodes",
+  "answer": true,
+  "at": [
+   "verinoda/tq.py:364"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-44",
+  "repo": "verinoda",
+  "question": "exists Change.as_dict",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:165"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-45",
+  "repo": "verinoda",
+  "question": "exists _Preview.import_status",
+  "answer": true,
+  "at": [
+   "verinoda/rename_preview.py:428"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-46",
+  "repo": "verinoda",
+  "question": "exists _Eval.text_match",
+  "answer": true,
+  "at": [
+   "verinoda/graphquery.py:879"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-47",
+  "repo": "verinoda",
+  "question": "exists Checker._verdict",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck.py:2142"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-48",
+  "repo": "verinoda",
+  "question": "exists Checker._class_container",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck.py:805"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-49",
+  "repo": "verinoda",
+  "question": "exists Snapshot.group",
+  "answer": true,
+  "at": [
+   "verinoda/ui/data.py:491"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-50",
+  "repo": "verinoda",
+  "question": "exists Checker._returned_value_writes",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck.py:1126"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-51",
+  "repo": "verinoda",
+  "question": "exists Checker.module_container",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck.py:633"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-52",
+  "repo": "verinoda",
+  "question": "exists Snapshot._make_stats",
+  "answer": true,
+  "at": [
+   "verinoda/ui/data.py:547"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-53",
+  "repo": "verinoda",
+  "question": "exists python_cross_cache._load",
+  "answer": true,
+  "at": [
+   "verinoda/python_cross.py:279"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-54",
+  "repo": "verinoda",
+  "question": "exists _Preview.other_symbols",
+  "answer": true,
+  "at": [
+   "verinoda/rename_preview.py:471"
+  ],
+  "shape": "method"
+ },
+ {
+  "id": "v-exists-55",
+  "repo": "verinoda",
+  "question": "exists raw",
+  "answer": true,
+  "at": [
+   "verinoda/scrub.py:233"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-56",
+  "repo": "verinoda",
+  "question": "exists server",
+  "answer": true,
+  "at": [
+   "verinoda/cross_service.py:947"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-57",
+  "repo": "verinoda",
+  "question": "exists prop_names",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_kotlin.py:144"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-58",
+  "repo": "verinoda",
+  "question": "exists add_binding",
+  "answer": true,
+  "at": [
+   "verinoda/claims.py:717"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-59",
+  "repo": "verinoda",
+  "question": "exists literal_assign",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck.py:1138"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-60",
+  "repo": "verinoda",
+  "question": "exists define_in",
+  "answer": true,
+  "at": [
+   "verinoda/probe.py:1226"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-61",
+  "repo": "verinoda",
+  "question": "exists enclosing_fn",
+  "answer": true,
+  "at": [
+   "verinoda/review_rules.py:738"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-62",
+  "repo": "verinoda",
+  "question": "exists onboarding",
+  "answer": true,
+  "at": [
+   "verinoda/mcp/server.py:3189"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-63",
+  "repo": "verinoda",
+  "question": "exists matched",
+  "answer": true,
+  "at": [
+   "verinoda/search_index.py:2463"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-64",
+  "repo": "verinoda",
+  "question": "exists maybe",
+  "answer": true,
+  "at": [
+   "verinoda/selffiles.py:225"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-65",
+  "repo": "verinoda",
+  "question": "exists subs",
+  "answer": true,
+  "at": [
+   "verinoda/datapack.py:1000"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-exists-66",
+  "repo": "verinoda",
+  "question": "exists names_target_pkg",
+  "answer": true,
+  "at": [
+   "verinoda/entail.py:1188"
+  ],
+  "shape": "nested"
+ },
+ {
+  "id": "v-absent-01",
+  "repo": "verinoda",
+  "question": "exists same_resolve",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-02",
+  "repo": "verinoda",
+  "question": "exists cache_head",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-03",
+  "repo": "verinoda",
+  "question": "exists version_project",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-04",
+  "repo": "verinoda",
+  "question": "exists split_python",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-05",
+  "repo": "verinoda",
+  "question": "exists local_claims",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-06",
+  "repo": "verinoda",
+  "question": "exists word_problem",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-07",
+  "repo": "verinoda",
+  "question": "exists line_set",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-08",
+  "repo": "verinoda",
+  "question": "exists split_paths",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-09",
+  "repo": "verinoda",
+  "question": "exists words_search",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-10",
+  "repo": "verinoda",
+  "question": "exists summary_api",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-11",
+  "repo": "verinoda",
+  "question": "exists args_norm",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-12",
+  "repo": "verinoda",
+  "question": "exists java_match",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-13",
+  "repo": "verinoda",
+  "question": "exists python_tests",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-14",
+  "repo": "verinoda",
+  "question": "exists table_parse",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-15",
+  "repo": "verinoda",
+  "question": "exists pytest_params",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-16",
+  "repo": "verinoda",
+  "question": "exists context_norm",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-17",
+  "repo": "verinoda",
+  "question": "exists parse_imports",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-18",
+  "repo": "verinoda",
+  "question": "exists python_repo",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-19",
+  "repo": "verinoda",
+  "question": "exists edge_has",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-20",
+  "repo": "verinoda",
+  "question": "exists scan_module",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-21",
+  "repo": "verinoda",
+  "question": "exists read_files",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-22",
+  "repo": "verinoda",
+  "question": "exists own_map",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-23",
+  "repo": "verinoda",
+  "question": "exists root_cache",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-24",
+  "repo": "verinoda",
+  "question": "exists table_note",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-25",
+  "repo": "verinoda",
+  "question": "exists for_code",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-26",
+  "repo": "verinoda",
+  "question": "exists refs_config",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-27",
+  "repo": "verinoda",
+  "question": "exists names_refs",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-28",
+  "repo": "verinoda",
+  "question": "exists command_missing",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-29",
+  "repo": "verinoda",
+  "question": "exists imports_summary",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-30",
+  "repo": "verinoda",
+  "question": "exists scan_graph",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-31",
+  "repo": "verinoda",
+  "question": "exists index_config",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-32",
+  "repo": "verinoda",
+  "question": "exists test_java",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-33",
+  "repo": "verinoda",
+  "question": "exists has_same",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-34",
+  "repo": "verinoda",
+  "question": "exists find_words",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-35",
+  "repo": "verinoda",
+  "question": "exists edge_symbol",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-36",
+  "repo": "verinoda",
+  "question": "exists target_def",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-37",
+  "repo": "verinoda",
+  "question": "exists claim_caller",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-38",
+  "repo": "verinoda",
+  "question": "exists same_jvm",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-39",
+  "repo": "verinoda",
+  "question": "exists decide_rules",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-40",
+  "repo": "verinoda",
+  "question": "exists import_pytest",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-41",
+  "repo": "verinoda",
+  "question": "exists ids_resolve",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-42",
+  "repo": "verinoda",
+  "question": "exists env_build",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-43",
+  "repo": "verinoda",
+  "question": "exists claims_params",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-44",
+  "repo": "verinoda",
+  "question": "exists note_call",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-45",
+  "repo": "verinoda",
+  "question": "exists method_source",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-46",
+  "repo": "verinoda",
+  "question": "exists note_module",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-47",
+  "repo": "verinoda",
+  "question": "exists source_root",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-48",
+  "repo": "verinoda",
+  "question": "exists new_write",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-49",
+  "repo": "verinoda",
+  "question": "exists test_project",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-50",
+  "repo": "verinoda",
+  "question": "exists json_args",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-51",
+  "repo": "verinoda",
+  "question": "exists jvm_symbol",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-52",
+  "repo": "verinoda",
+  "question": "exists dir_status",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-53",
+  "repo": "verinoda",
+  "question": "exists keys_table",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-54",
+  "repo": "verinoda",
+  "question": "exists kind_has",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-55",
+  "repo": "verinoda",
+  "question": "exists paths_cmd",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-56",
+  "repo": "verinoda",
+  "question": "exists git_line",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-57",
+  "repo": "verinoda",
+  "question": "exists repo_member",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-58",
+  "repo": "verinoda",
+  "question": "exists lines_render",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-59",
+  "repo": "verinoda",
+  "question": "exists cmd_from",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-absent-60",
+  "repo": "verinoda",
+  "question": "exists not_dir",
+  "answer": false,
+  "at": [],
+  "shape": "absent"
+ },
+ {
+  "id": "v-near-01",
+  "repo": "verinoda",
+  "question": "exists exact_node",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-02",
+  "repo": "verinoda",
+  "question": "exists file_line",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-03",
+  "repo": "verinoda",
+  "question": "exists parse_widen",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-04",
+  "repo": "verinoda",
+  "question": "exists read_jsonc_file",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-05",
+  "repo": "verinoda",
+  "question": "exists trust_paths",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-06",
+  "repo": "verinoda",
+  "question": "exists graph_identities",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-07",
+  "repo": "verinoda",
+  "question": "exists read_blob",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-08",
+  "repo": "verinoda",
+  "question": "exists receiver_call_edge",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-09",
+  "repo": "verinoda",
+  "question": "exists md_tables",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-10",
+  "repo": "verinoda",
+  "question": "exists venv_site_dir",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-11",
+  "repo": "verinoda",
+  "question": "exists glob_matches",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-12",
+  "repo": "verinoda",
+  "question": "exists entry_reason",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-13",
+  "repo": "verinoda",
+  "question": "exists symbols_name",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-14",
+  "repo": "verinoda",
+  "question": "exists stale_file",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-15",
+  "repo": "verinoda",
+  "question": "exists usable_facts",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-16",
+  "repo": "verinoda",
+  "question": "exists plain_caller_enclose",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-17",
+  "repo": "verinoda",
+  "question": "exists method_shapes",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-near-18",
+  "repo": "verinoda",
+  "question": "exists could_be_owned",
+  "answer": false,
+  "at": [],
+  "shape": "near-miss"
+ },
+ {
+  "id": "v-calls-01",
+  "repo": "verinoda",
+  "question": "calls _keep_unchanged_graph.finish write_json_atomic",
+  "answer": true,
+  "at": [
+   "verinoda/index.py:812"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-02",
+  "repo": "verinoda",
+  "question": "calls replay now",
+  "answer": true,
+  "at": [
+   "verinoda/benchmark/staleness.py:379"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-03",
+  "repo": "verinoda",
+  "question": "calls read_file parse_widener",
+  "answer": true,
+  "at": [
+   "verinoda/accesscheck.py:289"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-04",
+  "repo": "verinoda",
+  "question": "calls java_registers_edges _call_around",
+  "answer": true,
+  "at": [
+   "verinoda/index.py:2398"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-05",
+  "repo": "verinoda",
+  "question": "calls _resolve_one _resolve_local",
+  "answer": true,
+  "at": [
+   "verinoda/references/resolver.py:1460"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-06",
+  "repo": "verinoda",
+  "question": "calls _set_or_list _wrap",
+  "answer": true,
+  "at": [
+   "verinoda/probe_inputs.py:946"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-07",
+  "repo": "verinoda",
+  "question": "calls _un_command _read_claude_user_entry",
+  "answer": true,
+  "at": [
+   "verinoda/agents/installer.py:1168"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-08",
+  "repo": "verinoda",
+  "question": "calls cmd_decide _decide_baseline",
+  "answer": true,
+  "at": [
+   "verinoda/cli.py:2593"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-09",
+  "repo": "verinoda",
+  "question": "calls js_test_calls _blank_c_like",
+  "answer": true,
+  "at": [
+   "verinoda/testcode.py:973"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-10",
+  "repo": "verinoda",
+  "question": "calls package_versions pypi_project",
+  "answer": true,
+  "at": [
+   "verinoda/references/registries.py:183"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-11",
+  "repo": "verinoda",
+  "question": "calls discover _home_release",
+  "answer": true,
+  "at": [
+   "verinoda/jvmclass.py:731"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-12",
+  "repo": "verinoda",
+  "question": "calls AtlasTools._update_in_background index_dir",
+  "answer": true,
+  "at": [
+   "verinoda/mcp/server.py:736"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-13",
+  "repo": "verinoda",
+  "question": "calls link_mention _copy_families",
+  "answer": true,
+  "at": [
+   "verinoda/question_plan.py:1725"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-14",
+  "repo": "verinoda",
+  "question": "calls _type_checked read_jsonc",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_external.py:736"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-15",
+  "repo": "verinoda",
+  "question": "calls _Scope.value _either",
+  "answer": true,
+  "at": [
+   "verinoda/datapack_java.py:508"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-16",
+  "repo": "verinoda",
+  "question": "calls Selector._atom file_lines",
+  "answer": true,
+  "at": [
+   "verinoda/query_filters.py:491"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-17",
+  "repo": "verinoda",
+  "question": "calls _graph_files _local_source",
+  "answer": true,
+  "at": [
+   "verinoda/search_index.py:414"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-18",
+  "repo": "verinoda",
+  "question": "calls cmd_trace _emit",
+  "answer": true,
+  "at": [
+   "verinoda/cli.py:1404"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-19",
+  "repo": "verinoda",
+  "question": "calls bisect _rev_list",
+  "answer": true,
+  "at": [
+   "verinoda/debug.py:1511"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-20",
+  "repo": "verinoda",
+  "question": "calls changes_between_commits read_blobs",
+  "answer": true,
+  "at": [
+   "verinoda/treestate.py:596"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-21",
+  "repo": "verinoda",
+  "question": "calls Snapshot._fresh stale_files",
+  "answer": true,
+  "at": [
+   "verinoda/ui/data.py:344"
+  ],
+  "shape": "module"
+ },
+ {
+  "id": "v-calls-22",
+  "repo": "verinoda",
+  "question": "calls _observe _observe_terms",
+  "answer": true,
+  "at": [
+   "verinoda/analysis.py:1684"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-23",
+  "repo": "verinoda",
+  "question": "calls _h_why _begin",
+  "answer": true,
+  "at": [
+   "verinoda/analysis.py:1883"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-24",
+  "repo": "verinoda",
+  "question": "calls _judge_only_in glob_match",
+  "answer": true,
+  "at": [
+   "verinoda/dependency_ask.py:304"
+  ],
+  "shape": "module"
+ },
+ {
+  "id": "v-calls-25",
+  "repo": "verinoda",
+  "question": "calls _hot_info entry_reasons",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:4541"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-26",
+  "repo": "verinoda",
+  "question": "calls probe_config_read parse_python",
+  "answer": true,
+  "at": [
+   "verinoda/critique.py:307"
+  ],
+  "shape": "module"
+ },
+ {
+  "id": "v-calls-27",
+  "repo": "verinoda",
+  "question": "calls parse_governs symbols_named",
+  "answer": true,
+  "at": [
+   "verinoda/decisions.py:795"
+  ],
+  "shape": "module"
+ },
+ {
+  "id": "v-calls-28",
+  "repo": "verinoda",
+  "question": "calls update_facts usable",
+  "answer": true,
+  "at": [
+   "verinoda/anchors.py:646"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-29",
+  "repo": "verinoda",
+  "question": "calls alike _ratio",
+  "answer": true,
+  "at": [
+   "verinoda/health.py:661"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-30",
+  "repo": "verinoda",
+  "question": "calls _venv_env venv_site_dirs",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_env.py:572"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-31",
+  "repo": "verinoda",
+  "question": "calls per_question_table md_table",
+  "answer": true,
+  "at": [
+   "verinoda/benchmark/report.py:177"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-32",
+  "repo": "verinoda",
+  "question": "calls _own_in_nodes could_be_own",
+  "answer": true,
+  "at": [
+   "verinoda/index.py:2704"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-33",
+  "repo": "verinoda",
+  "question": "calls _main _capture_atexit",
+  "answer": true,
+  "at": [
+   "verinoda/runtime/probe_plugin.py:772"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-34",
+  "repo": "verinoda",
+  "question": "calls augment_python_receiver_calls receiver_call_edges",
+  "answer": true,
+  "at": [
+   "verinoda/index.py:2512"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-35",
+  "repo": "verinoda",
+  "question": "calls _symptom_tests read_blobs",
+  "answer": true,
+  "at": [
+   "verinoda/debug.py:1170"
+  ],
+  "shape": "module"
+ },
+ {
+  "id": "v-calls-36",
+  "repo": "verinoda",
+  "question": "calls _lookup_npm _not_found",
+  "answer": true,
+  "at": [
+   "verinoda/package_check.py:362"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-37",
+  "repo": "verinoda",
+  "question": "calls backlog_lines items_for",
+  "answer": true,
+  "at": [
+   "verinoda/retrieval.py:214"
+  ],
+  "shape": "module"
+ },
+ {
+  "id": "v-calls-38",
+  "repo": "verinoda",
+  "question": "calls _FileCheck.receiver _all_identifiers",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_java.py:1135"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-39",
+  "repo": "verinoda",
+  "question": "calls facts_by_sha _mem_put",
+  "answer": true,
+  "at": [
+   "verinoda/anchors.py:567"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-40",
+  "repo": "verinoda",
+  "question": "calls open_for graph_identity",
+  "answer": true,
+  "at": [
+   "verinoda/search_index.py:1354"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-41",
+  "repo": "verinoda",
+  "question": "calls _persistence _value_flow",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:1401"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-42",
+  "repo": "verinoda",
+  "question": "calls _Scope.elements _args",
+  "answer": true,
+  "at": [
+   "verinoda/datapack_java.py:461"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-43",
+  "repo": "verinoda",
+  "question": "calls claim_terms _is_key",
+  "answer": true,
+  "at": [
+   "verinoda/entail.py:190"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-44",
+  "repo": "verinoda",
+  "question": "calls assess unchecked_statements",
+  "answer": true,
+  "at": [
+   "verinoda/entail.py:2526"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-45",
+  "repo": "verinoda",
+  "question": "calls trust_entries trust_path",
+  "answer": true,
+  "at": [
+   "verinoda/paths.py:265"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-46",
+  "repo": "verinoda",
+  "question": "calls research_full _research_issue",
+  "answer": true,
+  "at": [
+   "verinoda/research.py:1957"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-47",
+  "repo": "verinoda",
+  "question": "calls run_checkers python_config",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_external.py:765"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-48",
+  "repo": "verinoda",
+  "question": "calls markdown sweep_table",
+  "answer": true,
+  "at": [
+   "verinoda/benchmark/report.py:293"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-49",
+  "repo": "verinoda",
+  "question": "calls parse_class method_shape",
+  "answer": true,
+  "at": [
+   "verinoda/jvmclass.py:210"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-calls-50",
+  "repo": "verinoda",
+  "question": "calls Checker._store_index _file_stores",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck.py:2387"
+  ],
+  "shape": "direct"
+ },
+ {
+  "id": "v-self-01",
+  "repo": "verinoda",
+  "question": "calls AtlasTools.project_query AtlasTools._run",
+  "answer": true,
+  "at": [
+   "verinoda/mcp/server.py:848"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-02",
+  "repo": "verinoda",
+  "question": "calls _Probe.config _Probe.absence",
+  "answer": true,
+  "at": [
+   "verinoda/decision_brief.py:469"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-03",
+  "repo": "verinoda",
+  "question": "calls Gate._module Gate._sql_writes",
+  "answer": true,
+  "at": [
+   "verinoda/probe_gate.py:307"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-04",
+  "repo": "verinoda",
+  "question": "calls Resolver._read_ambient Resolver._exports_of",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_ts.py:332"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-05",
+  "repo": "verinoda",
+  "question": "calls _Scopes.qualify _Scopes.reaching",
+  "answer": true,
+  "at": [
+   "verinoda/guards.py:885"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-06",
+  "repo": "verinoda",
+  "question": "calls _Project.class_td _Project.locate",
+  "answer": true,
+  "at": [
+   "verinoda/probe.py:295"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-07",
+  "repo": "verinoda",
+  "question": "calls Resolver.exports Resolver._exports_of",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_ts.py:338"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-08",
+  "repo": "verinoda",
+  "question": "calls Linter.script Linter.unfollowed",
+  "answer": true,
+  "at": [
+   "verinoda/agentlint.py:1004"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-09",
+  "repo": "verinoda",
+  "question": "calls _Scopes._stmt _Scopes._from_base",
+  "answer": true,
+  "at": [
+   "verinoda/guards.py:680"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-10",
+  "repo": "verinoda",
+  "question": "calls Checker.callee_sig Checker.receiver",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck.py:1654"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-11",
+  "repo": "verinoda",
+  "question": "calls _Eval.match_pattern _Eval._extend",
+  "answer": true,
+  "at": [
+   "verinoda/graphquery.py:1096"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-12",
+  "repo": "verinoda",
+  "question": "calls Snapshot.changes Snapshot._snapshot_files",
+  "answer": true,
+  "at": [
+   "verinoda/ui/data.py:758"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-13",
+  "repo": "verinoda",
+  "question": "calls AtlasTools.reference_compare AtlasTools._run",
+  "answer": true,
+  "at": [
+   "verinoda/mcp/server.py:1671"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-14",
+  "repo": "verinoda",
+  "question": "calls Store.evidence Store.one",
+  "answer": true,
+  "at": [
+   "verinoda/store.py:784"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-15",
+  "repo": "verinoda",
+  "question": "calls StdlibOracle.ask StdlibOracle._send",
+  "answer": true,
+  "at": [
+   "verinoda/codecheck_env.py:975"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-self-16",
+  "repo": "verinoda",
+  "question": "calls _Consts.blank _Consts._innermost",
+  "answer": true,
+  "at": [
+   "verinoda/datapack.py:420"
+  ],
+  "shape": "self"
+ },
+ {
+  "id": "v-nocall-01",
+  "repo": "verinoda",
+  "question": "calls untrusted_next_step _through_links",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-02",
+  "repo": "verinoda",
+  "question": "calls _looks_like_path groups",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-03",
+  "repo": "verinoda",
+  "question": "calls _sampler _reemit",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-04",
+  "repo": "verinoda",
+  "question": "calls _maybe_added_by _tag_helpers",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-05",
+  "repo": "verinoda",
+  "question": "calls command_id quarantine",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-06",
+  "repo": "verinoda",
+  "question": "calls _edge_kept _base_findings",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-07",
+  "repo": "verinoda",
+  "question": "calls _at_file _items",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-08",
+  "repo": "verinoda",
+  "question": "calls overridden_paths module_facts",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-09",
+  "repo": "verinoda",
+  "question": "calls repo_of_config _map_like",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-10",
+  "repo": "verinoda",
+  "question": "calls trace_can_rule_out _counted",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-11",
+  "repo": "verinoda",
+  "question": "calls _home_release method_shape",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-12",
+  "repo": "verinoda",
+  "question": "calls _data_link_claims _resolve_references",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-13",
+  "repo": "verinoda",
+  "question": "calls _git_ignored _new_listed",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-14",
+  "repo": "verinoda",
+  "question": "calls cmd_challenge cmd_query",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-15",
+  "repo": "verinoda",
+  "question": "calls _norm_path _pct",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-16",
+  "repo": "verinoda",
+  "question": "calls _scope_free _default_for",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-17",
+  "repo": "verinoda",
+  "question": "calls _cache_put _def_lines_of",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-18",
+  "repo": "verinoda",
+  "question": "calls installed_record build_info",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-19",
+  "repo": "verinoda",
+  "question": "calls _reached_anywhere _prepare_copy",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-20",
+  "repo": "verinoda",
+  "question": "calls not_product exact_nodes",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-21",
+  "repo": "verinoda",
+  "question": "calls _site_diff _needs_refresh",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-22",
+  "repo": "verinoda",
+  "question": "calls verinoda_analyze _graphify_stats",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-23",
+  "repo": "verinoda",
+  "question": "calls _body _comment_lines",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-24",
+  "repo": "verinoda",
+  "question": "calls _failure _pt_section",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-25",
+  "repo": "verinoda",
+  "question": "calls _jvm_scopes receiver_call_edges",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-26",
+  "repo": "verinoda",
+  "question": "calls _begin answer_claims",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-27",
+  "repo": "verinoda",
+  "question": "calls _is_iterator _properties",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-28",
+  "repo": "verinoda",
+  "question": "calls _decl_head _outer_symbols",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-29",
+  "repo": "verinoda",
+  "question": "calls _jdeps_claim _javac_claim",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-30",
+  "repo": "verinoda",
+  "question": "calls timing_table sweep_table",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-31",
+  "repo": "verinoda",
+  "question": "calls _verdict_kinds _config_key_claims",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-32",
+  "repo": "verinoda",
+  "question": "calls _criterion_vars _def_reads",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-33",
+  "repo": "verinoda",
+  "question": "calls _record_files _governs",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-34",
+  "repo": "verinoda",
+  "question": "calls compact_check plan_hash",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-35",
+  "repo": "verinoda",
+  "question": "calls _names_exactly attach_freshness",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-36",
+  "repo": "verinoda",
+  "question": "calls diagram _default_pages",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-37",
+  "repo": "verinoda",
+  "question": "calls _accept _cue_version",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-38",
+  "repo": "verinoda",
+  "question": "calls _refutes invalidate_stale",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-39",
+  "repo": "verinoda",
+  "question": "calls _tag_groups model_check",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-40",
+  "repo": "verinoda",
+  "question": "calls verb slow_paths",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-41",
+  "repo": "verinoda",
+  "question": "calls _json_digest _visible_class",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-42",
+  "repo": "verinoda",
+  "question": "calls _sql_reaches_db py_param_sources",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-43",
+  "repo": "verinoda",
+  "question": "calls render_rules rules_file",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-44",
+  "repo": "verinoda",
+  "question": "calls _parse_py relocate_in",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-45",
+  "repo": "verinoda",
+  "question": "calls _std_ctor _c3",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-46",
+  "repo": "verinoda",
+  "question": "calls _scan_precise _r_notes",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-47",
+  "repo": "verinoda",
+  "question": "calls command_words dump",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-48",
+  "repo": "verinoda",
+  "question": "calls image_size ocr_images",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-49",
+  "repo": "verinoda",
+  "question": "calls decisions_dir _today",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-50",
+  "repo": "verinoda",
+  "question": "calls graphify_cli_update graphify_vendored_context",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-51",
+  "repo": "verinoda",
+  "question": "calls propose rank_hunks",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-52",
+  "repo": "verinoda",
+  "question": "calls _local_commit_ref _sha12",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-53",
+  "repo": "verinoda",
+  "question": "calls _direct_call text_conflicts",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-54",
+  "repo": "verinoda",
+  "question": "calls _strip_jsonc _jsonc",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-nocall-55",
+  "repo": "verinoda",
+  "question": "calls _entity_clarifications link_mentions",
+  "answer": false,
+  "at": [],
+  "shape": "not spelled"
+ },
+ {
+  "id": "v-spelled-01",
+  "repo": "verinoda",
+  "question": "calls link_mention shape",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-02",
+  "repo": "verinoda",
+  "question": "calls _pt_section section",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-03",
+  "repo": "verinoda",
+  "question": "calls per_question_table questions",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-04",
+  "repo": "verinoda",
+  "question": "calls architecture owners",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-05",
+  "repo": "verinoda",
+  "question": "calls _main cases",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-06",
+  "repo": "verinoda",
+  "question": "calls _staged_tree index",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-07",
+  "repo": "verinoda",
+  "question": "calls _grouped pairs",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-08",
+  "repo": "verinoda",
+  "question": "calls _exclusive_target mine",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-09",
+  "repo": "verinoda",
+  "question": "calls _windows runs",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-10",
+  "repo": "verinoda",
+  "question": "calls cmd_claim audit",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-11",
+  "repo": "verinoda",
+  "question": "calls _same_name_pairs groups",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-12",
+  "repo": "verinoda",
+  "question": "calls command_words band",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-13",
+  "repo": "verinoda",
+  "question": "calls _research_git available",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-14",
+  "repo": "verinoda",
+  "question": "calls _field_columns join",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-15",
+  "repo": "verinoda",
+  "question": "calls _hints trace",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-16",
+  "repo": "verinoda",
+  "question": "calls _lexicon_expansions audit",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-17",
+  "repo": "verinoda",
+  "question": "calls _record_claims runs",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-18",
+  "repo": "verinoda",
+  "question": "calls dead_code stem",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-19",
+  "repo": "verinoda",
+  "question": "calls private_sources sources",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-20",
+  "repo": "verinoda",
+  "question": "calls _py_units index",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-21",
+  "repo": "verinoda",
+  "question": "calls check_references references",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-22",
+  "repo": "verinoda",
+  "question": "calls _norm_ids failures",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-23",
+  "repo": "verinoda",
+  "question": "calls _symbols markdown",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-24",
+  "repo": "verinoda",
+  "question": "calls _through_links links",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-spelled-25",
+  "repo": "verinoda",
+  "question": "calls build_parser verify",
+  "answer": false,
+  "at": [],
+  "shape": "spelled, not called"
+ },
+ {
+  "id": "v-alias-01",
+  "repo": "verinoda",
+  "question": "calls changed_claim_files is_test_file",
+  "answer": true,
+  "at": [
+   "verinoda/claims.py:992"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-02",
+  "repo": "verinoda",
+  "question": "calls _walk_back is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:1250"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-03",
+  "repo": "verinoda",
+  "question": "calls _walk_callbacks is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:1275"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-04",
+  "repo": "verinoda",
+  "question": "calls _value_flow is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:1678"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-05",
+  "repo": "verinoda",
+  "question": "calls _repo_config_keys is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:4279"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-06",
+  "repo": "verinoda",
+  "question": "calls _key_readers is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:4298"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-07",
+  "repo": "verinoda",
+  "question": "calls _entry_info is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:4476"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-08",
+  "repo": "verinoda",
+  "question": "calls _planned is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/review.py:5228"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-09",
+  "repo": "verinoda",
+  "question": "calls diff_file is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/treestate.py:754"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-10",
+  "repo": "verinoda",
+  "question": "calls diff_trees is_test_or_support_file",
+  "answer": true,
+  "at": [
+   "verinoda/treestate.py:886"
+  ],
+  "shape": "import alias"
+ },
+ {
+  "id": "v-alias-11",
+  "repo": "verinoda",
+  "question": "calls diff_file is_test_file",
+  "answer": false,
+  "at": [],
+  "shape": "alias spells another function"
+ },
+ {
+  "id": "v-alias-12",
+  "repo": "verinoda",
+  "question": "calls diff_trees is_test_file",
+  "answer": false,
+  "at": [],
+  "shape": "alias spells another function"
+ },
+ {
+  "id": "o2-exists-01",
+  "repo": "orders_app",
+  "question": "exists get_repo",
+  "answer": true,
+  "at": [
+   "orders/api.py:9"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-02",
+  "repo": "orders_app",
+  "question": "exists create_order_handler",
+  "answer": true,
+  "at": [
+   "orders/api.py:16"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-03",
+  "repo": "orders_app",
+  "question": "exists get_order_handler",
+  "answer": true,
+  "at": [
+   "orders/api.py:24"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-04",
+  "repo": "orders_app",
+  "question": "exists fetch_order",
+  "answer": true,
+  "at": [
+   "orders/service.py:25"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-05",
+  "repo": "orders_app",
+  "question": "exists validate_items",
+  "answer": true,
+  "at": [
+   "orders/service.py:12"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-06",
+  "repo": "orders_app",
+  "question": "exists compute_total",
+  "answer": true,
+  "at": [
+   "orders/pricing.py:6"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-07",
+  "repo": "orders_app",
+  "question": "exists ValidationError",
+  "answer": true,
+  "at": [
+   "orders/service.py:8"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-08",
+  "repo": "orders_app",
+  "question": "exists OrderRepository.get",
+  "answer": true,
+  "at": [
+   "orders/repository.py:22"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-09",
+  "repo": "orders_app",
+  "question": "exists OrderRepository",
+  "answer": true,
+  "at": [
+   "orders/repository.py:8"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-10",
+  "repo": "orders_app",
+  "question": "exists refund_order",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-11",
+  "repo": "orders_app",
+  "question": "exists OrderRepository.update",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-exists-12",
+  "repo": "orders_app",
+  "question": "exists list_orders",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-01",
+  "repo": "orders_app",
+  "question": "calls create_order_handler get_repo",
+  "answer": true,
+  "at": [
+   "orders/api.py:18"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-02",
+  "repo": "orders_app",
+  "question": "calls get_order_handler get_repo",
+  "answer": true,
+  "at": [
+   "orders/api.py:25"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-03",
+  "repo": "orders_app",
+  "question": "calls get_repo OrderRepository.__init__",
+  "answer": true,
+  "at": [
+   "orders/api.py:12"
+  ],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-04",
+  "repo": "orders_app",
+  "question": "calls get_order_handler OrderRepository.get",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-05",
+  "repo": "orders_app",
+  "question": "calls create_order_handler compute_total",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-06",
+  "repo": "orders_app",
+  "question": "calls fetch_order OrderRepository.save",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-07",
+  "repo": "orders_app",
+  "question": "calls place_order apply_discount",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-08",
+  "repo": "orders_app",
+  "question": "calls compute_total validate_items",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ },
+ {
+  "id": "o2-calls-09",
+  "repo": "orders_app",
+  "question": "calls load_settings apply_discount",
+  "answer": false,
+  "at": [],
+  "shape": "orders_app"
+ }
+]

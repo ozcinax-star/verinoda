@@ -4321,6 +4321,26 @@ def cmd_benchmark(args) -> int:
               lambda r: (print(f"verdict audit, split {args.split}" + (f" (full result: {args.out})" if args.out
                                                                        else "")), _render_flat(r)))
         return 0
+    if args.bench_cmd == "tq-audit":
+        from verinoda.benchmark import tq_audit
+
+        def progress(repo: str, n: int) -> None:
+            print(f"[tq-audit] {repo}: {n} answer(s)", file=sys.stderr, flush=True)
+
+        try:
+            res = tq_audit.evaluate(work=Path(args.work).resolve() if args.work else None, progress=progress)
+        except tq_audit.GoldError as exc:
+            print(f"tq-audit: {exc}", file=sys.stderr)
+            return 2
+        written = {} if args.no_write else tq_audit.write(
+            res, table=Path(args.table) if args.table else None,
+            report_dir=Path(args.report_dir) if args.report_dir else None)
+        small = {"summary": res["report"]["summary"], "gold_sha": res["table"]["gold_sha"],
+                 "engine_sha": res["table"]["engine"]["sha"], "written": written,
+                 "reliability": {r["status"]: f"{r['right']}/{r['n']} (cap {r['cap']})"
+                                 for r in res["report"]["reliability"] if r["n"]}}
+        _emit(args, small, lambda r: (print("tq audit (held-out gold sets, verify on)"), _render_flat(r)))
+        return 0 if not res["report"]["summary"]["wrong_at_verified"] else 1
     if args.bench_cmd == "critique-eval":
         from verinoda.benchmark import critique_eval
 
@@ -5603,6 +5623,16 @@ def build_parser() -> argparse.ArgumentParser:
                                   "afterwards; reused when given)")
     c.add_argument("--only", help="comma list of case ids")
     c.add_argument("--out", help="write the full result JSON here")
+    c.add_argument("--json", action="store_true")
+    c = bsub.add_parser("tq-audit", help="`verinoda tq` on the frozen held-out gold sets (benchmarks/tq_gold, "
+                                         "tq_gold2): the calibration table behind `measured: k/n` and the "
+                                         "CONFIDENCE_CAP reliability report")
+    c.set_defaults(fn=cmd_benchmark)
+    c.add_argument("--work", help="work directory for the indexed copies (default: a temporary one, removed "
+                                  "afterwards; reused when given)")
+    c.add_argument("--table", help="calibration table to write (default: verinoda/data/tq_calibration.json)")
+    c.add_argument("--report-dir", help="report directory (default: benchmarks/results/tq-audit-DATE)")
+    c.add_argument("--no-write", action="store_true", help="print the summary only")
     c.add_argument("--json", action="store_true")
     c = bsub.add_parser("critique-eval", help="critique precision/recall on the labelled claim set")
     c.set_defaults(fn=cmd_benchmark)
