@@ -69,7 +69,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 6.5 | **Reachable vulnerable dependencies and SBOM (opt-in)** | Advisories filtered to library functions the code actually calls; CycloneDX output; licenses | Semgrep Supply Chain, narsil-mcp | an advisory is reported only with a call path to the vulnerable function |
-| 6.6 | **Affected projects in a monorepo** | The workspace packages and build targets a diff affects | nx affected | `review` names affected packages |
 
 ## 7 - Architecture rules engine
 
@@ -96,7 +95,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 10.1 | **Cross-service edges** | HTTP, gRPC, GraphQL and tRPC client calls linked to their route handlers; event emit and listen edges; framework route tables | codebase-memory-mcp, CodeGraph, GitNexus, Bito, CodeSee | `trace` crosses from a frontend fetch to its backend handler |
 | 10.2 | **ORM, DI and database schema (live database opt-in)** | ORM models, dependency-injection bindings, migrations and schema as nodes | agentforge-graph, Graphify, Kodit | the dataflow view reaches a table |
-| 10.3 | **Infrastructure-as-code nodes** | Dockerfile, Kubernetes and Terraform resources linked to the code they run | codebase-memory-mcp, Graphify | a service's entry point is linked to its container |
 
 ## 11 - Claim history and memory
 
@@ -164,7 +162,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 19.1 | **Symbolic differential behaviour (opt-in)** | Solver-found inputs where two versions differ; inputs that reach every branch | CrossHair diffbehavior and cover | `probe --symbolic` finds a planted difference random inputs miss |
 | 19.2 | **Java differential tests (opt-in)** | Tests that pass on the old version and fail on the new, for Java | EvoSuiteR, Randoop, Diffblue Cover | `probe` works on a Java method |
-| 19.3 | **Property test templates** | Roundtrip, idempotent and equivalence tests written as a lasting file | Hypothesis Ghostwriter | `probe --emit-test` writes a property test |
 | 19.4 | **Regression test generation (opt-in)** | Tests that pin current behaviour before a refactor | Pynguin | a generated test passes on the current tree |
 | 19.5 | **Runtime diff between base and head** | Call paths, SQL queries, routes and exceptions added or removed at runtime between two revisions | AppMap compare | `review --observe` lists runtime changes |
 

@@ -1123,6 +1123,27 @@ def cmd_review(args) -> int:
     return int(res["exit"])
 
 
+def cmd_affected(args) -> int:
+    from verinoda import affected as aff
+    from verinoda import treestate
+
+    if args.base and args.staged:
+        print("error: give --base or --staged, not both", file=sys.stderr)
+        return 2
+    if args.file and (args.base or args.staged):
+        print("error: --file names the changed files: give no --base / --staged", file=sys.stderr)
+        return 2
+    repo = _repo(args)
+    changed = [_rel_in_repo(repo.resolve(), f, "file") for f in args.file] if args.file else None
+    try:
+        res = aff.run(repo, base=args.base, staged=args.staged, changed=changed)
+    except (treestate.NotAGitTree, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: _write(aff.render_run(r)))
+    return 0
+
+
 def cmd_coverage(args) -> int:
     from verinoda import coverage_import as ci
 
@@ -1580,6 +1601,30 @@ def cmd_grep_ast(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     _emit(args, res, lambda r: print(grep_ast.render(r)))
+    return 0 if res["status"] == "found" else 1
+
+
+def cmd_infra(args) -> int:
+    from verinoda import infra
+
+    repo = _repo(args)
+    if not repo.is_dir():
+        print(f"error: not a folder: {repo}", file=sys.stderr)
+        return 2
+    res = infra.run(repo)
+    if args.file:
+        p = Path(args.file)     # repository-relative first, then relative to the working folder (as _rel_in_repo)
+        q = (p if p.is_absolute() else (Path.cwd() / p if not (repo / p).exists() and (Path.cwd() / p).exists()
+                                        else repo / p)).resolve()
+        if not q.is_relative_to(repo.resolve()) or not q.exists():
+            print(f"error: not a file of the project: {args.file}", file=sys.stderr)
+            return 2
+        rel = q.relative_to(repo.resolve()).as_posix()
+        res["nodes"] = infra.links_for(res, rel)
+        res["file"], res["count"] = rel, len(res["nodes"])
+        res["linked"] = res["count"]
+        res["status"] = "found" if res["nodes"] else "none"
+    _emit(args, res, lambda r: print(infra.render(r)))
     return 0 if res["status"] == "found" else 1
 
 
@@ -3126,6 +3171,11 @@ def cmd_probe(args) -> int:
         raise SystemExit("error: give a function or --changed, not both")
     if args.no_base and args.changed:
         raise SystemExit("error: --changed compares with a base; it cannot be used with --no-base")
+    if (args.template or args.inverse or args.test_file) and not (args.template and args.emit_test):
+        raise SystemExit("error: --template names the kind of property test --emit-test writes; --inverse and "
+                         "--test-file go with them")
+    if args.template and args.changed:
+        raise SystemExit("error: a property test is written for one function, not with --changed")
     st = _store(repo, create=True)
     kw = dict(inputs=args.inputs, seed=args.seed, properties=args.property or [], examples=args.example or [],
               scaling=args.scaling, timeout=args.timeout, per_call_timeout=args.per_call_timeout,
@@ -3134,7 +3184,8 @@ def cmd_probe(args) -> int:
         if args.changed:
             res = probe.probe_changed(st, repo, base=args.base or "HEAD", **kw)
         else:
-            res = probe.probe(st, repo, args.symbol, base=args.base or "HEAD", no_base=args.no_base, **kw)
+            res = probe.probe(st, repo, args.symbol, base=args.base or "HEAD", no_base=args.no_base,
+                              template=args.template, inverse=args.inverse, test_file=args.test_file, **kw)
     finally:
         st.close()
     _emit(args, res, _r_probe)
@@ -3784,6 +3835,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="a coverage report (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON; repeatable): the "
                          "changed lines no test ran (default: the reports found at the usual paths)")
     sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)
+    sp = add("affected", cmd_affected, "the workspace packages of a monorepo a change affects: the packages "
+                                       "holding changed files, then those declaring a dependency on them")
+    sp.add_argument("--base", help="compare the working tree with this commit (default HEAD)")
+    sp.add_argument("--staged", action="store_true", help="the staged changes against HEAD")
+    sp.add_argument("--file", action="append", metavar="PATH",
+                    help="a changed file, repository-relative (repeatable): instead of the git diff")
     sp = add("coverage", cmd_coverage, "coverage reports (lcov, Cobertura XML, JaCoCo XML, coverage.py JSON) read "
                                        "into lines and symbols: what ran, what did not, which tests ran it; with "
                                        "--base-report the indirect coverage changes")
@@ -3973,6 +4030,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="a YAML rule file (id, language, pattern or rule.pattern, message; one rule per "
                          "document); repeatable")
     sp.add_argument("--max-results", type=int, default=200, help="matches listed at most (default 200)")
+    sp = add("infra", cmd_infra, "infrastructure as code: Dockerfiles, compose services, Kubernetes containers and "
+                                 "Terraform resources, each linked to the project file its command runs, with the "
+                                 "manifest and COPY lines as evidence (read as text; exit 1: none found)")
+    sp.add_argument("--file", help="only the nodes whose command runs this project file")
     sp = add("context", cmd_context, "what the project says about one file: decision records whose guards name it, "
                                      "your notes on it or on a glob matching it (`scope:` in a note's header), "
                                      "Cursor and Kiro rules for it (what the Read/Edit hook shows an agent)")
@@ -4421,7 +4482,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="run even when the side-effect gate refuses (the user's decision: writes, network and "
                          "processes then run in the throw-away copy with process isolation only)")
     sp.add_argument("--emit-test", action="store_true", help="print pytest functions that pin the base behaviour "
-                                                             "(nothing is written)")
+                                                             "(nothing is written); with --template, write a "
+                                                             "property test file")
+    sp.add_argument("--template", choices=["roundtrip", "idempotent", "equivalence"],
+                    help="with --emit-test: check this property on the generated inputs and write it as a pytest "
+                         "file (roundtrip: g(f(x)) == x; idempotent: f(f(x)) == f(x); equivalence: same result as "
+                         "the base); never over an existing file")
+    sp.add_argument("--inverse", metavar="FUNCTION", help="g of the roundtrip template (path.py::name)")
+    sp.add_argument("--test-file", metavar="PATH",
+                    help="the file to write (default tests/test_<name>_<template>.py)")
     sp.add_argument("--no-record", action="store_true", help="do not record claims for the findings")
     sp = add("resolve-call", cmd_resolve_call, "precise resolution of one call site: which definition does "
                                                "TARGET on PATH:LINE bind to? (exit 3: no precise answer)")

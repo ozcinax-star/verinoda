@@ -10232,6 +10232,337 @@ locally, from the traces Verinoda already makes, and has `review` print the comm
   `tests/test_testhistory.py` (62 together), `tests/test_store.py`, `tests/test_mcp.py`, `tests/test_buildinfo.py`,
   `tests/test_line_endings.py`, `tests/test_docs.py` (one expected failure: UPGRADING.md lacks v9, see above).
 
+## 104. Property test templates (D131, 2026-10-01)
+
+### 104.1 Why
+
+The behaviour probe already generates many inputs for a function and runs it in throw-away copies, but what it
+learns is gone after the run: `--emit-test` only printed tests that pin the base behaviour on a few differing
+inputs. Hypothesis' Ghostwriter writes roundtrip, idempotent and equivalence tests as lasting files. This decision
+gives the probe the same three templates, run first on the probe's own inputs, so the written file comes with what
+was observed instead of a guess.
+
+### 104.2 Decisions
+
+- `verinoda probe FILE::NAME --emit-test --template roundtrip|idempotent|equivalence` (with `--inverse FILE::NAME`
+  for roundtrip and an optional `--test-file PATH`). `--template` without `--emit-test`, and with `--changed`, is
+  an error; plain `--emit-test` keeps its old meaning (print pinning tests, write nothing). `--json` returns the
+  same result with a `property_test` key.
+- The properties: roundtrip `g(result) == x`, idempotent `f(result, *rest) == result` (the other arguments as in
+  the first call), equivalence `same outcome as the base version` (the probe's differential: no extra property).
+  Roundtrip and idempotent need a required positional first parameter; instance methods are refused (a function,
+  a static method or a class method only); equivalence needs a base version of the function.
+- The property is added to the probe's properties and evaluated by the plugin inside the isolated run, with the
+  functions it calls bound through a new spec key `property_refs` (`{name: module}`) and the call's arguments as
+  `__args__` / `__kwargs__`. The inverse is added to the side-effect gate's roots, so a `g` with side effects is
+  refused like `f`.
+- The result says `observed_to_hold`, `did_not_hold` or `not_evaluated`, with on how many generated inputs it was
+  evaluated and how many were counterexamples. The word "verified" is never used: it is an observation over the
+  listed inputs in the named runs. A violated template property makes the probe status `property_violated`, as a
+  `--property` does. An input on which the property itself raises (the inverse, or `f` on its own result) is a
+  counterexample; one where the functions it calls could not be imported is not evaluated, and the reason is
+  given. The observation is also a claim: `weak_inference` when it held, `experiment_verified` when a
+  counterexample was seen again under the other hash seeds (else `strong_inference`), `unknown` when not
+  evaluated (`claim_status`, and `claim_id` when recorded).
+- The file is written only after the runs, opened exclusively (`x` mode): an existing file is refused before
+  anything runs and again at write time. The default path is `tests/test_<name>_<kind>.py` (the repository root
+  when there is no `tests/`); a path outside the repository, under a hidden folder (`.git`, `.verinoda`, `.venv`)
+  or not ending in `.py` is refused. A function whose module name is not a Python identifier is refused before
+  anything runs. The file puts the import roots of the functions it calls on `sys.path` relative to itself, so it
+  imports them however pytest is started; a rendered file that would not parse is not written.
+- The file holds up to 50 of the probe's inputs as source (counterexamples first; an input longer than 2,000
+  characters of source is left out) in one parametrized test, each built by a lambda so every test gets fresh
+  arguments. It imports only pytest and the project: inputs came from the probe's generators (annotations, call
+  sites, mined boundaries, edges, then hypothesis when installed, else a fixed pseudo-random list), so neither
+  Verinoda nor hypothesis is needed to run it. Equivalence rows pin the base outcome (result text, rendered as the
+  probe does with sorted set elements, or the exception type); base results whose text is masked, cut or failed
+  to render are left out. The probe runs with PYTHONHASHSEED=0 and pytest does not, so the chosen inputs run once
+  more on the working tree under seeds 1, 2 and 3 (`experiments.run` accepts `PYTHONHASHSEED` in `env_extra`);
+  an input whose outcome changes is left out of the file (`hash_order_dropped`, and a header line).
+- Nothing new in MCP: the core profile and the full profile's `change_probe` arguments are unchanged (the template
+  writes a file into the repository, which stays a CLI decision of the user).
+
+### 104.3 Measured
+
+On a small codec module in a git copy of examples/orders_app (in-sample, tests/test_probe_templates.py):
+`encode`/`decode` roundtrip observed to hold on every evaluated input and the written file passes; a decoder that
+strips whitespace is reported `did_not_hold` with counterexamples and its written file fails; `" ".join(s.split())`
+is observed idempotent and its file passes; `s + "!"` is `did_not_hold`; after changing `split()` to `split(" ")`
+the equivalence template reports differing inputs and its written file fails on the working tree. Each probe run
+took a few seconds (40 inputs).
+
+Review round: an inverse that raised on 33 of 40 inputs was reported `observed_to_hold` on the other 7; it is now a
+counterexample (`picky(result) == text` did not hold on 34 of 40, it raised on 34; probe status
+`property_violated`). `list(set(words))` under equivalence wrote 38 inputs that failed 3 or 4 times under hash
+seeds 1 to 3; the seed check now leaves those out and the file passes under seeds 0, 4 and 5. A target in
+`tools/` and an inverse in `scripts/` (no `__init__.py`) are imported by the file when pytest runs from `tests/`;
+`my-codec.py` is refused before running; `--test-file .git/x.py` is refused; an inverse missing at the base no
+longer reports `holds_at_base: true`. The seed check adds three working-tree runs on at most 50 inputs.
+
+### 104.4 Not done
+
+- An observation over the generated inputs, not a proof; the probe's input generators decide what is covered.
+- Equality is `==` (NaN never equals itself, so a roundtrip of `nan` is a counterexample).
+- A function that mutates its first argument is compared with the mutated value, in the probe and in the file.
+- Roundtrip compares only the first argument; inverses of several arguments are not templated.
+- Equivalence compares result text (as the probe does), so results whose repr holds addresses are not written.
+- The hash-seed check tries three seeds: an order that happens to match seed 0 under all three is kept.
+- A file with `did_not_hold` is written too (its counterexamples are the finding) and fails until the code or the
+  file changes: the user asked for the file with `--emit-test --template`.
+- Instance methods with recipes are not templated.
+- Not reachable from MCP.
+
+### 104.5 Tests
+
+tests/test_probe_templates.py: the plan for each kind and its refusals (unknown kind, instance method, missing or
+misplaced `--inverse`, no base for equivalence, no required positional first parameter, a parameter named like
+the called function); path rules (exists, outside, not `.py`, exclusive write); the observation (counterexamples
+first, `not_evaluated`, never "verified"; equivalence skips masked results); rendered files parse; the plugin binds
+`property_refs` and reports an import failure as a property error; CLI argument rules; and end-to-end runs
+(experiment-marked) of the three templates whose written files are run with pytest. Review round: a property that
+raises is a counterexample and an import failure is not evaluated; `holds_at_base` only where evaluated; inputs
+whose outcome changes with the hash seed are left out (unit, and end to end under seeds 0, 4, 5); hidden folders
+and names that are not identifiers are refused; the file imports from other roots run from `tests/`.
+
+## 105. Infrastructure-as-code nodes (D132, 2026-10-01)
+
+### 105.1 Why
+
+A service is started by a manifest, not by the code: a Dockerfile's `CMD`, a compose service's `command`, a
+Kubernetes container's `args`, a Terraform Lambda's `handler`. Asking "what runs `app/main.py`, and how?" (or
+"what does this container run?") needed reading those files by hand. codebase-memory-mcp and Graphify put such
+resources in their graphs; here they are linked to the project file their command runs, with the manifest line as
+evidence, so a service's entry point is linked to its container.
+
+### 105.2 Decisions
+
+- **`verinoda infra [--file FILE] [--json]`**, a new module `verinoda/infra.py`. CLI only; no MCP tool (the core
+  menu and the full profile are unchanged), no change to graph.json or the index: the manifests are read when
+  the command runs, from the files `snapshot.listed_files` lists. Exit 1 when no node is found (with `--file`:
+  no node runs or names that file), 2 on a `--file` that is not a file of the project (repository-relative
+  first, then relative to the working folder).
+- **Read as data, nothing run.** No docker, kubectl, helm or terraform is called and nothing is built.
+  - Dockerfile (`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, `Containerfile`): stages (`FROM ... AS name`,
+    a stage built on an earlier one inherits its working folder and command), `WORKDIR`, `COPY`/`ADD`
+    (`--from` a stage followed into that stage), `ENV PYTHONPATH`, `ENTRYPOINT` and `CMD` (exec or shell form;
+    an `ENTRYPOINT` clears a `CMD` inherited from the base stage, as Docker does). The image's command is the
+    last stage's `ENTRYPOINT` + `CMD`. Continuation lines are joined and cited at their first line.
+  - Compose (`docker-compose*.yml`, `compose*.yml`): `build` (string or context + dockerfile), `image`,
+    `command`, `entrypoint`, `working_dir`, over the Dockerfile the service builds (Compose's override rules).
+  - Kubernetes (any other YAML document with `apiVersion` and `kind`): every `containers` / `initContainers`
+    item's `image`, `command` (replaces `ENTRYPOINT`), `args` (replaces `CMD`), `workingDir`.
+  - Terraform (`*.tf`): every `resource` and `data` block (brace counting outside strings and `#`, `//` and
+    `/* */` comments), its string attributes that name a project file or folder (`${path.module}/` removed), a
+    `command`/`args` list, and a Lambda-style `handler = "mod.func"`. A code attribute (`source_dir`,
+    `source_file`, `filename`, `source`, `context`, ...) of a code-running type (a function, an archive, a
+    container, a job) is a run; any other attribute whose value is a path (it has a `/` or a file extension) only
+    names it (`"relation": "names"`); a bare word (`name = "api"`) and name attributes are not paths.
+  - Files are read as UTF-8 with a byte order mark dropped; BuildKit's `Dockerfile.dockerignore` is not a
+    Dockerfile.
+  - YAML is read by a small subset reader that keeps line numbers (block and flow sequences, mappings, quoted
+    and block scalars, flow mappings and sequences with quoted brackets, `---` documents; Helm `{{ ... }}` lines
+    skipped). PyYAML is not a dependency and loses
+    lines.
+- **What a command runs.** `python -m pkg.mod` and `python file.py`; uvicorn/gunicorn/hypercorn/daphne
+  `pkg.mod:app`; `celery -A pkg`; `flask --app`; `streamlit`/`fastapi run file`; node/bun/deno/ts-node
+  `file.js`; `java -jar x.jar` and `java pkg.Main`; `go run ./cmd/x`; `sh -c "a && b"` (each part); wrappers
+  (`exec`, `tini --`, `dumb-init`, `VAR=1`) dropped; a script named by path, and the command it is given (an
+  entrypoint script ending in `exec "$@"`, or the command after its `--`, as `wait-for-it.sh db:5432 -- python
+  app.py`); `poetry`/`uv`/`pipenv`/`pdm`/`hatch`/`rye run CMD` read as CMD. Anything else is an installed program (`nginx`, `alembic`): listed,
+  no link.
+- **Linking.** The image path (relative to `WORKDIR`, plus `PYTHONPATH` folders for modules; `pkg/mod.py`,
+  `pkg/mod/__main__.py`, `pkg/mod/__init__.py`) is mapped back through the stage's `COPY` lines, newest first,
+  to the build context. A `COPY` source is a file or a folder as the project has it (a trailing `/` or a dot
+  in the name only when the source is not a project path), so `COPY Procfile app.py ./` and `COPY my.pkg/ /srv/`
+  map their contents. A folder `COPY` that would bring a file the folder does not hold (`COPY config/ ./` after
+  `COPY . .`) is passed over for an older one, as Docker overwrites only the files a folder contains. The link's
+  line is the app object's or function's definition (`app = FastAPI()` for `app.main:app`) or the import that
+  brings it; with no object named, the `__main__` guard; else 1. A server's app is never cited at the guard.
+- **Statuses.** The node and its command are `statically_verified` (the manifest line says it). A link through
+  `COPY` lines, or a path a Terraform attribute names, is `strong_inference`: the image could still run
+  something else (a package installed under the same name, a volume mounted over the folder). `weak_inference`:
+  a file found only by its path's ending (nearest the manifest first, the number of other matches said), a
+  Kubernetes container or compose service whose image was matched to a project Dockerfile by name (the folder's
+  name, a `Dockerfile.NAME` suffix, a compose service's name or `image`; the node says so in `image_built_by`), a
+  path a non-code Terraform attribute names, a jar that is a build output linked to the
+  nearest build file (`pom.xml`, `build.gradle(.kts)`, `build.sbt`, `package.json`), a Lambda handler's module.
+  No link: the reason (`an installed program`, `X maps to Y, which is not in the project`, `copied from the
+  image Z`, `no project file found for it`).
+- **Evidence.** Each link lists the command's lines (`Dockerfile:6 CMD [...]`, `docker-compose.yml:5 command:
+  ...`) and then the `COPY` lines that put the file in the image, in the order they were followed.
+- `--file FILE` keeps only the nodes whose command runs (or that name) that file, each once (the reverse
+  question). A program run twice by one command is one entry.
+
+### 105.3 Measured
+
+Tests only: the fixture project (a Python API image, a Node image, a two-stage Java image, a compose file with
+three services, a Kubernetes Deployment with two containers and a Service, a Terraform Lambda and archive)
+gives each expected link and status. Verinoda's own repository has no Dockerfile, compose, Kubernetes or
+Terraform file: `verinoda infra` reports none (exit 1) in 1.3 s.
+
+Review round: a compose service whose image was matched to a Dockerfile by name kept strong_inference (now weak,
+with `image_built_by`, as Kubernetes); any Terraform string equal to a project folder's name (`name = "api"`) was a
+strong run (now only code attributes of code-running types run; other paths are weak `names`); `//` and `/* */`
+comments with a brace swallowed later resources; an overlay `COPY config/ ./` hid the `COPY . .` that brought the
+file; extensionless files (`Procfile`, `scripts/start`) and dotted folders (`my.pkg/`) were mistaken for each other;
+`build: {context: ., ...}` was read as text; a quoted `[` swallowed the rest of a YAML document; a BOM dropped a
+Dockerfile's `FROM`, a compose `services` and a Kubernetes `apiVersion`; `Dockerfile.dockerignore` was a node; a
+uvicorn app was cited at the `__main__` guard; `wait-for-it.sh ... -- python app.py` and `poetry run` lost the
+command; `--file` tried the working folder before the repository, exited 1 on a missing file and said there was no
+Dockerfile, and listed a node twice. Each has a test. Folders and file names are now looked up in sets built once:
+500 Terraform resources against 100,000 listed files went from 14.1 s to 0.5 s. Rejected: none.
+
+### 105.4 Not done
+
+- Text, not evaluation: build `ARG`s and `${VAR}` substitution, compose `extends`, profiles and `.env`
+  interpolation, Kustomize overlays, Helm values, Terraform variables, modules and `locals` are not resolved; a
+  value built from them is left as text.
+- The last stage is the image; a compose `build.target` naming an earlier stage is not followed.
+- Image-to-Dockerfile matching is by name only (no registry, no tag), hence `weak_inference`.
+- `npm start` / `npm run X` and Makefile targets are installed programs here; the `package.json` script they run
+  is not followed. `poetry`/`uv`/`pipenv run` are followed to the command they run, but a `[tool.poetry.scripts]`
+  entry point name run that way is an installed program.
+- The path-ending search (when `COPY` gives no project file) tries the last three path endings of the reference,
+  never a bare file name for a deeper path.
+- Terraform code attributes and code-running types are fixed lists; a provider's own attribute names (say a
+  `code_dir`) are read as names, weak.
+- The nodes are not added to graph.json, `map`, `impact` or `review`, and there is no MCP tool: a later step
+  could add an `infra` map view or a `run_tool` entry. A YAML document is recognised as Kubernetes by
+  `apiVersion` + `kind` only; CRDs with `containers` lists are read the same way.
+- The YAML subset reader does not support anchors/aliases, multi-line plain scalars or complex keys; such
+  values are read as text.
+
+### 105.5 Tests
+
+`tests/test_infra.py`: a Dockerfile's uvicorn `CMD` (continuation lines) linked to `app/main.py` at `app = ...`
+through its `COPY` line; a Node image; a two-stage Java image whose jar is a build output linked weakly to
+`pom.xml` through `COPY --from`; compose services overriding the command (`python -m` linked at the `__main__`
+guard), a service whose folder is never copied found by its path's ending only (weak), a service with no
+command; a Kubernetes container using the image a compose service builds (weak) and one with a registry image
+(no link), a Service skipped; Terraform resource and data blocks (a folder named by `${path.module}/..`, a Lambda
+handler, a `command` list); what nine command shapes run (`python -u -m`, gunicorn options, `sh -c` chains, tini,
+`java -cp`, an entrypoint script with arguments, deno, nginx); `ENTRYPOINT` clearing an inherited `CMD`; a file
+copied into a folder not standing for its siblings; the YAML reader's lines; the CLI's JSON, `--file`, text and
+exit codes; a project path with a space and non-ASCII. Review round: a compose image matched by name is weak with
+`image_built_by`; Terraform `name`/`tags` values are not runs and a `local_file.filename` is a weak `names`;
+Terraform `//` and `/* */` comments; an overlay folder `COPY`; `Procfile`, `my.pkg/` and `scripts/start` sources;
+a compose `build` flow mapping; a quoted `[` in a flow sequence; BOM-prefixed manifests and a
+`Dockerfile.dockerignore`; a uvicorn app cited at its import, not the guard; `wait-for-it.sh --` and `poetry`/`uv
+run`; a program run twice listed once; `--file` repository-relative first, a missing file exit 2, an unrun file
+exit 1 with "no node runs or names".
+
+## 106. Affected projects in a monorepo (D133, 2026-10-01)
+
+### 106.1 Why
+
+In a monorepo a change to one package can break the packages that build on it. `nx affected` answers
+"which projects does this diff touch, and which depend on them" from the workspace's project graph. Until
+now `review` listed changed definitions and their dependents in the code graph, but not the workspace
+packages and build targets: a reviewer had to work out by hand that a change in `packages/core` also
+reaches `packages/ui` and `apps/web`.
+
+### 106.2 Decisions
+
+- One new module, `verinoda/affected.py`, used by `review` (its `affected` key, a "Workspace packages
+  affected" sentence in the summary and an "Affected workspace packages" section in the text) and by a
+  new CLI command, `verinoda affected [--base REF | --staged | --file PATH ...] [--json]`. No new MCP
+  tool: `change_review` carries a compact form of the key (`affected.compact()`).
+- Packages come only from what the manifests declare, read as text from the tree under review (the
+  staged text with `--staged`): npm/yarn/pnpm `workspaces` and `pnpm-workspace.yaml` (globs through
+  `guards.ws_match`, negations honoured), Cargo `[workspace] members`/`exclude` (and the root when it has
+  a `[package]`), Gradle `include` in `settings.gradle(.kts)`, Maven `<modules>` recursively, and Python
+  `pyproject.toml` and Go `go.mod` files in subfolders (with `go.work` `use` lines). Python and Go have no
+  workspace list, so manifests under test folders and the folders the guards take for samples, fixtures
+  and vendored code (`examples/`, `fixtures/`, `vendor/` ...) are left out; this keeps a single project
+  with a sample under `examples/` from being called a monorepo.
+- Fewer than two packages: not a monorepo. The block says so (`not_checked`) and the MCP response keeps
+  only `{"packages_total": N}`, so a normal repository pays about 25 characters.
+- A changed file belongs to the innermost package folder that holds it. The dependents are walked back
+  over the packages' declared internal dependencies (dependencies, dev, peer, optional, build and test
+  scopes alike), nearest first, at most 20 levels; each row has the `via` chain and the manifest line of
+  its first hop (`at`), and its claim cites the line of every hop (up to four).
+- Status: a changed package is `statically_verified` (its manifest line and the path). A dependent is
+  `statically_verified` when every hop is declared local by the manifest (`workspace:`/`file:` specs, a
+  Cargo `path`, or `workspace = true` when the root `[workspace.dependencies]` entry it inherits has a `path`,
+  Gradle `project(":x")`, a Go `replace` to a folder or `go.work` using both modules, a uv `workspace = true`
+  or Poetry `path` source, a Maven module of the same group and version: the reactor builds a module only for
+  its groupId:artifactId:version, and a dependency without a version is taken as managed to the reactor's);
+  otherwise the package manager may take the published package of that name, and it is
+  `strong_inference` with that uncertainty. A Gradle type-safe accessor (`projects.app`) is mapped by
+  name and is `strong_inference`. Two packages of one name: a dependency on the name is an edge to each,
+  `strong_inference` with that uncertainty, whichever of them changed.
+- "Affected" means "declares a dependency on a changed package", as `nx affected` reads it, not that
+  the changed code is used; the limits say so.
+- Build targets: npm `scripts` of each affected package (up to eight). Gradle, Maven, Cargo and Go
+  targets are not listed.
+- Changed files outside every package (a root build file, a lock file, shared configuration) are listed
+  under `outside` (ten at most, then counted) and not followed: they may affect every package. A root
+  package (a Cargo root `[package]`, a root `pyproject.toml`) does not own a dot folder (`.github/`), a root
+  lock file, or a folder with its own manifest that is not a member (a Cargo `exclude`): those are outside.
+- Packages a workspace list declares are read whatever their folder is called (`packages/build`), as the
+  guards read the same lists; only `node_modules` and the like are never one.
+- The walk stops at 20 levels; when packages further away depend on the last level, the block has
+  `"truncated": true` and a `not_checked` line (kept in the compact form), and the text says so.
+- A manifest that cannot be parsed never stops the review: the error becomes an `affected_packages`
+  unknown with `verinoda affected` as the next step.
+
+### 106.3 Measured
+
+- On this repository (2,691 files): `affected()` takes 0.054 s after the file list (0.84 s, which the
+  review already reads); `verinoda affected --file verinoda/review.py` runs in 1.8 s in a fresh process.
+  The repository is not a monorepo (its only other manifests are under `examples/`, `tests/` and
+  `tests_upstream/`), so `review` adds `{"packages_total": 0}` to the MCP response.
+- The compact form for the npm fixture of four packages (three affected, one outside file) is under 600
+  characters.
+- In-sample fixtures only (one per ecosystem); no real monorepo measured, no comparison with `nx affected`.
+
+Review round: the TOML array reader ended an array at a `]` inside a string, so a PEP 508 extra
+(`"fastapi[standard]"`) dropped every later dependency; it now ends at the first `]` outside a string. The
+TOML section pattern backtracked cubically on a `[` line with a long run of spaces (65.6 s at 4,000
+spaces); it now matches each character one way (a 20,000-space line and a two-package `affected()` on it
+take well under the test's 2 s bound). npm lines are now located per key path (`("devDependencies",
+"core")`, the top-level `"name"`), not by the first matching line of the file; Gradle `include(` over
+several lines and `include ':a',` continued lines are read; a pnpm item at column 0 is read; Maven compares
+the version and Cargo `workspace = true` reads the root entry (both were `statically_verified` for a
+published artifact); a root package no longer owns shared files or excluded crates; duplicates of one name
+resolve the same way from either; the depth cap is said; `verinoda affected --file` takes an absolute or
+cwd-relative path like the other commands. One test per finding.
+
+### 106.4 Not done
+
+- Gradle `projectDir` overrides, `includeBuild`, Maven profiles, version-catalog bundles of projects
+  and Bazel/Buck/Pants/Lerna-only configurations are not read.
+- npm, Yarn and pnpm link a dependency on a workspace package by name when its version range fits: such
+  hops are `strong_inference`; the published version is never looked up.
+- A package whose manifest was deleted by the change is gone from the new tree: its changed files are
+  listed under `outside`.
+- A dependency is matched by declared name only within one ecosystem; a Python package that imports a
+  sibling without declaring it is not followed (the code graph's dependents still are).
+- Changes outside every package are not followed, though a root file can affect every package.
+- A Maven dependency with no `<version>` is taken as the reactor module (managed by the parent); a
+  `dependencyManagement` that pins another version is not read. Version properties other than
+  `${project.version}`/`${project.parent.version}` are compared as written.
+- The npm key lines come from a small JSON scanner (depth one and two); a repeated key is cited at its last
+  occurrence, as `json.loads` keeps it.
+
+### 106.5 Tests
+
+`tests/test_affected.py`: npm workspaces with `workspace:` and version-range hops, transitive chains,
+the outside list and the text; a leaf change and a single-package repository; `pnpm-workspace.yaml`
+with a negated glob; Cargo members with `path`, `package =` renames and a `[dev-dependencies.x]` table;
+Gradle `include`, `project(...)`, a commented-out dependency and a type-safe accessor; Maven modules with
+a parent group; and, from the review round: an extra before a sibling in a dependency array, a long `[`
+line read quickly, a Maven dependency on another version, Cargo `workspace = true` with and without a root
+`path` (and a root rename), an npm dependency in two sections and a nested `name`, Gradle multi-line
+`include`, a pnpm item at column 0 and a declared `packages/build`, a root package with `.github/`, a lock
+file and an excluded crate, the depth cap, two packages of one name, and `--file` with an absolute path; Python `pyproject.toml` with a uv workspace source, test fixtures and samples left out,
+and a lone project with a sample not called a monorepo; Go modules under `go.work`; the compact form's
+size; `review` on a git monorepo (summary, text, every cited line matching its manifest line and hash);
+the MCP `change_review` key and `verinoda affected` (`--json`, `--file`, the `--file` with `--staged`
+error). Run with the touched modules' tests: `test_review.py`, `test_mcp.py`, `test_reviewers.py`,
+`test_review_since_last.py`, `test_cli.py`, `test_risk.py`, `test_sarif.py`, `test_docs.py`,
+`test_line_endings.py`.
+
 ## Sources
 
 - **Retrieval:**

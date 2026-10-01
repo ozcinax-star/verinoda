@@ -132,7 +132,7 @@ COMMIT_COPY_BATCH = 2000  # blobs read per `git cat-file --batch` when copying a
 COPY_THREADS = 8          # threads copying a working tree of COPY_PARALLEL_MIN files or more
 COPY_PARALLEL_MIN = 200
 PLUGIN_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.py$")
-ENV_EXTRA_RE = re.compile(r"^VERINODA_[A-Z0-9_]+$")
+ENV_EXTRA_RE = re.compile(r"^(VERINODA_[A-Z0-9_]+|PYTHONHASHSEED)$")  # the hash seed: a probe checks order
 ARGS_CONFINED = "allowlisted commands may only name paths inside the repository copy"
 # Runner options that run arbitrary code or import from outside the copy, whatever their value.
 FORBIDDEN_OPTIONS: dict[str, dict[str, str]] = {
@@ -1298,7 +1298,8 @@ def run(
     ``plugins`` ({module file name: source bytes}) are written next to the
     copy, never into it, and that directory is put on ``PYTHONPATH`` (load
     them with ``-p <module>``). ``env_extra`` adds ``VERINODA_*`` variables
-    only. Files the child writes to ``$VERINODA_ARTIFACTS`` are returned in
+    only, and ``PYTHONHASHSEED`` (it replaces the pinned 0). Files the child
+    writes to ``$VERINODA_ARTIFACTS`` are returned in
     ``result["artifacts"]`` ({name: path under runs/<id>/artifacts}).
 
     Source of the copy: the working tree by default; with ``ref`` the regular
@@ -1329,7 +1330,7 @@ def run(
             raise ValueError(f"plugin file name must be a plain module file name, not {name!r}")
     for key in env_extra or {}:
         if not ENV_EXTRA_RE.match(key):
-            raise ValueError(f"env_extra may only set VERINODA_* variables, not {key!r}")
+            raise ValueError(f"env_extra may only set VERINODA_* variables (or PYTHONHASHSEED), not {key!r}")
     timeout = float(timeout or cfg["default_timeout"])
     plugin_names = tuple(n.removesuffix(".py") for n in plugins or {})
     trusted = is_trusted(repo)
