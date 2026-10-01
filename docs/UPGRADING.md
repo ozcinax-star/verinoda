@@ -666,7 +666,7 @@ was added.
 
 New: `verinoda consolidate` re-verifies stale claims against the current tree and finds duplicate claims
 (`--merge` folds them, nothing deleted); `update --consolidate` or `claims.consolidate_on_update` in
-`.verinoda/config.json` runs it after each update. The MCP tool count is unchanged.
+`.verinoda/config.json` runs it after each update (never with `--merge`). No MCP tool changes.
 
 ### D60-D62
 
