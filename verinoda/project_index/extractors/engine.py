@@ -1487,6 +1487,70 @@ def _js_module_bound_names(root, source: bytes) -> set[str]:
     walk(root)
     return bound
 
+def _js_collect_body_bound_names(node, source: bytes, bound: set) -> None:
+    """Verinoda patch: every non-function name bound anywhere under *node* (a
+    declarator whose value is not a function, a parameter, a `catch` binding, a
+    `for … in/of` binding). See `_scan_js_nested_function_declarations`."""
+    for c in node.children:
+        t = c.type
+        if t == "variable_declarator":
+            value = c.child_by_field_name("value")
+            name = c.child_by_field_name("name")
+            if name is not None and (value is None or value.type not in _JS_FUNCTION_VALUE_TYPES):
+                _js_collect_pattern_idents(name, source, bound)
+        elif t == "formal_parameters":
+            _js_collect_pattern_idents(c, source, bound)
+            continue
+        elif t in _JS_FUNCTION_VALUE_TYPES:
+            solo = c.child_by_field_name("parameter")
+            if solo is not None:
+                _js_collect_pattern_idents(solo, source, bound)
+        elif t == "catch_clause":
+            param = c.child_by_field_name("parameter")
+            if param is not None:
+                _js_collect_pattern_idents(param, source, bound)
+        elif t == "for_in_statement":
+            left = c.child_by_field_name("left")
+            if left is not None:
+                _js_collect_pattern_idents(left, source, bound)
+        _js_collect_body_bound_names(c, source, bound)
+
+
+def _js_module_owner_names(root, source: bytes) -> dict[str, int | None]:
+    """Verinoda patch: the names a module-level statement binds, for member
+    assignments (`res.json = function json() {}`) to attach to.
+
+    A `var`/`let`/`const` declarator name maps to its 1-based line (the owner
+    node is created there when no other branch made one); a function or class
+    declaration name maps to None (its own node is the owner). Only statements
+    directly under the program (or an `export`) count, so a function's locals
+    never do.
+    """
+    owners: dict[str, int | None] = {}
+    for stmt in root.children:
+        decl = stmt
+        if decl.type == "export_statement":
+            decl = next((c for c in decl.children
+                         if c.type in ("lexical_declaration", "variable_declaration",
+                                       "function_declaration", "class_declaration",
+                                       "generator_function_declaration",
+                                       "abstract_class_declaration")), None)
+            if decl is None:
+                continue
+        if decl.type in ("lexical_declaration", "variable_declaration"):
+            for d in decl.children:
+                if d.type != "variable_declarator":
+                    continue
+                name = d.child_by_field_name("name")
+                if name is not None and name.type == "identifier":
+                    owners.setdefault(_read_text(name, source), d.start_point[0] + 1)
+        elif decl.type in ("function_declaration", "generator_function_declaration",
+                           "class_declaration", "abstract_class_declaration"):
+            name = decl.child_by_field_name("name")
+            if name is not None:
+                owners[_read_text(name, source)] = None
+    return owners
+
 def _js_import_binds_external(raw: str, str_path: str) -> bool:
     """True when a JS/TS import specifier names a module outside the scanned corpus.
 
@@ -2151,10 +2215,23 @@ def _require_imports_js(node, source: bytes, importer_nid: str, stem: str, edges
 _JS_FUNCTION_VALUE_TYPES = frozenset({"arrow_function", "function_expression", "function", "generator_function"})
 
 
+def _js_named_function_value(declarator):
+    """Verinoda patch: (name, value) of a `name = <function>` declarator, else None."""
+    name = declarator.child_by_field_name("name")
+    value = declarator.child_by_field_name("value")
+    if (name is not None and name.type == "identifier"
+            and value is not None and value.type in _JS_FUNCTION_VALUE_TYPES):
+        return name, value
+    return None
+
+
 def _scan_js_nested_function_declarations(
     container_node, parent_nid: str, *, source: bytes, config,
     add_node, add_edge, callable_def_nids: set | None,
     local_bound_names: dict | None, function_bodies: list,
+    scope_parents: dict[str, str] | None = None,
+    lexical_nids_by_scope: dict[str, dict[str, str]] | None = None,
+    captured_names: frozenset | None = None,
 ) -> None:
     """Emit a node + `contains` edge for every named `function`/generator
     declaration lexically nested inside *container_node*, scoped under
@@ -2168,9 +2245,55 @@ def _scan_js_nested_function_declarations(
     idiom that motivated #2653) is captured too. Anonymous closures themselves
     are not noded — they are attributed to the nearest enclosing named scope,
     which is *parent_nid*.
+
+    Verinoda patch: a local binding whose value is a function
+    (`const login = async (data) => {...}` inside a hook or component, also
+    `let`/`var` and a function expression) is a nested symbol too, scoped the
+    same way, so its calls are its own and not the enclosing function's. With
+    *scope_parents* / *lexical_nids_by_scope* the nested names are recorded per
+    scope, so a bare call binds to the definition visible from the caller.
     """
     if container_node is None:
         return
+    if captured_names is None and local_bound_names is not None:
+        # Verinoda patch: a nested function sees the names its enclosing scope
+        # binds (closure capture), so `f(config)` in it names that local, not a
+        # same-named function elsewhere. Every name bound anywhere in the
+        # enclosing body counts: an over-approximation that only drops edges.
+        captured = set(local_bound_names.get(parent_nid, ()))
+        _js_collect_body_bound_names(container_node, source, captured)
+        captured_names = frozenset(captured)
+
+    def _nested(name: str | None, line: int, func_node) -> None:
+        # A name that normalizes to nothing (e.g. minified `$`) would collapse
+        # the nested id onto parent_nid and leak the scan path (#1899); skip it.
+        if not name or not normalize_id(name):
+            return
+        nested_nid = _make_id(parent_nid, name)
+        add_node(nested_nid, f"{name}()", line)
+        add_edge(parent_nid, nested_nid, "contains", line)
+        if callable_def_nids is not None:
+            callable_def_nids.add(nested_nid)
+        if local_bound_names is not None:
+            local_bound_names[nested_nid] = (
+                _js_local_bound_names(func_node, source) | (captured_names or frozenset()))
+        if scope_parents is not None:
+            scope_parents[nested_nid] = parent_nid
+        if lexical_nids_by_scope is not None:
+            lexical_nids_by_scope.setdefault(parent_nid, {})[name] = nested_nid
+        nested_body = _find_body(func_node, config)
+        if nested_body:
+            function_bodies.append((nested_nid, nested_body))
+            _scan_js_nested_function_declarations(
+                nested_body, nested_nid, source=source, config=config,
+                add_node=add_node, add_edge=add_edge,
+                callable_def_nids=callable_def_nids,
+                local_bound_names=local_bound_names,
+                function_bodies=function_bodies,
+                scope_parents=scope_parents,
+                lexical_nids_by_scope=lexical_nids_by_scope,
+            )
+
     for child in container_node.children:
         if child.type in ("function_declaration", "generator_function_declaration"):
             name_node = child.child_by_field_name(config.name_field)
@@ -2180,27 +2303,12 @@ def _scan_js_nested_function_declarations(
                         name_node = c
                         break
             func_name = _read_text(name_node, source) if name_node else None
-            # A name that normalizes to nothing (e.g. minified `$`) would collapse
-            # the nested id onto parent_nid and leak the scan path (#1899); skip it.
-            if func_name and normalize_id(func_name):
-                line = child.start_point[0] + 1
-                nested_nid = _make_id(parent_nid, func_name)
-                add_node(nested_nid, f"{func_name}()", line)
-                add_edge(parent_nid, nested_nid, "contains", line)
-                if callable_def_nids is not None:
-                    callable_def_nids.add(nested_nid)
-                if local_bound_names is not None:
-                    local_bound_names[nested_nid] = _js_local_bound_names(child, source)
-                nested_body = _find_body(child, config)
-                if nested_body:
-                    function_bodies.append((nested_nid, nested_body))
-                    _scan_js_nested_function_declarations(
-                        nested_body, nested_nid, source=source, config=config,
-                        add_node=add_node, add_edge=add_edge,
-                        callable_def_nids=callable_def_nids,
-                        local_bound_names=local_bound_names,
-                        function_bodies=function_bodies,
-                    )
+            _nested(func_name, child.start_point[0] + 1, child)
+        elif (child.type == "variable_declarator"
+              and _js_named_function_value(child) is not None):
+            # Verinoda patch: `const f = () => {}` / `let f = function () {}` in a body
+            name_node, value = _js_named_function_value(child)
+            _nested(_read_text(name_node, source), child.start_point[0] + 1, value)
         elif child.type in _JS_FUNCTION_VALUE_TYPES:
             # An anonymous arrow/function expression is not itself a node, but a
             # `function` declared inside its body still belongs to the enclosing
@@ -2211,6 +2319,9 @@ def _scan_js_nested_function_declarations(
                 callable_def_nids=callable_def_nids,
                 local_bound_names=local_bound_names,
                 function_bodies=function_bodies,
+                scope_parents=scope_parents,
+                lexical_nids_by_scope=lexical_nids_by_scope,
+                captured_names=captured_names,
             )
         else:
             _scan_js_nested_function_declarations(
@@ -2219,6 +2330,9 @@ def _scan_js_nested_function_declarations(
                 callable_def_nids=callable_def_nids,
                 local_bound_names=local_bound_names,
                 function_bodies=function_bodies,
+                scope_parents=scope_parents,
+                lexical_nids_by_scope=lexical_nids_by_scope,
+                captured_names=captured_names,
             )
 
 
@@ -2428,8 +2542,17 @@ def _js_extra_walk(node, source: bytes, file_nid: str, stem: str, str_path: str,
                    callable_def_nids: set | None = None,
                    local_bound_names: dict | None = None,
                    closure_locals_by_body: dict | None = None,
-                   config=None) -> bool:
-    """Handle lexical_declaration (arrow functions, CJS requires, module-level const literals) for JS/TS. Returns True if handled."""
+                   config=None,
+                   scope_parents: dict | None = None,
+                   lexical_nids_by_scope: dict | None = None,
+                   js_module_owners: dict | None = None,
+                   js_assigned_members: dict | None = None) -> bool:
+    """Handle lexical_declaration (arrow functions, CJS requires, module-level const literals) for JS/TS. Returns True if handled.
+
+    Verinoda patch: *js_module_owners* (from :func:`_js_module_owner_names`) names the
+    module-level bindings whose assigned function members become methods;
+    *js_assigned_members* collects those methods (nid -> owner name) for the call pass.
+    """
     # CommonJS / prototype member assignments whose value is a function:
     #   exports.X = () => {}     → file-contained function  X()
     #   module.exports.X = fn    → file-contained function  X()
@@ -2476,6 +2599,74 @@ def _js_extra_walk(node, source: bytes, file_nid: str, stem: str, str_path: str,
                     function_bodies.append((file_nid, closure_body))
         assign = next((c for c in node.children
                        if c.type == "assignment_expression"), None)
+
+        def _object_member(target, line: int) -> str | None:
+            # Verinoda patch: `res.json = function json(obj) {}`,
+            # `app.use = (fn) => {}`, `Foo.create = function () {}` where the
+            # receiver is bound at module level in this file
+            # (`var res = Object.create(...)`, `var app = exports = module.exports = {}`,
+            # a function or class declaration). A method of that owner, as
+            # `Foo.prototype.bar` is; the owner of a variable gets its own node
+            # when nothing declared one. An undeclared receiver (`window.x = fn`)
+            # stays out (the #1077 guard). Returns the method's nid, else None.
+            if target is None or js_module_owners is None:
+                return None
+            kind, owner_name, member_name = target
+            if (kind != "object" or owner_name not in js_module_owners
+                    or not normalize_id(owner_name) or not normalize_id(member_name)):
+                return None
+            owner_nid = _make_id(stem, owner_name)
+            owner_line = js_module_owners[owner_name]
+            if owner_line is not None and owner_nid not in seen_ids:
+                add_node_fn(owner_nid, owner_name, owner_line)
+                add_edge_fn(file_nid, owner_nid, "contains", owner_line)
+            member_nid = _make_id(owner_nid, member_name)
+            if member_nid not in seen_ids:
+                add_node_fn(member_nid, f".{member_name}()", line)
+                add_edge_fn(owner_nid, member_nid, "method", line)
+            if js_assigned_members is not None:
+                js_assigned_members[member_nid] = owner_name
+            return member_nid
+
+        if assign is not None and (assign.child_by_field_name("right") is not None
+                                   and assign.child_by_field_name("right").type == "assignment_expression"):
+            # Verinoda patch: an alias chain, `res.contentType = res.type = function contentType() {}`
+            # (Express's `res.set = res.header = ...`, `req.get = req.header = ...`): every
+            # module-object member of the chain is a method, each walked as its own.
+            lefts = [assign.child_by_field_name("left")]
+            value = assign.child_by_field_name("right")
+            while value is not None and value.type == "assignment_expression":
+                lefts.append(value.child_by_field_name("left"))
+                value = value.child_by_field_name("right")
+            if value is not None and value.type in _JS_FUNCTION_VALUE_TYPES:
+                chain_nids = []
+                for left in lefts:
+                    if left is None:
+                        continue
+                    member_nid = _object_member(_js_member_assignment_target(left, source),
+                                                left.start_point[0] + 1)
+                    if member_nid is not None and member_nid not in chain_nids:
+                        chain_nids.append(member_nid)
+                body = value.child_by_field_name("body")
+                for i, member_nid in enumerate(chain_nids):
+                    if callable_def_nids is not None:
+                        callable_def_nids.add(member_nid)
+                    if local_bound_names is not None:
+                        local_bound_names[member_nid] = _js_local_bound_names(value, source)
+                    if body:
+                        function_bodies.append((member_nid, body))
+                        if i == len(chain_nids) - 1:  # nested symbols once, under the name next to the function
+                            _scan_js_nested_function_declarations(
+                                body, member_nid, source=source, config=config,
+                                add_node=add_node_fn, add_edge=add_edge_fn,
+                                callable_def_nids=callable_def_nids,
+                                local_bound_names=local_bound_names,
+                                function_bodies=function_bodies,
+                                scope_parents=scope_parents,
+                                lexical_nids_by_scope=lexical_nids_by_scope,
+                            )
+                if chain_nids:
+                    return True
         if assign is not None:
             value = assign.child_by_field_name("right")
             if value is not None:
@@ -2497,6 +2688,8 @@ def _js_extra_walk(node, source: bytes, file_nid: str, stem: str, str_path: str,
                             add_node_fn(nid, f".{member_name}()", line)
                             add_edge_fn(owner_nid, nid, "method", line)
                             handled = True
+                        elif (nid := _object_member(target, line)) is not None:
+                            handled = True
                         if handled:
                             if callable_def_nids is not None:
                                 callable_def_nids.add(nid)  # CJS/prototype fn is callable
@@ -2505,6 +2698,18 @@ def _js_extra_walk(node, source: bytes, file_nid: str, stem: str, str_path: str,
                             body = value.child_by_field_name("body")
                             if body:
                                 function_bodies.append((nid, body))
+                                # Verinoda patch: functions declared or bound in
+                                # the body are symbols of their own (as for a
+                                # module-level `const f = () => {}` below).
+                                _scan_js_nested_function_declarations(
+                                    body, nid, source=source, config=config,
+                                    add_node=add_node_fn, add_edge=add_edge_fn,
+                                    callable_def_nids=callable_def_nids,
+                                    local_bound_names=local_bound_names,
+                                    function_bodies=function_bodies,
+                                    scope_parents=scope_parents,
+                                    lexical_nids_by_scope=lexical_nids_by_scope,
+                                )
                             return True
                     elif kind == "exports":
                         # #3035: `exports.handler = wrapper(async (req) => …)` or `module.exports.handler = wrapper(…)`
@@ -2620,6 +2825,8 @@ def _js_extra_walk(node, source: bytes, file_nid: str, stem: str, str_path: str,
                                     callable_def_nids=callable_def_nids,
                                     local_bound_names=local_bound_names,
                                     function_bodies=function_bodies,
+                                    scope_parents=scope_parents,
+                                    lexical_nids_by_scope=lexical_nids_by_scope,
                                 )
                                 # #3408: `this.X = fn` members were captured only
                                 # when the enclosing function was a DECLARATION;
@@ -3649,6 +3856,14 @@ def _extract_generic(
         if config.ts_module in ("tree_sitter_javascript", "tree_sitter_typescript")
         else set()
     )
+    # Verinoda patch: module-level bindings whose assigned function members
+    # (`res.json = function json() {}`) are methods, and those methods.
+    js_module_owners: dict[str, int | None] = (
+        _js_module_owner_names(root, source)
+        if config.ts_module in ("tree_sitter_javascript", "tree_sitter_typescript")
+        else {}
+    )
+    js_assigned_members: dict[str, str] = {}
     nodes: list[dict] = []
     edges: list[dict] = []
     seen_ids: set[str] = set()
@@ -5514,6 +5729,8 @@ def _extract_generic(
                         callable_def_nids=callable_def_nids,
                         local_bound_names=local_bound_names,
                         function_bodies=function_bodies,
+                        scope_parents=scope_parents,
+                        lexical_nids_by_scope=lexical_nids_by_scope,
                     )
                 if config.ts_module == "tree_sitter_python":
                     _scan_python_nested_function_declarations(
@@ -5617,7 +5834,11 @@ def _extract_generic(
                               nodes, edges, seen_ids, function_bodies,
                               parent_class_nid, add_node, add_edge,
                               callable_def_nids, local_bound_names,
-                              closure_locals_by_body, config=config):
+                              closure_locals_by_body, config=config,
+                              scope_parents=scope_parents,
+                              lexical_nids_by_scope=lexical_nids_by_scope,
+                              js_module_owners=js_module_owners,
+                              js_assigned_members=js_assigned_members):
                 return
 
         # TS enum members, and namespace / module containers
@@ -6663,10 +6884,25 @@ def _extract_generic(
                     # ... unless the receiver names a class or object this file defines with that method (Ruby
                     # `Foo.make`)
                     _object_method = _methods_of.get(label_to_nid.get(member_receiver, ""), {}).get(callee_name)
+                # Verinoda patch: `res.send()` where `res` is the module-level object
+                # this file assigns `res.send = function send() {}` to (and no local
+                # of the caller shadows it) binds to that method.
+                _js_owner_method = None
+                _js_own_method = None
+                if (js_assigned_members and is_member_call and member_receiver
+                        and not own_receiver and not is_this_field_call and not js_super_receiver
+                        and member_receiver in js_module_owners
+                        and member_receiver not in (
+                            local_bound_names.get(caller_nid, frozenset()) | extra_locals)):
+                    _hit = _methods_of.get(_make_id(stem, member_receiver), {}).get(callee_name)
+                    if _hit in js_assigned_members:
+                        _js_owner_method = _hit
                 if _php_target is not None:
                     tgt_nid = _php_target
                 elif _object_method is not None:
                     tgt_nid = _object_method
+                elif _js_owner_method is not None:
+                    tgt_nid = _js_owner_method
                 elif _python_defer or _java_defer or _builtin_member_call or _foreign_receiver_defer or (
                     is_member_call
                     and member_receiver
@@ -6704,7 +6940,12 @@ def _extract_generic(
                                 _own_nid = _inherited_method(_cls, callee_name)[0]
                     if _own_nid is not None:
                         tgt_nid = _own_nid
-                    elif config.ts_module == "tree_sitter_python" and not is_member_call:
+                        _js_own_method = _own_nid
+                    elif not is_member_call and (
+                        config.ts_module == "tree_sitter_python"
+                        # Verinoda patch: JS/TS nested functions are scoped too
+                        or config.ts_module in ("tree_sitter_javascript", "tree_sitter_typescript")
+                    ):
                         curr_scope = caller_nid
                         tgt_nid = None
                         while curr_scope:
@@ -6714,8 +6955,18 @@ def _extract_generic(
                             curr_scope = scope_parents.get(curr_scope)
                         if not tgt_nid:
                             tgt_nid = label_to_nid.get(callee_name)
+                            # Verinoda patch: a JS/TS nested function is visible only
+                            # in its own scope, which the walk above has searched.
+                            if (tgt_nid in scope_parents and config.ts_module in (
+                                    "tree_sitter_javascript", "tree_sitter_typescript")):
+                                tgt_nid = None
                     else:
                         tgt_nid = label_to_nid.get(callee_name)
+                        # Verinoda patch: and never a property of an object
+                        # (`controller.abort()` inside a nested `const abort`).
+                        if (tgt_nid in scope_parents and config.ts_module in (
+                                "tree_sitter_javascript", "tree_sitter_typescript")):
+                            tgt_nid = None
                     # A qualified `new A.B.Foo()` whose bare name matches only a
                     # sourceless stub in this file would bind the call to the stub
                     # and never reach _resolve_csharp_qualified_calls, the one pass
@@ -6726,6 +6977,14 @@ def _extract_generic(
                         and not nid_to_sf.get(tgt_nid)
                     ):
                         tgt_nid = None
+                # Verinoda patch: a method assigned to a module-level object
+                # (`res.send = function send() {}`) is reached only through that
+                # object or the method's own `this`. A bare `send(...)` (the
+                # `send` package in Express) or `app.render()` on another object
+                # is not it; such a call is left to the cross-file passes.
+                if (tgt_nid is not None and tgt_nid in js_assigned_members
+                        and tgt_nid != _js_owner_method and tgt_nid != _js_own_method):
+                    tgt_nid = None
                 # A name-only reference can leave a source-less stub behind when
                 # the target is outside the scanned corpus (for example,
                 # ``HTTPException`` imported from FastAPI). It is useful for the
