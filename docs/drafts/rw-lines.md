@@ -102,7 +102,8 @@ Windows 11, Python 3.13, one process at a time. The clones are the pinned ones i
 The scan and update times are single runs and are within run-to-run noise. I did not run the other
 8 repositories.
 
-After the review round (merged with competitor-backlog at f8a4721), gson again: gold v1 10/10,
+After the review round (run on the merge with competitor-backlog f8a4721; the later 7071ed9 only
+changes the tq-audit report and table), gson again: gold v1 10/10,
 0 crashes, 0 timeouts, clean after revert, scan 27.9 s, update 33.9 s (single run), and the same
 `review` output (exit 3, 76798 bytes) as before the round. sqlmodel was not run again: the round
 changes only tree-sitter spans and lookups, and Python spans and lines take another path.
@@ -128,6 +129,9 @@ changes only tree-sitter spans and lookups, and Python spans and lines take anot
   constant) ends before the next symbol's line. Symbols below an annotation are now at their name
   line, so such a span can grow by the annotation's lines (`RED` in `public enum E { RED }` followed
   by an annotated record: (4,5) before, (4,6) now).
+- This changes engine files (`index.py`, `project_index/`), so the `measured: k/n held-out` part of
+  `verinoda tq` answers is hidden until `verinoda benchmark tq-audit` is run again and the table
+  committed. I did not run the audit here.
 - Kotlin `@Deprecated("y")` on the line above `object Obj`: the grammar leaves the annotation
   outside the object's node, so the span starts at `object`, before and after this change.
 - Only Java, Kotlin, C# and TS (methods and classes) and Python are covered by tests. PHP
