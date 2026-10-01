@@ -2669,9 +2669,19 @@ def _r_debug_strategy(r: dict) -> None:
             print(f"      + {ln.strip()[:110]}")
     runs = r.get("runs")
     for run in runs if isinstance(runs, list) else []:  # bisect's runs; rerun's "runs" is a count
-        print(f"  {'recorded' if run.get('recorded') else 'ran'} {run['commit'][:12]}: {run['outcome']} "
-              f"(attempt {run['attempt']})" + (f" - for the symptom: {run['for_the_symptom']}"
-                                                if run.get("for_the_symptom") else ""))
+        at = (f"{run['commit'][:12]}: {run['outcome']} (attempt {run['attempt']})" if "commit" in run else
+              f"the tree of attempt {run['attempt']}: {run['outcome']} (attempt {run['run']}, "
+              f"{run.get('experiment_id') or 'no run id'})")
+        print(f"  {'recorded' if run.get('recorded') else 'ran'} {at}"
+              + (f" - for the symptom: {run['for_the_symptom']}" if run.get("for_the_symptom") else ""))
+    for sk in r.get("skipped") or []:
+        if isinstance(sk, dict):
+            print(f"  skipped attempt {sk['attempt']}: {sk['why']}")
+    if r.get("first_bad_attempt"):
+        fb = r["first_bad_attempt"]
+        print(f"  first failing attempt: {fb['attempt']} ({fb['run_by']}) {fb['hypothesis'][:80]}")
+        for c in fb.get("changed") or []:
+            print(f"      {c['status']} {c['path']} {', '.join(c.get('symbols') or [])}")
     for ln in r.get("notes") or []:
         print(f"  note: {ln}")
     for test, d in ((r.get("trace_diff") or {}).get("tests") or {}).items():
@@ -2828,6 +2838,14 @@ def cmd_debug(args) -> int:
         if sub == "differential":
             res = debug.differential(st, repo, args.session, base=args.base, prepare=args.prepare,
                                      trace=args.trace, overlay=args.overlay)
+        elif sub == "bisect" and args.attempts:
+            if args.overlay:
+                raise SystemExit("error: --overlay applies to bisect over commits, not --attempts")
+            try:
+                good, bad = (None if v is None else int(v) for v in (args.good, args.bad))
+            except ValueError:
+                raise SystemExit("error: with --attempts, --good and --bad are attempt numbers")
+            res = debug.bisect_attempts(st, repo, args.session, good=good, bad=bad, max_runs=args.max_runs)
         elif sub == "bisect":
             res = debug.bisect(st, repo, args.session, good=args.good, bad=args.bad, overlay=args.overlay,
                                max_runs=args.max_runs)
@@ -4070,6 +4088,9 @@ def build_parser() -> argparse.ArgumentParser:
     c = add("bisect", cmd_debug, "strategy: binary search over commits (throw-away copies) for the first failing "
                                  "one", parent=dsub)
     c.add_argument("--session")
+    c.add_argument("--attempts", action="store_true",
+                   help="search the session's own attempts (agent steps included) instead of commits: each "
+                        "attempt's recorded tree is rebuilt in a throw-away copy; --good/--bad are attempt numbers")
     c.add_argument("--good", help="a commit where the repro passes (default: a known passing run, else step back)")
     c.add_argument("--bad", help="a commit where it fails (default: the session base)")
     c.add_argument("--overlay", action="append", metavar="PATH",

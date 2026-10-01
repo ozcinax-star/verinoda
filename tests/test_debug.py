@@ -961,3 +961,50 @@ def test_a_failure_the_edits_introduced_does_not_let_a_passing_baseline_session_
     with pytest.raises(debug.DebugError, match="came after an edit"):
         debug.close(st, repo, resolved_by=2)
     assert debug.close(st, repo, abandoned=True, note="not reproduced")["status"] == "abandoned"
+
+
+def _agent_step(st, repo, hypothesis: str) -> dict:
+    return debug.attempt(st, repo, hypothesis=hypothesis, observed_output="2 passed in 0.1s\n", exit_code=0,
+                         command=PT)
+
+
+def test_bisect_over_attempts_names_the_agent_step_that_broke_the_repro(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    st = open_store(repo)
+    assert debug.start(st, repo, "totals", PT)["outcome"] == "pass"
+    (repo / "README.md").unlink()  # step 1: a file left out of the tree (replayed as a deletion)
+    _agent_step(st, repo, "drop the readme")
+    _sub(repo, "orders/pricing.py", 'i["qty"]', 'i["quantity"]')  # step 2: the break, reported as passing
+    _agent_step(st, repo, "rename the quantity key")
+    _sub(repo, "orders/config.py", "Runtime configuration", "Runtime configuration (ORDERS_*)")
+    _agent_step(st, repo, "document the settings")
+    assert debug.attempt(st, repo, hypothesis="does the suite still pass?")["outcome"] == "fail"
+    before = _digest(repo)
+    b = debug.bisect_attempts(st, repo)
+    assert _digest(repo) == before  # the user's tree is never touched
+    # attempts 3 and 4 ran on one tree: one step, named by its first attempt; Verinoda's run of it (4) is the bad end
+    assert b["status"] == "found" and (b["good"], b["bad"]) == (0, 3) and b["runs_total"] == 2
+    assert b["runs"][0]["run"] == 4 and b["runs"][0]["recorded"]
+    fb = b["first_bad_attempt"]
+    assert fb["attempt"] == 2 and fb["run_by"] == "agent" and fb["reported_outcome"] == "pass"
+    assert fb["previous"]["attempt"] == 1 and fb["fail_run"]["experiment_id"].startswith("exp")
+    assert [(c["path"], c["symbols"]) for c in fb["changed"]] == [("orders/pricing.py", ["compute_total"])]
+    assert "attempt 2" in b["conclusion"] and "reported that step as passing" in b["conclusion"]
+    assert not any(r.get("tree_differs") for r in b["runs"])  # the replayed trees are the recorded ones
+    rows = st.all("SELECT copy_source FROM debug_attempts WHERE kind = 'bisect'")
+    assert sorted(r["copy_source"]["attempt"] for r in rows) == [1, 2]
+    assert all(r["copy_source"]["kind"] == "attempt" for r in rows)
+    again = debug.bisect_attempts(st, repo)  # every step it needs is recorded now: nothing runs
+    assert again["runs_total"] == 0 and again["first_bad_attempt"]["attempt"] == 2
+    assert all(r.get("recorded") for r in again["runs"])
+    with pytest.raises(debug.DebugError, match="not a step"):
+        debug.bisect_attempts(st, repo, good=5)  # a strategy run is not a step
+    u = debug.bisect_attempts(st, repo, good=2, bad=4)
+    assert u["status"] == "unknown" and "does not pass on the tree of attempt 2" in u["conclusion"]
+    r = str(repo)
+    assert cli.main(["debug", "bisect", "--attempts", "--repo", r]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("bisect_attempts: the repro passes on the tree of attempt 1")
+    assert "first failing attempt: 2 (agent) rename the quantity key" in out
+    with pytest.raises(SystemExit, match="attempt numbers"):
+        cli.main(["debug", "bisect", "--attempts", "--good", "abc", "--repo", r])

@@ -319,6 +319,10 @@ def _tree_record(repo: Path, base: str, ids: dict[str, str], source: dict, prior
                     ch["base"][rel] = bnorm
     else:
         ch = treestate.changes_from_ids(repo, base, ids, treestate.base_ids(repo, base))
+    if source.get("kind") == "attempt":  # a recorded tree replayed: its contents are in the blob store, not on disk
+        got = {p: treestate.get_blob(repo, c) for p, c in ch["tree_files"].items() if c}
+        ch["contents"] = {p: d for p, d in got.items() if d is not None}
+        ch["drift"] = []
     for data in ch["contents"].values():
         treestate.put_blob(repo, data)
     known: dict[tuple[str, str], dict] = {}
@@ -488,8 +492,11 @@ def _passed_text(a: dict, sess: dict) -> str:
 def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothesis: str, expect: str = "pass",
             command=None, kind: str = "fix", observed_output: bytes | str | None = None,
             exit_code: int | None = None, trace: bool | None = None, timeout: float | None = None,
-            ref: str | None = None, overlay: list[str] | None = None) -> dict:
-    """Record one attempt (``verinoda debug try``). See the module docstring."""
+            ref: str | None = None, overlay: list[str] | None = None, replay_of: dict | None = None) -> dict:
+    """Record one attempt (``verinoda debug try``). See the module docstring.
+
+    ``replay_of`` (an earlier attempt's row): run on that attempt's recorded tree, rebuilt in the copy from
+    the session base and the blob store (:func:`bisect_attempts`)."""
     t_start = time.perf_counter()
     steps: dict[str, float] = {}
     t_run = t_start
@@ -515,6 +522,14 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
     prior = _attempts(store, sess["id"])
     n = len(prior)
     aid = new_id("dba")
+    replay = None
+    if replay_of is not None:
+        if agent or ref or overlay:
+            raise DebugError("a replayed tree is run by Verinoda on the session base; give no ref, overlay or output")
+        replay = _replay_files(repo, replay_of)
+        if replay is None:
+            raise DebugError(f"the tree of attempt {replay_of['n']} cannot be rebuilt (a file's content was not kept)")
+        ref = base
     if agent and ref:
         raise DebugError("an agent-reported run is recorded against the working tree (or, with kind "
                          "differential, the session base); do not give ref")
@@ -573,8 +588,12 @@ def attempt(store: Store, repo: Path, session_id: str | None = None, *, hypothes
         t_run = time.perf_counter()
         exp = experiments.run(store, repo, run_argv, hypothesis=f"[{sess['id']} attempt {n}] {hypothesis}",
                               expect=expect, timeout=t, plugins=plugins if experiments._is_pytest(argv) else None,
-                              env_extra=env_extra or None, file_ids=ids, ref=ref, overlay=overlay)
+                              env_extra=env_extra or None, file_ids=ids, ref=ref, overlay=overlay, replay=replay)
         source = exp["source"]
+        if replay_of is not None:
+            source = {"kind": "attempt", "attempt": replay_of["n"], "commit": base,
+                      "recorded_tree": replay_of.get("tree_hash"), "replayed": source.get("replayed", 0),
+                      **({"skipped": source["skipped"]} if source.get("skipped") else {})}
         tree_hash = exp["tree"]["hash"]
         outcome = exp["outcome"]
         code = exp.get("exit_code")
@@ -1569,6 +1588,218 @@ def bisect(store: Store, repo: Path, session_id: str | None = None, *, good: str
                              "symptom's is unknown (no per-test outcomes or signature to compare): counted as failing")
     if notes:
         out["notes"] = notes
+    return out
+
+
+def _replay_files(repo: Path, a: dict) -> dict[str, bytes | None] | None:
+    """The files of attempt ``a``'s tree that differ from the session base, from the blob store (None for a
+    file left out); None when a changed file's content was not kept."""
+    out: dict[str, bytes | None] = {}
+    for p, cid in (a.get("tree_files") or {}).items():
+        if cid is None:
+            out[p] = None
+            continue
+        data = treestate.get_blob(repo, cid)
+        if data is None:
+            return None
+        out[p] = data
+    return out
+
+
+def _steps(attempts: list[dict]) -> list[dict]:
+    """The ledger's steps on the working tree, oldest first: an agent's edit shows as a new tree. Consecutive
+    attempts on one tree are one step (named by its first attempt); strategy runs are not steps."""
+    out: list[dict] = []
+    for a in attempts:
+        if a["kind"] not in LOOP_KINDS or (a.get("copy_source") or {}).get("kind", "worktree") != "worktree":
+            continue
+        if out and out[-1]["tree_hash"] == a.get("tree_hash"):
+            out[-1]["attempts"].append(a["n"])
+            continue
+        out.append({"n": a["n"], "tree_hash": a.get("tree_hash"), "attempts": [a["n"]], "row": a})
+    return out
+
+
+def _recorded_step(attempts: list[dict], sess: dict, step: dict) -> dict | None:
+    """The latest pass/fail run Verinoda made of the session's repro on the step's tree: on the working tree
+    with that tree hash, or a replay of one of the step's attempts."""
+    for a in reversed(attempts):
+        if a["run_by"] != "verinoda" or not _is_repro(a, sess) or a["outcome"] not in ("pass", "fail"):
+            continue
+        src = a.get("copy_source") or {}
+        kind = src.get("kind", "worktree")
+        if kind == "attempt" and src.get("attempt") in step["attempts"]:
+            return a
+        if kind == "worktree" and a["kind"] in LOOP_KINDS and a.get("tree_hash") == step["tree_hash"]:
+            return a
+    return None
+
+
+def bisect_attempts(store: Store, repo: Path, session_id: str | None = None, *, good: int | None = None,
+                    bad: int | None = None, max_runs: int | None = None) -> dict:
+    """Binary search over the ledger's own steps for the first attempt whose tree fails the repro.
+
+    Each step is a tree the session recorded on the working tree (Verinoda's runs and agent-reported ones
+    alike). A step is judged by a run Verinoda made of the repro on that tree - recorded earlier in the
+    session, or now on a throw-away copy of the session base with the step's recorded files laid over it
+    (from the blob store; the user's tree is never touched). The bad end (default: the latest step) must
+    fail and the good end (default: the latest step before it with a passing run, else the first step)
+    must pass; otherwise it says so and stops ("unknown"). Steps that cannot be rebuilt or run are skipped.
+    """
+    repo = Path(repo).resolve()
+    sess = _session(store, session_id)
+    budget = max(1, int(max_runs if max_runs is not None else _cfg(repo).get("bisect_max_runs", 12)))
+    attempts = _attempts(store, sess["id"])
+    steps = _steps(attempts)
+    head = {"session": sess["id"], "strategy": "bisect_attempts"}
+    if not steps:
+        raise DebugError("the session has no attempts on the working tree to bisect")
+
+    def index_of(n: int, which: str) -> int:
+        for i, s in enumerate(steps):
+            if n in s["attempts"]:
+                return i
+        raise DebugError(f"attempt {n} is not a step on the working tree (no such attempt, or a strategy run); "
+                         f"give a {which} attempt listed by `verinoda debug status`")
+
+    runs: list[dict] = []
+    skipped: list[dict] = []
+    symptom: dict = {"tests": set(), "coarse": None, "attempt": None}
+
+    def ran() -> int:
+        return sum(1 for r in runs if not r.get("recorded"))
+
+    def outcome_at(i: int, why: str) -> tuple[str | None, dict | None]:
+        s = steps[i]
+        rec = _recorded_step(_attempts(store, sess["id"]), sess, s)
+        recorded = rec is not None
+        if rec is None:
+            if ran() >= budget:
+                return None, None
+            if _replay_files(repo, s["row"]) is None:
+                skipped.append({"attempt": s["n"], "why": "a changed file's content was not kept"})
+                return "skipped", None
+            got = attempt(store, repo, sess["id"], hypothesis=f"bisect over attempts: {why} (tree of attempt "
+                                                              f"{s['n']})", expect="pass", kind="bisect",
+                          replay_of=s["row"])
+            rec = _attempts_by_n(store, sess["id"]).get(got["attempt"]) or {"outcome": got["outcome"],
+                                                                            "n": got["attempt"]}
+        entry = {"attempt": s["n"], "outcome": rec["outcome"], "run": rec["n"],
+                 "experiment_id": rec.get("experiment_id"), "evidence_id": rec.get("evidence_id")}
+        if recorded:
+            entry["recorded"] = True
+        elif rec.get("tree_hash") and s["tree_hash"] and rec["tree_hash"] != s["tree_hash"]:
+            entry["tree_differs"] = True
+        verdict = rec["outcome"]
+        if symptom["attempt"] is not None:
+            verdict, vwhy = judge_at(rec, symptom)
+            if rec["outcome"] == "fail" and verdict != "fail":
+                entry["for_the_symptom"] = f"{verdict}: {vwhy}"
+            verdict = "fail" if verdict in ("fail?", "part") else verdict
+        runs.append(entry)
+        return verdict, entry
+
+    def stop(why: str, next_step: str) -> dict:
+        return {**head, "status": "unknown", "runs": runs, "runs_total": ran(), "skipped": skipped,
+                "conclusion": why, "next_step": next_step}
+
+    hi = index_of(bad, "bad") if bad is not None else len(steps) - 1
+    o_bad, e_bad = outcome_at(hi, "the bad end: does the repro fail here?")
+    n_bad = steps[hi]["n"]
+    if o_bad is None:
+        return stop("the run budget ended before the bad end was run", "raise --max-runs")
+    if o_bad != "fail":
+        return stop(f"the repro does not fail on the tree of attempt {n_bad} ({o_bad}"
+                    + (f", run {e_bad['run']}" if e_bad else "") + "): there is no failing step to search for",
+                    "give --bad <an attempt whose tree fails>")
+    bad_row = _attempts_by_n(store, sess["id"]).get(e_bad["run"]) or {}
+    symptom.update({"tests": set((bad_row.get("signature") or {}).get("failed_tests") or []),
+                    "coarse": bad_row.get("sig_coarse"), "attempt": e_bad["run"]})
+    if good is not None:
+        lo = index_of(good, "good")
+        if lo >= hi:
+            raise DebugError(f"attempt {good} is not before attempt {n_bad}; bisect needs good before bad")
+    else:
+        now_rows = _attempts(store, sess["id"])
+        lo = next((i for i in range(hi - 1, -1, -1)
+                   if ((_recorded_step(now_rows, sess, steps[i]) or {}).get("outcome") == "pass")), 0)
+        if lo >= hi:
+            return stop(f"attempt {n_bad} is the session's first step: there is no earlier attempt to compare with",
+                        "`verinoda debug bisect` searches the commits before the session base")
+    o_good, e_good = outcome_at(lo, "the good end: does the repro pass here?")
+    if o_good is None:
+        return stop("the run budget ended before the good end was run", "raise --max-runs")
+    if o_good != "pass":
+        return stop(f"the repro does not pass on the tree of attempt {steps[lo]['n']} ({o_good}"
+                    + (f", run {e_good['run']}" if e_good else "") + "): no earlier step of the session passes, so "
+                    "the failure predates these attempts",
+                    "`verinoda debug bisect` searches the commits before the session base; or give --good <an "
+                    "attempt whose tree passes>")
+    seen: dict[int, dict] = {hi: e_bad, lo: e_good}
+    first_lo = lo
+    while hi - lo > 1 and ran() < budget:
+        mid = (lo + hi) // 2
+        order = [mid] + [x for k in range(1, hi - lo) for x in (mid + k, mid - k) if lo < x < hi]
+        verdict = None
+        for i in order:
+            if i in seen or any(sk["attempt"] == steps[i]["n"] for sk in skipped) or ran() >= budget:
+                continue
+            o, e = outcome_at(i, "does the repro fail here?")
+            if o in ("pass", "fail"):
+                seen[i] = e
+                verdict = (i, o)
+                break
+            if o is not None and o != "skipped":
+                skipped.append({"attempt": steps[i]["n"], "why": e.get("for_the_symptom") if e else o})
+        if verdict is None:
+            break
+        i, o = verdict
+        if o == "pass":
+            lo = i
+        else:
+            hi = i
+    status = "found" if hi - lo == 1 else "range"
+    estimate = math.ceil(math.log2(max(1, hi - first_lo)))
+    out = {**head, "status": status, "good": steps[first_lo]["n"], "bad": n_bad, "steps": len(steps),
+           "runs": runs, "runs_total": ran(), "skipped": skipped,
+           "cost": {"estimate_runs": estimate + 2, "estimate_s": round((estimate + 2) * _duration(attempts), 1)},
+           "limits": ["each step ran in a copy of the session base with that attempt's recorded files laid over "
+                      "it (line endings as stored: LF); dependency or environment changes are not modelled",
+                      "one run per tree: a flaky test can move the boundary (`verinoda debug rerun` on a tree)",
+                      "steps are the session's attempts in order; an edit reverted and made again between "
+                      "them breaks bisect's one-boundary assumption"]}
+    if any(r.get("tree_differs") for r in runs):
+        out["limits"].append("a rebuilt tree's hash differs from the recorded one (files outside the recorded "
+                             "changes, such as untracked or skipped ones, differ): "
+                             + ", ".join(f"attempt {r['attempt']}" for r in runs if r.get("tree_differs")))
+    passed, failed = steps[lo], steps[hi]
+    if status == "found":
+        row = failed["row"]
+        changed = treestate.diff_trees(repo, sess["base_commit"], passed["row"].get("tree_files") or {},
+                                       row.get("tree_files") or {}, base_map=treestate.base_ids(repo,
+                                                                                                sess["base_commit"]))
+        first = {"attempt": failed["n"], "kind": row["kind"], "run_by": row["run_by"],
+                 "hypothesis": row["hypothesis"], "tree": failed["tree_hash"], "fail_run": seen[hi],
+                 "previous": {"attempt": passed["n"], "pass_run": seen[lo]},
+                 "changed": [{"path": c["path"], "status": c.get("status"), "symbols": (c.get("symbols") or [])[:8],
+                              "lines": [h["new"] for h in (c.get("hunks") or [])][:5]}
+                             for c in changed[:LIST_CAP]],
+                 "changed_total": len(changed)}
+        if row["run_by"] == "agent":
+            first["reported_outcome"] = row["outcome"]
+        out["first_bad_attempt"] = first
+        ev = ", ".join(x for x in (seen[lo].get("experiment_id"), seen[hi].get("experiment_id")) if x)
+        out["conclusion"] = (f"the repro passes on the tree of attempt {passed['n']} (run {seen[lo]['run']}) and "
+                             f"fails on the tree of attempt {failed['n']} (run {seen[hi]['run']}; {ev}): the "
+                             f"change made for attempt {failed['n']} ({row['hypothesis'][:80]!r}, "
+                             f"{'agent-reported' if row['run_by'] == 'agent' else 'run by Verinoda'}) is where "
+                             "to look")
+        if row["run_by"] == "agent" and row["outcome"] == "pass":
+            out["conclusion"] += "; the agent reported that step as passing"
+    else:
+        out["conclusion"] = (f"the first failing step is between attempt {passed['n']} (passes, run "
+                             f"{seen[lo]['run']}) and attempt {failed['n']} (fails, run {seen[hi]['run']}); the run "
+                             "budget or skipped steps left it open")
     return out
 
 
