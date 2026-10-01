@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D148)
+## Upgrading from 0.4.0 (D137-D149)
 
 ### D137: Trigram regex index
 
@@ -134,6 +134,14 @@ re-runs stale search facts within 20 facts and 10 s (an `update --fast` that def
 them), which `facts.refresh_on_update: false` in `.verinoda/config.json` turns off. `query --json`, MCP
 `project_query` and `analyze` gain a `facts` list when the question names a fact (a `facts_error` when they
 could not be read). No MCP tool added; the tool count is unchanged.
+
+### D149: Native file watcher
+
+`verinoda ui --watch` is woken by the operating system's file events (Windows `ReadDirectoryChangesW`, Linux
+`inotify`, `watchdog` elsewhere when installed) and falls back to polling; nothing to configure. `/api/version`'s
+`watch` block says which (`backend`, `note`). New: `verinoda mcp serve --watch` runs a fast update when the project's files
+change; add `--watch` to the server's arguments in the agent's MCP configuration to use it. `ui.server.Watcher`
+moved to `verinoda.fswatch.Watcher` (still importable from the old place).
 
 ## Upgrading from 0.3.2 (D60-D136)
 

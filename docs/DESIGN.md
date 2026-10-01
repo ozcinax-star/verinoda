@@ -12521,6 +12521,97 @@ connection is not made, a second retire is a refusal, the write lock is held fro
 is a refusal, an unknown `--status` is exit 2; an update with the graph deferred only lowers and the facts' time is
 reported; a lead needs the fact's whole name.
 
+## 122. Native file watcher (D149, 2026-10-01)
+
+### 122.1 Why
+
+`verinoda ui --watch` found edits by listing the tree every two seconds and comparing each file's size and
+time. On Verinoda's own checkout one listing takes 0.92 s, so the watcher spaced its looks out to about 9 s and
+needed two equal looks before updating: an edit reached the update 12-22 s after the save, and an idle watcher
+still spent 1.5 s of CPU every 20 s. The MCP server had no watcher at all: an agent's edit stayed out of the
+index until it called `index_update` (the reads only said which files had changed). narsil-mcp and
+codebase-memory-mcp update from operating-system file events.
+
+### 122.2 Decisions
+
+- One module, `fswatch.py`, holds the `Watcher` (moved from `ui/server.py`, which re-exports it) and the event
+  sources. No new dependency: the sources call the system through `ctypes`. On Windows `ReadDirectoryChangesW` on
+  the project root, recursive (one handle for the tree, a 64 KB buffer: the limit over a network share), read
+  synchronously by a daemon thread that `CancelIoEx` stops. On Linux `inotify`, one watch per folder (the ignored
+  folders left out), a folder that appears later watched when its event arrives; when the per-user watch limit
+  is reached the folders past it are left to the periodic look and the note says so. Elsewhere (macOS) the
+  `watchdog` package when it is installed; otherwise polling.
+- An event only wakes the watcher. What decides is still the tree's signature (`snapshot.list_files`, each file's
+  size and modification time), so an event for an ignored file, a save that leaves the file as it was, or a lost
+  event never causes a wrong update, only a look. Events under `.verinoda`, `.git`, virtual environments,
+  `node_modules`, caches, editor folders and `*.egg-info` are dropped before they wake anything: an update's own
+  writes do not start another update. A full system buffer (`ReadDirectoryChangesW` returning no bytes,
+  `IN_Q_OVERFLOW`) or a cut record counts as "something changed".
+- After an event the watcher waits until no event came for 0.3 s (at most 5 s), so a save that writes several
+  files is one update. The tree is still looked at every 60 s without an event, for changes no event reports (a
+  network share, a folder past the watch limit). A source that fails while running (its read returns an error)
+  switches the watcher to polling, and the status says why.
+- `verinoda mcp serve --watch` starts the same watcher in the server process, with the fast update
+  `index_update` runs (`update --fast`: the changed files are taken in at once and the graph is rebuilt by a
+  background process), so the next tool call answers from the edited code; the server's kept graph reloads when
+  `graph.json` changes, as before. Off by default: a save then costs an update. Without an index the flag only
+  says so (the first scan stays `index_update`'s). It does not wait for the build lock: while another build runs,
+  it does nothing and looks again after the poll interval (2 s), not at the next event.
+- `ui --watch`'s status (`/api/version`) gains `backend` (`ReadDirectoryChangesW`, `inotify`, `watchdog (...)`,
+  `poll`) and `note` (why there are no events, the watch limit).
+
+- Review round: a file saved while an update ran was lost (the next comparison used a look taken after the
+  update, which already held it): the watcher now compares with the look taken before the update, so such a save
+  updates once more. The Windows reader owns its handle and closes it when it ends (a failed reader leaked it);
+  `close()` cancels with `CancelIoEx` until the reader has ended, since a read started just after one cancel
+  blocked `close()` until the next file event. On Linux the reader owns the descriptor too, and the root's own
+  delete or move stops the source (the watcher then polls) instead of leaving a source with no watches. A
+  project folder that is deleted or moved stops the watcher with the reason; an update had created it again
+  (`.verinoda/` and all). A refused index build is an error, not a counted update. `watchdog`'s observer thread
+  dying counts as the source ending. The MCP server's message without an index says to restart after
+  `index_update`.
+
+### 122.3 Measured
+
+Windows 11, Python 3.13, Verinoda's own checkout as the project (2,735 files listed), the watcher with a no-op
+update, five saves of one file one second apart:
+
+- One look at the tree (the signature): median 0.92 s (min 0.91 s) of five.
+- Save to update, with `ReadDirectoryChangesW`: median 1.22 s (1.22-1.31 s): 0.3 s of quiet plus one look.
+- Save to update, polling (the old watcher, unchanged): median 20.4 s (12.1-22.2 s).
+- Idle for 20 s after the saves: 0.00 s of CPU and no wakeup with events; 1.52 s of CPU polling.
+- End to end on the orders example (a copy, scanned, `mcp serve --watch`'s settings): a new function written to a
+  file is in `graph.json` 6.6 s after the save, background graph build included (test run time).
+
+### 122.4 Not done
+
+- Events are filtered by folder name only, not by `.gitignore`: an ignored file written continuously (a log) wakes
+  a look every few seconds (about 5 s with continuous writes; each look costs a listing, 0.92 s on Verinoda's
+  own checkout), which polling did not cost more. Tracked files under `.vscode`, `.idea` or `venv` are in the
+  signature but their events are dropped: they wait for the 60 s look.
+- A save that lands while the update records its snapshot can be taken as indexed with the graph of the text
+  before it (an `update` race, not the watcher's); a later edit of the file fixes it.
+
+- Linux `inotify` and the `watchdog` path were not run here (Windows only): their event parsing is tested on
+  synthetic records, the folder-added-later case only runs on Linux.
+- A branch switch that leaves every listed file's size and time as it was is not an update (the signature is the
+  same, as before); `git checkout` normally changes the times of the files it writes.
+- The watcher sees the project root only: a file outside it that the index reads (a reference tree elsewhere) is
+  not watched.
+- Each save starts an update; with `mcp serve --watch` each one that touches the graph also starts a background
+  graph build. Builds never overlap (the build lock), and a save during a build is taken in by the next look.
+
+### 122.5 Tests
+
+`tests/test_fswatch.py` (25): the Windows and inotify record parsers (a chain, an empty buffer, a cut record), the
+folder filter, a real source reporting a write and not `.verinoda`, closing a source quickly, inotify watching a
+folder created later (Linux only), no source meaning polling with the reason, one update for several events,
+no update for an event without a change, the periodic look without an event, a failing source falling back to
+polling, a busy build retried without a new event, polling with events off, a real edit picked up with a 60 s
+poll interval (an event, not the poll), `mcp serve --watch` on the command line, and end to end: an edit
+reaching `graph.json` through the watcher with no `update` call. `tests/test_ui.py` keeps its watcher test (on
+the moved class).
+
 ## Sources
 
 - **Retrieval:**
