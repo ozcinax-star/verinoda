@@ -209,7 +209,7 @@ def _git_grep(repo: Path, args: list[str]) -> tuple[int, str, str]:
     return r.returncode, r.stdout, r.stderr
 
 
-def _git_grep_rows(repo: Path, args: list[str]) -> tuple[int, list[dict], str]:
+def _git_grep_rows(repo: Path, args: list[str], timeout: float = 120) -> tuple[int, list[dict], str]:
     """``git grep -n -z`` read line by line: (exit code, rows, stderr). Stops at :data:`MAX_MATCHES` + 1 rows
     (exit code -1, git killed) so a pattern matching everything never fills memory; 2 on a timeout."""
     import subprocess
@@ -222,7 +222,7 @@ def _git_grep_rows(repo: Path, args: list[str]) -> tuple[int, list[dict], str]:
                                 stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
     except OSError as exc:
         return 2, [], str(exc)
-    timer = threading.Timer(120, proc.kill)
+    timer = threading.Timer(timeout, proc.kill)
     timer.start()
     err_chunks: list[bytes] = []
     reader = threading.Thread(target=lambda: err_chunks.append(proc.stderr.read()), daemon=True)
@@ -249,7 +249,7 @@ def _git_grep_rows(repo: Path, args: list[str]) -> tuple[int, list[dict], str]:
     if cut:
         return -1, rows, err
     if timed_out and rc != 0:
-        return 2, [], "timed out after 120 s"
+        return 2, [], f"timed out after {timeout:.0f} s"
     return rc, rows, err
 
 

@@ -768,8 +768,13 @@ def cmd_notes(args) -> int:
     from verinoda import usernotes
 
     repo = Path(args.repo or args.path).resolve() if (args.repo or args.path) else find_repo_root()
+    if sum(map(bool, (args.facts or args.category or args.tag, args.links, args.changed))) > 1:
+        print("error: give one of --facts (with --category / --tag), --links or --changed", file=sys.stderr)
+        return 2
     snap = None
     try:  # with an index, a note whose symbol was renamed or deleted is gone, and --keep knows its lines
+        if (args.facts or args.category or args.tag) and not (args.keep or args.delete):
+            raise FileNotFoundError("the facts need no index")
         from verinoda.ui.data import Atlas
 
         snap = Atlas(repo).snapshot()
@@ -807,13 +812,58 @@ def cmd_notes(args) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         kept.append(subject)
-    notes = [usernotes.as_dict(repo, n, resolves=resolves(n.subject)) for n in usernotes.load_all(repo)]
+    own = usernotes.load_all(repo)
+    if args.facts or args.category or args.tag:
+        cat = (args.category or "").strip().lower()
+        tag = (args.tag or "").strip().lower().lstrip("#")
+        facts = [{"subject": n.subject, "note": n.path.name if n.path else None, **o}
+                 for n in own for o in usernotes.observations(n)
+                 if (not cat or o["category"] == cat) and (not tag or tag in o["tags"])]
+        res = {"dir": str(usernotes.notes_dir(repo)), "facts": facts,
+               "categories": sorted({f["category"] for f in facts}),
+               "tags": sorted({t for f in facts for t in f["tags"]}), "kept": kept, "deleted": deleted,
+               "note": "facts are what you wrote, not claims: no evidence status"}
+        _emit(args, res, _r_note_facts)
+        return 0
+    if args.links:
+        rows = [{"subject": n.subject, "name": lk["name"], "line": lk["line"],
+                 "note": n.path.name if n.path else None,
+                 **usernotes.resolve_link(lk["name"], own, snap, repo)}
+                for n in own for lk in usernotes.links(n)]
+        res = {"dir": str(usernotes.notes_dir(repo)), "links": rows,
+               "unresolved": sum(1 for r in rows if r["to"] is None),
+               "unchecked": sum(1 for r in rows if r["to"] == "unknown"), "index": snap is not None,
+               "kept": kept, "deleted": deleted}
+        _emit(args, res, _r_note_links)
+        return 1 if res["unresolved"] else 3 if res["unchecked"] else 0
+    notes = [usernotes.as_dict(repo, n, resolves=resolves(n.subject)) for n in own]
     bad = [n for n in notes if n["status"] != "fresh"]
     shown = bad if args.changed else notes
     res = {"dir": str(usernotes.notes_dir(repo)), "notes": shown, "changed": len(bad), "kept": kept,
            "deleted": deleted}
     _emit(args, res, _r_notes)
     return 1 if args.changed and bad else 0
+
+
+def _r_note_facts(res: dict) -> None:
+    print(f"{len(res['facts'])} observation(s) in your notes ({res['dir']})"
+          + (f"; categories: {', '.join(res['categories'])}" if res["categories"] else ""))
+    for f in res["facts"][:200]:
+        print(f"  [{f['category']}] {f['text']}  - {f['subject']} ({f['note']}:{f['line']})")
+
+
+def _r_note_links(res: dict) -> None:
+    print(f"{len(res['links'])} link(s) in your notes, {res['unresolved']} leading nowhere"
+          + (f", {res['unchecked']} not checked" if res["unchecked"] else "")
+          + ("" if res["index"] else " (no index: only links to your own notes resolve)"))
+    for r in res["links"][:200]:
+        where = (f"note {r['subject']!r}" if r["to"] == "note" else
+                 f"{r['kind']} {r['title']} at {r['at']}" + (f" (+{r['also']} other match(es)"
+                                                            + (", ambiguous" if r.get("ambiguous") else "") + ")"
+                                                            if r.get("also") else "")
+                 if r["to"] == "code" else f"NOT CHECKED: {r['why']}" if r["to"] == "unknown"
+                 else f"NOWHERE: {r['why']}")
+        print(f"  [[{r['name']}]] in {r['note']}:{r['line']} -> {where}")
 
 
 MAP_ACTIONS = ("save", "show", "list")  # `map save NAME`: a project folder with such a name is passed as ./save
@@ -1338,10 +1388,13 @@ def cmd_secret_scan(args) -> int:
 def cmd_shader(args) -> int:
     from verinoda import shaders
 
-    res = shaders.lookup(_repo(args), args.name, check_only=args.check)
+    res = shaders.lookup(_repo(args), args.name, check_only=args.check, include_graph=args.includes,
+                         use_glslang=args.glslang)
     _emit(args, res, lambda r: print(shaders.render(r)))
     if res["kind"] == "check":
         return 3 if res["issues"] else 0
+    if res["kind"] == "includes":
+        return 0
     return 0 if res["status"] == "found" else 2
 
 
@@ -1526,6 +1579,23 @@ def cmd_context(args) -> int:
 
     _emit(args, res, render)
     return 2 if res.get("outside") else 0
+
+
+def cmd_rules(args) -> int:
+    from verinoda import path_rules as pr
+
+    repo = _repo(args)
+    try:
+        if args.base and args.staged:
+            raise pr.RulesError("give --base or --staged, not both")
+        res = pr.check(repo, base=args.base, staged=args.staged)
+    except pr.RulesError as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(pr.render(r)))
+    return res["exit"]
 
 
 def cmd_monitor(args) -> int:
@@ -2247,6 +2317,17 @@ def cmd_claim(args) -> int:
         except KeyError as exc:
             raise SystemExit(f"error: {exc}")
         _emit(args, res, _r_claim)
+    elif args.claim_cmd == "asof":
+        from verinoda import asof
+
+        if (args.time is None) == (args.commit is None):
+            raise SystemExit("error: give one of --time WHEN or --commit REV")
+        try:
+            res = (asof.at_time(st, args.time, status=args.status) if args.time is not None else
+                   asof.at_commit(st, repo, args.commit, status=args.status))
+        except asof.AsOfError as exc:
+            raise SystemExit(f"error: {exc}")
+        _emit(args, res, lambda r: print(asof.render(r)))
     elif args.claim_cmd == "list":
         rows = st.claims(status=args.status, limit=args.limit)
         res = [{k: r[k] for k in ("id", "status", "confidence", "kind", "text", "updated_at")} for r in rows]
@@ -2738,7 +2819,8 @@ def _r_debug_status(r: dict) -> None:
         print(f"  other command: {ln}")
     for a in r.get("attempts") or []:
         what = a.get("failure") or ""
-        where = f"commit {a['commit']}" if a.get("commit") else f"tree {a['tree']}"
+        where = (f"tree of attempt {a['replay_of']}" if a.get("replay_of") is not None else
+                 f"commit {a['commit']}" if a.get("commit") else f"tree {a['tree']}")
         loop = f"  loop: {', '.join(a['loop'])}" if a.get("loop") else ""
         print(f"  #{a['n']} {a['kind']:<12} {a['outcome']:<5} {where}  {what}  [{a.get('progress') or '-'}]"
               f"{'  (agent-reported)' if a['run_by'] == 'agent' else ''}{loop}")
@@ -2768,9 +2850,19 @@ def _r_debug_strategy(r: dict) -> None:
             print(f"      + {ln.strip()[:110]}")
     runs = r.get("runs")
     for run in runs if isinstance(runs, list) else []:  # bisect's runs; rerun's "runs" is a count
-        print(f"  {'recorded' if run.get('recorded') else 'ran'} {run['commit'][:12]}: {run['outcome']} "
-              f"(attempt {run['attempt']})" + (f" - for the symptom: {run['for_the_symptom']}"
-                                                if run.get("for_the_symptom") else ""))
+        at = (f"{run['commit'][:12]}: {run['outcome']} (attempt {run['attempt']})" if "commit" in run else
+              f"the tree of attempt {run['attempt']}: {run['outcome']} (attempt {run['run']}, "
+              f"{run.get('experiment_id') or 'no run id'})")
+        print(f"  {'recorded' if run.get('recorded') else 'ran'} {at}"
+              + (f" - for the symptom: {run['for_the_symptom']}" if run.get("for_the_symptom") else ""))
+    for sk in r.get("skipped") or []:
+        if isinstance(sk, dict):
+            print(f"  skipped attempt {sk['attempt']}: {sk['why']}")
+    if r.get("first_bad_attempt"):
+        fb = r["first_bad_attempt"]
+        print(f"  first failing attempt: {fb['attempt']} ({fb['run_by']}) {fb['hypothesis'][:80]}")
+        for c in fb.get("changed") or []:
+            print(f"      {c['status']} {c['path']} {', '.join(c.get('symbols') or [])}")
     for ln in r.get("notes") or []:
         print(f"  note: {ln}")
     for test, d in ((r.get("trace_diff") or {}).get("tests") or {}).items():
@@ -2927,6 +3019,14 @@ def cmd_debug(args) -> int:
         if sub == "differential":
             res = debug.differential(st, repo, args.session, base=args.base, prepare=args.prepare,
                                      trace=args.trace, overlay=args.overlay)
+        elif sub == "bisect" and args.attempts:
+            if args.overlay:
+                raise SystemExit("error: --overlay applies to bisect over commits, not --attempts")
+            try:
+                good, bad = (None if v is None else int(v) for v in (args.good, args.bad))
+            except ValueError:
+                raise SystemExit("error: with --attempts, --good and --bad are attempt numbers")
+            res = debug.bisect_attempts(st, repo, args.session, good=good, bad=bad, max_runs=args.max_runs)
         elif sub == "bisect":
             res = debug.bisect(st, repo, args.session, good=args.good, bad=args.bad, overlay=args.overlay,
                                max_runs=args.max_runs)
@@ -3592,6 +3692,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="after reading a changed note again: anchor it to the code as it is now; repeatable")
     sp.add_argument("--delete", action="append", metavar="SUBJECT",
                     help="delete a note (one whose code is gone, for instance); repeatable")
+    sp.add_argument("--facts", action="store_true",
+                    help="list the `[category] fact #tag` lines of your notes (with --category / --tag to filter); "
+                         "what you wrote, not claims: no evidence status")
+    sp.add_argument("--category", help="with --facts: only this category")
+    sp.add_argument("--tag", help="with --facts: only facts with this #tag")
+    sp.add_argument("--links", action="store_true",
+                    help="list every [[Name]] link with where it leads (a note of yours, or a name in the index); "
+                         "exit 1 when one leads nowhere, 3 when one could not be checked (no index, or a changed "
+                         "file)")
     sp = add("map", cmd_map, "top-down architecture views; `map save NAME [--trace SOURCE TARGET | --view V]` keeps "
                              "one under a name, `map show NAME` reads it back with whether the files it cites "
                              "changed since (exit 1 = stale), `map list` lists them", repo=False)
@@ -3748,9 +3857,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("paths", nargs="*", help="files to scan instead of the stored ones")
     sp.add_argument("--fix", action="store_true", help="redact the findings in place (line numbers are kept)")
     sp = add("shader", cmd_shader, "GLSL uniform blocks and the Java that fills them: where a field (Weather.y) comes "
-                                   "from; --check: blocks and writers that differ, mirrored constants that disagree")
+                                   "from; --check: blocks and writers that differ, mirrored constants that disagree, "
+                                   "and shader lint (includes, brackets, #version, Iris/OptiFine uniforms and macros)")
     sp.add_argument("name", nargs="?", help="Field, Field.x or Block.Field")
-    sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java (exit 3)")
+    sp.add_argument("--check", action="store_true", help="list what disagrees between the shaders and Java and what "
+                                                         "the shader text gets wrong, with lines (exit 3)")
+    sp.add_argument("--includes", action="store_true", help="the #include / #moj_import edges with their lines")
+    sp.add_argument("--glslang", action="store_true", help="with --check: also compile each pack stage with "
+                                                           "glslangValidator when it is installed (off by default)")
     sp = add("access-check", cmd_access_check, "access wideners and access transformers checked against the class "
                                                "files of the build's classpath: each entry exists, is absent (with "
                                                "the nearest real names), malformed or unknown, with its line "
@@ -3849,6 +3963,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--fix", action="store_true", help="with --check: write moved steps' lines back")
     sp.add_argument("--force", action="store_true",
                     help="overwrite a tour file Verinoda did not write, or one edited since it wrote it")
+    sp = add("rules", cmd_rules, "path-scoped review rules: `verinoda-rules` blocks in AGENTS.md, CLAUDE.md, "
+                                 "BUGBOT.md and REVIEW.md (any folder; .cursor/BUGBOT.md too) checked on the lines "
+                                 "the change added in the folder they cover; exit 1 on an error rule's match, 3 "
+                                 "when a search did not finish; the prose rule files covering each changed file "
+                                 "are listed")
+    sp.add_argument("--base", help="compare with this revision (default HEAD)")
+    sp.add_argument("--staged", action="store_true", help="the staged changes against HEAD (or --base)")
     sp = add("monitor", cmd_monitor, "saved searches that must not gain matches (verinoda-monitors.json, committed): "
                                      "check (default; exit 1 on a match the baseline does not have, 3 when a search "
                                      "did not finish), add ID --regex RE|--ast PATTERN, accept ID, remove ID, trend ID "
@@ -4035,13 +4156,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("claim", help="inspect or add claims")
     csub = sp.add_subparsers(dest="claim_cmd", required=True)
-    for name in ("show", "list", "add"):
-        c = csub.add_parser(name)
+    for name in ("show", "list", "asof", "add"):
+        c = csub.add_parser(name, **({"help": "every claim's status as recorded at a moment (--time) or at a commit "
+                                              "(--commit: recorded there observed, carried from an ancestor "
+                                              "strong_inference)"} if name == "asof" else {}))
         c.set_defaults(fn=cmd_claim)
         c.add_argument("--repo")
         c.add_argument("--json", action="store_true")
         if name == "show":
             c.add_argument("id")
+        elif name == "asof":
+            c.add_argument("--time", help="an ISO date or time: what Verinoda had recorded then (a date: its end, UTC)")
+            c.add_argument("--commit", help="a revision: which claims held at that commit")
+            c.add_argument("--status", help="list only the claims with this status then")
         elif name == "list":
             c.add_argument("--status")
             c.add_argument("--limit", type=int, default=50)
@@ -4206,6 +4333,9 @@ def build_parser() -> argparse.ArgumentParser:
     c = add("bisect", cmd_debug, "strategy: binary search over commits (throw-away copies) for the first failing "
                                  "one", parent=dsub)
     c.add_argument("--session")
+    c.add_argument("--attempts", action="store_true",
+                   help="search the session's own attempts (agent steps included) instead of commits: each "
+                        "attempt's recorded tree is rebuilt in a throw-away copy; --good/--bad are attempt numbers")
     c.add_argument("--good", help="a commit where the repro passes (default: a known passing run, else step back)")
     c.add_argument("--bad", help="a commit where it fails (default: the session base)")
     c.add_argument("--overlay", action="append", metavar="PATH",

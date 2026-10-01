@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D124)
+## Upgrading from 0.3.2 (D60-D129)
 
 ### D63: Running a project's own tests safely
 
@@ -596,6 +596,38 @@ tool count is unchanged.
 Schema v8 adds `memory.expires_at`; an older Verinoda refuses a database this one opened. `memory history KEY`
 now prints an object, `{"key", "events", "versions"}`, where it printed the list of versions (now under
 `versions`). New: `memory learn --ttl` and `memory forget`. The MCP tool count is unchanged.
+
+### D125: Path-scoped review rules
+
+New: `verinoda rules` checks `verinoda-rules` blocks in AGENTS.md, CLAUDE.md, BUGBOT.md and REVIEW.md (any
+folder) against the lines a change added in the folders they cover, and `review` carries a `path_rules` block
+when the project has such files. The MCP tool count is unchanged.
+
+### D126: Bi-temporal claims
+
+New: `verinoda claim asof --time WHEN | --commit REV` lists each claim's status as recorded at a moment or at a
+commit. Claim history rows now carry `payload.snapshot` (the snapshot the transition was made at). The MCP tool
+count is unchanged.
+
+### D127: Typed notes and wikilinks
+
+New: `verinoda notes --facts [--category C] [--tag T]` lists the `- [category] fact #tag` lines of your notes;
+`verinoda notes --links` resolves every `[[Name]]` and exits 1 when one leads nowhere. The MCP tool count is
+unchanged.
+
+### D128: Shaderpack lint and include graph
+
+`verinoda shader --check` now also lints the shader text (includes, brackets, `#if`/`#endif`, `#version`,
+undeclared Iris/OptiFine uniforms, undefined macros), so a project whose check passed may now exit 3; the issues
+carry a `status`. New `shader --includes` lists the include edges; `shader --check --glslang` also compiles each
+pack stage with `glslangValidator` when installed (off by default). The MCP tool count does not change.
+
+### D129: Bisect over the debug ledger's attempts
+
+`verinoda debug bisect --attempts` finds the first attempt of a debug session (agent-reported steps
+included) whose tree fails the repro: each recorded tree is rebuilt from the session base and the blob
+store in a throw-away copy and run by Verinoda; the answer names the attempt, its hypothesis, the files it
+changed and the run ids on both sides. `experiments.run` takes `replay=` for that. No tool count change.
 
 ### D60-D62
 

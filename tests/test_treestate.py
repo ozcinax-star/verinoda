@@ -210,7 +210,7 @@ def _session(st: Store, sid: str = "dbg_1") -> None:
 
 def test_debug_tables_are_append_only(tmp_path):
     st = Store(tmp_path / "a.db")
-    assert SCHEMA_VERSION == 6
+    assert SCHEMA_VERSION >= 6
     _session(st)
     st.insert("debug_attempts", {"id": "dba_1", "session_id": "dbg_1", "n": 0, "kind": "baseline",
                                  "hypothesis": "h", "command": ["pytest"], "run_by": "verinoda", "outcome": "fail",
@@ -244,7 +244,7 @@ def test_a_v4_database_migrates_to_v6(tmp_path):
     conn.commit()
     conn.close()
     st = Store(db)
-    assert st.one("SELECT value FROM meta WHERE key='schema_version'")["value"] == "6"
+    assert st.one("SELECT value FROM meta WHERE key='schema_version'")["value"] == str(SCHEMA_VERSION)
     _session(st, "dbg_x")
     assert st.get("debug_sessions", "dbg_x")["command"] == ["pytest"]
 

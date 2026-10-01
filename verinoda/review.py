@@ -4989,6 +4989,16 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         packages = {"not_checked": [f"{type(exc).__name__}: {exc}"[:300]]}
         unknown.append({"kind": "affected_packages", "at": None, "what": "which workspace packages the change "
                         "affects", "why": packages["not_checked"][0], "next_step": "run `verinoda affected`"})
+    rules = None
+    if not targets:
+        from verinoda import path_rules
+
+        try:
+            pr = path_rules.check(repo, base=base_sha, staged=staged, budget=20.0)
+            rules = path_rules.summary(pr) if (pr["rule_files"] or pr["weakened"]) and pr["changed_files"] else None
+        except Exception as exc:   # an optional block never stops the review
+            unknown.append({"kind": "path_rules", "at": None, "what": "which path-scoped review rules the change "
+                            "breaks", "why": f"{type(exc).__name__}: {exc}"[:300], "next_step": "run `verinoda rules`"})
     n_strong = sum(1 for v in found.values() for f in v if rr.at_least_strong(f["status"]))
     res = {
         "review_id": None,
@@ -5016,6 +5026,7 @@ def review(repo: Path, *, store=None, graph=None, base: str | None = None, stage
         "made_stale": stale,
         "reviewers": who,
         "affected": packages,
+        **({"path_rules": rules} if rules else {}),
         "coverage": {"method": "changed definitions from symbol facts of both versions; dependents over the last "
                                "snapshot's graph (depth 3) by change kind; concern rule tables "
                                "(verinoda/review_rules.py)",
@@ -5886,6 +5897,9 @@ def render_text(res: dict) -> str:
     from verinoda import affected as aff
 
     out += aff.render(res.get("affected") or {})
+    from verinoda import path_rules
+
+    out += path_rules.render_lines(res.get("path_rules") or {})
     sl = res.get("since_last")
     if sl:
         out.append("")

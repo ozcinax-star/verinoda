@@ -375,7 +375,8 @@ class Claims:
             self._link(cid, ev, rel, None, grp)
         self._record_deps(cid)
         self.set_status(cid, status, reason="initial assessment", actor=actor,
-                        confidence=confidence, downgrade=True)
+                        confidence=confidence, downgrade=True,
+                        payload={"snapshot": snapshot["id"] if snapshot else None})
         return self.get(cid)
 
     def _link(self, cid: str, ev: dict | str, relation: str, note: str | None, grp: str | None) -> str:

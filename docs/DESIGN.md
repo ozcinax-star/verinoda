@@ -9778,6 +9778,357 @@ earlier than it was learned, and its EXPIRE event; a fallen claim as an INVALIDA
 migrated with its memories intact. After review: a time-to-live over 100 years refused; a memory that expired
 before its claim fell has EXPIRE, not INVALIDATE; `recall("")` hides expired memories. `tests/test_cli.py`: `memory history` lists the events.
 
+## 98. Path-scoped review rules (D125, 2026-10-01)
+
+### 98.1 Why
+
+Cursor Bugbot reads `BUGBOT.md` files per folder, Greptile and CodeRabbit read path-scoped instructions, and
+agents read AGENTS.md and CLAUDE.md at any depth: teams keep review rules next to the code they are about. A rule
+under `src/api/` should apply only to changes there, and a nearer folder should be able to tighten or turn off a
+rule from above.
+
+### 98.2 Decisions
+
+- **`verinoda rules [--base REV | --staged]`**, and a `path_rules` block in `review` (only when the project has
+  rule files and the change touches files): the error and warning counts, the first ten matches and the rule
+  files covering the change. `review`'s exit code is unchanged: `verinoda rules` is the gate.
+- **Rule files and their scope.** AGENTS.md, CLAUDE.md, BUGBOT.md and REVIEW.md in any folder cover that folder and
+  everything under it; `.cursor/BUGBOT.md` and `.github/copilot-instructions.md` cover the folder holding
+  `.cursor` / `.github`. The files are the ones git tracks plus the untracked ones it does not ignore; in
+  `--staged` mode their staged text is read.
+- **Checked rules are written to be checked.** Verinoda uses no language model, so it does not judge prose. A
+  fenced block with the info string `verinoda-rules` holds lines `MODE ID: regex|ast PATTERN [-- MESSAGE]`
+  (MODE `error`, `warning` or `off`). Other lines in such a block are listed as "not a rule", never dropped
+  silently. Everything else in the rule files is prose: per changed file, the rule files covering it are listed,
+  nearest first, for the reviewer to read.
+- **Nearest wins.** Per changed file, the nearest rule file's rule with a given id is the one in force; `off`
+  turns it off for that folder. In one folder the order is REVIEW.md, BUGBOT.md, `.cursor/BUGBOT.md`,
+  AGENTS.md, CLAUDE.md, `.github/copilot-instructions.md`: the first that defines the id applies.
+- **Rule files are not checked by the rules.** They name the patterns they forbid (in the rule and in the prose),
+  so the commit that adds a rule does not fail on its own text.
+- **A change that weakens its own gate is reported.** The rules in force at the base (read from the base commit)
+  are compared, per changed file, with the change's: a rule removed, turned down (error to warning or off,
+  including by a new nearer file) or rewritten is listed under `weakened`, and the exit is 3: CI cannot vouch for
+  a change that edits the rules it is checked by, so a person reads it. The rules are the change's own once it
+  is merged.
+- **Bounded.** At most 50 rules in force run, within a time budget (300 s for `verinoda rules`, 20 s inside
+  `review`); the rest are reported as not checked (exit 3). Regex back-references (`\1`-`\9`) are refused as
+  "not a rule", since git's matcher backtracks on them.
+- **Only what the change added.** The added lines come from `git diff-index -p -U0` against the base, read by
+  walking each hunk's lines (so an added line starting with `++`, a user's `diff.interHunkContext` or a quoted
+  path name cannot shift them; `--no-textconv`); the plumbing command, since `git diff` rewrites the index's
+  stat data. Untracked files count whole in the working-tree mode. Without a rule file nothing is diffed. A regex rule runs through `git grep -E` on the changed files (the index
+  with `--staged`), streamed and capped as in D123; an AST rule runs through `grep-ast` and counts when the
+  matched node touches an added line. Each match is `statically_verified` at its `file:line`, with the rule's
+  own `file:line` as its source: the pattern is there; whether the intent of the rule is broken is the
+  reader's call.
+- **Exit codes.** 1 on a match of an `error` rule; 3 when a search did not finish (a cut list, a timeout, a git
+  error, a bad pattern, an AST rule on a staged file whose working copy differs from the index, since grep-ast
+  reads the working copy, the rule cap or the time budget) or when a rule was weakened; else 0; 2 on a bad base.
+
+### 98.3 Measured
+
+Tests only.
+
+### 98.4 Not done
+
+- Prose rules are listed, not checked.
+- A regex reads one line; a rule about a construct spread over lines needs an `ast` rule.
+- A match on an added line in a file the rule does not cover is not reported, even if the rule file's prose
+  says otherwise.
+
+### 98.5 Tests
+
+`tests/test_path_rules.py`: parsing (rules, a line that is not a rule, a block with another info string
+ignored) and scope (`.cursor/BUGBOT.md` covers the folder above); a nearer error rule replaces the root's
+warning only in its folder, an existing line is not reported, the prose rule files listed nearest first; `off`
+turns a rule off below and untracked files count; an AST rule across lines, staged mode, and a staged file whose
+working copy differs is exit 3; staged mode reads the rule files from the index; a bad regex is exit 3 and a bad
+base an error; the CLI (`--json`, exit codes 1 and 2); `review` carries the block and drops it without rule
+files. After review: a new rule does not match its own line, while the file's prose still counts; a path with a
+space, an added `++` line and `diff.interHunkContext` read right; staged mode in a project below the git top;
+the order in one folder; no rule files. Second review: a rule file is not checked; a removed rule, a rewritten
+pattern and an `off` in a new nearer file are reported as weakened (exit 3); back-references refused; the rule
+cap and the time budget; the CLI's error JSON.
+
+## 99. Bi-temporal claims (D126, 2026-10-01)
+
+### 99.1 Why
+
+Zep's Graphiti and mem0 keep two times per fact: when it held and when it was recorded. Verinoda's claims are
+never deleted and their history is append-only, so both are there, but nothing answered "which claims held at
+v0.2" or "what did we believe on 1 May".
+
+### 99.2 Decisions
+
+- **`verinoda claim asof --time WHEN | --commit REV [--status S]`**, CLI only.
+- **Recorded time** (`--time`, an ISO date, its end in UTC, or time): each claim made by then, with the status of
+  its last transition at or before that moment. Read back from the append-only history, so `observed`.
+- **Code time** (`--commit`): a claim is checked at a snapshot (a commit). `update` rebinds it to the new
+  snapshot when nothing it depends on changed and makes it stale at the snapshot where something did. Per claim,
+  a transition recorded at the revision itself gives its status there (`observed`); else the last transition at
+  the nearest commits with a record in the revision's history (none of them an ancestor of another, so a later
+  check of an older commit, after a checkout or a bisect, never hides a nearer one) gives it as
+  `strong_inference` (nothing was checked at the revision, and the code may have changed in between and back);
+  with none, the claim has no record there (`no_record` in the counts; the claim came later, or on another line
+  of history). `held` is a supporting status of at least `strong_inference`.
+- **Every transition records the tree it read.** `Store.record_transition` and the creation row write
+  `payload.snapshot`: the claim's snapshot at creation and its initial assessment, the new one at a rebind, the
+  one an invalidation saw the change in, the current one when `verify` read a tree that has a snapshot; `None`
+  for a transition that read the working tree (a critique, a counterexample, a re-assessment), which is at no
+  commit. A snapshot of a dirty tree is at no commit either. No schema change.
+- **Older rows are rebuilt.** A claim starts at its first snapshot (the earliest `rebound_from`, else its own),
+  where its creation and initial assessment are; a rebind (`update`'s, named in its reason, or `verify`'s
+  `snapshot_id`) moves it; a stale transition is at its `new_snapshot`; any other transition is at no commit.
+  Such an answer says so in its basis.
+
+### 99.3 Measured
+
+Tests only.
+
+### 99.4 Not done
+
+- Carried over is not checked: an ancestor's record says nothing about edits after it that were undone.
+- A transition made on the working tree (a critique, a contradiction from feedback) is at no commit: a claim
+  contradicted that way keeps, at the commits, the status recorded there before.
+- Commits are compared by ancestry only: a claim checked on another branch is unknown on this one.
+
+### 99.5 Tests
+
+`tests/test_asof.py`: a claim made at c1, kept through an unrelated change at c2 and made stale by its file at
+c3: observed at c1 and c3, carried over (strong_inference) at c2, unknown at c0 and carried over on a branch from
+c2; recorded time before it went stale, before it existed and with a status filter; every transition records
+its snapshot, and the same snapshots are rebuilt from a history without them; an invalidation in the working
+tree is at no commit; the CLI. After review: a stale record at an older commit made later does not hide the
+record at the revision; a contradiction on the working tree is at no commit; a dirty snapshot is at no commit and
+counted as `no_record` (`--status unknown` matches statuses only); weak_inference is not held; dates with spaces
+and a `Z` parse; older rows with a `verify` rebind rebuilt. `tests/test_store.py`: the history payload carries
+the snapshot (None when unstated).
+
+## 100. Typed notes and wikilinks (D127, 2026-10-01)
+
+### 100.1 Why
+
+Basic Memory keeps knowledge as Markdown files an editor can open, with typed observation lines
+(`- [category] fact #tag`) and `[[Name]]` links, and indexes them as the files change. Verinoda's own notes
+(`verinoda ui`, `verinoda notes`) are already Markdown files with `[[Name]]` links, anchored to the code and
+checked against it, but their facts could not be listed and their links were followed only by clicking in the
+viewer.
+
+### 100.2 Decisions
+
+- **Observations.** A body line `- [category] fact #tag #other` (`-`, `*`, `+` or no bullet) is an observation:
+  its category (lower case, words allowed, any script), its text, its tags and its line in the note file. Fenced
+  code (CommonMark's rules: an opener indented at most three spaces, a closer of the same character with
+  nothing after it) is not read; a task box (`[ ]`, `[x]`) is not a category; a tag starts a word, outside
+  inline code and link targets. `verinoda notes --facts [--category C] [--tag T]` lists them across your notes.
+  They are what you wrote, not claims: they carry no evidence status.
+- **Links.** `[[Name]]` (also `[[Name|label]]`, `[[Name\|label]]` and `[[Name#part]]`) is a link; `![[embed]]`
+  and `[[...]]` inside inline code are not. `verinoda notes --links` resolves each one: a note of yours whose
+  subject, or the name after `::`, is `Name`; else in the index the subject `file::Name` or `file` it names, a
+  symbol or section whose name is `Name` or ends in `.Name` (ignoring `()` and case), or a file by its path or
+  its name without the suffix; the exact name first, and with several matches the others are counted and the
+  link marked ambiguous unless exactly one has that name. Exit 1 when a link leads nowhere (for CI); 3 when one
+  could not be checked: without an index (only links to your own notes resolve), or when the file it found
+  changed since the index was built. The viewer is more lenient: it opens the closest search hit.
+- **One question at a time.** `--facts`, `--links` and `--changed` exclude each other (exit 2).
+- **The files are the index.** Nothing is cached: every command reads the note files, so a note edited in an
+  editor is what the next command sees. The anchors and the fresh / changed / gone checks are unchanged.
+
+### 100.3 Measured
+
+Tests only.
+
+### 100.4 Not done
+
+- Facts are what you wrote, not claims: they carry no evidence status and are not verified.
+- A link resolves to the first name that matches; `also` counts the others (among the first 200 search hits).
+- No full-text search over notes beyond the filters (`verinoda query` does not read them).
+
+### 100.5 Tests
+
+`tests/test_usernotes.py`: observations with categories (one of two words), tags and the note file's line;
+task boxes and fenced code left out; links to code (a module-qualified name), to a note of yours (by the name
+after `::`, also without an index) and nowhere; the CLI filters by category and tag; `--links` exits 1, then 0
+after the note is edited in place. After review: non-ASCII categories and tags, tags not read in inline code,
+link targets or URLs, an over-long tag, a fence not closed by a line with an info string, a four-space fence
+not opened; embeds, inline code and an escaped pipe in links; file links by stem, path and `file::Name`; an
+ambiguous name; a link into a file changed since the index and no index are not checked (exit 3); the flags
+exclude each other; `--facts` reports what `--keep` / `--delete` did.
+
+## 101. Shaderpack lint and include graph (D128, 2026-10-01)
+
+### 101.1 Why
+
+`verinoda shader --check` compared uniform blocks with their Java writers and mirrored constant tables, but said
+nothing about the shader text itself. An Iris or OptiFine shaderpack (and a mod's core shaders) only fails when the
+game compiles a stage: a brace left open in an included `lib/` file, an `#include` that points nowhere or a
+uniform used without its declaration shows up as a pink world, not as a file and a line. mcshader-lsp gives this in
+an editor; this decision gives it on the command line, offline, with the line.
+
+### 101.2 Decisions
+
+- **`verinoda/shaderlint.py`**, next to `shaders.py`, text only (no graph, no index):
+  - `includes()`: every `#include "..."` / `<...>` and `#moj_import <...>` as an edge from file and line to the
+    file it names. A path starting with `/` is read from the pack's `shaders/` directory (the innermost one above
+    the including file, as Iris does), any other path from the including file's directory. `#moj_import <ns:name>` resolves to
+    `assets/<ns>/shaders/include/<name>`; when no file is there it is `external` for `minecraft` (and for another
+    mod's namespace: the game or that mod provides it) and `missing` for the file's own namespace.
+  - `cycles()`: include cycles, each with the edge that closes it.
+  - `lint()`, per file: brackets `()[]{}` and `#if`/`#endif` pairing, read on the first branch of each
+    conditional only (both halves of `#ifdef X ... { #else ... { #endif` would otherwise count twice); the first
+    mismatch per file is reported, with the line of the opener it closes; `#version` not on the first code line, or
+    written twice.
+  - per stage (a file under `shaders/` named like an Iris/OptiFine program: `gbuffers_*`, `composite*`,
+    `deferred*`, `final`, `shadow*`, `prepare*`, `begin*`, `setup*`, `dh_*`, not itself included), expanded with its
+    includes: a `#version` an include brings in; a standard Iris/OptiFine uniform (`sunPosition`, `colortex3`,
+    `frameTimeCounter`, ... a data list in the module) used but never declared in the stage or its includes (a
+    program must declare each uniform it reads); a macro tested by `#ifdef`/`#ifndef`/`#if`/`#elif` that no
+    `#define` or `//#define` option toggle of the pack (a shared program file tests the `FSH`/`VSH` that each
+    sibling stage defines before including it) and no standard Iris/OptiFine macro (`MC_VERSION`,
+    `IS_IRIS`, `MC_OS_*`, `MC_GL_VENDOR_*`, `IRIS_*`, `GL_*`, ... a data list) defines.
+- **Status.** What the text states (a missing include, a cycle, `#version` placement, a bracket that does not
+  balance in a file with no conditional, an unpaired `#endif`) is `verified`. A bracket mismatch in a file with
+  conditionals is `strong_inference` (only the first branch was read). An undeclared uniform and an undefined macro
+  are `strong_inference`: a loader, `shaders.properties` or the mod's Java can define them.
+- **`verinoda shader --check`** appends these issues to the block/writer and constant ones (same rows: `kind`,
+  `name`, `at` = file:line, `why`, plus `status`), states the counts (shader files, pack stages, includes, missing,
+  cycles) and exits 3 on any issue. **`--includes`** lists the edges with their lines and the cycles.
+- **`--glslang`** (opt-in, off by default, with `--check`): when `glslangValidator` (or `glslang`) is on PATH,
+  each pack stage, its includes inlined, is compiled with `--stdin -S <stage>` and the standard macros
+  `MC_VERSION`, `IS_IRIS`, `MC_GL_VERSION`, `MC_GLSL_VERSION` defined; each `ERROR: 0:<n>:` is mapped back through
+  the expansion to the file and line it came from (`glsl_error`, `verified`). Not installed: the result says so and
+  nothing else changes. Nothing is required and nothing leaves the machine.
+- Iris stage suffixes `.gsh`, `.tcs`, `.tes` joined `shaders.SHADER_SUFFIXES`; `.csh` (an Iris compute stage) is
+  linted only under a `shaders/` directory, elsewhere it is a C-shell script.
+- No MCP change: `shader` is CLI only; the tool count is unchanged.
+
+### 101.3 Measured
+
+- The test pack (a stage including `/lib/light.glsl`, which includes `common.glsl`, with an `#ifdef`/`#else`
+  pair that opens a brace in each branch, an `#ifndef` include guard and a `//#define` option): two edges resolved
+  with their lines, no issue. Each seeded fault is reported at its line: a brace left open, a `(` closed by `}`, a
+  `#version` on line 2 and one in an included file, a missing include, an `#if` without `#endif`, an include cycle,
+  `sunPosition` used undeclared (in the included file, line 4), `#ifdef SHADOWS_TYPO`.
+- This repository has no shader files: `shader --check` reads 0 files, says "nothing disagrees".
+- glslangValidator is not installed on the build machine; the opt-in path is tested with a stand-in that answers
+  like it (error line 9 of the expanded stage mapped back to the right file and line).
+- No real shaderpack was measured; a run on one (BSL, Complementary) is the next step to count false positives of
+  the uniform and macro checks.
+- Review round: fixed a comma list (`uniform float viewWidth, viewHeight;`) and a pack function named like a
+  uniform (`vec3 skyColor(...)`) being reported as undeclared; stage macros defined by sibling stages
+  (`#define FSH` / `VSH` before a shared `/program/*.glsl`) reported as never defined (the macro check is now
+  pack-wide); `.csh` C-shell scripts linted as shaders; `/`-rooted includes read from the outermost `shaders/`
+  instead of the pack's own; `#define` continuation lines read as code (a verified false bracket fault); a UTF-8
+  BOM hiding a directive on line 1; `#moj_import <../..>` resolved to a file outside the repository (now
+  `missing`, "outside the repository", never read); deep include chains hitting the recursion limit (`cycles` and
+  the expansion are iterative); two glslang errors on one line merged into one; the glslang input encoded with the
+  locale codec (now UTF-8). Each has a test. Not changed: without `--glslang`, a missing semicolon or an
+  undeclared identifier is still not reported (no GLSL parser, a stated limit).
+
+### 101.4 Not done
+
+- No GLSL parser: types, overloads, undeclared identifiers in general and wrong swizzles are found only with
+  `--glslang`. The continuation lines of a multi-line `#define` are skipped by the bracket check, not read.
+- Conditionals: only the first branch of each `#if` is read for brackets; a fault only in an `#else` branch is not
+  seen.
+- `shaders.properties` (program-specific defines, option profiles, custom uniforms) and `dimension.properties`
+  world folders are not read: a custom uniform used undeclared is not reported, a macro the properties define can
+  be reported as never defined (hence `strong_inference`).
+- Includes are inlined once per stage; Iris inlines each time, which only matters for code without include guards.
+- Include edges are not graph edges (not in `query` or `impact`); the macro and uniform checks run on pack stages
+  only, not on a mod's core shaders (whose defines come from JSON).
+
+### 101.5 Tests
+
+`tests/test_shaderlint.py`: include edges and a clean pack; a brace left open and a bracket closing the wrong
+opener with their lines and statuses; `#version` placement (in a file and in an include), a missing include, an
+unpaired `#if`; an include cycle; an undeclared standard uniform and an undefined macro (standard macros and
+`//#define` options not reported); `#moj_import` resolved, external, missing; the review-round cases (comma
+lists and functions, sibling stage macros, `.csh` outside `shaders/`, nested pack roots, `#define` continuations,
+a BOM, `#moj_import` outside the repository, a deep chain, two glslang errors on a line and UTF-8 input); the CLI (`--check` exit 3 with the
+line, `--includes --json`); `--glslang` off by default, errors mapped back, "not found" when absent.
+`tests/test_shaders.py` unchanged and passing (its fixture lints clean).
+
+## 102. Bisect over the debug ledger's attempts (D129, 2026-10-01)
+
+### 102.1 Why
+
+`verinoda debug bisect` searches commits. An agent's session breaks things between commits: it edits the
+working tree step after step, often reports its own runs (`--observed-output`), and only notices much later
+that the repro fails. The ledger already holds every step's tree (changes vs the session base, contents in
+the blob store), so the question "which of my steps broke it" can be answered by running the repro on those
+trees, without touching the user's tree.
+
+### 102.2 Decisions
+
+- `verinoda debug bisect --attempts [--good N] [--bad N] [--max-runs N] [--json]`: `--good` / `--bad` are
+  attempt numbers; `--overlay` is refused with `--attempts`. Python: `debug.bisect_attempts`.
+- Steps are the session's attempts on the working tree (`baseline`, `fix`, `probe`, `rerun`; Verinoda's and
+  agent-reported alike), oldest first; consecutive attempts on one tree are one step, named by its first
+  attempt. Strategy runs (differential, bisect, replays) are not steps.
+- A step is judged only by a run Verinoda made of the session's repro on that tree: a recorded one (same
+  tree hash on the working tree, or an earlier replay of the step), else a new one. An agent's report is
+  never used as the outcome; when the first failing step was agent-reported its reported outcome is shown
+  next to the replay's.
+- A replay is an ordinary recorded attempt (`kind = "bisect"`, `copy_source = {"kind": "attempt", "attempt":
+  N, "commit": <base>, "recorded_tree", "replayed"}`): `experiments.run` copies the session base and writes
+  the step's recorded files over it (`replay={path: bytes | None}`, None leaves the file out), with the same
+  policy and isolation as every run. A step whose changed file's content is not in the blob store is
+  skipped, said so.
+- Both ends are established first, as in the commit bisect: the bad end (default: the latest step) must
+  fail; the symptom is that run's failing tests and coarse signature, and the other steps are judged against
+  it with `judge_at` (a step that fails only other tests passes; a different failure is skipped). The good
+  end (default: the latest earlier step with a passing Verinoda run, else the first step) must pass; when it
+  fails only some of the symptom's tests, the symptom becomes the ones that passed there (what the steps
+  broke); if none passed, the answer is `unknown` and points to the commit bisect.
+- Bounded by `debug.bisect_max_runs` (default 12); recorded runs cost nothing.
+- Output: `status` found / range / unknown, `runs` (step, outcome, the attempt that ran it, experiment and
+  evidence ids, `recorded`, `tree_differs` when a rebuilt tree's hash is not the recorded one),
+  `first_bad_attempt` (attempt, run_by, hypothesis, the files and symbols changed since the passing step,
+  `fail_run` and `previous.pass_run` with their run ids), `conclusion`, `limits`, `cost`. CLI exit 3 when not
+  found, like the commit bisect.
+- No MCP change: the full profile's `debug_strategy` keeps its arguments (EXPECTED_PARAMS unchanged).
+
+### 102.3 Measured
+
+- One end-to-end test on `examples/orders_app`: baseline passes, three agent-reported steps (a deleted file,
+  the break reported as passing, an unrelated edit), then a failing Verinoda run. The search named the
+  break (attempt 2) with 2 runs, the rebuilt trees had the recorded hashes (the deletion included), the
+  user's tree was byte-identical afterwards, and a second search ran nothing (all recorded). About 11 s on
+  this machine.
+- Review round: a session that starts on a failure still there at the end judged its baseline "part"
+  against the bad end's failing tests and stopped with a false "the failure predates these attempts"; the
+  search now narrows the symptom to the bad end's failing tests that passed at the good end (reported as
+  `symptom`, said in the conclusion) and names the step that broke them. Replays no longer mark the commit
+  bisect done in `debug status`, and status shows a replay row as "tree of attempt N" (`replay_of`), not
+  the base commit. An inverted `--good`/`--bad` pair is refused before anything runs. A skipped step always
+  carries a reason (a timeout said "None"). A step that turned a directory into a file (or back) is rebuilt
+  (deletions first, the path in the way removed); a copy that still cannot hold a tree skips the step
+  instead of raising. Tests: the failing-baseline session, `range` with skipped steps (timeout, lost blob)
+  and the run budget, and the file/directory replay.
+
+### 102.4 Not done
+
+- One run per tree: a flaky test can move the boundary (`debug rerun` on the tree).
+- Bisect assumes one boundary; an edit reverted and made again between steps can hide an earlier break.
+- Replayed files have the line endings of the blob store (LF); a rebuilt tree differs from the recorded one
+  when files outside the recorded changes (untracked, skipped by the commit copy) mattered - flagged as
+  `tree_differs` in the run and in `limits`.
+- Steps are only what the ledger recorded: an edit made and undone between two attempts is invisible.
+- Not exposed over MCP.
+
+### 102.5 Tests
+
+- `tests/test_debug.py::test_bisect_over_attempts_names_the_agent_step_that_broke_the_repro` (search,
+  deletion replay, user tree untouched, recorded reuse, bad `--good`, unknown when the good end fails, CLI
+  text and the `--attempts` number check).
+- `tests/test_debug.py::test_bisect_over_attempts_in_a_session_that_started_on_a_failure` (narrowed
+  symptom, `--good 0`, inverted pair refused before a run, status strategies and replay rows).
+- `tests/test_debug.py::test_bisect_over_attempts_skips_steps_it_cannot_run_and_says_why` (`range`, skip
+  reasons, `--max-runs`, CLI exit 3).
+- `tests/test_debug.py::test_a_replay_can_put_a_file_where_the_base_has_a_directory_and_back`.
+
 ## Sources
 
 - **Retrieval:**

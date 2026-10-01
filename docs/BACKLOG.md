@@ -82,7 +82,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 8.5 | **Path-scoped review rules** | Rule files per directory (like BUGBOT.md), AGENTS.md and CLAUDE.md read as rules; off, warning and error modes | Cursor Bugbot, Greptile, CodeRabbit | a rule under `src/api/` applies only to changes there |
 | 8.8 | **Pull request triage (opt-in)** | Open PRs with CI and review state, PR impact, a warning when two PRs touch the same code | Graphify MCP | needs authenticated GitHub access |
 
 ## 9 - Test map and coverage
@@ -104,9 +103,7 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 11.1 | **Bi-temporal claims** | Each claim records when it held (commits) and when it was recorded; invalidated, never deleted | Zep Graphiti, mem0 | "which claims held at v0.2" answered |
 | 11.3 | **Background consolidation** | Between sessions: re-verify stale claims, merge duplicates | Letta sleep-time agents, Cognee memify | stale claims re-checked by the background update |
-| 11.5 | **Typed notes and wikilinks** | Notes with `[category] fact #tag` lines and `[[symbol]]` links; two-way sync with Markdown files | Basic Memory | a note edited in an editor updates the index |
 
 ## 12 - Docs, decisions and specs
 
@@ -122,7 +119,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 13.1 | **Hooks on the agent's own tool calls** | PreToolUse and PostToolUse hooks add graph context to the agent's Grep and Read in Claude Code, Codex and Cursor | GitNexus, Codanna, CodeGraph | a Grep in Claude Code returns the matching symbols' callers without a Verinoda call |
 | 13.3 | **Installers for more agents** | Cursor, Gemini CLI, GitHub Copilot, Kiro, Aider, Continue and others | Graphify | `setup --agents all` registers each one found |
 | 13.4 | **Package existence and slopsquatting check (opt-in)** | A new dependency checked against its registry: exists, age, downloads, malware signals | Socket MCP, Endor Labs | `check` flags a dependency name the registry does not have |
-| 13.5 | **Bisect over the debug ledger's attempts** | Find which recorded attempt or agent step broke the tests | agent-blackbox, culprit | `debug bisect --attempts` |
 
 ## 14 - Outputs and views
 
@@ -155,7 +151,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 17.3 | **Mixin conflicts across mods** | Several mods injecting into the same method; the mod behind a failed injection | ModLens, MixinConflictHelper | conflicts listed with both Mixins |
 | 17.4 | **Mixin debug export as evidence** | `.mixin.out` classes and audit reports read as what a Mixin really changed | SpongePowered Mixin | a Mixin claim cites the exported class |
 | 17.5 | **Command syntax and JSON schemas per version** | Commands, resource locations, NBT paths, loot tables and predicates checked against vanilla-mcdoc | Spyglass, Datapack Helper Plus | a malformed command is reported with its line |
-| 17.8 | **Shaderpack lint and include graph** | GLSL checked with Iris and OptiFine macros; `#include` edges | mcshader-lsp | `shader --check` reports a GLSL error with its line |
 
 ## 18 - Flow analysis
 

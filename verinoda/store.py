@@ -800,7 +800,8 @@ class Store:
                 "INSERT INTO claim_history (claim_id, from_status, to_status, from_confidence,"
                 " to_confidence, reason, actor, payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                 (claim["id"], None, claim["status"], None, claim["confidence"], "created",
-                 "verinoda", "{}", claim["created_at"]),
+                 "verinoda", json.dumps({"snapshot": claim["snapshot_id"]} if claim.get("snapshot_id") else {}),
+                 claim["created_at"]),
             )
 
     def claim(self, cid: str) -> dict | None:
@@ -825,13 +826,19 @@ class Store:
         ts = now()
         fields = {"status": to_status, "confidence": to_conf, "updated_at": ts}
         fields.update(extra_fields or {})
+        payload = dict(payload or {})
+        if "snapshot" not in payload:
+            # the snapshot whose tree the transition read, when the caller knows it: an invalidation's
+            # new_snapshot, a rebind's snapshot_id; else None (the working tree, at no known commit). A claim's
+            # code time (verinoda/asof.py).
+            payload["snapshot"] = payload["new_snapshot"] if "new_snapshot" in payload else fields.get("snapshot_id")
         with self.tx():
             self._update("claims", "id", cid, fields)
             self.conn.execute(
                 "INSERT INTO claim_history (claim_id, from_status, to_status, from_confidence,"
                 " to_confidence, reason, actor, payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
                 (cid, from_status, to_status, from_conf, to_conf, reason, actor,
-                 json.dumps(payload or {}, sort_keys=True), ts),
+                 json.dumps(payload, sort_keys=True), ts),
             )
 
     def history(self, cid: str) -> list[dict]:
