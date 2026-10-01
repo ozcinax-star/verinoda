@@ -18,6 +18,24 @@
             "statusMessage": "verinoda: graph context"
           }
         ]
+      },
+      {
+        "matcher": "Read|Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "verinoda",
+            "tool": "run_tool",
+            "input": {
+              "name": "read_context",
+              "arguments": {
+                "file_path": "${tool_input.file_path}"
+              }
+            },
+            "timeout": 10,
+            "statusMessage": "verinoda: what the project says about this file"
+          }
+        ]
       }
     ]
   }

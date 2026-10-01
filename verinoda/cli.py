@@ -1260,6 +1260,15 @@ def cmd_docs(args) -> int:
     return res["exit"]
 
 
+def cmd_context(args) -> int:
+    from verinoda import scoped
+
+    repo = _repo(args)
+    res = scoped.for_file(repo, args.file)
+    _emit(args, res, lambda r: print(scoped.text(r, limit=10_000) or f"nothing in this project names {r['file']}"))
+    return 2 if res.get("outside") else 0
+
+
 def cmd_owners(args) -> int:
     from verinoda import ownership
 
@@ -3428,6 +3437,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="leave out documents matching this glob (repeatable), e.g. a vendored or template folder")
     c.add_argument("--fix", action="store_true", help="rewrite renamed paths and moved line numbers in place (the "
                                                       "reference's own characters only); the rest stays flagged")
+    sp = add("context", cmd_context, "what the project says about one file: decision records whose guards name it, "
+                                     "your notes on it or on a glob matching it (`scope:` in a note's header), "
+                                     "Cursor and Kiro rules for it (what the Read/Edit hook shows an agent)")
+    sp.add_argument("file", help="the file (repository-relative or absolute)")
     sp = add("owners", cmd_owners, "who knows this code: the CODEOWNERS rule that owns it, and from git blame its "
                                    "authors, main author, bus factor and knowledge loss (exit 2: nothing found)")
     sp.add_argument("target", nargs="?", help="a file, a folder, path:A-B or path#Symbol (default: the project)")
