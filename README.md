@@ -574,7 +574,7 @@ verinoda setup . --agents all                     # every supported agent found 
 | GitHub Copilot (VS Code) | `.vscode/mcp.json` (`servers`, project only) | a marked block in `.github/copilot-instructions.md` |
 | Kiro | `.kiro/settings/mcp.json` / `~/.kiro/settings/mcp.json` (`mcpServers`) | `.kiro/steering/verinoda.md` |
 | Continue | `.continue/mcpServers/verinoda.yaml` (project only) | `.continue/rules/verinoda.md` |
-| Aider | none (Aider has no MCP client) | `.aider.verinoda.md`, named by `read:` in a new `.aider.conf.yml` (an existing one is not edited: the step to add is printed) |
+| Aider | none (Aider has no MCP client) | `.aider.verinoda.md`, named by `read:` in a marked block of a new `.aider.conf.yml` (your own keys may go around it; an existing config without the block is not edited: the step to add is printed) |
 
 - **Claude Code**: `/verinoda how does checkout reach the database?`
 - **Codex**: mention `$verinoda` in the prompt. (Codex has no `/verinoda` command.)

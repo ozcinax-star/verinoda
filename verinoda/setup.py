@@ -36,8 +36,14 @@ USAGE = {
               "`/verinoda <question>`",
     "codex": "Codex: trust this project so it reads .codex/config.toml, then mention `$verinoda <question>` "
              "(Codex has no /verinoda command)",
-    **{a: s.usage for a, s in more_agents.SPECS.items()},
 }
+
+
+def _usage(agent: str, scope: str, with_mcp: bool) -> str:
+    """The next step for ``agent``: naming only the files install wrote at this scope."""
+    if agent in more_agents.SPECS:
+        return more_agents.usage(agent, scope, with_mcp)
+    return USAGE[agent]
 
 
 class SetupRefused(RuntimeError):
@@ -256,6 +262,10 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
         raise SetupRefused("scope must be 'project' or 'user'")
     found = found_agents(repo, home, scope) if agents == "all" else None
     chosen = _choose(agents, found)
+    no_place = [a for a in chosen if a in more_agents.SPECS and scope not in more_agents.scopes(a)]
+    if no_place:  # refused before anything is written, as an unknown name is
+        raise SetupRefused("; ".join(f"{more_agents.SPECS[a].title} has no {scope}-scope location Verinoda writes "
+                                     f"to (supported: {', '.join(more_agents.scopes(a))})" for a in no_place))
 
     report: dict = {"repo": str(repo), "steps": [], "agents": [], "warnings": [], "next_steps": []}
     if found is not None:  # why each agent counts as found (a folder or a program, never a guess)
@@ -345,7 +355,7 @@ def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", s
             if w not in report["warnings"]:
                 report["warnings"].append(w)
         if r.get("ok", True):
-            report["next_steps"].append(USAGE[agent])
+            report["next_steps"].append(_usage(agent, scope, with_mcp))
     if not chosen and agents in ("auto", "all"):
         missing = [a for a in (SKILL_AGENTS if agents == "auto" else AGENTS) if a not in chosen]
         report["warnings"].append(

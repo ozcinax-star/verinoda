@@ -144,6 +144,18 @@ def _read(p: Path) -> str | None:
         return None
 
 
+def _doc_lines(text: str) -> list[str]:
+    """The lines of an instruction file, those of Verinoda's own marked blocks blank (the installer's text,
+    not the project's; numbering kept)."""
+    from verinoda.selffiles import find_block
+
+    out: list[str] = []
+    while (m := find_block(text)) is not None:
+        out += text[:m.start()].splitlines() + [""] * len(m.group(0).splitlines())
+        text = text[m.end():]
+    return out + text.splitlines()
+
+
 def _line_of(p: Path, needle: str | re.Pattern, start: int = 1) -> int:
     for i, ln in enumerate((_read(p) or "").splitlines(), 1):
         if i >= start and (needle.search(ln) if isinstance(needle, re.Pattern) else needle in ln):
@@ -308,7 +320,7 @@ def instruction_files(repo: Path, files: list[str], *, extra: list[str] | None =
             continue
         docs.append(Doc(_shown(p, repo, home), p, "file", list(dict.fromkeys([p.parent, repo])), p.parent))
     for doc in docs:
-        doc.lines = (_read(doc.path) or "").splitlines()
+        doc.lines = _doc_lines(_read(doc.path) or "")
     return docs
 
 
@@ -1419,6 +1431,7 @@ def lint(repo: Path, *, extra: list[str] | None = None, memory: bool = True, inc
         "`cd` carries to the next lines of the same shell block; a folder it cannot follow (cd -, cd $DIR, a "
         "missing one) makes what runs there unknown",
         "a nested instruction file governs its folder: its commands are compared only with files of the same folder",
+        "Verinoda's own marked block (`verinoda install` adds it to GEMINI.md and Copilot's instructions) is not read",
     ]
     if not docs:
         return {"status": "no_files", "files": [], "summary": {"checks": 0, "ok": 0, "wrong": 0, "unknown": 0},

@@ -19,7 +19,11 @@ own test of "managed by Verinoda") and is
   in the one indexed, set up on its own, has its skill there) and in any letter case (a case-insensitive
   file system puts the installer's ``.claude`` into an existing ``.Claude``); or
 * listed by the project's install manifest (``.verinoda/install-manifest.json``) as written whole by
-  Verinoda (``kind: "file"``).
+  Verinoda (``kind: "file"``); or
+* listed by the manifest as holding a marked block of Verinoda's (``kind: "md_block"``: GEMINI.md,
+  ``.github/copilot-instructions.md``, Aider's ``.aider.conf.yml``) and holding nothing else now: the
+  block (:func:`find_block`) and white space. A file the user also wrote in stays in the corpus, the
+  block with it (``agent-lint`` skips the block).
 
 The marker decides, as it does for the installer: a file without it is the user's (a ``SKILL.md`` the
 installer refuses to overwrite, a taken-over one, a ``reference.md`` a user keeps next to the managed
@@ -39,6 +43,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -62,8 +67,42 @@ _SKILL_PATHSPECS = tuple(":(glob,icase)**/" + "/".join(parts) + "/**" for parts 
 MCP_CONFIG_NAMES = frozenset({".mcp.json", "claude_desktop_config.json", "mcp.json", "mcp_servers.json"})
 _MARKER_READ = 1 << 20  # a skill is a few KB; a larger file is read this far for the marker
 
-_MANIFESTS: dict[str, tuple[tuple, tuple[str, ...]]] = {}  # manifest path -> (its stat, listed files)
-_MARKED: dict[str, tuple[tuple, bool]] = {}                # file path -> (its stat, carries the marker)
+# The marked block the installer adds to a file it shares with the user (Markdown, or a YAML comment).
+# Begin and end are looked for one after the other, so a file of many begin lines and no end is one pass.
+BLOCK_BEGIN_RE = re.compile(r"^(?:#[ \t]*)?<!-- verinoda-managed v1 begin\b[^\r\n]*(?:\r?\n|\Z)", re.M)
+BLOCK_END_RE = re.compile(r"^(?:#[ \t]*)?<!-- verinoda-managed end -->[^\r\n]*(?:\r?\n|\Z)", re.M)
+
+_MANIFESTS: dict[str, tuple] = {}            # manifest path -> (its stat, listed files, listed blocks)
+_MARKED: dict[str, tuple[tuple, bool]] = {}  # file path -> (its stat, carries the marker)
+_BLOCK_ONLY: dict[str, tuple[tuple, bool]] = {}  # file path -> (its stat, holds the block and nothing else)
+
+
+class Block:
+    """The span of a marked block in a text (the part of ``re.Match`` the installer's edits use)."""
+
+    def __init__(self, text: str, start: int, end: int):
+        self.string, self._span = text, (start, end)
+
+    def span(self) -> tuple[int, int]:
+        return self._span
+
+    def start(self) -> int:
+        return self._span[0]
+
+    def end(self) -> int:
+        return self._span[1]
+
+    def group(self, i: int = 0) -> str:
+        return self.string[self._span[0]:self._span[1]]
+
+
+def find_block(text: str) -> Block | None:
+    """The first marked block in ``text`` (its begin line through the next end line), or None."""
+    b = BLOCK_BEGIN_RE.search(text)
+    if b is None:
+        return None
+    e = BLOCK_END_RE.search(text, b.end())
+    return Block(text, b.start(), e.end()) if e else None
 
 
 def _stat_key(p: Path) -> tuple | None:
@@ -74,32 +113,59 @@ def _stat_key(p: Path) -> tuple | None:
     return (st.st_mtime_ns, st.st_size)
 
 
-def _manifest_files(manifest: Path) -> tuple[str, ...]:
-    """Project-relative paths of the ``kind: "file"`` items of every install the manifest records.
-    An unreadable or malformed manifest lists nothing (it never breaks a file listing)."""
+def _manifest_items(manifest: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Project-relative paths of the ``kind: "file"`` items and of the ``kind: "md_block"`` items of every
+    install the manifest records. An unreadable or malformed manifest lists nothing (it never breaks a file
+    listing)."""
     key = _stat_key(manifest)
     if key is None:
-        return ()
+        return (), ()
     memo = _MANIFESTS.get(str(manifest))
     if memo is not None and memo[0] == key:
-        return memo[1]
-    out: list[str] = []
+        return memo[1], memo[2]
+    out: dict[str, list[str]] = {"file": [], "md_block": []}
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
         installs = data.get("installs") if isinstance(data, dict) else None
         for entry in (installs or {}).values() if isinstance(installs, dict) else ():
             for item in (entry.get("items") or []) if isinstance(entry, dict) else ():
-                path = item.get("path") if isinstance(item, dict) and item.get("kind") == "file" else None
+                kind = item.get("kind") if isinstance(item, dict) else None
+                path = item.get("path") if kind in out else None
                 if isinstance(path, str) and path and not os.path.isabs(path):
                     rel = path.replace("\\", "/")
-                    if not rel.startswith("../") and rel not in out:
-                        out.append(rel)
+                    if not rel.startswith("../") and rel not in out[kind]:
+                        out[kind].append(rel)
     except (OSError, ValueError, AttributeError, TypeError):
-        out = []
+        out = {"file": [], "md_block": []}
     if len(_MANIFESTS) > 32:
         _MANIFESTS.clear()
-    _MANIFESTS[str(manifest)] = (key, tuple(out))
-    return tuple(out)
+    _MANIFESTS[str(manifest)] = (key, tuple(out["file"]), tuple(out["md_block"]))
+    return tuple(out["file"]), tuple(out["md_block"])
+
+
+def _manifest_files(manifest: Path) -> tuple[str, ...]:
+    """Project-relative paths of the ``kind: "file"`` items of every install the manifest records."""
+    return _manifest_items(manifest)[0]
+
+
+def _block_only(p: Path) -> bool:
+    """Does the file hold a marked block (:func:`find_block`) and nothing else but white space?"""
+    key = _stat_key(p)
+    if key is None or key[1] > _MARKER_READ:
+        return False
+    memo = _BLOCK_ONLY.get(str(p))
+    if memo is not None and memo[0] == key:
+        return memo[1]
+    try:
+        text = p.read_bytes().decode("utf-8").lstrip("\ufeff")
+        m = find_block(text)
+        only = m is not None and not (text[:m.start()] + text[m.end():]).strip()
+    except (OSError, UnicodeDecodeError):
+        only = False
+    if len(_BLOCK_ONLY) > 256:
+        _BLOCK_ONLY.clear()
+    _BLOCK_ONLY[str(p)] = (key, only)
+    return only
 
 
 def _has_marker(p: Path) -> bool:
@@ -133,12 +199,15 @@ def in_skill_dir(rel: str) -> bool:
 def own_filter(repo: Path) -> Callable[[str], bool]:
     """``rel -> bool``: is the project-relative POSIX path ``rel`` one of Verinoda's own files - under a
     skill folder (:func:`in_skill_dir`) or listed by the install manifest as written whole by Verinoda, and
-    carrying the ownership marker now (the manifest is read once; each marker check is remembered by the
-    file's size and time)."""
+    carrying the ownership marker now; or listed as holding Verinoda's marked block and holding nothing else
+    now (the manifest is read once; each file check is remembered by the file's size and time)."""
     repo = Path(repo)
-    listed = frozenset(_manifest_files(repo / MANIFEST_DIR / MANIFEST_NAME))
+    files, blocks = _manifest_items(repo / MANIFEST_DIR / MANIFEST_NAME)
+    listed, blocked = frozenset(files), frozenset(blocks)
 
     def own(rel: str) -> bool:
+        if rel in blocked and _block_only(repo / rel):
+            return True
         return (rel in listed or in_skill_dir(rel)) and _has_marker(repo / rel)
     return own
 
@@ -151,7 +220,7 @@ def is_own(repo: Path, rel: str) -> bool:
 def could_be_own(repo: Path) -> Callable[[str], bool]:
     """A cheap test on any spelling of a path (absolute or relative, either slash) with no file-system call:
     False means it is not one of Verinoda's own files; True means :func:`own_filter` has to decide."""
-    listed = tuple(_manifest_files(Path(repo) / MANIFEST_DIR / MANIFEST_NAME))
+    listed = tuple(sum(_manifest_items(Path(repo) / MANIFEST_DIR / MANIFEST_NAME), ()))
 
     def maybe(path: str) -> bool:
         s = path.replace("\\", "/")
@@ -198,7 +267,7 @@ def own_files(repo: Path) -> list[str]:
     """Verinoda's own files present in the project (project-relative POSIX paths, sorted)."""
     repo = Path(repo)
     own = own_filter(repo)
-    cands = _skill_dir_candidates(repo) | set(_manifest_files(repo / MANIFEST_DIR / MANIFEST_NAME))
+    cands = _skill_dir_candidates(repo) | set(sum(_manifest_items(repo / MANIFEST_DIR / MANIFEST_NAME), ()))
     return sorted(rel for rel in cands if own(rel))
 
 

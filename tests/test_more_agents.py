@@ -229,7 +229,7 @@ def test_aider_has_no_mcp_and_an_existing_config_is_not_edited(env):
 def test_aider_config_written_by_install_names_the_rules_file(env):
     install(env, "aider")
     text = (env.proj / ".aider.conf.yml").read_text(encoding="utf-8")
-    assert text.startswith("# " + agents.MARKER)
+    assert text.startswith("# " + ma.BLOCK_BEGIN) and text.rstrip("\n").endswith("# " + ma.BLOCK_END)
     assert f"read: [{json.dumps(str(env.proj.resolve() / '.aider.verinoda.md'))}]" in text
 
 
@@ -307,8 +307,10 @@ def test_rules_files_are_own_files_and_shared_files_are_not(env):
     for agent in OTHERS:
         install(env, agent)
     own = set(selffiles.own_files(env.proj))
+    # a shared file install created holds only Verinoda's block: Verinoda's text, so out of the corpus too
     assert own == {".cursor/rules/verinoda.mdc", ".kiro/steering/verinoda.md", ".continue/rules/verinoda.md",
-                   ".continue/mcpServers/verinoda.yaml", ".aider.verinoda.md", ".aider.conf.yml"}
+                   ".continue/mcpServers/verinoda.yaml", ".aider.verinoda.md", ".aider.conf.yml", "GEMINI.md",
+                   ".github/copilot-instructions.md"}
     vscode = env.proj / ".vscode/mcp.json"
     with_ours = selffiles.config_digest(vscode)
     data = json.loads(vscode.read_text(encoding="utf-8"))
@@ -330,3 +332,91 @@ def test_cli_lists_every_agent_and_the_rules_text_is_complete(env):
     assert "Never present `weak_inference` or `unknown` as fact" in text and "{{" not in text
     for ln in re.findall(r"^verinoda .*$", text, re.M):
         build_parser().parse_args(shlex.split(ln)[1:])
+
+
+# -- review round: the block is Verinoda's text, the user's config stays the user's, notes say what was written
+
+def test_a_shared_file_with_the_users_text_stays_in_the_corpus_and_agent_lint_skips_the_block(env):
+    from verinoda import agentlint
+
+    (env.proj / "pyproject.toml").write_text('[project]\nname = "shop"\nversion = "1"\n', encoding="utf-8")
+    (env.proj / "app.py").write_text("def total():\n    return 1\n", encoding="utf-8")
+    for agent in ("gemini", "copilot"):
+        install(env, agent)
+    assert selffiles.is_own(env.proj, "GEMINI.md") and selffiles.is_own(env.proj, ".github/copilot-instructions.md")
+    rep = agentlint.lint(env.proj, memory=False, home=env.home, files=["GEMINI.md", "app.py", "pyproject.toml"])
+    assert rep["summary"]["wrong"] == 0, rep  # the block's `-m verinoda` line is not the project's
+    p = env.proj / "GEMINI.md"
+    p.write_bytes(p.read_bytes() + b"\nRun `python -m nosuchmodule` to test.\n")
+    assert not selffiles.is_own(env.proj, "GEMINI.md")  # the user wrote in it: it is the project's now
+    rep = agentlint.lint(env.proj, memory=False, home=env.home, files=["GEMINI.md", "app.py", "pyproject.toml"])
+    wrong = [c for c in rep["checks"] if c["verdict"] == "wrong"]
+    assert [c["at"] for c in wrong] == [f"GEMINI.md:{len(p.read_text(encoding='utf-8').splitlines())}"], wrong
+
+
+def test_find_block_is_linear_on_many_begin_lines_without_an_end():
+    import time
+
+    text = ma.BLOCK_BEGIN + " x\n"
+    t0 = time.perf_counter()
+    assert selffiles.find_block(text * 20000) is None
+    assert time.perf_counter() - t0 < 1.0
+    both = "a\n" + ma.render_block("b") + "c\n" + ma.render_block("d", comment="# ")
+    m = selffiles.find_block(both)
+    assert m.group(0) == ma.render_block("b") and both[m.end():].startswith("c\n")
+
+
+def test_aider_config_keys_the_user_adds_are_kept_and_reinstall_stays_safe(env):
+    assert install(env, "aider")["result"] == "installed"
+    conf = env.proj / ".aider.conf.yml"
+    conf.write_bytes(conf.read_bytes() + b"model: sonnet\n")
+    r = install(env, "aider")
+    assert r["ok"] and r["result"] == "unchanged", r
+    assert not selffiles.is_own(env.proj, ".aider.conf.yml")  # the user's keys are in it now
+    u = uninstall(env, "aider")
+    assert u["result"] == "uninstalled", u
+    assert tree(env.proj) == {".aider.conf.yml": b"model: sonnet\n"}
+
+
+@pytest.mark.parametrize("conf, manual", [
+    ("# TODO maybe read .aider.verinoda.md later\nmodel: sonnet\n", "read: ["),  # a comment is not a read entry
+    ("read: [CONVENTIONS.md]\n", "add "),  # one read: key: add to it, never a second one
+    ("read:\n  - CONVENTIONS.md\n  - .aider.verinoda.md  # ours\n", None),
+    ("model: x\nread: [CONVENTIONS.md, .aider.verinoda.md]\n", None),
+])
+def test_aider_existing_config_counts_only_a_read_entry(env, conf, manual):
+    (env.proj / ".aider.conf.yml").write_text(conf, encoding="utf-8")
+    r = install(env, "aider")
+    assert r["ok"], r
+    act = next(a for a in r["actions"] if a["what"] == "config")
+    if manual:
+        assert act["op"] == "manual" and r["manual"] and r["manual"][0].startswith(manual), r
+    else:
+        assert act["op"] == "unchanged" and "`read:` entry" in act["detail"] and not r["manual"], r
+    assert (env.proj / ".aider.conf.yml").read_text(encoding="utf-8") == conf
+
+
+@pytest.mark.parametrize("agent", ["cursor", "gemini", "copilot", "kiro", "continue"])
+def test_notes_name_only_what_was_written(env, agent):
+    r = install(env, agent, with_mcp=False)
+    assert r["mcp_config"] is None
+    mcp_rel = ma.SPECS[agent].mcp["project"][1]
+    assert not any(mcp_rel in n or "server" in n for n in r["notes"]), r["notes"]
+    assert ma.SPECS[agent].rules["project"][1] in r["notes"][0]
+
+
+def test_cursor_user_scope_notes_name_no_rules_file(env):
+    r = install(env, "cursor", "user")
+    assert not any(".cursor/rules" in n for n in r["notes"]), r["notes"]
+    assert any("~/.cursor/mcp.json" in n for n in r["notes"])
+    assert ma.usage("cursor", "user", False) == "Cursor: nothing is written for it at user scope"
+
+
+@pytest.mark.parametrize("agent", ["copilot", "continue"])
+def test_setup_refuses_an_agent_with_no_place_at_the_scope_before_writing(env, agent):
+    from verinoda import setup as setup_mod
+
+    (env.proj / "app.py").write_text("x = 1\n", encoding="utf-8")
+    with pytest.raises(setup_mod.SetupRefused, match="no user-scope location"):
+        setup_mod.setup_project(env.proj, agents=agent, scope="user", home=env.home)
+    assert not (env.proj / ".verinoda").exists() and tree(env.home) == {}
