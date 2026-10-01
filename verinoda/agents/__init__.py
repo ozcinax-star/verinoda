@@ -1,4 +1,5 @@
-"""Claude Code and Codex integration: install/uninstall the Verinoda skill and MCP server.
+"""Coding-agent integration: install/uninstall the Verinoda skill (Claude Code, Codex) or instructions
+(Cursor, Gemini CLI, GitHub Copilot, Kiro, Continue, Aider) and the MCP server.
 
 Public API (used by ``verinoda install``/``uninstall`` and ``verinoda doctor``)::
 

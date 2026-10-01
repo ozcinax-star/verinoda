@@ -12,6 +12,10 @@ codex  / project       <project>/.agents/skills/verinoda/SKILL.md  <project>/.co
 codex  / user          ~/.agents/skills/verinoda/SKILL.md          ~/.codex/config.toml (or $CODEX_HOME)
 =====================  =========================================  ==========================================
 
+Cursor, Gemini CLI, GitHub Copilot, Kiro, Continue and Aider get an instructions file and, where the
+agent has one, an MCP entry through the same planning and manifest: see
+:mod:`verinoda.agents.more_agents` for their locations.
+
 Safety rules:
 
 * a SKILL.md without the ``<!-- verinoda-managed`` marker is never overwritten;
@@ -43,11 +47,14 @@ from typing import Callable
 
 from verinoda.agents import _jsonedit as je
 from verinoda.agents import _tomledit as te
+from verinoda.agents import more_agents as ma
 # NAME, the ownership marker, the skill folders and the manifest's place are shared with the rule that
 # keeps these files out of the project's own index (verinoda.selffiles, D68)
 from verinoda.selffiles import MANIFEST_DIR, MANIFEST_NAME, MARKER, MARKER_PREFIX, NAME, SKILL_DIRS
 
-AGENTS = ("claude", "codex")
+AGENTS = ("claude", "codex")  # the agents that get the full skill
+# every agent install/uninstall knows: the others get an instructions file (verinoda.agents.more_agents)
+ALL_AGENTS = AGENTS + ma.AGENTS
 SCOPES = ("project", "user")
 MANIFEST_VERSION = 1
 TEMPLATES = Path(__file__).parent / "templates"
@@ -167,10 +174,13 @@ class Target:
     home: Path
     explicit_home: bool
     project_dir: Path
-    skill: Path
-    mcp_kind: str       # "json" | "toml" | "claude_cli"
-    mcp_path: Path      # file holding the server entry (claude_cli: ~/.claude.json, read only)
+    skill: Path | None  # the skill, or another agent's instructions file (None: the agent has none here)
+    mcp_kind: str | None  # "json" | "toml" | "claude_cli" | "yaml_file" | None (no MCP for this agent/scope)
+    mcp_path: Path | None  # file holding the server entry (claude_cli: ~/.claude.json, read only)
     manifest: Path
+    rules_kind: str = "skill"      # "skill" | "file" (written whole) | "md_block" (a block in a shared file)
+    mcp_outer: str = "mcpServers"  # the JSON object holding the servers
+    mcp_typed: bool = True         # the JSON entry carries "type": "stdio"
 
 
 def _claude_user_config(home: Path, explicit_home: bool) -> Path:
@@ -187,6 +197,13 @@ def _codex_home(home: Path, explicit_home: bool) -> Path:
 
 def _target(agent: str, scope: str, project_dir: Path, home: Path, explicit_home: bool) -> Target:
     root = project_dir if scope == "project" else home
+    if agent in ma.SPECS:
+        s = ma.SPECS[agent]
+        rkind, rpath = s.rules.get(scope, (None, None))
+        mkind, mpath = s.mcp.get(scope, (None, None))
+        return Target(agent, scope, root, home, explicit_home, project_dir, root / rpath if rpath else None,
+                      mkind, root / mpath if mpath else None, root / MANIFEST_DIR / MANIFEST_NAME,
+                      rkind or "file", s.outer or "mcpServers", s.typed)
     skill = root.joinpath(*SKILL_DIRS[agent], "SKILL.md")
     if agent == "claude":
         if scope == "project":
@@ -571,37 +588,42 @@ class Plan:
 
 
 def _plan_skill(plan: Plan, t: Target, prev_items: list[dict], launcher: dict | None = None) -> None:
-    data = render_skill(t.agent, launcher)
-    rel = _rel(t.root, t.skill)
+    _plan_file(plan, t.root, t.skill, render_skill(t.agent, launcher), prev_items, "skill")
+
+
+def _plan_file(plan: Plan, root: Path, path: Path, data: bytes, prev_items: list[dict], role: str) -> None:
+    """Write ``data`` to ``path`` as a file Verinoda owns whole (it carries the marker): created, or
+    replaced only when it carries the marker and is unchanged since install."""
+    rel = _rel(root, path)
     prev = _prev(prev_items, "file", rel)
-    item = {"kind": "file", "role": "skill", "path": rel, "sha256": _sha(data),
+    item = {"kind": "file", "role": role, "path": rel, "sha256": _sha(data),
             "created_dirs": list(prev.get("created_dirs", [])) if prev else []}
-    if not t.skill.exists():
-        item["created_dirs"] = [_rel(t.root, d) for d in _missing_dirs(t.skill, t.root)]
-        plan.act("create", "skill", t.skill)
-        plan.ops.append((lambda: (_write_bytes(t.skill, data), item)[1], item))
+    if not path.exists():
+        item["created_dirs"] = [_rel(root, d) for d in _missing_dirs(path, root)]
+        plan.act("create", role, path)
+        plan.ops.append((lambda: (_write_bytes(path, data), item)[1], item))
         return
-    cur = t.skill.read_bytes()
+    cur = path.read_bytes()
     if MARKER_PREFIX not in cur:
-        plan.refuse("skill", t.skill, f"{t.skill} already exists and is not managed by Verinoda (no "
+        plan.refuse(role, path, f"{path} already exists and is not managed by Verinoda (no "
                     f"'{MARKER}' marker); refusing to overwrite it. Move or rename it, then re-run install.")
         return
     if cur == data:
-        plan.act("unchanged", "skill", t.skill)
+        plan.act("unchanged", role, path)
         plan.keep(item)
         return
     if prev and _sha(cur) != prev.get("sha256"):
-        plan.refuse("skill", t.skill, f"{t.skill} was edited after Verinoda installed it; refusing to "
+        plan.refuse(role, path, f"{path} was edited after Verinoda installed it; refusing to "
                     "overwrite local edits. Delete it (or undo the edits) and re-run install.")
         return
-    plan.act("update", "skill", t.skill, "managed copy, unchanged since install" if prev
+    plan.act("update", role, path, "managed copy, unchanged since install" if prev
              else "carries the Verinoda marker")
-    plan.ops.append((lambda: (_write_bytes(t.skill, data), item)[1], item))
+    plan.ops.append((lambda: (_write_bytes(path, data), item)[1], item))
 
 
-def _json_set(text: str, entry: dict, expected: dict) -> tuple[str, bool]:
+def _json_set(text: str, entry: dict, expected: dict, outer: str = "mcpServers") -> tuple[str, bool]:
     try:
-        new = je.set_member(text, ("mcpServers", NAME), entry)
+        new = je.set_member(text, (outer, NAME), entry)
         if json.loads(new) == expected:
             return new, True
     except (je.JsonEditError, ValueError, IndexError):
@@ -611,15 +633,18 @@ def _json_set(text: str, entry: dict, expected: dict) -> tuple[str, bool]:
 
 
 def _plan_json(plan: Plan, t: Target, cmd: list[str], prev_items: list[dict]) -> None:
-    entry = {"type": "stdio", "command": cmd[0], "args": cmd[1:]}
+    outer = t.mcp_outer
+    entry = ({"type": "stdio"} if t.mcp_typed else {}) | {"command": cmd[0], "args": cmd[1:]}
     p, rel = t.mcp_path, _rel(t.root, t.mcp_path)
     prev = _prev(prev_items, "json_key", rel)
-    item = {"kind": "json_key", "role": "mcp", "path": rel, "key": ["mcpServers", NAME],
-            "sha256": _entry_hash(entry), "created_file": False, "created_parent": False}
+    item = {"kind": "json_key", "role": "mcp", "path": rel, "key": [outer, NAME],
+            "sha256": _entry_hash(entry), "created_file": False, "created_parent": False,
+            "created_dirs": []}
     if not p.exists():
-        item.update(created_file=True, created_parent=True)
-        text = json.dumps({"mcpServers": {NAME: entry}}, indent=2, ensure_ascii=False) + "\n"
-        plan.act("create", "mcp", p, f"mcpServers.{NAME}")
+        item.update(created_file=True, created_parent=True,
+                    created_dirs=[_rel(t.root, d) for d in _missing_dirs(p, t.root)])
+        text = json.dumps({outer: {NAME: entry}}, indent=2, ensure_ascii=False) + "\n"
+        plan.act("create", "mcp", p, f"{outer}.{NAME}")
         plan.ops.append((lambda: (_write_bytes(p, text.encode("utf-8")), item)[1], item))
         return
     try:
@@ -628,17 +653,18 @@ def _plan_json(plan: Plan, t: Target, cmd: list[str], prev_items: list[dict]) ->
     except (UnicodeDecodeError, ValueError) as exc:
         plan.refuse("mcp", p, f"{p} is not valid JSON ({exc}); not touching it. Fix it, or install with --no-mcp.")
         return
-    if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
-        plan.refuse("mcp", p, f"{p} has an unexpected shape (need an object with an 'mcpServers' object); "
+    if not isinstance(data, dict) or not isinstance(data.get(outer, {}), dict):
+        plan.refuse("mcp", p, f"{p} has an unexpected shape (need an object with an '{outer}' object); "
                     "not touching it.")
         return
     if prev:
-        item.update(created_file=prev.get("created_file", False), created_parent=prev.get("created_parent", False))
+        item.update(created_file=prev.get("created_file", False), created_parent=prev.get("created_parent", False),
+                    created_dirs=list(prev.get("created_dirs") or []))
     else:
-        item["created_parent"] = "mcpServers" not in data
-    cur = data.get("mcpServers", {}).get(NAME)
+        item["created_parent"] = outer not in data
+    cur = data.get(outer, {}).get(NAME)
     if cur == entry:
-        plan.act("unchanged", "mcp", p, f"mcpServers.{NAME}")
+        plan.act("unchanged", "mcp", p, f"{outer}.{NAME}")
         if prev:
             plan.keep(item)
         else:
@@ -647,18 +673,18 @@ def _plan_json(plan: Plan, t: Target, cmd: list[str], prev_items: list[dict]) ->
         return
     if cur is not None:
         if not prev:
-            plan.refuse("mcp", p, f"{p} already has an 'mcpServers.{NAME}' entry that Verinoda did not add; "
+            plan.refuse("mcp", p, f"{p} already has an '{outer}.{NAME}' entry that Verinoda did not add; "
                         "refusing to replace it. Remove that entry, or install with --no-mcp.")
             return
         if _entry_hash(cur) != prev.get("sha256"):
-            plan.refuse("mcp", p, f"the 'mcpServers.{NAME}' entry in {p} was edited after install; "
+            plan.refuse("mcp", p, f"the '{outer}.{NAME}' entry in {p} was edited after install; "
                         "refusing to overwrite it. Remove it, or install with --no-mcp.")
             return
     expected = copy.deepcopy(data)
-    expected.setdefault("mcpServers", {})[NAME] = entry
-    new, spliced = _json_set(text, entry, expected)
+    expected.setdefault(outer, {})[NAME] = entry
+    new, spliced = _json_set(text, entry, expected, outer)
     plan.act("update" if cur is not None else "create", "mcp", p,
-             f"mcpServers.{NAME}; other keys preserved" + ("" if spliced else " (file re-indented)"))
+             f"{outer}.{NAME}; other keys preserved" + ("" if spliced else " (file re-indented)"))
     if not spliced:
         plan.warnings.append(f"{p}: could not splice the entry in place; the file was re-serialised "
                              "(values and key order kept, whitespace may differ).")
@@ -861,10 +887,13 @@ def _fail(res: dict, msg: str) -> dict:
 
 
 def _check_args(res: dict, agent: str, scope: str, project_dir: Path, home: Path) -> bool:
-    if agent not in AGENTS:
-        _fail(res, f"unknown agent {agent!r} (choose from {', '.join(AGENTS)})")
+    if agent not in ALL_AGENTS:
+        _fail(res, f"unknown agent {agent!r} (choose from {', '.join(ALL_AGENTS)})")
     elif scope not in SCOPES:
         _fail(res, f"unknown scope {scope!r} (choose from {', '.join(SCOPES)})")
+    elif agent in ma.SPECS and scope not in ma.scopes(agent):
+        _fail(res, f"{ma.SPECS[agent].title} has no {scope}-scope location Verinoda writes to (supported: "
+                   f"{', '.join(ma.scopes(agent))})")
     elif scope == "project" and not project_dir.is_dir():
         _fail(res, f"project directory {project_dir} does not exist")
     elif scope == "user" and not home.is_dir():
@@ -893,6 +922,8 @@ def _move_note(cmd: list[str] | None, project_dir: Path) -> str:
 
 def _usage_notes(t: Target, with_mcp: bool, cmd: list[str] | None = None) -> list[str]:
     notes = []
+    if t.agent in ma.SPECS:
+        return ma.usage_notes(t, with_mcp)
     if t.agent == "claude":
         notes.append(f"Claude Code: type /{NAME} <question> (the text after the command is passed to the skill "
                      "as $ARGUMENTS); Claude can also load the skill by itself when a request matches it. "
@@ -939,7 +970,8 @@ def install(agent: str, scope: str, *, project_dir, home=None, with_mcp: bool = 
     if not _check_args(res, agent, scope, project_dir, home):
         return res
     t = _target(agent, scope, project_dir, home, explicit_home)
-    res.update(skill=str(t.skill), mcp_config=str(t.mcp_path) if with_mcp else None, manifest=str(t.manifest))
+    res.update(skill=str(t.skill) if t.skill else None,
+               mcp_config=str(t.mcp_path) if with_mcp and t.mcp_path else None, manifest=str(t.manifest))
     try:
         manifest = _load_manifest(t)
     except (OSError, ValueError) as exc:
@@ -952,13 +984,17 @@ def install(agent: str, scope: str, *, project_dir, home=None, with_mcp: bool = 
     plan.warnings.extend(launcher["warnings"])
     res["server"] = {k: launcher[k] for k in ("how", "note", "cli", "why", "python", "package", "imports",
                                               "runs_ours", "path_exe", "path_python", "path_build")}
-    _plan_skill(plan, t, prev_items, launcher)
+    if agent in ma.SPECS:
+        ma.plan_rules(plan, t, prev_items, launcher)
+    else:
+        _plan_skill(plan, t, prev_items, launcher)
     cmd = None
-    if with_mcp:
+    if with_mcp and t.mcp_kind:
         profile = mcp_profile(agent)
         cmd = server_command(scope, project_dir, agent, launcher, profile=profile)
         res["server"]["command"] = cmd
-        {"json": _plan_json, "toml": _plan_toml, "claude_cli": _plan_claude_cli}[t.mcp_kind](plan, t, cmd, prev_items)
+        {"json": _plan_json, "toml": _plan_toml, "claude_cli": _plan_claude_cli,
+         "yaml_file": ma.plan_yaml}[t.mcp_kind](plan, t, cmd, prev_items)
         if profile:
             plan.notes.append(f"The MCP server is registered with --profile {profile}: this Verinoda install is "
                               "editable or hardlinked, so the Codex sandbox may not import it and MCP is the "
@@ -1040,44 +1076,46 @@ def _un_file(plan: Plan, t: Target, item: dict, kept: list[dict]) -> None:
 
 def _un_json(plan: Plan, t: Target, item: dict, kept: list[dict]) -> None:
     p = _abs(t.root, item["path"])
+    outer = (item.get("key") or ["mcpServers"])[0]
     if not p.exists():
         plan.act("missing", "mcp", p, "file already gone")
         return
     try:
         text, bom = _read_text(p)
         data = json.loads(text)
-        cur = data.get("mcpServers", {}).get(NAME)
+        cur = data.get(outer, {}).get(NAME)
     except (UnicodeDecodeError, ValueError, AttributeError) as exc:
         plan.act("keep", "mcp", p, "unreadable")
-        plan.warnings.append(f"{p} is not valid JSON ({exc}); left untouched - remove 'mcpServers.{NAME}' by hand.")
+        plan.warnings.append(f"{p} is not valid JSON ({exc}); left untouched - remove '{outer}.{NAME}' by hand.")
         kept.append(item)
         return
     if cur is None:
-        plan.act("missing", "mcp", p, f"mcpServers.{NAME} already gone")
+        plan.act("missing", "mcp", p, f"{outer}.{NAME} already gone")
         return
     if _entry_hash(cur) != item.get("sha256"):
-        plan.act("keep", "mcp", p, f"mcpServers.{NAME} modified since install")
+        plan.act("keep", "mcp", p, f"{outer}.{NAME} modified since install")
         plan.warnings.append(f"the '{NAME}' entry in {p} was modified after install; left in place.")
         kept.append(item)
         return
     expected = copy.deepcopy(data)
-    del expected["mcpServers"][NAME]
-    drop_outer = bool(item.get("created_parent")) and not expected["mcpServers"]
+    del expected[outer][NAME]
+    drop_outer = bool(item.get("created_parent")) and not expected[outer]
     if drop_outer:
-        del expected["mcpServers"]
+        del expected[outer]
     if item.get("created_file") and expected == {}:
         plan.act("remove", "mcp", p, "file created by install; nothing else in it")
-        plan.ops.append((lambda: p.unlink(), None))
+        dirs = _un_dirs(plan, t, item.get("created_dirs", []))
+        plan.ops.append((lambda: (p.unlink(), _rmdirs(dirs))[0], None))
         return
     try:
-        new = je.remove_member(text, ("mcpServers", NAME), drop_empty_outer=drop_outer)
+        new = je.remove_member(text, (outer, NAME), drop_empty_outer=drop_outer)
         if json.loads(new) != expected:
             raise ValueError("splice mismatch")
     except (je.JsonEditError, ValueError, IndexError):
         nl = je.newline_of(text)
         new = json.dumps(expected, indent=je.indent_unit(text), ensure_ascii=False).replace("\n", nl) + nl
         plan.warnings.append(f"{p}: re-serialised while removing the entry (whitespace may differ).")
-    plan.act("remove", "mcp", p, f"key mcpServers.{NAME}; other keys preserved")
+    plan.act("remove", "mcp", p, f"key {outer}.{NAME}; other keys preserved")
     plan.ops.append((lambda: _write_bytes(p, _encode(new, bom)), None))
 
 
@@ -1169,7 +1207,8 @@ def uninstall(agent: str, scope: str, *, project_dir, home=None, dry_run: bool =
     if not _check_args(res, agent, scope, project_dir, home):
         return res
     t = _target(agent, scope, project_dir, home, explicit_home)
-    res.update(skill=str(t.skill), mcp_config=str(t.mcp_path), manifest=str(t.manifest))
+    res.update(skill=str(t.skill) if t.skill else None, mcp_config=str(t.mcp_path) if t.mcp_path else None,
+               manifest=str(t.manifest))
     try:
         manifest = _load_manifest(t)
     except (OSError, ValueError) as exc:
@@ -1179,7 +1218,7 @@ def uninstall(agent: str, scope: str, *, project_dir, home=None, dry_run: bool =
         res["result"] = "nothing_to_uninstall"
         res["notes"].append(f"no Verinoda install for {agent} ({scope}) is recorded in {t.manifest}.")
         try:
-            if t.skill.exists() and MARKER_PREFIX in t.skill.read_bytes():
+            if t.skill and t.rules_kind != "md_block" and t.skill.exists() and MARKER_PREFIX in t.skill.read_bytes():
                 res["warnings"].append(f"{t.skill} carries the Verinoda marker but is not in the manifest; "
                                        "left in place (delete it by hand if you want it gone).")
         except OSError:
@@ -1188,7 +1227,8 @@ def uninstall(agent: str, scope: str, *, project_dir, home=None, dry_run: bool =
 
     plan = Plan()
     kept: list[dict] = []
-    handlers = {"file": _un_file, "json_key": _un_json, "toml_block": _un_toml, "command": _un_command}
+    handlers = {"file": _un_file, "json_key": _un_json, "toml_block": _un_toml, "command": _un_command,
+                "md_block": ma.un_block}
     for item in entry.get("items", []):
         h = handlers.get(item.get("kind"))
         if h is None:
