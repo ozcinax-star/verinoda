@@ -9672,7 +9672,7 @@ by Verinoda or edited since kept unless `--force`; `--out` outside the project r
 structural path's note and one step per line; the CLI's JSON errors; in a project path with a space and
 non-ASCII.
 
-## 96. Pattern trends and code monitors (DD123, 2026-10-01)
+## 96. Pattern trends and code monitors (D123, 2026-10-01)
 
 ### 96.1 Why
 
