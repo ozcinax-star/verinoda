@@ -69,7 +69,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 6.5 | **Reachable vulnerable dependencies and SBOM (opt-in)** | Advisories filtered to library functions the code actually calls; CycloneDX output; licenses | Semgrep Supply Chain, narsil-mcp | an advisory is reported only with a call path to the vulnerable function |
-| 6.6 | **Affected projects in a monorepo** | The workspace packages and build targets a diff affects | nx affected | `review` names affected packages |
 
 ## 7 - Architecture rules engine
 

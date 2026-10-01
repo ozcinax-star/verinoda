@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D132)
+## Upgrading from 0.3.2 (D60-D133)
 
 ### D63: Running a project's own tests safely
 
@@ -652,6 +652,15 @@ New command `verinoda infra [--file FILE] [--json]`: Dockerfiles, compose servic
 Terraform resources, each linked to the project file its command runs (statically_verified commands;
 strong_inference links through `COPY` lines, weak_inference by name). Read-only; nothing to migrate. No MCP tool
 changes.
+
+### D133: Affected projects in a monorepo
+
+`review --json` and the MCP `change_review` response have a new key, `affected`: in a monorepo the
+workspace packages the change affects (the packages holding changed files, then those declaring a
+dependency on them, each with its manifest line and status; compact in MCP), else
+`{"packages_total": N, "not_checked": [...]}` (MCP: `{"packages_total": N}`). The review summary adds a
+"Workspace packages affected" sentence when there are some. New command `verinoda affected`. No MCP tool
+was added, so the tool count in UPGRADING does not change.
 
 ### D60-D62
 
