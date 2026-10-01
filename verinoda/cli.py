@@ -1531,6 +1531,23 @@ def cmd_context(args) -> int:
     return 2 if res.get("outside") else 0
 
 
+def cmd_rules(args) -> int:
+    from verinoda import path_rules as pr
+
+    repo = _repo(args)
+    try:
+        if args.base and args.staged:
+            raise pr.RulesError("give --base or --staged, not both")
+        res = pr.check(repo, base=args.base, staged=args.staged)
+    except pr.RulesError as exc:
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(pr.render(r)))
+    return res["exit"]
+
+
 def cmd_monitor(args) -> int:
     from verinoda import monitors as mon
 
@@ -3850,6 +3867,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--fix", action="store_true", help="with --check: write moved steps' lines back")
     sp.add_argument("--force", action="store_true",
                     help="overwrite a tour file Verinoda did not write, or one edited since it wrote it")
+    sp = add("rules", cmd_rules, "path-scoped review rules: `verinoda-rules` blocks in AGENTS.md, CLAUDE.md, "
+                                 "BUGBOT.md and REVIEW.md (any folder; .cursor/BUGBOT.md too) checked on the lines "
+                                 "the change added in the folder they cover; exit 1 on an error rule's match, 3 "
+                                 "when a search did not finish; the prose rule files covering each changed file "
+                                 "are listed")
+    sp.add_argument("--base", help="compare with this revision (default HEAD)")
+    sp.add_argument("--staged", action="store_true", help="the staged changes against HEAD (or --base)")
     sp = add("monitor", cmd_monitor, "saved searches that must not gain matches (verinoda-monitors.json, committed): "
                                      "check (default; exit 1 on a match the baseline does not have, 3 when a search "
                                      "did not finish), add ID --regex RE|--ast PATTERN, accept ID, remove ID, trend ID "
