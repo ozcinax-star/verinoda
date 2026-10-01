@@ -33,7 +33,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 1.4 | **Broader language coverage** | Pull the grammars upstream Graphify added after the fork (COBOL, R, Solidity, Erlang, OCaml, Terraform attributes, Razor and others) | Graphify, codebase-memory-mcp | each new language has an extraction fixture test |
 | 1.5 | **Daemon and multi-project server** | One MCP server over several indexed projects; HTTP transport with a token; `list_projects`, `index_status` | Graphify, codebase-memory-mcp, Codanna, Kodit | two projects answered from one server process |
 | 1.6 | **Multi-repository index** | Index several local repositories as one group with cross-repo symbol links | Sourcegraph, Graphify merge-graphs, GitNexus | a call from repo A to a function in repo B is an edge with its call site |
-| 1.7 | **Trigram regex index** | A local trigram index for exact and regex search faster than a file walk | Zoekt, Cursor, Moderne | regex search on a 2,000-file repository answers in under a second |
 
 ## 2 - Precise resolution layer
 
