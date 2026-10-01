@@ -551,6 +551,30 @@ def cmd_hooks(args) -> int:
     return 2 if res.get("refused") else 0
 
 
+def cmd_agent_hooks(args) -> int:
+    from verinoda import agent_hooks as ah
+
+    agents = [a.strip() for a in (args.agent or "claude").split(",") if a.strip()]
+    if agents == ["all"]:
+        agents = list(ah.AGENTS)
+    try:
+        res = ah.run(args.agent_hooks_cmd, agents, args.scope, _repo(args), dry_run=getattr(args, "dry_run", False))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: _write(ah.render(r)))
+    return 0 if res["ok"] else 2
+
+
+def cmd_tool_hook(args) -> int:
+    """A PostToolUse hook's call: the tool call as JSON on stdin, the context for it as JSON on stdout (``{}`` for
+    nothing). Always exit 0: a hook never fails the agent's tool call."""
+    from verinoda import tool_hook
+
+    print(tool_hook.run(args.agent))
+    return 0
+
+
 def _scan_precise(st, repo: Path, before: dict[str, str], now_files: dict[str, str]) -> dict:
     """``scan --precise``: resolve every call site of the .py files that changed since the previous snapshot."""
     import time
@@ -940,9 +964,25 @@ def _r_note_links(res: dict) -> None:
 MAP_ACTIONS = ("save", "show", "list")  # `map save NAME`: a project folder with such a name is passed as ./save
 
 
+def _dsm_flags_refused(args) -> bool:
+    """``--group-by`` / ``--depth`` / ``--model`` that would be ignored are refused (as every map argument is)."""
+    stray = [f for f, v, views in (("--group-by", args.group_by, ("dsm",)), ("--depth", args.depth, ("dsm",)),
+                                    ("--model", args.model, ("model",))) if v is not None and args.view not in views]
+    if stray:
+        print(f"error: {', '.join(stray)}: --group-by and --depth go with --view dsm, --model with --view model",
+              file=sys.stderr)
+        return True
+    if args.depth is not None and args.group_by == "tag":
+        print("error: --depth groups folders; with --group-by tag the groups are the tags", file=sys.stderr)
+        return True
+    return False
+
+
 def cmd_map(args) -> int:
     if args.path in MAP_ACTIONS:
         return _cmd_named_map(args)
+    if _dsm_flags_refused(args):
+        return 2
     if args.name is not None or args.trace:
         print("error: a second argument and --trace go with `map save NAME` (saved maps: map save|show|list)",
               file=sys.stderr)
@@ -957,7 +997,9 @@ def cmd_map(args) -> int:
         _write(_dump(res))
         return 2 if failed else 0
     _r_map(args, res)
-    if failed and args.view == "repo":
+    if failed and args.view == "model":
+        print(f"error: the model {args.model} was not read (see the problem above)", file=sys.stderr)
+    elif failed and args.view == "repo":
         print("error: a --target is not a file of the graph (see above); pass a repository-relative path",
               file=sys.stderr)
     elif failed:
@@ -972,7 +1014,10 @@ def _cmd_named_map(args) -> int:
 
     repo = Path(args.repo).resolve() if args.repo else find_repo_root()
     view_args = [f for f, v in (("--view", args.view), ("--target", args.target), ("--base", args.base),
-                                ("--max-tokens", args.max_tokens)) if v is not None]
+                                ("--max-tokens", args.max_tokens), ("--group-by", args.group_by),
+                                ("--depth", args.depth), ("--model", args.model)) if v is not None]
+    if args.path == "save" and not args.trace and _dsm_flags_refused(args):
+        return 2
     # like plain `map`, an argument that would be ignored is refused
     stray = ["NAME"] if args.path == "list" and args.name else []
     if args.path != "save":
@@ -1036,7 +1081,8 @@ def _cmd_named_map(args) -> int:
         fresh = freshness.check(repo)
         kind = "map"
         saved_args = {k: v for k, v in (("view", args.view), ("target", args.target), ("base", args.base),
-                                        ("max_tokens", args.max_tokens)) if v}
+                                        ("max_tokens", args.max_tokens), ("group_by", args.group_by),
+                                        ("depth", args.depth), ("model", args.model)) if v}
         # no --target: the views took the working-tree changes; the targets they used make the map again
         used = {"impact": ("impact", "targets"), "repo": ("repo", "focus")}.get(args.view)
         used = (result.get(used[0]) or {}).get(used[1]) if used else None
@@ -1079,6 +1125,20 @@ def _map_result(args, repo: Path):
         res = {"repo": am.repo_map(g, focus, max_tokens=budget)}
         # like the impact view: a --target that names no file of the graph is an error, not a silent fallback
         failed = bool(args.target and res["repo"].get("focus_unresolved"))
+    elif args.view == "dsm":
+        from verinoda import dsm
+
+        try:
+            res = {"dsm": dsm.dsm(g, by=args.group_by or "folder", depth=args.depth)}
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    elif args.view == "model":
+        from verinoda import dsm
+
+        res = {"model": dsm.model_check(g, model=args.model)}
+        if args.model and res["model"]["status"] == "no_model":   # the file the user named was not read
+            failed = True
     elif args.view:
         res = {args.view: am.VIEWS[args.view](g)}
     else:
@@ -3912,6 +3972,23 @@ def build_parser() -> argparse.ArgumentParser:
                    help="instead remove every block whose project folder no longer exists (a moved project, a "
                         "removed worktree)")
     add("status", cmd_hooks, "which hooks have this project's block", parent=hsub_hooks)
+    sp = sub.add_parser("agent-hooks", help="hooks in Claude Code, Codex or Cursor that add graph context after the "
+                                             "agent's own Grep, grep/rg in a shell, and file reads")
+    hsub_agent = sp.add_subparsers(dest="agent_hooks_cmd", required=True)
+    for name, help_ in (("install", "add Verinoda's hooks to the agents' hook files (other hooks are kept)"),
+                        ("uninstall", "remove exactly Verinoda's hooks"),
+                        ("status", "whether Verinoda's hooks are in the agents' hook files")):
+        c = add(name, cmd_agent_hooks, help_, parent=hsub_agent)
+        c.add_argument("--agent", default="claude",
+                       help="claude, codex, cursor, a comma list, or all (default claude)")
+        c.add_argument("--scope", choices=["project", "user"], default="project",
+                       help="the project's files (default) or the user's")
+        if name != "status":
+            c.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
+    sp = add("tool-hook", cmd_tool_hook, "the hook command itself: a tool call as JSON on stdin, graph context as "
+                                         "the agent's hook JSON on stdout", repo=False, js=False)
+    sp.add_argument("--agent", choices=["claude", "codex", "cursor"], default="claude",
+                    help="the output shape (default claude)")
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp = add("trust", cmd_trust, "trust a project: its tests run with process isolation (your privileges) and its "
@@ -3996,12 +4073,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--mode", choices=["flow", "any"], default="flow", help="with --trace: as for trace")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                       "cycles", "dead", "hotspots", "sides", "repo"],
+                                       "cycles", "dead", "hotspots", "sides", "repo", "dsm", "model"],
                     help="cycles: dependency cycles between files and the fewest file dependencies to cut; "
                          "dead: code no entry point reaches; hotspots: files and functions by changes x "
                          "complexity; sides: client-only code (Minecraft) reachable from server code, with the "
                          "path; repo: the files to read first (PageRank toward the files in play) and their "
-                         "signatures under --max-tokens (dead, hotspots, sides and repo are asked for by name)")
+                         "signatures under --max-tokens; dsm: the dependency structure matrix between folders "
+                         "(--depth) or architecture tags (--group-by tag); model: a C4 model (--model "
+                         "workspace.dsl, or [architecture.model] in verinoda.toml) against the code's "
+                         "dependencies (dead, hotspots, sides, repo, dsm and model are asked for by name)")
     sp.add_argument("--target", action="append", help="impact view: file or symbol (repeatable); repo view: a file "
                                                       "in play; default: git changes")
     sp.add_argument("--base", help="impact and repo views: diff base (default HEAD + untracked)")
@@ -4009,6 +4089,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="repo view: the map's budget in estimated tokens (default 1024)")
     sp.add_argument("--max-lines", type=int, default=None,
                     help="summary lines per view (default 12 for all views, 40 for one --view)")
+    sp.add_argument("--group-by", choices=["folder", "tag"], default=None,
+                    help="dsm view: the groups (default folder; tag: [architecture.tags] of verinoda.toml)")
+    sp.add_argument("--depth", type=int, default=None,
+                    help="dsm view by folder: the folder depth (default: the deepest with at most 30 groups)")
+    sp.add_argument("--model", metavar="PATH",
+                    help="model view: a Structurizr DSL file (default: [architecture.model] of verinoda.toml)")
     sp = add("review", cmd_review, "what a change touches, by concern: changed symbols, dependents, persistence, "
                                    "security, performance, public API, config, entry points, tests, unknowns "
                                    "(exit 3 = findings or unknowns to report)", repo=False)

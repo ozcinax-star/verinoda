@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D141)
+## Upgrading from 0.4.0 (D137-D143)
 
 ### D137: Trigram regex index
 
@@ -69,6 +69,21 @@ New command `verinoda mixin-check [FILE ...] [--json]`: every Mixin method selec
 `absent` (with `jar!class` evidence and the nearest real names as a suggestion) or `unknown` with the next step.
 Exit 3: absent; 4: something unknown; 2: no `@Mixin`. `jvmclass.class_code()` and `accesscheck.ClassFiles.code()`
 are new; nothing else changes.
+
+### D142: Dependency structure matrix and C4 model check
+
+New map views `dsm` (`verinoda map --view dsm [--group-by folder|tag] [--depth N]`: a dependency structure matrix
+between folders or `[architecture.tags]`) and `model` (`verinoda map --view model [--model workspace.dsl]`: a C4
+model - Structurizr DSL with the element property `"verinoda.code"`, or `[architecture.model] relations` between
+tags in `verinoda.toml` - against the code's dependencies). MCP `map_view` accepts both. `verinoda ui` has a
+Dependency matrix page. Nothing to migrate.
+
+### D143: Hooks on the agent's own tool calls
+
+New `verinoda agent-hooks install|uninstall|status` (Claude Code, Codex, Cursor; project or user scope) and the
+hook command `verinoda tool-hook`. MCP `grep_context` also takes `command` (a shell line); `pattern` is optional.
+The Claude Code hooks template has a Bash entry. A project that copied the old template keeps working; running
+`agent-hooks install` replaces its entries with the current ones.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

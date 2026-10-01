@@ -208,6 +208,9 @@ def rerun_command(doc: dict) -> str:
         cmd += f" --base {_q(a['base'])}"
     if a.get("max_tokens") is not None:
         cmd += f" --max-tokens {a['max_tokens']}"
+    for key, flag in (("group_by", "--group-by"), ("depth", "--depth"), ("model", "--model")):
+        if a.get(key) is not None:
+            cmd += f" {flag} {_q(a[key])}"
     return cmd
 
 

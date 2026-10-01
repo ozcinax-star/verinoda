@@ -179,8 +179,12 @@ def build(repo: Path | str) -> dict:
         timeline = atlas.decisions()
     except DecisionError:  # a decisions folder configured outside the project: nothing to show
         timeline = {"records": [], "relations": [], "mermaid": ""}
+    # the dependency matrix by folder at the automatic depth, and the committed model against the code
+    from verinoda import dsm
+
     data = {"stats": stats, "tree": _prune_tree(tree, ids) or {**tree, "children": []}, "global": graph,
-            "notes": notes, "user_notes": mine, "wiki": wiki, "decisions": timeline}
+            "notes": notes, "user_notes": mine, "wiki": wiki, "decisions": timeline, "dsm": dsm.dsm(snap.g),
+            "model": dsm.model_check(snap.g)}
     # the file is made to be passed on: no path of this machine, no secret or e-mail address in its text
     paths = _scrubber(Path(repo).resolve())
     redact = redactor()  # the environment's secret values, read once for all the texts

@@ -290,6 +290,13 @@ def make_handler(atlas: Atlas, port: list[int], token: str = "", watcher: Watche
                     obj = atlas.user_notes()
                 elif route == "decisions":
                     obj = atlas.decisions()
+                elif route == "dsm":
+                    raw = (qs.get("depth") or [""])[0]
+                    if raw and not raw.isdigit():
+                        raise ValueError("depth must be a whole number")
+                    obj = atlas.dsm((qs.get("by") or ["folder"])[0] or "folder", int(raw) if raw else None)
+                elif route == "model":
+                    obj = atlas.model()
                 elif route == "impact":
                     obj = atlas.impact(nid, int((qs.get("depth") or ["3"])[0] or 3), tests=_flag(qs, "tests", True))
                 elif route == "butterfly":

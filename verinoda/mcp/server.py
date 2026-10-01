@@ -126,7 +126,7 @@ RATIONALE_CAP = 5   # rationale comments node_inspect quotes (each at most 200 c
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
 VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline",
-         "dead", "hotspots", "sides", "repo", "saved")
+         "dead", "hotspots", "sides", "repo", "dsm", "model", "saved")
 DEAD_FIRST_CUT = ("searched.entry_points", "searched.entry_modules")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
@@ -148,14 +148,6 @@ PLAN_HINT = ("draft and check a plan with `verinoda plan draft` / `verinoda plan
 # within the file system's timestamp granularity: what was derived from it is not kept (git's racy-clean rule).
 RACY_NS = 2_000_000_000
 MCP_BUILD_WAIT = 30.0          # index_update waits this long for another build of the project
-# grep_context (the Grep hook, D62): identifier-like words of a Grep pattern, those that are only regex or
-# language keywords left out; the hook's text is at most this long
-_HOOK_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
-_HOOK_SKIP = {"def", "class", "function", "return", "import", "from", "self", "this", "public", "private", "static",
-              "void", "const", "async", "await", "final", "override", "interface", "record", "true", "false", "none",
-              "null", "string", "self."}
-HOOK_CONTEXT_CHARS = 450  # every Grep that names a known symbol pays it: about 110 tokens at most
-HOOK_CALLERS, HOOK_CALLS = 3, 4
 # D62 (a), under study: the sentence that asks for analyze before a search by hand. Not in the instructions yet; the
 # adoption study appends it verbatim, and it goes into _INSTRUCTIONS_CORE_HEAD byte for byte if it is adopted.
 ANALYZE_FIRST = ("For a how, why, what-happens or flow question, call analyze once before searching by hand; a "
@@ -897,44 +889,24 @@ class AtlasTools:
             return {}
         return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
 
-    def grep_context(self, pattern: str, path: str | None = None) -> dict:
-        """What the static graph says about the symbols a Grep searched for, as a Claude Code PostToolUse hook
-        output (D62): where each one found by its exact name is defined, who calls it and what it calls, in one
-        short line. Nothing found, or anything wrong: ``{}`` (the hook adds nothing; a Grep is never held up).
-        ``path`` is the Grep's own path argument, unused for now."""
-        from verinoda import naming, retrieval
+    def grep_context(self, pattern: str = "", path: str | None = None, command: str | None = None) -> dict:
+        """What the static graph says about the symbols a search names, as a Claude Code PostToolUse hook output
+        (D62): the Grep tool's ``pattern``, or the patterns of ``grep`` / ``rg`` / ``git grep`` ... in a shell
+        ``command`` (:func:`verinoda.tool_hook.shell_patterns`). Where each symbol found by its exact name is
+        defined, who calls it and what it calls, in one short line. Nothing found, or anything wrong: ``{}`` (the
+        hook adds nothing; a search is never held up). ``path`` is the Grep's own path argument, unused for now."""
+        from verinoda import tool_hook
 
+        try:   # every shell command reaches this: one with no search returns before waiting for the lock
+            pats = ([pattern] if pattern else []) + (tool_hook.shell_patterns(command) if command else [])
+            if not tool_hook.words_of(pats) or not graph_path(self.repo).exists():
+                return {}
+        except Exception:  # noqa: BLE001 - a hook never breaks the agent's Grep
+            return {}
         with self._lock:
             try:
                 with contextlib.redirect_stdout(sys.stderr):
-                    if not graph_path(self.repo).exists():
-                        return {}
-                    g = self._graph()
-                    words = sorted({w for w in _HOOK_WORD.findall(pattern or "")
-                                    if len(w) >= 4 and w.lower() not in _HOOK_SKIP}, key=len, reverse=True)
-                    said = []
-                    for w in words[:4]:
-                        r = naming.resolve(g, w)
-                        if r.node is None or not r.exact:
-                            continue
-                        calls, callers, nc, nb = retrieval.call_outline(g, r.node)
-                        line = f"`{w}` is defined at {g.file(r.node)}:{g.line(r.node)}"
-                        if callers:
-                            line += "; called by " + "; ".join(callers[:HOOK_CALLERS]) + (
-                                f" (+{nb - HOOK_CALLERS})" if nb > HOOK_CALLERS else "")
-                        if calls:
-                            line += "; calls " + ", ".join(calls[:HOOK_CALLS]) + (
-                                f" (+{nc - HOOK_CALLS})" if nc > HOOK_CALLS else "")
-                        said.append(line)
-                        if len(said) == 2:
-                            break
-                    if not said:
-                        return {}
-                    text = "Verinoda (static call graph, extracted, not verified): " + " | ".join(said)
-                    if len(text) > HOOK_CONTEXT_CHARS:  # cut between entries, never inside a path
-                        cut = text.rfind("; ", 0, HOOK_CONTEXT_CHARS - 4)
-                        text = text[:cut if cut > 0 else HOOK_CONTEXT_CHARS - 4] + "; ..."
-                    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
+                    return tool_hook.shape("claude", tool_hook.grep_text(self._graph(), pats))
             except Exception:  # noqa: BLE001 - a hook never breaks the agent's Grep
                 return {}
 
@@ -1173,6 +1145,16 @@ class AtlasTools:
                                        stale=fresh.get("files") or ())
                 if not tg:
                     res["next_step"] = "targets=[page id] for a page's Mermaid diagrams and their evidence"
+                res.update(freshness.summary(fresh))
+                return res
+            if view in ("dsm", "model"):
+                from verinoda import dsm
+
+                if len(tg) > 1 or (view == "dsm" and tg and tg[0] not in ("tag", "folder")):
+                    raise ToolFailure("invalid_argument", f"the {view} view takes one target at most",
+                                      "dsm: targets=['tag'] or ['folder']; model: targets=['path/to/workspace.dsl']")
+                res = (dsm.dsm(g, by=tg[0] if tg else "folder") if view == "dsm"
+                       else dsm.model_check(g, model=tg[0] if tg else None))
                 res.update(freshness.summary(fresh))
                 return res
             res = am.VIEWS[view](g)
@@ -2056,8 +2038,8 @@ GATEWAY_CATALOG: dict[str, str] = {
     "node_inspect": "node_inspect {name}: a symbol's definition and edges with file:line",
     "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between symbols",
     "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead|hotspots|sides|repo|"
-                "saved, targets?}",
-    "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
+                "dsm|model|saved, targets?}",
+    "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: claims, "
                   "evidence re-checked",
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {since_last?} after: "
                      "what it touches",
@@ -2214,7 +2196,9 @@ DESCRIPTIONS: dict[str, str] = {
         "fewest dependencies to cut), outline (the wiki page tree; targets = page ids for their Mermaid "
         "diagrams), dead (code no entry point reaches, as claims), hotspots (files and functions by changes x "
         "complexity), sides (client-only code reachable from server code, each path as a claim), or repo (files "
-        "ranked by PageRank toward the targets, with their signatures, under a token budget), or saved (a map "
+        "ranked by PageRank toward the targets, with their signatures, under a token budget), dsm (the dependency "
+        "structure matrix between folders; targets=['tag'] groups by [architecture.tags]), model (a C4 model "
+        "against the code: targets=[a Structurizr DSL path], default [architecture.model]), or saved (a map "
         "kept with `verinoda map save`: targets=[name]; status current, or stale when a file it cites changed; "
         "no targets: the list). 'coverage' states the method and its limits."),
     "change_review": (
@@ -2623,13 +2607,15 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     @register("map_view")
     def map_view(
         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                "cycles", "outline", "dead", "hotspots", "sides", "repo", "saved"],
+                                "cycles", "outline", "dead", "hotspots", "sides", "repo", "dsm", "model",
+                                "saved"],
                         Field(description="Which architecture view to return.")],
         targets: Annotated[list[str] | None, Field(description="impact view: changed files or symbols (default = "
                                                                "git working-tree changes); outline view: page ids "
                                                                "whose diagrams to return; repo view: files in "
                                                                "play (default the same changes); saved view: "
-                                                               "the map's name.")] = None,
+                                                               "the map's name; dsm: ['tag'] to group by tags; "
+                                                               "model: a Structurizr DSL path.")] = None,
     ) -> dict[str, Any]:
         return emit(t.map_view(view, targets=targets))
 
@@ -3043,10 +3029,11 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
     @register("grep_context")
     def grep_context(
-        pattern: Annotated[str, Field(description="The Grep pattern.")],
+        pattern: Annotated[str, Field(description="The Grep pattern.")] = "",
         path: Annotated[OptStr, Field(description="The Grep's path argument.")] = None,
+        command: Annotated[OptStr, Field(description="Instead: a shell command; its grep/rg patterns.")] = None,
     ) -> dict[str, Any]:
-        return emit(t.grep_context(pattern, path))
+        return emit(t.grep_context(pattern, path, command))
 
     @register("read_context")
     def read_context(
