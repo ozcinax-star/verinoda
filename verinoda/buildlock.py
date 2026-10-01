@@ -219,10 +219,12 @@ _STAMP: str | None = None
 
 
 def extraction_stamp(repo: Path | None = None) -> str:
-    """Which extraction builds a graph now: the AST cache schema and a hash of the extractor's source files. A
-    graph built under another stamp describes the code as an older extractor read it (Java overloads as one node
-    before D57). The source, not the installed version: two installs of the same code (the MCP server's and a
-    development checkout's, whose metadata can say another version) agree, and never rebuild each other's graph.
+    """Which extraction builds a graph now: the AST cache schema and a hash of the extractor's source files and of
+    the optional grammars installed (:func:`verinoda.grammars.signature`). A graph built under another stamp
+    describes the code as an older extractor read it (Java overloads as one node before D57). The source, not the
+    installed version: two installs of the same code (the MCP server's and a development checkout's, whose
+    metadata can say another version) agree, and never rebuild each other's graph unless one of them has an
+    optional grammar the other lacks (their graphs then differ).
     With *repo*: ``-vendored`` when that repository keeps vendored code in its graph (config ``index.vendored``
     or ``VERINODA_GRAPH_VENDORED``), so turning the switch on or off rebuilds the graph on the next ``update``."""
     global _STAMP
@@ -238,6 +240,10 @@ def extraction_stamp(repo: Path | None = None) -> str:
                 h.update(p.name.encode() + b"\0" + p.read_bytes().replace(b"\r\n", b"\n"))
             except OSError:
                 continue
+        # the optional grammars installed: installing one reads the files skipped without it (verinoda.grammars)
+        from verinoda import grammars
+
+        h.update(b"grammars\0" + grammars.signature().encode())
         _STAMP = f"s{_AST_CACHE_SCHEMA}-{h.hexdigest()[:12]}"
     if repo is not None and _keeps_vendored(repo):
         return _STAMP + "-vendored"

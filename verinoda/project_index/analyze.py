@@ -38,9 +38,13 @@ _LANG_FAMILY: dict[str, str] = {
     **{e: "c" for e in (".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx", ".ipp", ".inl", ".tpp")},
     **{e: "ruby" for e in (".rb", ".rake")},
     **{e: "swift" for e in (".swift",)},
-    **{e: "dotnet" for e in (".cs",)},
+    # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d): .vb, COBOL, Solidity, Erlang
+    **{e: "dotnet" for e in (".cs", ".vb")},
     **{e: "php" for e in (".php",)},
     **{e: "r" for e in (".r",)},
+    **{e: "cobol" for e in (".cbl", ".cob", ".cobol", ".cpy")},
+    **{e: "solidity" for e in (".sol",)},
+    **{e: "erlang" for e in (".erl", ".hrl", ".escript")},
 }
 
 

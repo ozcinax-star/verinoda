@@ -192,6 +192,8 @@ class _Names:
     which an exact lookup does not need."""
 
     def __init__(self, g):
+        from verinoda.retrieval import bare_name
+
         self.by_bare: dict[str, list[str]] = defaultdict(list)
         self.files: dict[str, str] = {}
         self.by_stem: dict[str, list[str]] = defaultdict(list)
@@ -208,6 +210,9 @@ class _Names:
             elif (d.get("metadata") or {}).get("language") == "mcfunction":  # one node per file, its function id
                 self.files.setdefault(f, n)
             self.by_bare[fold_tr(label.strip().lstrip(".").split("(")[0].strip())].append(n)
+            alt = bare_name(g, n)  # an Erlang `name/arity` is asked for by its name
+            if alt is not None:
+                self.by_bare[fold_tr(alt)].append(n)
 
 
 def _names(g) -> _Names:
