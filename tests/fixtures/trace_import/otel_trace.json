@@ -1,0 +1,53 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": [{"key": "service.name", "value": {"stringValue": "shop"}}]},
+      "scopeSpans": [
+        {
+          "scope": {"name": "shop.tracing"},
+          "spans": [
+            {
+              "traceId": "5b8efff798038103d269b633813fc60c",
+              "spanId": "eee19b7ec3c1b174",
+              "name": "checkout",
+              "attributes": [
+                {"key": "code.filepath", "value": {"stringValue": "/srv/app/shop/orders.py"}},
+                {"key": "code.lineno", "value": {"intValue": "11"}},
+                {"key": "code.function", "value": {"stringValue": "checkout"}}
+              ],
+              "events": [
+                {
+                  "name": "exception",
+                  "attributes": [
+                    {"key": "exception.type", "value": {"stringValue": "ValueError"}},
+                    {"key": "exception.message", "value": {"stringValue": "bad qty"}},
+                    {"key": "exception.stacktrace", "value": {"stringValue": "Traceback (most recent call last):\n  File \"/srv/app/shop/orders.py\", line 12, in checkout\n    return order.place()\n  File \"/srv/app/shop/orders.py\", line 7, in place\n    raise ValueError(\"bad qty\")\nValueError: bad qty\n"}}
+                  ]
+                }
+              ]
+            },
+            {
+              "traceId": "5b8efff798038103d269b633813fc60c",
+              "spanId": "f00dfeedc0ffee01",
+              "name": "Foo.bar",
+              "attributes": [
+                {"key": "code.namespace", "value": {"stringValue": "com.example.Foo"}},
+                {"key": "code.function", "value": {"stringValue": "bar"}},
+                {"key": "code.lineno", "value": {"intValue": 4}}
+              ],
+              "events": [
+                {
+                  "name": "exception",
+                  "attributes": [
+                    {"key": "exception.type", "value": {"stringValue": "java.lang.IllegalStateException"}},
+                    {"key": "exception.stacktrace", "value": {"stringValue": "java.lang.IllegalStateException: closed\n\tat com.example.Foo.bar(Foo.java:5)\n\tat java.base/java.lang.Thread.run(Thread.java:840)\n"}}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1400,6 +1400,55 @@ def cmd_datapack(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+TRACE_CLAIMS_NOTE = ("a stored claim's evidence is a file Verinoda did not produce (agent_report): the claim rules "
+                     "never let it verify, so its status (in `claims`) is usually weak_inference, whatever the "
+                     "report's rows say for their own run or event")
+
+
+def _trace_export(args, repo: Path, path: Path) -> int | None:
+    """A Sentry or OpenTelemetry JSON export given to ``trace-log``: its frames mapped and reported (the exit
+    code), or None when the file is a log after all."""
+    from verinoda import index, trace_import
+
+    meant = path.name.lower().endswith(trace_import.JSON_SUFFIXES)
+    if path.stat().st_size > trace_import.MAX_BYTES:
+        if meant:
+            raise SystemExit(f"error: {args.file} is over {trace_import.MAX_BYTES // (1024 * 1024)} MB; "
+                             "export fewer events")
+        return None
+    try:
+        read = trace_import.load(path.read_bytes(), name=path.name)
+    except ValueError as e:
+        raise SystemExit(f"error: {args.file}: {e}") from None
+    if read is None:
+        return None
+    res = trace_import.analyze(repo, index.load(repo), read[0], source=args.file, skipped=read[1])
+    if res is None:
+        if meant:
+            raise SystemExit(f"error: {args.file}: no Sentry event (exception.values) or OpenTelemetry span "
+                             "(resourceSpans) with frames in it")
+        return None
+    if not args.no_store and res["counts"]["mapped"]:
+        st = _store(repo)
+        try:
+            res["claims"] = trace_import.store(st, repo, path, res)
+        finally:
+            st.close()
+        if res["claims"]:
+            res["claims_note"] = TRACE_CLAIMS_NOTE
+
+    def render(r: dict) -> None:
+        print(trace_import.render(r))
+        for c in r.get("claims") or []:
+            print(f"  {'already stored' if c.get('existing') else 'stored'} {c['id']} [{c['status']}]")
+        if any(c["status"] != "observed" for c in r.get("claims") or []):
+            print("  (an export Verinoda did not record never verifies: a stored claim keeps the status the claim "
+                  "rules allow for it)")
+
+    _emit(args, res, render)
+    return 0 if any(e["frames"] or e.get("library") for e in res["events"]) else 2
+
+
 def cmd_trace_log(args) -> int:
     from verinoda import index, trace_log
 
@@ -1408,13 +1457,19 @@ def cmd_trace_log(args) -> int:
     log = Path(args.file)
     if not log.is_file():
         raise SystemExit(f"error: {args.file} is not a file")
-    res = trace_log.analyze(index.load(repo), log.read_text(encoding="utf-8", errors="replace"), source=args.file)
+    code = _trace_export(args, repo, log)
+    if code is not None:
+        return code
+    res = {"mode": "log", **trace_log.analyze(index.load(repo), log.read_text(encoding="utf-8", errors="replace"),
+                                               source=args.file)}
     if not args.no_store and (res["traces"] or res["results"]):
         st = _store(repo)
         try:
             res["claims"] = trace_log.store(st, repo, log, res)
         finally:
             st.close()
+        if res["claims"]:
+            res["claims_note"] = TRACE_CLAIMS_NOTE
 
     def render(r: dict) -> None:
         print(trace_log.render(r))
@@ -3945,8 +4000,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("trace-log", cmd_trace_log, "the stack traces and GameTest results of a log mapped onto the code: project "
                                          "frames with their callers, the rest folded, a trace through a test's "
                                          "succeed/fail tied to that test, known crash patterns named and suspect mods "
-                                         "scored from their frames; stored as claims with the log as evidence")
-    sp.add_argument("file", help="the log (latest.log, a GameTest run's output, a pasted trace)")
+                                         "scored from their frames; stored as claims with the log as evidence; "
+                                         "a Sentry event or OpenTelemetry (OTLP JSON) export: each frame mapped "
+                                         "onto the code, or said to be stale, ambiguous or not in the repository")
+    sp.add_argument("file", help="the log (latest.log, a GameTest run's output, a pasted trace) or a local Sentry / "
+                                 "OTLP JSON export")
     sp.add_argument("--no-store", action="store_true", help="report only; record no claim")
     sp = add("secret-scan", cmd_secret_scan, "secrets and e-mail addresses left in files (default: the run logs and "
                                              "copied logs under .verinoda/ and the `ui --export` file): exit 1 on a "
