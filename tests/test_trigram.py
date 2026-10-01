@@ -66,7 +66,7 @@ def _walk(repo, pattern, flags=0):
     rx = re.compile(pattern, flags | re.M)
     out = set()
     for rel in trigram._list_files(repo):
-        data = trigram._read(repo, rel)
+        data, _why = trigram._read(repo, rel)
         if data is None:
             continue
         text = data.decode("utf-8", "replace")
@@ -101,7 +101,7 @@ def test_narrowing_and_incremental_update(repo):
     (repo / "src" / "c.py").write_text("apply_discount(1)\n", encoding="utf-8")
     res = trigram.search(repo, "apply_discount")
     assert {m["at"] for m in res["matches"]} == {"src/b.py:1", "src/c.py:1"}
-    assert res["index_update"]["removed"] == 1 and res["index_update"]["changed"] == 2
+    assert res["index_update"]["built"]       # 3 of 5 files changed: rebuilt rather than patched
     again = trigram.search(repo, "PARKİNG")   # the old content of b.py is gone from the postings
     assert again["total"] == 0 and again["candidates"] == 0
     full = trigram.refresh(repo, rebuild=True)
