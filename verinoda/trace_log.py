@@ -7,7 +7,9 @@ line) with its callers and callees; frames outside the project are folded into o
 the last of them and the ones that matter (a GameTest's ``succeed`` / ``fail``, an event dispatch). GameTest result
 lines (``... passed``, ``... failed``) are matched to the ``@GameTest`` methods, and a trace that runs through
 ``GameTestInfo.succeed`` / ``fail`` or ``GameTestHelper.succeed`` is tied to the test that finished at that moment:
-the test whose result line is nearest to the trace, or whose method is on the stack.
+the test whose result line is nearest to the trace, or whose method is on the stack. Known crash patterns (out of
+memory, the watchdog, a missing dependency or class, a Mixin that failed to apply, the wrong Java) are named with
+their log line, and the mods the frames point at are ranked by a score (:mod:`verinoda.crash_rules`).
 
 Read-only on the log. What it says is an observation of a run Verinoda did not make: :func:`store` records it as a
 claim with the log lines as evidence, at the status the claim rules allow for such evidence.
@@ -18,15 +20,20 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_FRAME = re.compile(r"^\s*at\s+(?:[\w.$@-]+/{1,2})*(?P<cls>[\w$.]+)\.(?P<meth>[\w$<>]+)\((?P<src>[^)]*)\)")
+# "at TRANSFORMER/examplemod@1.0/com.example.Foo.bar(Foo.java:12)": the module prefix names the mod; a Mixin
+# handler's name may carry a mod id with a dash (handler$zdo000$fabric-lifecycle-events-v1$onStopping)
+_FRAME = re.compile(r"^\s*at\s+(?P<mods>(?:[\w.$@-]+/{1,2})*)(?P<cls>[\w$.]+)\.(?P<meth>[\w$<>-]+)\((?P<src>[^)]*)\)")
+_HIDDEN = re.compile(r"/0x[0-9a-fA-F]+(?=\.[\w$<>-]+\()")  # a hidden class: "Foo$$Lambda$12/0x0000000800c3b440.accept"
 _EXC = re.compile(r"^(?:Exception in thread \"[^\"]*\"\s+)?(?P<exc>(?:[a-z][\w$]*\.)+[A-Z][\w$]*(?:Exception|Error|"
                   r"Throwable)?)(?::\s*(?P<msg>.*))?$")
 _CAUSED = re.compile(r"^\s*Caused by:\s*(?P<rest>.*)$")
+_JAR = re.compile(r"\)\s*~?\[(?P<jar>[^\]\s/%!]+?\.jar)")  # Forge: "(Foo.java:12) ~[examplemod-1.0.jar%2390!/:?]"
 _MORE = re.compile(r"^\s*\.\.\.\s*(\d+)\s+more")
 _STAMP = re.compile(r"^\[(?P<t>[\d:.]+)\]")
 # a logger's prefix on every line, a stack trace printed through System.out / System.err included:
-# "[20:01:36] [Server thread/INFO] (Minecraft) [STDOUT]: \tat a.B.c(B.java:4)"
-_PREFIX = re.compile(r"^(?:\[[^\]]*\]\s*)+(?:\([^)]*\)\s*)?(?:\[[^\]]*\]\s*)*:\s?")
+# "[20:01:36] [Server thread/INFO] (Minecraft) [STDOUT]: \tat a.B.c(B.java:4)", and Fabric's own lines with no
+# colon: "[11:03:27] [main/ERROR] (FabricLoader) Incompatible mods found!" (a tag after it stays: "(guard) [TAG] ...")
+_PREFIX = re.compile(r"^(?:\[[^\]]*\]\s*)+(?:(?:\([^)]*\)\s*)?(?:\[[^\]]*\]\s*)*:\s?|\([^)]*\)\s+(?!\[))")
 
 
 def _unprefixed(line: str) -> str:
@@ -47,6 +54,9 @@ class Frame:
     log_line: int
     node: str | None = None
     project: bool = False
+    pos: int = 0                           # 0: the top of its trace or of its `Caused by`
+    jar: str | None = None                 # the mod jar a Forge frame names
+    module: str | None = None              # the module a frame names ("TRANSFORMER/examplemod@1.0/...")
 
 
 @dataclass
@@ -66,8 +76,9 @@ def parse(text: str) -> tuple[list[Trace], list[dict]]:
     results: list[dict] = []
     cur: Trace | None = None
     last_stamp = None
+    pos = 0
     for i, raw in enumerate(raw_lines, 1):
-        line = lines[i - 1].rstrip()
+        line = _HIDDEN.sub("", lines[i - 1].rstrip())
         st = _STAMP.match(raw)
         if st:
             last_stamp = st.group("t")
@@ -77,12 +88,20 @@ def parse(text: str) -> tuple[list[Trace], list[dict]]:
                 prev = lines[i - 2].strip() if i >= 2 else ""
                 cur = Trace(prev or "(no header)", i - 1, None, stamp=last_stamp)
                 traces.append(cur)
+                pos = 0
             src = fm.group("src")
             f, _, ln = src.partition(":")
+            jm = _JAR.search(line, fm.end() - 1)
+            mod = next((m.split("@", 1)[0] for m in reversed(fm.group("mods").split("/")) if "@" in m), None)
             cur.frames.append(Frame(fm.group("cls"), fm.group("meth"), f or None,
-                                    int(ln) if ln.isdigit() else None, i))
+                                    int(ln) if ln.isdigit() else None, i, pos=pos, jar=jm.group("jar") if jm else None,
+                                    module=mod or None))
+            pos += 1
             continue
-        if _MORE.match(line) or _CAUSED.match(line):
+        if _MORE.match(line):
+            continue
+        if _CAUSED.match(line):
+            pos = 0
             continue
         body = re.sub(r"^\[[^\]]*\]\s*(?:\[[^\]]*\]\s*)*(?:\([^)]*\)\s*)?:?\s*", "", line).strip()
         ex = _EXC.match(body)
@@ -93,6 +112,7 @@ def parse(text: str) -> tuple[list[Trace], list[dict]]:
                                 lines[i - 2]).strip() or None
             cur = Trace(body, i, marker, stamp=last_stamp)
             traces.append(cur)
+            pos = 0
             continue
         cur = None
         rm = _RESULT.search(body)
@@ -170,6 +190,8 @@ _GT_FRAME = re.compile(r"GameTest(?:Info|Helper)\.(?:succeed|fail)|GameTestInfo\
 
 def analyze(g, text: str, *, source: str) -> dict:
     """The report of :func:`parse` over ``text`` (the log at ``source``) mapped onto ``g``."""
+    from verinoda import crash_rules
+
     traces, results = parse(text)
     map_frames(g, traces)
     tests = gametests(g)
@@ -229,13 +251,27 @@ def analyze(g, text: str, *, source: str) -> dict:
                                          "basis": "the test whose result line is nearest"
                                                   + (" at the same time" if r.get("stamp") == t.stamp else "")}
         out.append(entry)
+    rules = crash_rules.diagnose(text.splitlines())
+    sus = crash_rules.suspects(traces)
     return {"source": source, "traces": out, "results": rows,
+            **({"diagnosis": rules} if rules else {}),
+            **({"suspects": sus, "score": crash_rules.SCORE_BASIS} if sus else {}),
             "note": "frames outside the project are folded; a run Verinoda did not make observes, it does not "
                     "verify"}
 
 
 def render(res: dict) -> str:
     out = [f"{res['source']}: {len(res['traces'])} stack trace(s), {len(res['results'])} test result line(s)"]
+    for d in res.get("diagnosis") or []:
+        found = ", ".join(f"{k} {v}" for k, v in (d.get("found") or {}).items())
+        out.append(f"rule {d['rule']} (log line {d['log_line']}" + (f", {d['hits']} lines" if d["hits"] > 1 else "")
+                   + f"): {d['means']}" + (f" [{found}]" if found else "") + f" ({d['status']})")
+    if res.get("suspects"):
+        out.append(f"suspects (strong_inference; score: {res['score']}):")
+        for s in res["suspects"]:
+            out.append(f"  {s['suspect']}: score {s['score']} ({s['frames']} frame(s) in {s['traces']} trace(s), "
+                       f"{s['top_frames']} at the top; first {s['first']}; named by {s['named_by']})"
+                       + (" - the project's own code" if s.get("in_project") else ""))
     for t in res["traces"]:
         out.append("")
         out.append(f"line {t['log_line']}: {t.get('marker') or t['header']}" + (f"  ({t['header']})" if t.get("marker")

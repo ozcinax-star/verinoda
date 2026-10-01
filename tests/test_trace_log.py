@@ -131,3 +131,48 @@ def test_a_trace_printed_through_stdout_keeps_the_loggers_prefix_on_every_line()
     assert [(f.cls, f.meth, f.line) for f in traces[0].frames] == [("com.example.Foo", "bar", 12),
                                                                     ("com.example.Foo", "tick", 30)]
     assert results[0]["name"] == "gametest:foo" and results[0]["outcome"] == "passed"
+
+
+CRASH = """---- Minecraft Crash Report ----
+Description: Exception in server tick loop
+
+java.lang.OutOfMemoryError: Java heap space
+\tat java.util.Arrays.copyOf(Arrays.java:3537)
+\tat com.example.guard.Guard.log(Guard.java:9)
+\tat com.example.guard.Guard.remove(Guard.java:5)
+\tat net.minecraft.server.level.ServerLevel.tick(ServerLevel.java:386)
+\tat com.bigstorage.network.StorageNetwork.rebuild(StorageNetwork.java:211) ~[bigstorage-2.4.1.jar%23188!/:2.4.1] {}
+"""
+
+
+def test_cli_names_the_rule_and_the_suspect_with_its_score(repo, tmp_path, capsys):
+    log = tmp_path / "crash-2026-09-28_21.14.02-server.txt"
+    log.write_text(CRASH, encoding="utf-8")
+    assert cli.main(["trace-log", str(log), "--repo", str(repo), "--json", "--no-store"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert [(d["rule"], d["log_line"]) for d in out["diagnosis"]] == [("out_of_memory", 4)]
+    top = out["suspects"][0]
+    assert (top["suspect"], top["score"], top["positions"]) == ("com.example.guard", 0.83, [1, 2])
+    assert top["in_project"] and top["status"] == "strong_inference" and "1/(1+position)" in out["score"]
+    assert out["suspects"][1]["suspect"] == "bigstorage-2.4.1.jar"
+    assert cli.main(["trace-log", str(log), "--repo", str(repo), "--no-store"]) == 0
+    text = capsys.readouterr().out
+    assert "rule out_of_memory (log line 4)" in text and "com.example.guard: score 0.83" in text
+
+
+def test_a_log_with_no_crash_pattern_has_no_diagnosis(repo):
+    res = trace_log.analyze(index.load(repo), LOG, source="latest.log")
+    assert "diagnosis" not in res
+    assert [(s["suspect"], s["score"]) for s in res["suspects"]] == [("com.example.guard", 2.5)]
+
+
+def test_a_log_with_only_a_crash_pattern_is_a_finding(repo, tmp_path, capsys):
+    """No stack trace and no test result, only a loader line saying a dependency is missing: exit 0, not 2."""
+    log = tmp_path / "çalış repo" / "latest.log"
+    log.parent.mkdir()
+    log.write_text("[11:03:27] [main/ERROR] (FabricLoader)  - Mod 'Guard Mod' (guardmod) 1.2.0 requires any version "
+                   "of fabric-api, which is missing!\n", encoding="utf-8")
+    assert cli.main(["trace-log", str(log), "--repo", str(repo), "--json", "--no-store"]) == 0
+    (d,) = json.loads(capsys.readouterr().out)["diagnosis"]
+    assert d["rule"] == "missing_dependency" and d["found"]["needs"] == "fabric-api"
+    assert d["evidence"].startswith("- Mod") and d["status"] == "strong_inference"

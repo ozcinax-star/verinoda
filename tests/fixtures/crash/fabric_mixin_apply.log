@@ -1,0 +1,19 @@
+[09:12:40] [main/INFO] (FabricLoader/GameProvider) Loading Minecraft 1.21.1 with Fabric Loader 0.16.5
+[09:12:40] [main/INFO] (FabricLoader) Loading 4 mods:
+	- fabric-api 0.102.0+1.21.1
+	- guardmod 1.2.0
+	- java 21
+	- minecraft 1.21.1
+[09:12:44] [main/ERROR] (mixin) Mixin apply for mod guardmod failed guardmod.mixins.json:LevelMixin from mod guardmod -> net.minecraft.class_1937: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException Critical injection failure: @Inject annotation on onTick could not find any targets matching 'method_18765' in net.minecraft.class_1937. No refMap loaded. [PREINJECT Applicator Phase -> guardmod.mixins.json:LevelMixin -> Prepare Injections -> handler$zza000$guardmod$onTick(Ljava/util/function/BooleanSupplier;Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V -> Parse]
+[09:12:44] [main/ERROR] (Minecraft) Unreported exception thrown!
+java.lang.RuntimeException: Mixin transformation of net.minecraft.class_1937 failed
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java:427)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:323)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:112)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
+	at net.minecraft.server.MinecraftServer.method_3823(MinecraftServer.java:351)
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:392)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:234)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java:422)
+	... 4 more

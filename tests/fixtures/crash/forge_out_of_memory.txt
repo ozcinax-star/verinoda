@@ -1,0 +1,39 @@
+---- Minecraft Crash Report ----
+// Who set us up the TNT?
+
+Time: 2026-09-28 21:14:02
+Description: Exception in server tick loop
+
+java.lang.OutOfMemoryError: Java heap space
+	at java.util.Arrays.copyOf(Arrays.java:3537) ~[?:?] {}
+	at java.util.ArrayList.grow(ArrayList.java:237) ~[?:?] {}
+	at com.bigstorage.network.StorageNetwork.collectStacks(StorageNetwork.java:318) ~[bigstorage-2.4.1.jar%23188!/:2.4.1] {re:classloading}
+	at com.bigstorage.network.StorageNetwork.rebuild(StorageNetwork.java:211) ~[bigstorage-2.4.1.jar%23188!/:2.4.1] {re:classloading}
+	at com.bigstorage.block.ControllerBlockEntity.serverTick(ControllerBlockEntity.java:96) ~[bigstorage-2.4.1.jar%23188!/:2.4.1] {re:classloading}
+	at net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity.tick(LevelChunk.java:695) ~[server-1.20.1-20230612.114412-srg.jar%23253!/:?] {re:mixin,pl:accesstransformer:B}
+	at net.minecraft.world.level.Level.tickBlockEntities(Level.java:479) ~[server-1.20.1-20230612.114412-srg.jar%23253!/:?] {re:classloading}
+	at net.minecraft.server.level.ServerLevel.tick(ServerLevel.java:386) ~[server-1.20.1-20230612.114412-srg.jar%23253!/:?] {re:mixin}
+	at net.minecraft.server.MinecraftServer.tickChildren(MinecraftServer.java:893) ~[server-1.20.1-20230612.114412-srg.jar%23253!/:?] {re:mixin}
+	at com.tinyhud.server.TickTimer.wrap(TickTimer.java:40) ~[tinyhud-1.0.3.jar%23201!/:1.0.3] {re:classloading}
+	at net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:814) ~[server-1.20.1-20230612.114412-srg.jar%23253!/:?] {re:mixin}
+	at net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:661) ~[server-1.20.1-20230612.114412-srg.jar%23253!/:?] {re:mixin}
+	at java.lang.Thread.run(Thread.java:833) ~[?:?] {}
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Server thread
+Suspected Mods:
+Stacktrace:
+	at java.util.Arrays.copyOf(Arrays.java:3537) ~[?:?] {}
+	at java.util.ArrayList.grow(ArrayList.java:237) ~[?:?] {}
+	at com.bigstorage.network.StorageNetwork.collectStacks(StorageNetwork.java:318) ~[bigstorage-2.4.1.jar%23188!/:2.4.1] {re:classloading}
+
+-- System Details --
+Details:
+	Minecraft Version: 1.20.1
+	Java Version: 17.0.8, Eclipse Adoptium
+	Memory: 12582912 bytes (12 MiB) / 2147483648 bytes (2048 MiB) up to 2147483648 bytes (2048 MiB)
+	JVM Flags: 2 total; -Xms2G -Xmx2G

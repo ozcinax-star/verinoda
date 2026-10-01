@@ -1247,7 +1247,7 @@ def cmd_trace_log(args) -> int:
             print(f"  stored {c['id']} [{c['status']}]")
 
     _emit(args, res, render)
-    return 0 if res["traces"] or res["results"] else 2
+    return 0 if res["traces"] or res["results"] or res.get("diagnosis") else 2
 
 
 def cmd_secret_scan(args) -> int:
@@ -3578,7 +3578,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "checked for collisions and its mods meet dependencies; repeatable")
     sp = add("trace-log", cmd_trace_log, "the stack traces and GameTest results of a log mapped onto the code: project "
                                          "frames with their callers, the rest folded, a trace through a test's "
-                                         "succeed/fail tied to that test; stored as claims with the log as evidence")
+                                         "succeed/fail tied to that test, known crash patterns named and suspect mods "
+                                         "scored from their frames; stored as claims with the log as evidence")
     sp.add_argument("file", help="the log (latest.log, a GameTest run's output, a pasted trace)")
     sp.add_argument("--no-store", action="store_true", help="report only; record no claim")
     sp = add("secret-scan", cmd_secret_scan, "secrets and e-mail addresses left in files (default: the run logs and "
