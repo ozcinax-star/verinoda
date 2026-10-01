@@ -804,12 +804,109 @@ def cmd_notes(args) -> int:
     return 1 if args.changed and bad else 0
 
 
+MAP_ACTIONS = ("save", "show", "list")  # `map save NAME`: a project folder with such a name is passed as ./save
+
+
 def cmd_map(args) -> int:
+    if args.path in MAP_ACTIONS:
+        return _cmd_named_map(args)
+    if args.name is not None or args.trace:
+        print("error: a second argument and --trace go with `map save NAME` (saved maps: map save|show|list)",
+              file=sys.stderr)
+        return 2
+    repo = Path(getattr(args, "repo", None) or args.path).resolve()
+    _need_graph(repo)
+    got = _map_result(args, repo)
+    if isinstance(got, int):
+        return got
+    res, failed = got
+    if args.json:
+        _write(_dump(res))
+        return 2 if failed else 0
+    _r_map(args, res)
+    if failed and args.view == "repo":
+        print("error: a --target is not a file of the graph (see above); pass a repository-relative path",
+              file=sys.stderr)
+    elif failed:
+        print("error: a --target did not name one symbol exactly (see above); pass it as path/file.py::Name or a "
+              "node id", file=sys.stderr)
+    return 2 if failed else 0
+
+
+def _cmd_named_map(args) -> int:
+    """``map save NAME`` (a trace or map result kept under a name), ``map show NAME``, ``map list``."""
+    from verinoda import named_maps as nm
+
+    repo = Path(args.repo).resolve() if args.repo else find_repo_root()
+    if args.path == "list":
+        res = nm.listing(repo)
+        _emit(args, res, lambda r: _write(nm.render_list(r)))
+        return 0
+    if not args.name:
+        print(f"error: `map {args.path}` needs a NAME", file=sys.stderr)
+        return 2
+    if args.path == "show":
+        res = nm.read(repo, args.name)
+        if args.json:
+            _write(_dump(res))
+        else:
+            _write(nm.render(res))
+            if res.get("result") is not None:
+                print()
+                if res["kind"] == "trace":
+                    _r_trace(res["result"])
+                else:
+                    _r_map(argparse.Namespace(view=(res.get("args") or {}).get("view"), max_lines=args.max_lines),
+                           res["result"])
+        return {"current": 0, "stale": 1}.get(res["status"], 2)
+    try:
+        name = nm.check_name(args.name)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _need_graph(repo)
+    from verinoda import freshness, index, retrieval
+
+    if args.trace:
+        source, target = args.trace
+        fresh = freshness.check(repo)
+        result = retrieval.trace(index.load(repo), source, target, mode=args.mode, stale=fresh["files"])
+        if result["status"] != "found":
+            _r_trace(result)
+            print(f"error: not saved: the trace is {result['status']!r}", file=sys.stderr)
+            return 2
+        kind, saved_args = "trace", {"source": source, "target": target, "mode": args.mode}
+    else:
+        got = _map_result(args, repo)
+        if isinstance(got, int):
+            return got
+        result, failed = got
+        if failed:
+            _r_map(args, result)
+            print("error: not saved: a --target did not resolve (see above)", file=sys.stderr)
+            return 2
+        fresh = freshness.check(repo)
+        kind = "map"
+        saved_args = {k: v for k, v in (("view", args.view), ("target", args.target), ("base", args.base),
+                                        ("max_tokens", args.max_tokens)) if v}
+    try:
+        res = nm.save(repo, name, kind, saved_args, result, stale=fresh.get("files") or ())
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    _emit(args, res, lambda r: print(f"saved map {r['name']} ({r['kind']}) to {r['path']}: snapshot {r['snapshot']}"
+                                     + (f", commit {r['commit'][:12]}" if r.get("commit") else "")
+                                     + f", {r['cited_files']} cited file(s)"
+                                     + (f"\n note: {r['note']}" if r.get("note") else "")
+                                     + f"\n read it back: verinoda map show {r['name']}"))
+    return 0
+
+
+def _map_result(args, repo: Path):
+    """``(views, failed)`` of ``verinoda map`` (or the exit code of a bad argument)."""
     from verinoda import architecture_map as am
     from verinoda import freshness, index
 
-    repo = Path(getattr(args, "repo", None) or args.path).resolve()
-    _need_graph(repo)
     g = index.load(repo)
     fresh = freshness.check(repo)
     # a target the user named that does not name one symbol exactly is an error, never a guess
@@ -833,9 +930,10 @@ def cmd_map(args) -> int:
         res = am.build_map(g)
     for v in res.values():
         v.update(freshness.summary(fresh))
-    if args.json:
-        _write(_dump(res))
-        return 2 if failed else 0
+    return res, failed
+
+
+def _r_map(args, res: dict) -> None:
     from verinoda import map_text
 
     # all views at once: a short summary of each; one view: more lines of it
@@ -858,13 +956,6 @@ def cmd_map(args) -> int:
         print()
     if not args.view:
         print("one view in more detail: --view NAME [--max-lines N]; everything: --json")
-    if failed and args.view == "repo":
-        print("error: a --target is not a file of the graph (see above); pass a repository-relative path",
-              file=sys.stderr)
-    elif failed:
-        print("error: a --target did not name one symbol exactly (see above); pass it as path/file.py::Name or a "
-              "node id", file=sys.stderr)
-    return 2 if failed else 0
 
 
 def cmd_review(args) -> int:
@@ -3223,8 +3314,15 @@ def build_parser() -> argparse.ArgumentParser:
                     help="after reading a changed note again: anchor it to the code as it is now; repeatable")
     sp.add_argument("--delete", action="append", metavar="SUBJECT",
                     help="delete a note (one whose code is gone, for instance); repeatable")
-    sp = add("map", cmd_map, "top-down architecture views", repo=False)
-    sp.add_argument("path", nargs="?", default=".")
+    sp = add("map", cmd_map, "top-down architecture views; `map save NAME [--trace SOURCE TARGET | --view V]` keeps "
+                             "one under a name, `map show NAME` reads it back with whether the files it cites "
+                             "changed since (exit 1 = stale), `map list` lists them", repo=False)
+    sp.add_argument("path", nargs="?", default=".",
+                    help="project root, or save|show|list (a project folder with such a name: ./save)")
+    sp.add_argument("name", nargs="?", help="with save or show: the map's name (.verinoda/maps/NAME.json)")
+    sp.add_argument("--trace", nargs=2, metavar=("SOURCE", "TARGET"),
+                    help="with save: keep the trace between two symbols (as `verinoda trace`) instead of a view")
+    sp.add_argument("--mode", choices=["flow", "any"], default="flow", help="with --trace: as for trace")
     sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
     sp.add_argument("--view", choices=["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
                                        "cycles", "dead", "hotspots", "sides", "repo"],
