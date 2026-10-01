@@ -1359,12 +1359,12 @@ def _trace_export(args, repo: Path, path: Path) -> int | None:
                              "export fewer events")
         return None
     try:
-        docs = trace_import.load(path.read_bytes(), name=path.name)
+        read = trace_import.load(path.read_bytes(), name=path.name)
     except ValueError as e:
         raise SystemExit(f"error: {args.file}: {e}") from None
-    if docs is None:
+    if read is None:
         return None
-    res = trace_import.analyze(repo, index.load(repo), docs, source=args.file)
+    res = trace_import.analyze(repo, index.load(repo), read[0], source=args.file, skipped=read[1])
     if res is None:
         if meant:
             raise SystemExit(f"error: {args.file}: no Sentry event (exception.values) or OpenTelemetry span "

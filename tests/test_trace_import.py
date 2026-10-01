@@ -62,8 +62,8 @@ def repo(tmp_path_factory) -> Path:
 
 
 def _analyze(repo: Path, name: str) -> dict:
-    docs = trace_import.load((FIX / name).read_bytes(), name=name)
-    return trace_import.analyze(repo, index.load(repo), docs, source=name)
+    docs, skipped = trace_import.load((FIX / name).read_bytes(), name=name)
+    return trace_import.analyze(repo, index.load(repo), docs, source=name, skipped=skipped)
 
 
 def _by_ref(ev: dict) -> dict:
@@ -73,8 +73,10 @@ def _by_ref(ev: dict) -> dict:
 def test_load_tells_an_export_from_a_log():
     assert trace_import.load(b"[14:02:08] [Server thread/INFO] guardtests.x passed!\n", name="latest.log") is None
     assert trace_import.load(b"java.lang.IllegalStateException: x\n", name="crash.txt") is None
-    assert trace_import.load(b'{"a": 1}\n{"b": 2}\n', name="events.jsonl") == [{"a": 1}, {"b": 2}]
-    assert trace_import.load('{"a": 1}'.encode("utf-16"), name="export.json") == [{"a": 1}]  # PowerShell's `>`
+    assert trace_import.load(b'{"a": 1}\n{"b": 2}\n', name="events.jsonl") == ([{"a": 1}, {"b": 2}], 0)
+    # an export still being written: its cut last line is skipped and counted, the others kept
+    assert trace_import.load(b'{"a": 1}\n{"b": 2}\n{"c": ', name="events.jsonl") == ([{"a": 1}, {"b": 2}], 1)
+    assert trace_import.load('{"a": 1}'.encode("utf-16"), name="export.json") == ([{"a": 1}], 0)  # PowerShell's >
     with pytest.raises(ValueError, match=r"not valid JSON \(line 1, column"):
         trace_import.load(b'{"exception": {"values": [', name="event.json")
     with pytest.raises(ValueError, match="not valid JSON"):
@@ -84,7 +86,7 @@ def test_load_tells_an_export_from_a_log():
     with pytest.raises(ValueError, match="nested too deeply"):
         trace_import.load(b"[" * 100000 + b"]" * 100000, name="deep.json")
     # bytes that are not UTF-8 inside a string do not stop the reading
-    assert trace_import.load(b'{"exception": "caf\xe9"}', name="e.json")[0]["exception"] == "caf\ufffd"
+    assert trace_import.load(b'{"exception": "caf\xe9"}', name="e.json")[0][0]["exception"] == "caf\ufffd"
 
 
 def test_path_resolver_names_every_file_of_a_shared_suffix():
@@ -168,3 +170,34 @@ def test_cli_refuses_a_broken_or_empty_export(repo, tmp_path, capsys):
     log = tmp_path / "structured.log"                                 # JSON lines that are no export: a log
     log.write_text('{"level": "info", "msg": "up"}\n', encoding="utf-8")
     assert cli.main(["trace-log", str(log), "--repo", str(repo), "--no-store"]) == 2
+
+
+def test_hostile_frames_are_not_mapped_by_accident(repo):
+    """Frames from site-packages, a library class whose file name the project shares, a Windows path in another
+    case, line numbers that are not lines, and an event with more frames than are read."""
+    def frame(**kw):
+        return {"in_app": None, **kw}
+
+    frames = [
+        frame(abs_path="C:\\Python312\\Lib\\site-packages\\shop\\orders.py", lineno=12, function="checkout"),
+        frame(filename="Foo.java", module="org.lib.Foo", function="bar", lineno=5),   # not com.example.Foo
+        frame(abs_path="C:\\Users\\Dev\\Shop\\Orders.py", lineno=12, function="checkout", in_app=True),
+        frame(abs_path="/srv/app/shop/orders.py", lineno=0, function="checkout", in_app=True),
+        frame(abs_path="/srv/app/shop/orders.py", lineno="12", function="Object.<anonymous>", in_app=True),
+        frame(abs_path="/srv/app/shop/orders.py", lineno=True, function="checkout", in_app=True),
+        "not a frame",
+    ]
+    ev = {"event_id": "e1", "exception": {"values": [{"type": "E", "stacktrace": {"frames": frames}}]}}
+    res = trace_import.analyze(repo, index.load(repo), [ev], source="x.json")
+    f = _by_ref(res["events"][0])
+    assert "x0.f0" not in f and "x0.f1" not in f                      # folded with the library frames
+    assert res["events"][0]["library"]["frames"] == 2
+    assert (f["x0.f2"]["result"], f["x0.f2"]["path"]) == ("mapped", "shop/orders.py")
+    assert f["x0.f3"]["result"] == "stale" and "not a line number" in f["x0.f3"]["why"]
+    assert f["x0.f4"]["result"] == "mapped"                           # a string line; an anonymous name unchecked
+    assert f["x0.f5"]["result"] == "stale" and f["x0.f5"]["why"] == "no line recorded"
+    many = {"exception": {"values": [{"type": "E", "stacktrace": {"frames": [
+        {"abs_path": "/srv/app/shop/orders.py", "lineno": 12, "function": "checkout"}] * 5000}}]}}
+    big = trace_import.analyze(repo, index.load(repo), [many] * 3, source="big.json")
+    assert [len(e["frames"]) for e in big["events"]] == [trace_import.MAX_FRAMES] * 3
+    assert big["events"][0]["truncated"] and "innermost 200 frames read" in trace_import.render(big)

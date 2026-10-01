@@ -27,6 +27,7 @@ MAX_EVENTS = 200
 MAX_FRAMES = 200                      # per event, the innermost kept
 MAX_CLAIMS = 50                       # stored claims per run
 MAX_STACK_LINES = 5000                # of one exception.stacktrace text
+MAX_CANDIDATES = 20                   # files of a shared suffix checked for the frame's function
 JSON_SUFFIXES = (".json", ".jsonl", ".ndjson")
 SCOPE = "what that event recorded, not what always happens"
 _UNNAMED = {"", "?", "<anonymous>", "anonymous", "<lambda>", "<listcomp>", "<genexpr>", "<dictcomp>", "<setcomp>",
@@ -39,8 +40,9 @@ def _decode(data: bytes) -> str:
     return data.decode("utf-8-sig", "replace")
 
 
-def load(data: bytes, *, name: str) -> list | None:
-    """The JSON documents of an export (one, or one per line), or None when the file is not JSON (a log).
+def load(data: bytes, *, name: str) -> tuple[list, int] | None:
+    """``(documents, lines skipped)`` of an export - one document, or one per line (a JSON-lines file whose last
+    line was cut keeps the others) - or None when the file is not JSON (a log).
 
     Raises ``ValueError`` for a file meant to be JSON (a ``.json`` name, or text starting with ``{``) that does not
     parse; a ``[``-led text that does not parse is a log (``[14:02:08] [Server thread/INFO] ...``)."""
@@ -52,22 +54,22 @@ def load(data: bytes, *, name: str) -> list | None:
             raise ValueError("not JSON: it does not start with { or [")
         return None
     try:
-        return [json.loads(s)]
+        return [json.loads(s)], 0
     except RecursionError:
         raise ValueError("not read: the JSON is nested too deeply") from None
     except ValueError as e:
         first = e
     docs: list = []
+    bad = 0
     for ln in text.splitlines():
         if not ln.strip():
             continue
         try:
             docs.append(json.loads(ln))
         except (ValueError, RecursionError):
-            docs = []
-            break
-    if docs:
-        return docs
+            bad += 1
+    if docs and len(docs) > bad:
+        return docs, bad
     if meant or s[0] == "{":
         where = (f"line {first.lineno}, column {first.colno}: {first.msg}"
                  if isinstance(first, json.JSONDecodeError) else str(first))
@@ -281,6 +283,21 @@ class Mapper:
                  if d.get("source_file")}
         self.resolver = failsig.PathResolver(files, roots=[str(self.repo)])
         self._lines: dict[str, list[str] | None] = {}
+        self._folded: tuple | None = None
+
+    def files_for(self, raw: str) -> list[str]:
+        """The repository files ``raw`` names; a Windows path (a drive letter or backslashes) that matches none is
+        compared again with case folded, as its file system does."""
+        found = self.resolver.matches(raw)
+        if found or not re.match(r"^(?:file:/+)?[A-Za-z]:[\\/]|.*\\", raw):
+            return found
+        if self._folded is None:
+            back: dict[str, list[str]] = {}
+            for f in self.resolver.files:
+                back.setdefault(f.lower(), []).append(f)
+            self._folded = (failsig.PathResolver(back, roots=[str(self.repo).lower()]), back)
+        res, back = self._folded
+        return sorted(f for low in res.matches(raw.lower()) for f in back[low])
 
     def lines(self, rel: str) -> list[str] | None:
         if rel not in self._lines:
@@ -308,8 +325,10 @@ class Mapper:
             return "stale", "file missing: the index names it but it is not on disk", []
         if line is None:
             return "stale", "no line recorded", []
-        if not 1 <= line <= len(cur):
+        if line > len(cur):
             return "stale", f"line {line} is beyond the end of the file ({len(cur)} lines)", []
+        if line < 1:
+            return "stale", f"line {line} is not a line number", []
         if fr["context"] is not None and fr["context"].strip() != cur[line - 1].strip():
             return "stale", f"the recorded source line differs from line {line} now", []
         chain = self.chain(rel, line)
@@ -334,15 +353,15 @@ class Mapper:
         low = (raw or "").replace("\\", "/").lower()
         if fr["in_app"] is False or any(f in low for f in failsig._FOREIGN):
             return {**row, "result": "library"}
-        cands = self.resolver.matches(fr["path"]) if fr["path"] else []
-        if not cands and fr["alt"]:
-            cands = self.resolver.matches(fr["alt"])
+        cands = self.files_for(fr["path"]) if fr["path"] else []
+        if not cands and fr["alt"] and not fr.get("built"):  # a JVM class's own path only: no other `Foo.java`
+            cands = self.files_for(fr["alt"])
         if not cands:
             if fr["in_app"] is True:
                 return {**row, "result": "not_in_repo", "why": "file missing: no indexed file ends with that path"}
             return {**row, "result": "library", "why": "no indexed file ends with that path"}
         if len(cands) > 1:
-            fits = [c for c in cands if self.check(c, fr)[0] == "mapped"]
+            fits = [c for c in cands[:MAX_CANDIDATES] if self.check(c, fr)[0] == "mapped"]
             return {**row, "result": "ambiguous", "why": f"{len(cands)} files end with that path; none is chosen",
                     "candidates": cands[:5], **({"fits": fits[:5]} if fits else {})}
         rel = cands[0]
@@ -358,8 +377,9 @@ class Mapper:
         return row
 
 
-def analyze(repo: Path, g, docs: list, *, source: str) -> dict | None:
-    """The frames of every event in ``docs`` mapped onto the repository; None when there is no event at all."""
+def analyze(repo: Path, g, docs: list, *, source: str, skipped: int = 0) -> dict | None:
+    """The frames of every event in ``docs`` mapped onto the repository; None when there is no event at all.
+    ``skipped``: the lines of a JSON-lines file that did not parse."""
     evs, truncated = events(docs)
     if not evs:
         return None
@@ -379,7 +399,8 @@ def analyze(repo: Path, g, docs: list, *, source: str) -> dict | None:
                    **({"library": {"frames": len(lib), "first": lib[0], "last": lib[-1]}} if lib else {})})
     kinds = {k: sum(1 for e in evs if e["kind"] == k) for k in ("sentry", "otel")}
     return {"source": source, "format": "+".join(k for k, v in kinds.items() if v), "events": out, "counts": counts,
-            **({"truncated": True} if truncated else {}), "scope": SCOPE,
+            **({"truncated": True} if truncated else {}), **({"skipped_lines": skipped} if skipped else {}),
+            "scope": SCOPE,
             "note": "read from a local export: each mapped frame is observed for its event only; a stale frame's "
                     "file or line no longer matches the code"}
 
@@ -388,7 +409,8 @@ def render(res: dict) -> str:
     c = res["counts"]
     out = [f"{res['source']}: {len(res['events'])} event(s) ({res['format']}); frames: {c['mapped']} mapped, "
            f"{c['stale']} stale, {c['ambiguous']} ambiguous, {c['not_in_repo']} not in the repository, "
-           f"{c['library']} outside it" + ("; events cut at the limit" if res.get("truncated") else "")]
+           f"{c['library']} outside it" + ("; events cut at the limit" if res.get("truncated") else "")
+           + (f"; {res['skipped_lines']} line(s) that are not JSON skipped" if res.get("skipped_lines") else "")]
     for e in res["events"]:
         out.append("")
         out.append(f"{'Sentry event' if e['kind'] == 'sentry' else 'span'} {e['id']}: {e['title']}"
