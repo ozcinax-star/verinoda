@@ -20,7 +20,8 @@ policy and isolation as any test run (a project that is not trusted runs only in
 The tests first run on the unmutated change (the baseline): when they do not pass there, no mutant can be judged
 and none is run. A mutant is **killed** when the tests fail with it, **survived** when they pass, **timeout**
 when they ran past the limit (counted apart: a mutant that loops is often killed in effect, but nothing failed),
-and **not_run** when the run was refused or inconclusive.
+and **not_run** when the run was refused or inconclusive. A mutant whose run stops while pytest collects the
+tests (exit 2: the module no longer imports) after the baseline passed is killed too, with that reason.
 
 Each mutant's outcome is observed in its experiment (run-scoped: those tests, that tree). "The tests do not check
 this line" is a ``strong_inference`` from a surviving mutant, never verified: the mutant may be equivalent (no
@@ -46,7 +47,8 @@ MAX_FILE_BYTES = 1_000_000
 LIMITS = [
     "a surviving mutant may be equivalent to the original (no input tells them apart): it is a lead, not proof",
     "only the selected tests run; a test the selection left out may kill a mutant that survived",
-    "Python files only; the operators are a small fixed set on the changed lines (no deleted lines, no new code)",
+    "Python files only; the operators are a small fixed set on the changed lines (no deleted lines; augmented "
+    "assignments, `**`, `%`, unary minus and conditional expressions are not mutated)",
     "each mutant is one full run of the selected tests in a copy of the repository",
 ]
 
@@ -126,16 +128,19 @@ def mutants_for(rel: str, text: str, lines: set[int]) -> list[dict]:
     """The mutants of ``text`` on ``lines``: ``{"path", "line", "op", "was", "now", "start", "end", "text"}``,
     in source order, compiling, with distinct texts. ``start``/``end`` are character offsets of the replaced
     span."""
+    bom = text.startswith("\ufeff")
+    body = text[1:] if bom else text
     try:
-        tree = ast.parse(text)
+        tree = ast.parse(body)
     except (SyntaxError, ValueError):
         return []
-    t = _Text(text)
-    skip = _docstring_nodes(tree)
+    t = _Text(body)
+    skip = _docstring_nodes(tree) | _annotation_nodes(tree)
     spans: list[tuple[int, int, str, str]] = []   # start, end, op, replacement
 
     def on(n: ast.AST) -> bool:
-        return getattr(n, "lineno", None) in lines
+        return getattr(n, "lineno", None) is not None and \
+            any(ln in lines for ln in range(n.lineno, (n.end_lineno or n.lineno) + 1))
 
     for n in ast.walk(tree):
         if isinstance(n, ast.Compare) and len(n.ops) == 1 and on(n):
@@ -165,7 +170,7 @@ def mutants_for(rel: str, text: str, lines: set[int]) -> list[dict]:
                 spans.append((t.start(n), t.end(n), f"{n.value} -> {n.value + 1}", str(n.value + 1)))
         elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not) and on(n):
             inner = t.text[t.start(n.operand):t.end(n.operand)]
-            spans.append((t.start(n), t.end(n), "not x -> x", inner))
+            spans.append((t.start(n), t.end(n), "not x -> x", f"({inner})"))
         elif isinstance(n, (ast.If, ast.While)) and on(n.test) and not isinstance(n.test, ast.UnaryOp):
             cond = t.text[t.start(n.test):t.end(n.test)]
             if "\n" not in cond:
@@ -175,17 +180,36 @@ def mutants_for(rel: str, text: str, lines: set[int]) -> list[dict]:
             spans.append((t.start(n.value), t.end(n.value), "return x -> return None", "None"))
     out, seen = [], set()
     for start, end, op, rep in sorted(spans):
+        line = t.text.count("\n", 0, start) + 1
+        if line not in lines:   # the node spans a changed line, but this operator sits on an unchanged one
+            continue
         new = t.text[:start] + rep + t.text[end:]
-        if new in seen or new == text:
+        if new in seen or new == body:
             continue
         try:
             compile(new, rel, "exec", dont_inherit=True)
         except (SyntaxError, ValueError):
             continue
         seen.add(new)
-        line = t.text.count("\n", 0, start) + 1
-        out.append({"path": rel, "line": line, "op": op, "was": t.text[start:end][:80], "now": rep[:80],
-                    "start": start, "end": end, "text": new})
+        col = start - t.starts[line - 1] + 1
+        out.append({"path": rel, "line": line, "col": col, "op": op, "was": t.text[start:end][:80],
+                    "now": rep[:80], "start": start, "end": end, "text": ("\ufeff" if bom else "") + new})
+    return out
+
+
+def _annotation_nodes(tree: ast.AST) -> set[int]:
+    """The nodes inside annotations: a mutant there changes nothing that runs (an equivalent mutant)."""
+    out: set[int] = set()
+    roots = []
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.returns is not None:
+            roots.append(n.returns)
+        elif isinstance(n, ast.arg) and n.annotation is not None:
+            roots.append(n.annotation)
+        elif isinstance(n, ast.AnnAssign):
+            roots.append(n.annotation)
+    for r in roots:
+        out.update(id(x) for x in ast.walk(r))
     return out
 
 
@@ -230,29 +254,56 @@ def run(store: Store, repo: Path, *, base: str | None = "HEAD", tests: list[str]
     ch = treestate.changes_vs_base(repo, sha)
     only = {f.replace("\\", "/").removeprefix("./") for f in files or []}
     res: dict = {"base": sha, "limits": list(LIMITS), "mutants": [], "skipped_files": []}
+    eligible = [rel for rel in sorted(ch["tree_files"]) if rel.endswith(".py")
+                and not testcode.is_test_or_support_file(rel) and ch["contents"].get(rel) is not None]
+    missing = sorted(only - set(eligible))
+    if missing:
+        raise ValueError(f"not a changed Python file that is not a test: {', '.join(missing)}")
     all_mutants: list[dict] = []
-    for rel in sorted(ch["tree_files"]):
-        if not rel.endswith(".py") or testcode.is_test_or_support_file(rel) or (only and rel not in only):
+    crlf: set[str] = set()
+    for rel in eligible:
+        if only and rel not in only:
             continue
-        new = ch["contents"].get(rel)
-        if new is None:
-            continue
+        new = ch["contents"][rel]
         if len(new) > MAX_FILE_BYTES:
             res["skipped_files"].append({"path": rel, "why": f"over {MAX_FILE_BYTES} bytes"})
             continue
-        lines = changed_lines(ch["base"].get(rel), new)
-        text = new.decode("utf-8", "replace")
-        if not _tokens_ok(text):
+        try:
+            text = new.decode("utf-8")
+        except UnicodeDecodeError:
+            res["skipped_files"].append({"path": rel, "why": "not UTF-8: a mutant could not keep the rest of the "
+                                                             "file byte for byte"})
+            continue
+        if not _tokens_ok(text.removeprefix("\ufeff")):
             res["skipped_files"].append({"path": rel, "why": "does not tokenize as Python"})
             continue
-        all_mutants += mutants_for(rel, text, lines)
+        try:
+            ast.parse(text.removeprefix("\ufeff"))
+        except (SyntaxError, ValueError) as exc:
+            res["skipped_files"].append({"path": rel, "why": f"does not parse as Python ({exc.__class__.__name__})"})
+            continue
+        try:
+            raw = (repo / rel).read_bytes()
+        except OSError:
+            raw = new
+        if b"\r\n" in raw and raw.count(b"\r\n") == raw.count(b"\n"):
+            crlf.add(rel)
+        all_mutants += mutants_for(rel, text, changed_lines(ch["base"].get(rel), new))
     res["mutants_total"] = len(all_mutants)
     chosen = all_mutants[:max_mutants]
     if len(all_mutants) > len(chosen):
         res["not_run_over_limit"] = len(all_mutants) - len(chosen)
     if not all_mutants:
-        res.update(status="nothing_to_mutate",
-                   headline=f"no mutant could be made on the Python lines changed against {sha[:12]}")
+        if res["skipped_files"]:
+            res.update(status="incomplete", headline=f"no mutant could be made on the Python lines changed against "
+                                                     f"{sha[:12]}; {len(res['skipped_files'])} changed file(s) could "
+                                                     "not be read (see skipped_files): no pass")
+        else:
+            res.update(status="nothing_to_mutate",
+                       headline=f"no mutant could be made on the Python lines changed against {sha[:12]}")
+        return res
+    if not chosen:
+        res.update(status="incomplete", headline=f"{len(all_mutants)} mutant(s) made, none run (--max-mutants 0)")
         return res
     if tests is None:
         tests, sel = _select_tests(store, repo, sha)
@@ -286,7 +337,7 @@ def run(store: Store, repo: Path, *, base: str | None = "HEAD", tests: list[str]
         except experiments.ExperimentRefused as exc:
             return {"outcome": "refused", "why": str(exc), "next_step": getattr(exc, "next_step", None)}
         return {"outcome": r["outcome"], "experiment": r["id"], "why": r.get("inconclusive_reason"),
-                "isolation": r.get("isolation")}
+                "isolation": r.get("isolation"), "exit_code": r.get("exit_code")}
 
     baseline = one(f"the selected tests pass on the change against {sha[:12]} (mutation baseline)", {})
     res["baseline"] = baseline
@@ -300,17 +351,22 @@ def run(store: Store, repo: Path, *, base: str | None = "HEAD", tests: list[str]
         return res
     counts = {"killed": 0, "survived": 0, "timeout": 0, "not_run": 0}
     for m in chosen:
-        src = m["text"].encode("utf-8")
-        r = one(f"the selected tests fail with mutant {m['path']}:{m['line']} ({m['op']})", {m["path"]: src})
+        text = m["text"].replace("\n", "\r\n") if m["path"] in crlf else m["text"]
+        r = one(f"the selected tests fail with mutant {m['path']}:{m['line']} ({m['op']})",
+                {m["path"]: text.encode("utf-8")})
         verdict = {"fail": "killed", "pass": "survived", "timeout": "timeout"}.get(r["outcome"], "not_run")
+        if verdict == "not_run" and r["outcome"] == "inconclusive" and r.get("exit_code") == 2:
+            # the baseline collected and passed: a mutant that stops collection broke the module's import
+            verdict, r["why"] = "killed", "pytest could not collect the tests with this mutant (exit 2)"
         counts[verdict] += 1
-        row = {"at": f"{m['path']}:{m['line']}", "op": m["op"], "was": m["was"], "now": m["now"],
-               "result": verdict, "experiment": r.get("experiment"), "status": "observed"}
+        row = {"at": f"{m['path']}:{m['line']}", "col": m["col"], "op": m["op"], "was": m["was"], "now": m["now"],
+               "result": verdict, "experiment": r.get("experiment"),
+               "status": "observed" if r.get("experiment") and verdict != "not_run" else "unknown"}
         if verdict == "survived":
             row["claim"] = {"statement": f"the selected tests do not check {m['path']}:{m['line']} ({m['op']} "
                                          "passes them)", "status": "strong_inference",
                             "why": "a surviving mutant; it may be equivalent to the original"}
-        if verdict == "not_run":
+        if verdict == "not_run" or r.get("why"):
             row["why"] = r.get("why") or r["outcome"]
         res["mutants"].append(row)
     res["counts"] = counts
@@ -331,7 +387,7 @@ def render(res: dict) -> str:
     lines = [res.get("headline", "")]
     for m in res.get("mutants") or []:
         if m["result"] != "killed":
-            lines.append(f"  {m['result']:<9} {m['at']}  {m['op']}  ({m['was']} -> {m['now']})"
+            lines.append(f"  {m['result']:<9} {m['at']}:{m['col']}  {m['op']}  ({m['was']} -> {m['now']})"
                          + (f"  [{m['experiment']}]" if m.get("experiment") else "")
                          + (f"  {m['why']}" if m.get("why") else ""))
     for s in res.get("skipped_files") or []:

@@ -108,3 +108,31 @@ def test_nothing_to_mutate_and_cli_exit_codes(shop, capsys):
     (shop / "shop" / "p.py").write_text("def price(n, vip):\n    return n if vip else n\n", encoding="utf-8")
     assert main(["mutate", "--repo", str(shop), "--tests", "tests/test_p.py::test_price", "--max-mutants", "0",
                  "--json"]) == 3   # mutants exist but none was run: no pass
+
+
+def test_review_round_generation_fixes():
+    # a BOM file is mutated, and the BOM kept
+    ms = mutate.mutants_for("m.py", "\ufeffx = a + 1\n", {1})
+    assert ms and all(m["text"].startswith("\ufeffx = a ") for m in ms)
+    # the operator's own line decides, not the first line of its expression
+    src = "x = (a\n     + b)\n"
+    assert [m["line"] for m in mutate.mutants_for("m.py", src, {2})] == [2]
+    assert mutate.mutants_for("m.py", src, {1}) == []
+    # `not (a or b)` keeps its parentheses
+    m = next(m for m in mutate.mutants_for("m.py", "y = x and not (a or b)\n", {1}) if m["op"] == "not x -> x")
+    assert m["text"] == "y = x and (a or b)\n"
+    # constants in annotations are never mutated (an equivalent mutant)
+    src = "def f(a: Lit[3] = 4) -> Lit[5]:\n    b: Lit[6] = 7\n"
+    assert {m["now"] for m in mutate.mutants_for("m.py", src, {1, 2})} == {"5", "8"}
+
+
+def test_named_file_must_be_changed_and_zero_mutants_runs_nothing(shop):
+    (shop / "shop" / "p.py").write_text("def price(n, vip):\n    return n if vip else n\n", encoding="utf-8")
+    st = open_store(shop, create=True)
+    try:
+        with pytest.raises(ValueError):
+            mutate.run(st, shop, files=["shop/__init__.py"], tests=["tests/test_p.py::test_price"])
+        res = mutate.run(st, shop, tests=["tests/test_p.py::test_price"], max_mutants=0)
+    finally:
+        st.close()
+    assert res["status"] == "incomplete" and "baseline" not in res
