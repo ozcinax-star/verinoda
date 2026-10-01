@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D157)
+## Upgrading from 0.4.0 (D137-D158)
 
 ### D137: Trigram regex index
 
@@ -212,6 +212,18 @@ is one `unknown` with how to turn it on (`-Dmixin.debug.export=true`); the exist
 are unchanged. `jvmclass.class_code()` returns the class's interfaces (`ifaces`). A Mixin claim of `analyze` may
 carry a second, `experiment`-type evidence citing the exported class, and its uncertainties now name the export.
 No MCP tool is added.
+
+### D158: ORM, DI and database schema
+
+New command `verinoda schema` (exit 3 with `--db` when the database and the code differ). The graph gains `table:<name>`
+nodes (`file_type: schema`) and `maps_to`, `writes_table`, `reads_table`, `migrates` and `injects` edges; the receiver
+sidecar is version 11 (an older one is recomputed on the first load). `map --view dataflow` paths may end one hop
+later, at a table, with `table` and `table_at`; the `sink` is still the function that writes or reads it, whose
+`sink_kinds` may now be `table-write` / `table-read` (a function with only ORM table uses is a sink it was not
+before). `q` accepts the five relations; the `ui` local graph, impact and path follow them; `trace`, `butterfly` and
+`node_inspect` set a table aside for any symbol of the same name (test code and nested functions included). With
+`--db`, a framework's bookkeeping tables are listed under `framework_tables` and no longer make exit 3. Tools that
+list every node or relation (export, the UI) show them. No MCP change.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
