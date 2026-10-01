@@ -954,7 +954,7 @@ def ask(repo: Path, questions, *, graph=None, verify: bool = True, need: str = "
     try:
         from verinoda import tq_measured
 
-        cells = tq_measured.shown_cells()
+        cells = tq_measured.shown_cells() if verify else {}   # the table was measured with verify on
     except Exception:  # noqa: BLE001 - an unreadable calibration table shows nothing, it never fails a batch
         cells = {}
     for qid, spec, err in batch:

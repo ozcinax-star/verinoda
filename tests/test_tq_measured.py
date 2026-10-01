@@ -263,6 +263,8 @@ def test_tq_shows_measured_only_for_a_current_table(tmp_path, monkeypatch):
     # absence decided by reading the installed library instead of the index
     assert deeper["answer"] is True and deeper["status"] == "statically_verified" and "measured" not in deeper
     assert "measured" not in lib
+    # the table was measured with verify on; without it nothing is shown, not even an absence
+    assert "measured" not in tq.ask(repo, ["exists nothing_like_it"], verify=False)["answers"][0]
     assert f"measured: 39/40 held-out @{sha8}" in tq.render(res)
     assert list(yes) == [k for k in tq._KEY_ORDER if k in yes]
     monkeypatch.setattr(tq_measured, "shown_cells", lambda *a, **k: {})
