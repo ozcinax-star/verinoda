@@ -49,7 +49,7 @@ CASE_SENSITIVE_SUFFIXES = frozenset({
     ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte", ".astro",
     ".py", ".pyi", ".java", ".kt", ".kts", ".scala", ".groovy", ".go", ".rs", ".c", ".h", ".cc", ".cpp",
     ".cxx", ".hpp", ".hh", ".hxx", ".m", ".mm", ".cs", ".swift", ".rb", ".dart", ".lua", ".ex", ".exs",
-    ".jl", ".zig",
+    ".jl", ".zig", ".erl", ".hrl", ".escript", ".r", ".sol",
 })
 # edges whose line is the definition of their target
 _DEFINING = frozenset({"contains", "defines", "declares"})

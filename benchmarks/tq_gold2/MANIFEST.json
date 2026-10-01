@@ -1,0 +1,40 @@
+{
+ "written": "2026-10-02",
+ "note": "sha256 of the held-out set as frozen before verinoda tq was run on any of its questions",
+ "files": {
+  "held_out.json": "c19578ede6befd35354ce8d43dfa6e1589d74e28e21c1e0afb1ee3bfd2f72031"
+ },
+ "repos": {
+  "verinoda": {
+   "source": ".",
+   "git_commit": "c23c483",
+   "include": [
+    "verinoda"
+   ],
+   "exclude": [
+    "verinoda/project_index/*",
+    "*/__pycache__/*",
+    "verinoda/benchmark/questions/*"
+   ]
+  },
+  "orders_app": {
+   "source": "examples/orders_app"
+  }
+ },
+ "examples": {
+  "examples/orders_app/docs/adr/0001-sqlite-persistence.md": "1b57d66019756f5d8d1a86e247b3d24cd97700973d14271be2d4abf233808a30",
+  "examples/orders_app/orders/__init__.py": "96b0503b584de90fef00f1b83b3c56733840f055e4c6981b29d2d922f917e3d1",
+  "examples/orders_app/orders/api.py": "020e6cb48af39a5556dfd96b2cc7ef3949a07713c432ceafc7e13bfe04c2aba1",
+  "examples/orders_app/orders/config.py": "4db85f67251a3fc2f839202f81724459c4707f8146f2ac49f71ffb3646ea2e90",
+  "examples/orders_app/orders/pricing.py": "d318020aef8997cc0aac098f73e2f2e764e2b582545f622aa921d74cd5cc9cfa",
+  "examples/orders_app/orders/repository.py": "e7031e7595ac92b8b490d263291a30dc9c7c7f06b3ce893970a67b6fd8f2c28a",
+  "examples/orders_app/orders/service.py": "eebc97d3379b5a02195de84fefe01ea3902194f759ecbf6b10ca37ed677bc1a7",
+  "examples/orders_app/pyproject.toml": "d8b072a86f866faf2f3da003c514add3eaec583c1d7ef6de40b746ccadd48bfc",
+  "examples/orders_app/README.md": "88cca2ac29707d60d20b77050d92c1c7d7c6ebf71c5103a2965be580efb4bad7",
+  "examples/orders_app/tests/test_pricing.py": "69d60fc7862cc45bc01ec9130766c5426a8fdb0c1cb6fd78285b2bba1880c2c1",
+  "examples/orders_app/tests/test_service.py": "1a069c2ccad3c4af177ec71e6b22ad2e03be7054ee06507df88cf92be81970ad"
+ },
+ "counts": {
+  "held_out.json": 323
+ }
+}

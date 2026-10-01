@@ -55,10 +55,13 @@ LANGS: dict[str, tuple[str, ...]] = {
     "swift": (".swift",), "lua": (".lua",), "shell": (".sh", ".bash"), "sql": (".sql",), "glsl": (".glsl", ".vsh",
     ".fsh", ".vert", ".frag"), "markdown": (".md", ".markdown", ".mdx"), "json": (".json", ".jsonc", ".json5"),
     "yaml": (".yml", ".yaml"), "toml": (".toml",), "xml": (".xml",), "html": (".html", ".htm"), "css": (".css",),
+    "cobol": (".cbl", ".cob", ".cobol", ".cpy"), "erlang": (".erl", ".hrl", ".escript"), "r": (".r",),
+    "solidity": (".sol",), "vbnet": (".vb",),
 }
 LANG_ALIASES = {"py": "python", "kt": "kotlin", "js": "javascript", "ts": "typescript", "rs": "rust",
                 "cs": "csharp", "c#": "csharp", "c++": "cpp", "rb": "ruby", "sh": "shell", "bash": "shell",
-                "md": "markdown", "yml": "yaml", "jvm": "jvm"}
+                "md": "markdown", "yml": "yaml", "jvm": "jvm", "vb": "vbnet", "vb.net": "vbnet", "erl": "erlang",
+                "sol": "solidity", "cob": "cobol"}
 JVM = ("java", "kotlin", "scala", "groovy")
 OPERATORS = {"AND", "OR", "NOT"}
 MAX_DEPTH = 32          # nested groups and chained NOTs

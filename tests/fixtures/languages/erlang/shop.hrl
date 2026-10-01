@@ -1,0 +1,1 @@
+-record(item, {name, price}).
