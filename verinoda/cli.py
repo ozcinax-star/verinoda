@@ -260,7 +260,18 @@ def _r_trace(res: dict) -> None:
             kind = f" ({h['kind']})" if h.get("kind") and h.get("kind") != "call" else ""
             if h.get("kind") == "callback" and h.get("context"):
                 kind = f" (callback: {h['context']})"
+            if h.get("kind") == "cross_service":
+                what = (f"{h.get('method', '')} {h.get('url', '')}".strip() if h.get("protocol") == "http"
+                        else f"'{h['event']}'" if h.get("event") else h.get("route", ""))
+                kind = f" (cross-service {h.get('protocol', '')}: {what}; handler declared at {h.get('route_at')})"
             print(f"   {h['from']} -{h['relation']}[{h['confidence']}]-> {h['to']}  @{h['at']}{kind}{extra}")
+            for n in h.get("notes") or []:
+                print(f"     assumed: {n}")
+    for a in res.get("cross_service_ambiguous") or []:
+        print(f" ambiguous call at {a['at']}: {a.get('method') or ''} {a.get('url', '')} names several handlers "
+              "(no edge made):")
+        for c in a.get("candidates") or []:
+            print(f"   {c['route']}  {c['at']}")
     if res.get("reachability"):
         print(f" reachability: {res['reachability']}")
     if res.get("note"):
@@ -1359,6 +1370,34 @@ def cmd_trace(args) -> int:
     res.update(freshness.summary(fresh))
     _emit(args, res, _r_trace)
     return 0 if res["status"] == "found" else 2
+
+
+def cmd_routes(args) -> int:
+    """The route table and every client call with a URL: linked, ambiguous, unmatched or a method mismatch."""
+    from verinoda import cross_service, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    g = index.load(repo, augment=False)
+    side = index._read_sidecar(repo) or {}
+    block = side.get("cross_service") or {}
+    old = block.get("files") if block.get("facts_version") == cross_service.FACTS_VERSION else None
+    _files, edges, report, _parsed = cross_service.collect(g, old=old)
+    report["edges"] = [{"from": g.label(u), "from_id": u, "to": g.label(v), "to_id": v, "relation": d["relation"],
+                        "at": f"{d['source_file']}:{d['source_location'][1:]}", "route_at": d.get("route_at"),
+                        "context": d.get("context"), **({"notes": d["notes"]} if d.get("notes") else {})}
+                       for u, v, d in edges]
+    report["derived_by"] = cross_service.ORIGIN
+
+    def render(r: dict) -> None:
+        print(cross_service.render(r, show_routes=not args.no_table))
+        if r["edges"]:
+            print("edges:")
+            for e in r["edges"]:
+                print(f"  {e['from']} -{e['relation']}-> {e['to']}  @{e['at']}  ({e['context']})")
+
+    _emit(args, report, render)
+    return 0
 
 
 def cmd_tour(args) -> int:
@@ -4154,6 +4193,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("routes", cmd_routes, "the route table (Flask, FastAPI, Django, Express, NestJS, Next.js, Spring, ...) "
+                                   "and every client call with a URL (fetch, axios, requests, httpx, ...): linked to "
+                                   "one handler, ambiguous, unmatched or a method mismatch; tRPC, gRPC, GraphQL and "
+                                   "event edges counted")
+    sp.add_argument("--no-table", action="store_true", help="leave out the route table (text output)")
     sp = add("export", cmd_export, "the graph for other tools: GraphML (Gephi, yEd), Neo4j Cypher, an Obsidian vault "
                                    "or an SVG drawing; each edge with its location and the status it can carry "
                                    "unchecked, no code, no machine paths")
