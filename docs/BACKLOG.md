@@ -105,7 +105,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 12.6 | **Specs traced to code and tests** | Requirement criteria (EARS style) linked to code and tests through claims; criteria with no evidence reported | Kiro specs, GitHub spec-kit, Tessl | `verinoda spec check` lists unevidenced criteria |
 | 12.8 | **Issue and chat sources (opt-in)** | PR, issue, Jira and Slack threads as "why" evidence, with contradictions between sources shown | Unblocked, Glean, Tabnine | a why-answer cites a PR discussion |
 
 ## 13 - Agent integration
