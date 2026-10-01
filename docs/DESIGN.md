@@ -13766,6 +13766,554 @@ variables, varargs) against a descriptor; `../` and absolute targets reading not
 noted in the text output; `unmatched` from `claim_evidence()`; a handler called only from a method its selector
 does not name; audit lines after a quoted newline.
 
+## 131. ORM, DI and database schema (D158, 2026-10-01)
+
+### 131.1 Why
+
+The dataflow view ended at the function that wrote: `.save()` at `orders/repository.py:15`, with a regular
+expression saying it held `INSERT`. Which table, what other code reads that table, which model maps to it, what a
+migration did to it, and what a handler gets injected were not in the graph, so neither `map`, `trace`, impact nor
+the query language could answer "who writes the orders table" or follow a request to it. agentforge-graph, Graphify
+and Kodit put ORM models, injection bindings and schema into their graphs.
+
+### 131.2 Decisions
+
+- New module `dataschema.py` and command `verinoda schema [--table NAME] [--db FILE] [--json]`. No MCP tool (the
+  core menu keeps its five); the nodes and edges are in the graph every tool reads.
+- Tables come from the code only, each with how its name was found: SQLAlchemy `__tablename__` and `Table("x", ...)`,
+  Flask-SQLAlchemy `db.Model` without one (the class name in snake_case, its default), SQLModel `table=True` (the
+  class name in lower case), Django models (`Meta.db_table`, else `<app>_<model>`, the app being the folder holding
+  `models.py` or the `models` package; abstract models left out; a class is a Django model when it extends
+  `models.Model` in a file importing django, or a project class that is one, through any number of bases), JPA
+  `@Entity` (`@Table(name=)`, else the entity name - `@Entity(name=)` or the class name - in snake_case, Spring
+  Boot's default physical naming), `CREATE TABLE` in SQL files and SQL strings, Alembic `op.create_table`, Django
+  `migrations.CreateModel` (the table of the migration's own app). Columns from model fields (`Column("name")`,
+  Django `ForeignKey` as `<name>_id` or its `db_column`, the implicit `id` unless a field is the primary key, an
+  abstract base's fields, `<parent>_ptr_id` under a concrete parent; a `ManyToManyField` is no column but a join
+  table `<table>_<field>` with `id`, `<model>_id`, `<other>_id`), `CREATE TABLE` bodies, `op.add_column` and `ALTER
+  TABLE ... ADD`.
+- SQL text is read with its comments blanked and its string literals emptied: `-- drop table x` and `/* ... */`
+  name nothing, a statement over several lines is read whole (SQL files are matched over the whole text, not line
+  by line). A schema prefix, quoted or bracketed, is dropped (`"public"."invoices"`, `[dbo].[Customers]`); a system
+  catalog (`information_schema.tables`) is no table; a `FROM` inside a function's parentheses (`EXTRACT(year FROM
+  d)`, `trim(both ' ' FROM name)`) is no table, one inside a subquery (`IN (SELECT ... FROM t)`) is; a CTE's name
+  (`WITH recent AS (...)`) is no table.
+- Reads and writes, from inside a function: SQL strings with a statement's shape (`SELECT ... FROM`, `INSERT INTO`,
+  `UPDATE x SET`, `DELETE FROM`, `MERGE INTO`, `CREATE TABLE`, `ALTER TABLE` ...) whose keyword is in capitals, or in
+  any case with a SQL marker (`?`, `%s`, `=`, `*`, `WHERE`, `VALUES`) - so "Merge a class ..." and "Select a file"
+  are prose; docstrings are never SQL. An f-string or a `+` of strings is one string; a value in it reads as `{}`,
+  which is neither a SQL marker nor a name, so `f"Delete from cache failed for {request}"` is prose. A SQL constant
+  (`INSERT_EVENT = "INSERT ..."` at module or class level, a Java `static final String` / Kotlin `const val`)
+  defines its `CREATE TABLE` tables where it is written, and its reads and writes belong to each function that
+  names it. ORM calls: a write or read method (`add`, `save`, `create`, `delete`, `update`, `merge` / `query`,
+  `filter`, `get`, `all`, `select`, `scalars` ...) on a model class (`Order.objects.filter`) or on an instance the
+  function built or a parameter typed with the model (`o = Order(...)`, `o.save()`); a model in the arguments only
+  when it is handed to a session (`session`, `db`, `self.session`, `db.session`, a name built from or typed as a
+  `...Session`) or to `select(Order)` / `get_object_or_404(Order, ...)` - `pending.add(o)` on a set or
+  `data.get(Order)` on a dict is no table use. Spring Data: a field or parameter typed as a `JpaRepository<Entity,
+  ...>` (or `Crud`, `PagingAndSorting`, `Mongo` ...) and its `save` / `delete` / `find*` / `count*` calls. A model
+  name that two models share is resolved by the file's own import (`from shop.models import Item`) or definition,
+  else not guessed (`unresolved`).
+- Java and Kotlin are read with comments and string contents blanked, positions kept: commented-out SQL
+  (`// jdbc.update("DELETE FROM users_backup")`) is not read, and an entity's `@Table` is looked for only after the
+  class before it (a Kotlin file with `@Entity @Table(name = "line_items") class LineItem` then `@Entity class
+  ShippingLabel` gives `shipping_label`). String literals and text blocks (`"""..."""`) are read: in `@Query`
+  without `nativeQuery = true` (and in `createQuery`) the text is JPQL, whose names are entities mapped through
+  their models (`SELECT o FROM Order o` reads the table `@Table(name = "orders")` names; a path join `JOIN o.lines`
+  is no entity; an entity that is no project model gives no edge); with `nativeQuery = true` it is SQL.
+- Injection: FastAPI `Depends(f)` / `Security(f)` make `handler -injects-> f`, owned by the function they are
+  declared for - a parameter default, a route decorator's `dependencies=[Depends(f)]` (on a method too: the method,
+  not its class) - and through a module-level `X = Annotated[..., Depends(f)]` alias used as a parameter type; Spring
+  constructor parameters (a Kotlin `@Autowired constructor(...)` included), `@Autowired` fields (other annotations
+  such as `@Qualifier` between) and the `final` fields of a Lombok `@RequiredArgsConstructor` / `@AllArgsConstructor`
+  class of a `@Service` / `@Component` / `@Controller` / `@Repository` / `@Configuration` class make `class
+  -injects-> dependency` when the type names one project type (its constructor's node does not count).
+- In the graph: one node per table, id `table:<name>`, `file_type: schema`, `kind: table`, its columns and whether
+  the code defines it, placed at its first definition (else its first use) and cited at the line naming the table
+  (`__tablename__`, `db_table`, `@Table`, the `CREATE TABLE` line), so `q ... --verify` finds the name there.
+  `file_type: schema` keeps it out of symbols, outlines, the files' line owners and the hierarchy view's file list.
+  Edges `maps_to` (model -> table; EXTRACTED when the code names the table, at that line; INFERRED for a framework
+  default), `writes_table`, `reads_table`, `migrates`, `injects`, all `derived_by: verinoda.dataschema`, INFERRED, at
+  the line of the use with what it was (`ORM .save() on Order`, `SQL string`, `JPQL in @Query on Order`, `SQL
+  constant FIND`); one edge per owner, table, relation and line. They live in the receiver sidecar (`data_schema`,
+  sidecar v11), facts kept per file by sha256 like the cross-service pass; a reused entry that is not of the shape
+  the pass makes is read again; a failure of the pass is noted in the block and never stops a load.
+- The dataflow view (the done-when): a function that writes or reads a table is a sink - with its regex kinds when
+  it has some (`sql-write`, `orm-write`, unchanged), else `table-write` / `table-read` (an ORM-only one such as
+  `session.scalars(select(Account))`); a path that reaches a sink with a table goes one hop on to it (written
+  tables before read ones). The table is never the sink: `sink` is the function, with its kinds, and the path says
+  the table apart (`table`, `table_at`); the text view ends `-> table orders`, and the sink count counts functions
+  only. `injects` edges are followed like calls. On `examples/orders_app`: `create_order_handler -> place_order ->
+  .save() -writes_table-> orders`. `analyze`'s data-path claims state the calls to the sink, not the hop on to the
+  table (it read `store_handler() -> t` as a call before); a claim whose sink is only a table use is partial
+  support when the cited line holds an ORM or database call (`session.scalars(...)`, `.save(`, `conn.execute(`),
+  and none when it does not (a `def` line, an import, `return 1`).
+- Other readers: the query language knows the five relations (a graph without one answers with no row and a
+  note, not "unknown relation"); the `ui` local graph, impact and path follow them (a table's impact lists who
+  writes, reads, maps and migrates it); in name resolution a table gives way first, before test code, copies and
+  nested functions do, so any symbol of the same name wins over it (`trace main orders` and `butterfly orders`
+  take the function `orders()`, `butterfly shop_item` the test helper `shop_item()`, a nested `billing_item()`
+  wins over `table:billing_item`; the table is listed aside as "a database table").
+- `verinoda update` after a change to `.sql` files only (no graph file changed, the graph is kept) makes the
+  sidecar again, every other file's facts reused, so a new `CREATE TABLE` is in the graph at once.
+- The live database is opt-in and local: `--db FILE` reads a SQLite file without writing beside it - opened
+  `immutable=1` (no lock, no `-shm` / `-wal` made), or, when it has a non-empty `-wal`, a temporary copy of the
+  file and its log (committed rows not yet in the file are read) - and lists the tables only in the database, only
+  in the code (defined there), and per shared table the columns only on one side (column names through
+  `pragma_table_info(?)`, so a table name with a quote is read); `--table` narrows the compare too. A framework's
+  bookkeeping tables the code does not define (`django_migrations`, `django_session`, `django_content_type`,
+  `django_admin_log`, `auth_*`, `alembic_version`, `flyway_schema_history`, `databasechangelog*`, Rails'
+  `schema_migrations`) are listed apart (`framework_tables`) and are no difference. That side is `observed` (the
+  file as read now; opened immutable, a hot rollback journal of an unfinished write is not applied, as the basis
+  says), the code side `strong_inference`. Exit 3 when they differ, 2 for a missing or non-SQLite file. Other
+  databases are not connected to.
+- Review round (19 findings and the minors, each with a regression test on a small realistic project - Django
+  with an abstract base and two apps with an `Item`, SQLAlchemy and FastAPI with decorator dependencies and an
+  `Annotated` alias, Spring Java and Kotlin with JPQL, a native text block and Lombok, a Flyway file with comments
+  and multi-line statements, raw sqlite3 with f-string log messages): f-string values no longer read as `?`; quoted
+  schema prefixes, `FROM` in a function call, CTE names, system catalogs and comments (SQL, Java, Kotlin) no longer
+  give tables; JPQL maps entities, text blocks are read; a Kotlin entity no longer takes the `@Table` before it;
+  Django models through project bases, Keras models no longer Django; argument-based ORM uses need a session;
+  `CreateModel` names its app's table; FastAPI dependencies are owned by their function and found through aliases;
+  tables and mappings are cited at the naming line; tables give way in name resolution; `.sql`-only updates refresh
+  the tables; the query language, the dataflow text view and the UI know the relations; the function, not the
+  table, is the sink (this draft had said so while ORM-only paths made the table the sink), and `analyze` no longer
+  states the table hop as a call (`tests/test_analysis.py`'s one-node path failed on the branch); `--db` writes nothing
+  beside the file and compares Django models honestly (implicit `id`, inherited fields, join tables); a damaged
+  sidecar entry is read again instead of crashing `schema`. Facts version 2 (older facts are read again).
+- Review round 2 (11 findings and the minors, each with a regression test that fails on the first round's code;
+  two were regressions of the first round): a backslash-escaped quote in a SQL file (`'O\'Brien'`, `E'it\'s'`)
+  no longer swallows every later table - quotes take backslash escapes, and a literal that runs over a line
+  opening `CREATE` / `ALTER` / `DROP` / `INSERT` makes the file be lexed line by line (so standard SQL's `'C:\'`
+  is safe too); a table now gives way before test code and nested functions in name resolution (the first round
+  applied it last, so a test helper or a nested function lost to a table); a statement written in lower case has
+  to go on as SQL after its table name (`delete from cache where ...`, `insert into t (`, `update t set a =`,
+  `select ... from t where|join|...|end`), so "Delete from cache failed for %s", "Insert into queue failed key=%s"
+  and "delete from cache?" are messages, and strings handed to logging (`log.*`, `logger.*`, `logging.*`),
+  `warnings.warn`, `print` and `raise X(...)` are never read; the table-sink grade reads the cited line (above);
+  `@Entity` classes whose annotations nest parentheses (`@Table(indexes = {@Index(...)})`,
+  `@UniqueConstraint(...)`) and qualified `@jakarta.persistence.Entity` / `Table` are read, `@Table`'s own `name`
+  only (not an `@Index`'s); the JPQL context is the enclosing `@Query(` / `create*Query(` by parenthesis depth, with
+  no length cap; a Django proxy model maps to its concrete parent's table and defines none (`CreateModel` with
+  `options={"proxy": True}` migrates nothing), a base named in two apps is the one the file defines or imports;
+  every optional key of a reused sidecar entry is type-checked; `WITH x AS(` is a CTE; a module SQL constant is
+  not read through a local of the same name, a class constant only through `self`, `cls` or its class;
+  `UPDATE <name> <alias> SET` (SQL and JPQL) is a write. Minors: `x IS DISTINCT FROM b` names no table, MySQL `#`
+  comment lines in SQL files are blanked, `FULLTEXT` / `SPATIAL KEY` are no columns, `.SQL` files are read, the
+  framework tables above.
+
+### 131.3 Measured
+
+Windows 11, Python 3.13, on Verinoda's own checkout (its graph loaded with `augment=False`, nothing written: the
+index folder's files were unchanged after each run), after the review round, two runs:
+
+- The pass read 415 files and parsed 154 (109 Python, 34 Java, 4 Kotlin, 7 SQL; the other Python files have no
+  hint); first run 15.0-15.2 s, again with the facts kept by sha256 0.71-0.72 s; linking alone 0.57-0.58 s on a
+  fresh graph.
+- It found 54 tables, all 54 defined in the code (Verinoda's own `atlas.db` tables, the search index's `body` and
+  `df`, tables in SQL fixtures and benchmark corpora), and 410 edges (252 `reads_table`, 91 `writes_table`, 67
+  `migrates`). The module before the round, on the same graph: 61 tables, 46 defined, 365 edges (267 / 91 / 7). The
+  round dropped nine that were no tables - `public` (the schema of `"public"."..."` in
+  `tests_upstream/fixtures/sample_plpgsql_quoted.sql`), `tables`, `views`, `routines` (`information_schema`),
+  `pg_class`, `pg_namespace`, `pg_attribute`, `pg_constraint` (`pg_catalog`) and `sqlite_master` - and added two
+  real ones, `question_plans` and `reference_resolutions`, from `store.py` schema strings that open with a `--`
+  comment (read as prose before). The 60 more `migrates` edges are SQL constants: a module-level `CREATE TABLE`
+  string had no owner before, now each function naming it migrates its tables (of the 67 `migrates` edges, 30 are
+  in `verinoda/search_index.py`, 24 in the benchmark corpus's copy of it and 8 in `verinoda/trigram.py`).
+- The dataflow view of `examples/orders_app` ends its handler path at `orders` with `.save()` as the sink
+  (`tests/test_data_schema.py`, `tests/test_architecture_map.py`); the MCP `map_view` response of the view still
+  fits its 2,500-character test cap (`tests/test_mcp.py`).
+
+### 131.4 Not done
+
+- Table names a framework derives follow its default (Django `<app>_<model>`, JPA snake_case, SQLModel lower case,
+  Flask-SQLAlchemy snake_case); a custom naming strategy, a `db_table` set elsewhere or a table prefix in settings
+  is not seen.
+- Reads and writes are calls on a model class, an instance built in the same function or a parameter typed with
+  the model, a model handed to a session, a repository field, or SQL strings and SQL constants of the same file;
+  an untyped model parameter, a query assembled in pieces, a raw cursor of an unknown type and dynamic table names
+  are not seen. SQL is matched by patterns, not parsed; CTE names are collected per string or per SQL file, so in a
+  SQL file a real table that shares a CTE's name is not read either.
+- Java/Kotlin are read by patterns; JPA relationships (`@OneToMany` join tables) and Kotlin Exposed / jOOQ / MyBatis
+  are not read. JPQL held in a constant and handed to `@Query(CONST)` is read as SQL (its entity names as tables).
+  Kotlin nested block comments are taken as ending at the first `*/`. A MySQL `#` comment is read only at the
+  start of a line in a SQL file (not after a statement, not in SQL strings).
+- A model name shared by two models is resolved only through the using file's own import or definition; Python
+  tables are matched by name across files otherwise.
+- `.sql`-only changes are taken in by `verinoda update`; a `.sql` file edited without an update is read on the
+  next build or update, like every other file.
+- The live database: SQLite files only; with a `-wal` file the database is copied to a temporary folder first (its
+  size in time and disk).
+
+### 131.5 Tests
+
+`tests/test_data_schema.py` (38): `examples/orders_app` scanned, its dataflow path ending at `orders` through a
+`writes_table` hop with the sink kinds kept; the table node not a symbol, with its columns; a Python project with
+Django (`db_table`, `<app>_<model>` with the implicit `id`, abstract), SQLAlchemy (`__tablename__`, `Table()`, a
+named `Column`), SQLModel, an Alembic migration and a Flyway SQL file (`CREATE TABLE`, `ALTER TABLE ADD`), ORM reads
+and writes through a class, an instance and `session.query`, SQL strings, and a FastAPI `Depends`; graph edges with
+EXTRACTED and INFERRED mappings; JPA `@Table` and snake_case, a Spring Data repository's `save` / `findAll` and
+constructor injection; the SQL patterns; facts reused and a damaged sidecar block skipped; the CLI's text and JSON, a
+live SQLite file with a table and a column only on one side (exit 3), a missing file and a non-SQLite file (exit
+2). The review round adds 20, on two more projects (a Django + SQLAlchemy/FastAPI + sqlite3 + Flask project, and a
+Spring Java/Kotlin project with a Flyway file), one per finding: f-string log and exception messages; quoted schema
+names (and the `sample_plpgsql_quoted.sql` fixture); `FROM` in a function call, CTE names, `information_schema`;
+JPQL entities and a native text block; commented-out Java SQL and a Java SQL constant; the Kotlin entity's own
+table; Django abstract bases, the M2M join table and a Keras model; a model in a set or a dict; `CreateModel` of its
+own app and two apps' `Item` resolved by import; SQL file comments and multi-line statements; FastAPI decorator
+dependencies, an `Annotated` alias and a method's dependency; the naming line of a table and its mapping (with `q
+--verify`), of a schema string that opens with a comment (its `CREATE TABLE` line; the function running it
+migrates the table) and of a native text block; a table giving way in `exact_nodes`, `trace` and `butterfly`; a `.sql`-only `update`; the query
+language with each relation and with none present; an ORM-only sink (the text view naming the table, the
+hierarchy view without the `.sql` file, the sink claim graded partial); the UI local graph, impact and path; the
+live database read without `-shm` / `-wal` left behind (a clean WAL file and one with an open writer), a quoted
+table name, and a Django compare per table that is equal (exit 0); a damaged sidecar entry read again; the minors
+(Flask-SQLAlchemy default, module and class SQL constants, no repeated "read by", Lombok, `@Autowired @Qualifier`,
+Kotlin `@Autowired constructor`). Each of the 20 fails on the code before the round. Review round 2 adds 10,
+each failing on the first round's code: a MySQL dump with an escaped quote, `#` comments, `FULLTEXT` / `SPATIAL`
+keys and an upper-case `.SQL` suffix, a Postgres `E'...'` string and a standard `'C:\'`; a test helper and a nested
+function winning over tables (`exact_nodes`, `butterfly`); %-style and `=` messages, logging / warnings / print /
+raise strings; the table-sink grade on a `def` line, an import, `return 1` (none) and an ORM call (partial);
+`@Entity` with nested and qualified annotations; a `countQuery` past 400 characters and `UPDATE Order o SET`; a
+Django proxy model and its proxy `CreateModel`; mistyped optional keys of a sidecar entry; `AS(`, `IS DISTINCT
+FROM`, a shadowed module constant and an unrelated object's attribute; framework tables in a live database. `test_architecture_map.py` and
+`test_index.py` follow the new path end and sidecar counts.
+
+## 132. Typed questions, batched (D159, 2026-10-01)
+
+### 132.1 Why
+
+An agent that needs several closed facts about the code ("does A call B?", "who calls F?", "does this handler
+write that table?") today asks `project_query` or `analyze` once per fact and reads a ranked excerpt or a claim
+block each time. Each call costs a turn and a few thousand characters, and the answer to a yes/no question is
+prose the agent must interpret. `verinoda tq` answers up to 20 such questions in one call, each with one typed
+value, its status, the `file:line` it rests on and, when it is not settled, why and the next step. It adds no
+analysis: every answer comes from an engine Verinoda already has, and its status is never above that engine's.
+The design is docs/drafts/13.6-13.8-spec.md (sections 1-4 and the 13.6 build plan in section 8).
+
+### 132.2 Decisions
+
+- **Gold set first.** `benchmarks/tq_gold/` was committed (b016512) before any tq code: 109 hand-checked cases
+  (75 dev, 34 held-out, split by `sha256(id)[0] < 0x56`) over the query-language fixture (copied to
+  `fixtures/qlang/`, plus `admin.py` with a real SQL injection and `dyn.py` with calls through `getattr` and a
+  variable) and `examples/orders_app`. `MANIFEST.json` holds the sha256 of both splits and every fixture file; a
+  test fails if any changed. (Until the review round it did not hash `examples/orders_app`, which 38 cases run on;
+  its 11 files were added then, unchanged since b016512.) `score.py` scores answers: `?` is never wrong, a count is right when it is a lower
+  bound, a SQL line cited up to two lines below the gold line is a hit. The set is small (the spec's 450/300
+  targets and per-type n >= 30 belong to 13.7).
+- **Graph queries as objects.** `graphquery.build` / `path` / `node` / `edge` / `id_in` make the same checked
+  tree as `parse`; `run(query=...)` takes it, so a resolved name is never spliced into query text. A variable
+  pinned by `id = ...` (text or object) is walked from those ids only, so the two forms take the same code path;
+  a test checks equal rows for the text form with ids, the text form with names and the object form, with and
+  without `--verify`, and for a grouped count.
+- **One shared context per batch.** `graphquery.Shared` holds the freshness check, the relations present, the
+  route table (`graphquery.route_table`) and the lines cache; `run(ctx=...)` fills and reuses it. Tests count one
+  `freshness.check` and one `cross_service.collect` for a batch of seven questions that all need them.
+- **The asked route is verified.** `run(route="POST /b")` makes `--verify` re-read that route's declaration, not
+  the handler's first route (a test blanks one of two stacked decorators in the shared lines).
+- **`testmap.mapping_current`** is the nested `current` of `testmap.affected`, lifted unchanged; `affected` calls
+  it. tq's `tested` reads `test_map` through a read-only SQLite connection.
+- **Statuses.** The answer's status is the weaker of the engine's and the type's ceiling (`claims.ORDER`, with
+  `stale` just above `unknown`). `exists`/`which`: `statically_verified` only when the definition line is re-read
+  (`entail.def_around`); `calls`/`reaches`/`route`: q's `--verify` rule; `writes`/`reads`: `strong_inference` at
+  most (run without verify); `callers` and `q ... as=count`: `>=N`, `strong_inference` at most; `taint`:
+  `strong_inference` at most; `tested`: `observed` and run-scoped, `stale` when another file the test ran changed.
+- **A "no" is an absence.** `strong_inference` only for a depth-1 `calls` whose caller's AST has no call of that
+  name and whose text (from the def line, its defaults included, to the end, the definition's own name left out)
+  does not spell it, and for a name the index does not define (`exists`, `which`) when no file changed since the
+  index defines it; never for a dunder such as `__init__` or `__enter__`, which construction, `with` and operators
+  call without spelling it; `weak_inference` otherwise. When the AST has a call of the asked name that the graph did not bind, the answer is `?` with
+  `next: verinoda resolve-call FILE:LINE NAME`, not a no (found on `pong -> ping` in the fixture and
+  `testmap.affected -> mapping_current` in this repository); since the review round `reaches`, deeper `calls`
+  and `route` (from the handler) make the same check before a no. `calls` and `reaches` walk `calls|indirect_call`
+  edges, as `callers` counts them (an `indirect_call` is INFERRED, so it gives `weak_inference`).
+- **Every unknown has a next step**: candidates and `pass path/file.py::symbol` for an ambiguous name,
+  `verinoda update` / `index_update` for a stale file, `verinoda routes` with up to five routes, `verinoda
+  schema` with the known tables, `verinoda observe TEST` for a test never traced, `ask again: q2,q3` for a budget
+  cut, `pass env` for a library name not decided.
+- **Names**: `naming.resolve`, exact only; overloads count as one name. `not_found`, `unresolved` and `similar`
+  are "no such symbol" (a similar name is never used); `ambiguous`, `not_indexed` and `not_a_symbol` are `?`.
+  `exists NAME scope=lib` asks `codecheck.api` instead (its `found` used as given, `strong_inference` at most).
+- **Budgets**: one deadline for the batch (default 30 s), min(200,000, 1,000,000 / n) expansions per question;
+  rows past the row cap are not a cut (a row found is found). A cut answer is `?` with `cut: true`; the decided
+  answers stay.
+- **Surface.** CLI `verinoda tq` (line form, `-f` with lines or JSON objects, `--no-verify`, `--need`, `--json`;
+  exit 0/1/2/3). MCP `tq` (41 tools): in `CORE_TOOLS` (15), not in `CORE_DIRECT`, so the core menu reaches it
+  through `run_tool`; the full profile lists it and its instructions have one line for it. The core instructions
+  are unchanged: the core-menu test now exempts `tq` from "every core tool is named in the instructions" (the spec
+  keeps that sentence for study F). The MCP text form has no question echo; `format="json"` gives `verinoda.tq/1`.
+- **Menu.** The spec's computed numbers (4,441 / 4,590) were not used; measured with the tests' own computation
+  after shortening the `history_search` catalog line and run_tool's `arguments` description (see Measured).
+- **Review round.** A reviewer confirmed six wrong or overstated answers, each fixed with a regression test in
+  `tests/test_tq.py`: (1) the depth-1 `calls` spelled check started after the def line, so `def f(cb=target)` and
+  every one-line def gave a strong no; it now reads the def line too, without the definition's own name. (2) An
+  implicit dunder call (`Order(1)` for `Order.__init__`, `with k` for `__enter__`, `k()` for `__call__`) was a
+  strong no; a dunder is now a weak no at most, and `__init__`/`__new__` look for a call of the owning class (`?`
+  with `resolve-call` when there is one). (3) `exists NAME` was a strong no when an indexed file changed since the
+  index now defines NAME; a changed Python file's current text is searched for `def`/`class`/an assignment of the
+  name, and a hit is `?` with the index update (in `calls` and the other types too, through the same resolver).
+  (4) `tested` built F's name with one owner only, so a nested function (`outer.inner`) or a nested class's method
+  (`A.B.deep`) that the map shows running was a strong no; F's dotted name now comes from the AST through every
+  owner, and a recorded function of the same name under another owner in F's file makes the answer `?`. (5)
+  `reaches` ignored the AST call evidence `calls` used, so it said no where `calls` said `?` (calls inside nested
+  functions: the pattern behind the wrong answers on this repository); see the bullet above. (6) `taint` matched
+  the asked names only against a finding's pattern and kind, so `taint request USERS.execute` was "no path" while
+  taint reported exactly that flow; the sink's call and `*.x` patterns now match, and a name that matches no rule
+  and no finding is `?` with the names found (`taint request.args shell` is now `?`: the rules' kind is
+  `command`). Minors fixed: `which` with more than 10 files is invalid (it silently kept 10); `callers` says "an
+  INFERRED or indirect call edge"; the text render says when `as=rows` was cut at 5; the MCP `questions` argument
+  is `list[Any]`, so through `run_tool` a question of another JSON type is invalid alone (it failed the call); a
+  route operand of 3 or more words is invalid and a trailing slash is ignored; `tested` takes `via` from the
+  latest run; `taint` checks the batch deadline before it starts; `MANIFEST.json` hashes `examples/orders_app`.
+  The skipped minors are in Limits.
+- **Determinism.** No threads, no randomness, sorted lists; the same batch gives the same JSON apart from
+  `seconds` (test).
+
+### 132.3 Measured
+
+All on 2026-10-01, Windows, the repository's `.venv`, in-process through `AtlasTools` (MCP text form), warm graph.
+
+Gold set (`score.py`, verify on and off give the same verdicts):
+
+| split | n | right | wrong | unknown | wrong at statically_verified / observed | locator hits |
+|---|---|---|---|---|---|---|
+| held_out | 34 | 30 | 0 | 4 | 0 | 16/16 |
+| dev | 75 | 70 | 1 (`weak_inference`) | 4 | 0 | 38/39 |
+
+Held-out with verify: 10 `statically_verified` (10 right), 8 `strong_inference` (8 right), 12 `weak_inference`
+(12 right), 4 unknown. Dev with verify: 27 / 21 / 23 (22 right) / 4 (re-measured in the review round: `taint
+request.args shell`, a right weak no before, is now `?`, since no rule or finding uses the name `shell`). The dev wrong answer is the `getattr` trap
+`reaches run_by_name target` answered no at `weak_inference`; the missed locator is `calls through_variable target`
+(the `indirect_call` edge cites the assignment line 17, the call is on line 18). Every unknown had a next step.
+
+Menu (the test's computation, orders_app copy):
+
+| | before (440d476) | after |
+|---|---|---|
+| core menu | 4,449 | 4,426 (limit < 4,500) |
+| decision-records menu | 4,598 | 4,575 (limit < 4,600) |
+| core instructions | 1,303 | 1,303 (limit < 1,400) |
+
+20 questions, one tq call vs the same questions in natural language through project_query and analyze (one call
+each; analyze `budget_seconds=60`):
+
+| repository | tq time (3 runs) | tq chars (text / json) | project_query (20 calls) | analyze (20 calls) |
+|---|---|---|---|---|
+| orders_app (42 nodes) | 0.705 s cold, 0.206 s, 0.221 s | 2,721 / 3,463 | 1.90 s, 15,589 chars (median 408) | 16.94 s, 102,741 chars (median 5,385) |
+| this repository, scanned copy of cc9fb68 (37,993 nodes) | 6.118 s cold, 1.942 s, 1.858 s | 2,825 / 3,557 | 18.08 s, 111,530 chars (median 5,729.5) | 148.77 s, 164,541 chars (median 7,759) |
+
+On this repository: 7 yes, 6 no, 4 counts, 1 `which`, 2 unknown (a call the graph did not bind; a test never
+traced). Checked by hand afterwards, three of the six no answers are wrong, all at `weak_inference`: `reaches
+cmd_q tokenize`, `reaches cmd_tq naming.resolve` and `reaches AtlasTools.tq tq.ask` (calls made inside a nested
+function or through a constructor are not edges of the outer function). The two strong no answers (`exists
+graphquery.py::explain_plan`, `calls freshness.check graphquery.run`) are right; `reaches taint.run
+graphquery.run` (weak no) was not traced, and taint.py does not name graphquery. The 20 questions were not
+recorded beyond the ones named here, so this table cannot be re-run as it was, and it was not re-measured after
+the review round: the three wrong weak no answers are of the pattern finding 5 fixed (a call named B in A's AST,
+nested functions included, now gives `?`), but whether each of them now gives `?` was not checked.
+
+### 132.4 Not done
+
+- The gold set is small (109 cases, 34 held-out) and written by the same author as the rules; no per-type cell
+  reaches n = 30, so nothing here is a calibrated frequency (`measured:` is 13.7).
+- A weak no is often wrong on a large codebase: three of six on this repository. They are marked `enough: no` and
+  carry `next`, but an agent must not state them as facts.
+- `calls`/`reaches` see what the graph sees: calls in nested functions belong to the nested function, dynamic
+  dispatch is not followed. A no is checked against A's AST for a call named B (nested defs included) only, not
+  against the intermediate functions of a deeper path. `writes`/`reads` have no such check (a table is not a
+  call name).
+- Freshness covers the files a no names (A, B, F, the handler, and a changed file defining an absent name): a
+  `reaches`/`route`/`writes` no through an intermediate file changed since the index stays a weak no.
+- `taint` checks the batch deadline before it starts but cannot be stopped inside `taint.run`, and the expansion
+  budget does not apply to it.
+- Route operands are not normalised beyond a trailing slash: `/orders/{oid}` against `<int:oid>` is `?` with
+  `verinoda routes` and the known routes.
+- The 20 questions behind the Measured comparison table were not recorded, so that table cannot be reproduced.
+- `writes`/`reads` never reach `statically_verified`; `dataschema` edges are INFERRED in both test repositories,
+  so table answers were all `weak_inference` there.
+- `tested` was measured only on synthetic test-map rows (no traced run in the gold repositories).
+- A cold first call on a 38k-node graph took 6.1 s (naming and route caches); warm batches took under 2 s.
+- The spec's study F (the instructions sentence), the calibration table (13.7) and host intent (13.8) are not
+  built.
+
+### 132.5 Tests
+
+- `tests/test_tq.py`: the frozen gold set (hashes, split rule); gate A on held-out and dev (0 wrong at verified or
+  observed, every unknown with a next step, locator hits >= 95%, wrong answers only at `weak_inference`); the
+  shared context (one freshness check, one route collection); each type's yes, no and unknown (exists with
+  `scope=lib`, which, calls with verify on and off, INFERRED hop, AST-call gap, route bound from the table, writes,
+  reads, unknown table, callers, taint, q in three modes and a bad query); an ambiguous name; a stale file; the
+  test map (observed, run-scoped no, failed early, incomplete trace, fixture-shared function, stale); a budget cut
+  keeping decided answers; bad questions and batch errors; the line form and its echo; byte-identical answers; CLI
+  exit codes 0/1/2/3 and `-f`; the MCP tool. Review round: a name on the def line and one-line defs, implicit
+  dunder calls, `reaches` with the AST call evidence, `tested` on nested definitions and a same-name function under
+  another owner, a name defined in a changed indexed file, taint's call and `*.x` matching and an unknown sink
+  name, the minors (11 `which` files, a 3-word route, a trailing slash, the rows-cut note), and a question of
+  another JSON type through `run_tool`; the frozen-set test also hashes `examples/orders_app`.
+- `tests/test_query_language.py`: equal rows for the text and object forms; one freshness check per shared
+  context; verify re-reading the asked route.
+- `tests/test_testmap.py`: `mapping_current` and its cache.
+- `tests/test_mcp.py`: tq's parameters and read-only hint, 15 core tools, both menu limits, the instructions rule.
+
+## 133. Host intent for analyze (D160, 2026-10-01)
+
+### 133.1 Why
+
+`analyze` reads a question's intent from cue words (`question_plan.intents_for`), and a question with no cue is
+read as `locate`. The host that calls it (an agent with a model) has often read the question already. TypeSafe Jev
+frames a task with a typed intent; the local idea is to let the host say what it read, and to check that against
+the rules instead of trusting it. Backlog row 13.8; design in `docs/drafts/13.6-13.8-spec.md` sections 6 and 8.
+
+### 133.2 Decisions
+
+- `verinoda analyze "<q>" --intent INTENT` and an optional `intent` on MCP `analyze` in the full profile only.
+  Values: the plan intents (`question_plan.INTENTS`, the keys of `DEFAULT_DONE`); the CLI rejects others through
+  argparse `choices`, MCP through its enum and `invalid_argument` with the valid list. Not with `--plan` /
+  `plan_json` (a plan's sub-questions carry their own intents): CLI exit message, MCP `invalid_argument`,
+  `analysis.analyze` a `ValueError`.
+- The core `analyze` schema is unchanged (`{question, budget_seconds}`, tests/test_mcp.py), and so is the shared
+  tool description: the new text lives only in the full profile's parameter description.
+- `question_plan.host_intent(plan, intent, lexicon)` reads the drafted plan with the host's intent and returns
+  `(plan or None, intent_check)`:
+  - disagree when the rule intents of the message are not empty and do not include it. A choice stays the user's,
+    judged per sub-question: one whose rule intent is `decide` or whose own text asks for a choice in so many words
+    (`asks_for_choice`) is a choice. `decide` disagrees only when the rules read no `decide` anywhere (a weak cue
+    such as "pros and cons" counts) and no sub-question is a choice; another intent disagrees when every
+    sub-question is a choice, or when only choices carry it. Another intent never retypes a choice, and a choice
+    keeps its slot when the other sub-questions are reordered;
+  - agree otherwise. The sub-questions whose intent it already is come first (stable; check's topological order
+    still runs a sub-question after the one it depends on). When none has it, those carrying it as a secondary
+    intent take it, else (no cue at all) every sub-question the rules left at `locate` by default does: the intent
+    becomes that sub-question's intent (the old one becomes the first secondary, unless it was the default),
+    its `done_when` kind, minimum status and detail come from `DEFAULT_DONE`, subjects are kept; `derived_by` of the
+    sub-question and of the plan ends `+host_intent`.
+- `analysis.analyze(..., intent=)` runs the read plan through `question_plan.check(..., source="host")`. It is used
+  when that check is not invalid and its `intent_divergence` names no sub-question the host retyped (a sub-question
+  the rules themselves left at `locate` already diverges from their own reading and does not count; the first
+  measurement run found one such case, glow_mod q14, and the rule was fixed; since `host_intent` weighs the intent
+  against the same `intents_for`, the divergence part is a guard that no measured question reaches). Otherwise the
+  rules' plan is checked and used as before (`source="fallback"`, D67 untouched). The stored plan keeps `source: fallback` (it is
+  the rules' draft); its stored check says `host`.
+- The result carries `intent_check` whenever an intent was given: `{given, read_as (the rule intents), agrees,
+  applied, sub_questions (where it was used), retyped (the sub-questions whose intent it replaced, when any), why
+  (when not used)}`; a step `intent_check` in `--json`; the MCP lean view keeps it next to `plan_fallback`; the
+  text view prints `host intent X: used for q1` or `host intent X: not used: <why>`.
+- No claim status is touched: the intent only picks which handlers a sub-question runs and the verdict's
+  `done_when`. Claims, critique and the verdict gate are the same code with or without it.
+- Review round: the first version judged a choice on the whole message, before the rules' reading. `decide` was
+  rejected on a question the rules themselves read as `decide` through a weak cue ("Pros and cons of using sqlite
+  in place_order", "Redis'in avantajları neler?"), so no host intent at all could agree there; and in a message of
+  several clauses the outcome hung on clause order ("Should we switch to Postgres? Who calls place_order?" refused
+  `callers` though q2 is callers; "Who calls place_order? Should we switch to Postgres?" refused `decide` though
+  q2 is decide, because `asks_for_choice` of the whole message misses a `should` after `? `). The choice is now
+  judged per sub-question as above, and the earlier claim that `decide` is never put on a question about code is
+  narrowed: it is never put on one the rules read no `decide` in and no clause of which asks for a choice. Also
+  from the review: MCP `analyze` refuses a blank `intent` (`""`, spaces) with `invalid_argument` instead of
+  reading it as none (the wire enum already blocked it; the direct tools path did not); when the host's plan only
+  reordered the rules' one and fails its checks, the why now names the rules' draft, not the intent;
+  `summarize.py` reads the `result.json` beside it when given no path. No benchmark question has a decide cue,
+  a `decide` sub-question or a clause asking for a choice (checked over all 107 questions), so every number in
+  Measured stands as run.
+- Promotion to the core menu: not promoted (see Measured). The rule from the spec: only if `wrong_met` or turns
+  fall by more than its schema cost. Neither fell.
+
+### 133.3 Measured
+
+Harness: `benchmarks/results/host-intent-2026-10-01/run.py` (result `result.json`, `summarize.py` prints the
+tables; `python summarize.py [RESULT.json]`, default the `result.json` beside it). Three conditions per question: no intent, a correct intent (hand-labelled by the author, listed in the
+script), a wrong one (a fixed misreading per correct intent, e.g. callers -> tests, why -> flow). Each condition
+on its own fresh copy of an indexed base, so no run reuses another's claims. The verdict-audit rows come from the
+first run; the fix above changes only multi-sub-question cases whose divergence names an untouched sub-question,
+and that run had none in the audit (its fastbench rows were run again after the fix).
+
+Verdict audit (`benchmarks/verdict_audit`, 39 cases: dev 23, held-out 16):
+
+| condition | wrong_met dev | wrong_met held-out | above ceiling | controls kept | used / retyped / disagreed |
+|---|---|---|---|---|---|
+| none | 0/23 | 1/16 | 0 | 15/22 | - |
+| correct intent | 0/23 | 1/16 | 0 | 15/22 | 35 / 5 / 4 |
+| wrong intent | 0/23 | 1/16 | 0 | 15/22 | 5 / 5 / 34 |
+
+Verdicts that moved: with the correct intent, `webui-useauth-components` (and its Turkish twin) unmet ->
+met_with_inference (callers instead of locate; at the case's ceiling, so no wrong met); `mixmod-unlisted` (both) locate -> config, still not_supported; `orders-order-written` locate ->
+dataflow, still met. With the wrong intent: `verinoda-lock-why` why -> flow (the rules also read `flow` there, so
+the check could not catch it), met_with_inference -> unmet; the others kept their verdict.
+
+Fastbench (the six sets whose corpora are in this repository: forge_mod, glow_mod, heldout_repoatlas, orders_app,
+orders_app_tr, verinoda_user_tr; 68 questions, 245 gold facts; the two graphify sets need an external checkout and
+were not run), `verinoda_analyze` scored by `runner.score`:
+
+| condition | facts found | met | met with a gold fact missing from the claims | negatives as findings | unknowns | median s |
+|---|---|---|---|---|---|---|
+| none | 218/245 | 31 | 12 | 0 | 33 | 0.88 |
+| correct intent | 218/245 | 28 | 12 | 0 | 37 | 0.86 |
+| wrong intent | 218/245 | 27 | 11 | 0 | 35 | 0.88 |
+
+- Correct intent: used on 58 of 68, but it changed the plan of 6 (retyped) and the order of 2 more; on the other
+  50 the rules already read the same intent. The 3 `met` lost (forge q11 behaviour, glow q04 callers,
+  verinoda_user_tr u11 why) all had every gold fact in their claims: the stricter `done_when` of the right intent
+  turned a correct `met` into a weaker verdict. No fact gained or lost.
+- Wrong intent: rejected on 62 of 68 (`intent_check.agrees: false`, rules' plan used). The 6 it got through are
+  questions where the rules read nothing (no cue, default locate) or read the wrong intent too (a secondary cue):
+  forge q08 locate -> impact (its met had a gold fact missing, so the lower verdict removed one met_wrong), forge
+  q11, glow q04, u11 lost a correct met, orders q09 (both languages) kept it.
+- Claim statuses: on every run where the intent retyped no sub-question, the multiset of claim statuses equals
+  the run without one (audit 68/68 such rows, fastbench 124/124). Where it retyped one (audit 10, fastbench 12),
+  other handlers ran and made other claims, so the multisets differ (equal in 1 and 4); the test checks that a
+  claim both runs make keeps its status (tests/test_host_intent.py).
+- Menu: core 4,449 characters and with decision records 4,598, both unchanged (limits 4,500 and 4,600). The full
+  profile's `intent` property is 454 characters; the bare enum alone would be 203. The records menu has 1
+  character free.
+- Turns: not measured. No model was in the loop; the harness is one `analyze` call per question.
+
+Promotion decision: not promoted to the core profile. `wrong_met` did not fall on either set with a correct
+intent (verdict audit 1/39 -> 1/39, fastbench 12 -> 12), turns were not measured, facts did not change, a correct
+intent cost 3 correct `met` verdicts, and a wrong one that slips through moves verdicts too. Against that the
+cheapest core form (the enum, 203 characters) does not fit the 1 character left in the records menu without
+cutting other text.
+
+### 133.4 Not done
+
+- A wrong intent passes when the rules read nothing (no cue, so the intent is not checked against anything) or
+  when the rules also read it as a secondary intent (`verinoda-lock-why`: why -> flow). The check is only as good
+  as the cue tables.
+- The intent is one for the whole question; a question of several clauses gets it on the sub-questions that
+  carry it, not per clause.
+- `done_when` of the host's intent can be stricter than the rules' default `locate`: a complete answer can drop
+  from `met` (3 of 68 fastbench questions with a correct intent).
+- The stored plan keeps `source: fallback` (it is the rules' draft) while its stored check says `host`; a reader
+  comparing the two sees them differ. Deliberate and tested, left as is.
+- A sub-question retyped to `flow` from the default keeps its mentions in the order written; it is not reordered
+  source to target by Turkish case roles as `draft()` does for a `flow` cue. No input was found where the rules
+  read no cue and the roles exist.
+- No benchmark question has a choice or a decide cue, so the per-sub-question choice rule is covered by tests
+  only, not measured.
+- The correct intents were labelled by the author of the rules; there is no independent label set, and no model
+  host was measured.
+- Not available in the core MCP profile, by the measurement above.
+
+### 133.5 Tests
+
+- `tests/test_host_intent.py` (17 tests, 21 with parameters): an intent the rules also read takes over the sub-question with its done_when
+  (the drafted plan not edited in place, the result still a valid plan); one they do not read is reported and not
+  used; the rules' own intent changes nothing but the order; the sub-questions it names come first and check's
+  order keeps it; a question without a cue takes the host's; a choice stays the user's and `decide` is never put
+  on a question without a choice or a decide cue; `decide` agrees on a weak decide cue (English and Turkish) where
+  every other intent disagrees; in both clause orders of a choice and a callers question, `decide` takes the
+  choice and `callers` its own clause without retyping or moving the choice; an intent the rules read only on a
+  choice does not take it; on the scanned copies: `decide` on a weak-decide question is used, the three
+  clause-order cases are used on their clause, and a failing plan the intent only reordered is blamed on the
+  draft; on scanned copies of `examples/orders_app`: a disagreeing intent leaves sub-question
+  intents, verdicts and every claim status as without one (and the text and lean views show `intent_check`); an
+  agreeing intent changes the handler and done_when, the stored check says `host`, and a claim both runs make
+  keeps its status; a sub-question the rules left at the default does not make the rules' own plan disagree, and
+  a dependency still runs first; an intent with a plan, or an unknown one, is a `ValueError`; the CLI takes
+  `--intent` and refuses an unknown value.
+- `tests/test_mcp.py`: `EXPECTED_PARAMS` lists `intent` for the full `analyze`; a new test checks the MCP
+  disagreement, `invalid_argument` for an unknown or blank intent (with the valid list) and for an intent with
+  `plan_json`, the full schema's enum, and that the core `analyze` has no `intent`; the existing core-menu test
+  (core analyze `{question, budget_seconds}`, both menu limits) passes unchanged.
+
 ## Sources
 
 - **Retrieval:**

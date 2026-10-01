@@ -78,9 +78,11 @@ def _dataflow(v: dict, cap: int) -> list[str]:
     n = max(3, cap - 3)
     for p in paths[:n]:
         hops = p.get("hops", [])
-        via = " -> ".join(h.get("to") or "?" for h in hops[:-1][:3])
+        table = p.get("table")   # the last hop goes on from the sink to the table it writes or reads
+        via = " -> ".join(h.get("to") or "?" for h in hops[:-2 if table else -1][:3])
         mid = f" via {via}" if via else ""
-        out.append(f"   {p['entry']}{mid} -> {p['sink']}  [{', '.join(p.get('sink_kinds', []))}]")
+        end = f" -> table {table}" if table else ""
+        out.append(f"   {p['entry']}{mid} -> {p['sink']}{end}  [{', '.join(p.get('sink_kinds', []))}]")
     out += _more(n, len(paths), "paths")
     if not paths and sinks:
         for s in sinks[: max(3, cap - 3)]:

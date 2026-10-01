@@ -570,3 +570,70 @@ def test_classes_with_and_without_methods_and_a_nested_function(rec):
                                                                                               ".run()")]
     nested = _q(rec, 'match (f:function) where f.name = "outer" and f.text ~ "return 1" return f')
     assert [ln["at"] for ln in nested["rows"][0]["evidence"]["lines"]] == ["rec.py:15"]
+
+
+# -- the object form and the shared context (typed questions build queries from node ids) -----------------
+
+def test_text_and_object_queries_give_equal_rows(rec):
+    from verinoda import index
+
+    g = index.load(rec)
+    a, b = "rec_chain1", "rec_leaf"
+    assert a in g.G and b in g.G
+    text = f'match (a)-[calls*1..3]->(b) where a.id = "{a}" and b.id = "{b}" return a, b'
+    by_name = 'match (a)-[calls*1..3]->(b) where a.name = "chain1" and b.name = "leaf" return a, b'
+    gq = graphquery
+    obj = gq.build([gq.path(gq.node("a"), gq.edge("calls", lo=1, hi=3), gq.node("b"))],
+                   gq.BoolOp("and", [gq.id_in("a", [a]), gq.id_in("b", [b])]), ["a", "b"])
+    for verify in (False, True):
+        rows = [gq.run(rec, text, graph=g, verify=verify)["rows"],
+                gq.run(rec, by_name, graph=g, verify=verify)["rows"],
+                gq.run(rec, query=obj, graph=g, verify=verify)["rows"]]
+        assert rows[0] and rows[0] == rows[1] == rows[2]
+    # a count over several ids, as text (an OR of ids) and as an object
+    cnt = gq.build([gq.path(gq.node("c"), gq.edge("calls"), gq.node("x"))], gq.id_in("x", ["rec_leaf", "rec_fact"]),
+                   ["x", "count(c)"])
+    t2 = 'match (c)-[calls]->(x) where x.id = "rec_leaf" or x.id = "rec_fact" return x, count(c)'
+    assert gq.run(rec, query=cnt, graph=g)["rows"] == gq.run(rec, t2, graph=g)["rows"]
+    with pytest.raises(gq.QueryError):
+        gq.run(rec, text, query=obj, graph=g)
+    with pytest.raises(gq.QueryError):
+        gq.build([gq.path(gq.node("a"))], None, ["z"])
+    with pytest.raises(gq.QueryError):
+        gq.edge("calls", lo=0, hi=11)
+
+
+def test_a_shared_context_checks_freshness_once_and_verify_reads_the_asked_route(tmp_path, monkeypatch):
+    from verinoda import freshness
+
+    web = ('from flask import Flask\n\napp = Flask(__name__)\n\n\n@app.route("/a", methods=["GET"])\n'
+           '@app.route("/b", methods=["POST"])\ndef both():\n    return 1\n')
+    root = tmp_path / "routes"
+    (root / "app").mkdir(parents=True)
+    (root / ".gitignore").write_text(".verinoda/\n", encoding="utf-8")
+    (root / "app" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "app" / "web.py").write_text(web, encoding="utf-8", newline="\n")
+    _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "one")
+    workflow.init(root)
+    st = open_store(root)
+    try:
+        workflow.scan(st, root)
+    finally:
+        st.close()
+    calls = []
+    real = freshness.check
+    monkeypatch.setattr(freshness, "check", lambda *a, **k: calls.append(1) or real(*a, **k))
+    ctx = graphquery.Shared()
+    q = "match (h:handler) return h"
+    graphquery.run(root, q, ctx=ctx)
+    graphquery.run(root, "match (f:function) return f", ctx=ctx)
+    assert len(calls) == 1 and ctx.computed == {"fresh": 1, "routes": 1}
+    # the GET /a declaration made blank in the shared lines: only the route asked about is re-read
+    lines = web.split("\n")
+    lines[5] = ""
+    for route, want in ((None, "not confirmed"), ("POST /b", "confirmed"), ("GET /a", "not confirmed")):
+        c = graphquery.Shared(lines_cache={"app/web.py": list(lines)})
+        row = graphquery.run(root, q, ctx=c, verify=True, route=route)["rows"][0]
+        assert row["verified"]["result"] == want, route

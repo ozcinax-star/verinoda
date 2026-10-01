@@ -49,7 +49,7 @@ CODE_RELATIONS = {"calls", "imports", "imports_from", "uses", "inherits", "metho
 FLOW_RELATIONS = {"calls"}
 RECEIVER_ORIGIN = "verinoda.receiver"
 JAVA_CALL_ORIGIN = "verinoda.java_calls"
-RECEIVER_SIDECAR_VERSION = 10  # 10: cross-service edges (verinoda.cross_service); 9: Java calls into datapack functions (D71); 8: Java overloads bound by argument count; 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
+RECEIVER_SIDECAR_VERSION = 11  # 11: tables, models and injection (verinoda.dataschema); 10: cross-service edges (verinoda.cross_service); 9: Java calls into datapack functions (D71); 8: Java overloads bound by argument count; 3: a receiver's class is the one the calling file can see (_visible_class); 4: and JVM method references as `registers` edges; 6: lambdas too (D47); 7: and Mixin edges (D48)
 HEURISTIC_SPAN_CAP = 80        # the next-symbol fallback never spans more lines than this
 PROSE_SUFFIXES = (".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc",
                   ".pdf", ".docx", ".xlsx", ".pptx")  # the last four: their text view (doctext.py)
@@ -2512,7 +2512,29 @@ def augment_python_receiver_calls(g: Graph) -> int:
     added = _apply_edges(g, receiver_call_edges(g) + java_call_edges(g))
     _apply_edges(g, java_registers_edges(g) + jvm_mixins.mixin_edges(g) + datapack_java.graph_edges(g))
     _apply_cross_service(g, _cross_service(g))
+    _apply_data_schema(g, _data_schema(g))
     return added
+
+
+def _data_schema(g: Graph, old: dict | None = None) -> dict:
+    """The tables block of the sidecar: per-file facts (reused from ``old`` by sha256), table nodes, edges and
+    counts (:mod:`verinoda.dataschema`)."""
+    from verinoda import dataschema
+
+    reuse = (old or {}).get("files") if (old or {}).get("facts_version") == dataschema.FACTS_VERSION else None
+    try:
+        files, nodes, edges, report = dataschema.collect(g, old=reuse)
+    except Exception as exc:  # noqa: BLE001 - the tables are extra: their failure never stops a load
+        return {"facts_version": dataschema.FACTS_VERSION, "files": {}, "nodes": [], "edges": [],
+                "counts": {}, "error": f"{type(exc).__name__}: {exc}"[:300]}
+    return {"facts_version": dataschema.FACTS_VERSION, "files": files, "nodes": [[n, d] for n, d in nodes],
+            "edges": [[u, v, d] for u, v, d in edges], "counts": report["counts"]}
+
+
+def _apply_data_schema(g: Graph, block: dict | None) -> None:
+    from verinoda import dataschema
+
+    dataschema.apply(g, block)
 
 
 def _cross_service(g: Graph, old: dict | None = None) -> dict:
@@ -2600,13 +2622,16 @@ def refresh_receiver_sidecar(repo: Path, g: Graph | None = None) -> dict:
     sidecar = {"version": RECEIVER_SIDECAR_VERSION, "graph": graph_identity(g.path),
                "files": files, "edges": [[u, v, d] for u, v, d in edges], "registers": [[u, v, d] for u, v, d in regs],
                "mixins": [[u, v, d] for u, v, d in mixins], "datapack": [[u, v, d] for u, v, d in functions],
-               "cross_service": _cross_service(g, old.get("cross_service"))}
+               "cross_service": _cross_service(g, old.get("cross_service")),
+               "data_schema": _data_schema(g, old.get("data_schema"))}
     write_json_atomic(receiver_calls_path(repo), sidecar)
     cross = sidecar["cross_service"]["counts"]
+    tables = sidecar["data_schema"].get("counts") or {}
     return {"edges": len(edges), "files_parsed": parsed, "files_reused": len(files) - parsed,
             **({"registers": len(regs)} if regs else {}), **({"mixins": len(mixins)} if mixins else {}),
             **({"datapack": len(functions)} if functions else {}),
-            **({"cross_service": cross} if cross["routes"] or cross["clients"] else {})}
+            **({"cross_service": cross} if cross["routes"] or cross["clients"] else {}),
+            **({"data_schema": tables} if tables.get("tables") or tables.get("injections") else {})}
 
 
 def apply_receiver_calls(g: Graph) -> int:
@@ -2636,6 +2661,7 @@ def _apply_sidecar(g: Graph, side: dict) -> int:
     _apply_edges(g, [(u, v, d) for u, v, d in (side.get("registers") or []) + (side.get("mixins") or [])
                      + (side.get("datapack") or [])])
     _apply_cross_service(g, side.get("cross_service"))
+    _apply_data_schema(g, side.get("data_schema"))
     return added
 
 

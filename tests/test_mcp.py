@@ -49,6 +49,7 @@ EXPECTED_PARAMS = {
     "grep_context": ({"pattern", "path", "command"}, set()),
     "read_context": ({"file_path"}, {"file_path"}),
     "node_inspect": ({"name"}, {"name"}),
+    "tq": ({"questions", "verify", "need", "format"}, {"questions"}),
     "relation_trace": ({"source", "target", "mode"}, {"source", "target"}),
     "run_when": ({"symbol", "depth"}, {"symbol"}),
     "history_search": ({"text", "regex", "message", "author", "path", "since", "until", "diff", "base", "head",
@@ -58,7 +59,8 @@ EXPECTED_PARAMS = {
                       "findings", "since_last"}, set()),
     "question_plan_draft": ({"question"}, {"question"}),
     "question_plan_check": ({"plan_json"}, {"plan_json"}),
-    "analyze": ({"question", "run_tests", "budget_seconds", "budget_calls", "plan_json", "observe"}, set()),
+    "analyze": ({"question", "run_tests", "budget_seconds", "budget_calls", "plan_json", "observe", "intent"},
+                set()),
     "plan_audit": ({"analysis_id", "refresh"}, {"analysis_id"}),
     "lexicon_show": ({"word"}, {"word"}),
     "claim_inspect": ({"claim_id"}, {"claim_id"}),
@@ -98,7 +100,7 @@ EXPECTED_PARAMS = {
 }
 READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
              "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context"}
+             "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq"}
 
 
 # -- fixtures & helpers -----------------------------------------------------------
@@ -233,6 +235,7 @@ def _all_calls(t: AtlasTools) -> dict:
     return {
         "project_query": lambda: t.project_query("where is the order saved?"),
         "node_inspect": lambda: t.node_inspect("place_order"),
+        "tq": lambda: t.tq(["exists place_order"]),
         "relation_trace": lambda: t.relation_trace("a", "b"),
         "run_when": lambda: t.run_when("place_order"),
         "history_search": lambda: t.history_search(text="place_order"),
@@ -336,7 +339,7 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
                 for t in anyio.run(srv.list_tools)]
 
     core = listing(mcp_server.build_server(repo))
-    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 14
+    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 15
     assert set(CORE_TOOLS) <= set(TOOL_NAMES) and GATEWAY not in TOOL_NAMES
     gate = next(t for t in core if t["name"] == GATEWAY)
     behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
@@ -350,11 +353,14 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     assert set(by["analyze"]) == {"question", "budget_seconds"} and "env" not in by["code_check"]
     wire = json.dumps(core, separators=(",", ":"))
     # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for 12 on 2026-09-26; 8,905 for 11 (D60);
-    # D82's deps argument and D84's dead view kept under the limit by shorter wording
+    # D82's deps argument and D84's dead view kept under the limit by shorter wording; tq's catalog line paid for by
+    # shorter history_search and run_tool.arguments texts: 4,449 -> 4,426 (the records menu 4,598 -> 4,575)
     assert len(wire) < 4500
     assert '"title"' not in wire and "outputSchema" not in wire
     text = instructions("core")
-    assert all(n in text for n in CORE_TOOLS) and "--profile full" in text and "question_plan_draft" not in text
+    # tq is named in run_tool's catalog only: a sentence for it in the instructions waits for a measured gain
+    assert all(n in text for n in CORE_TOOLS if n != "tq") and "tq" not in text
+    assert "--profile full" in text and "question_plan_draft" not in text
     assert len(text) < len(instructions("full")) and len(text) < 1400
     assert "decision_check" not in instructions("core", decisions=False)
     assert "decision_check" not in mcp_server.build_server(repo).verinoda_instructions
@@ -883,6 +889,30 @@ def test_analyze_with_a_host_plan(repo, tools):
         assert st.get("analyses", bad["analysis_id"])["result"]["status"] == "invalid_plan"
     not_json = tools.analyze(plan_json="plans/q.json")
     assert not_json["error"] == "invalid_plan" and "analysis_id" not in not_json
+
+
+def test_analyze_takes_a_host_intent_in_the_full_profile_only(repo, tools):
+    from verinoda.question_plan import INTENTS
+
+    res = tools.analyze("Who calls place_order?", intent="why")
+    assert "error" not in res and res["intent_check"]["agrees"] is False
+    assert res["intent_check"]["read_as"] == ["callers"] and res["subquestions"][0]["intent"] == "callers"
+    bad = tools.analyze("Who calls place_order?", intent="callers_of")
+    assert bad["error"] == "invalid_argument" and bad["valid"] == list(INTENTS)
+    for blank in ("", "   "):  # a blank intent is refused, not read as no intent
+        got = tools.analyze("Who calls place_order?", intent=blank)
+        assert got["error"] == "invalid_argument" and "blank" in got["message"] and got["valid"] == list(INTENTS)
+    with_plan = tools.analyze(plan_json=json.dumps(tools.question_plan_draft("Who calls place_order?")["plan"]),
+                              intent="callers")
+    assert with_plan["error"] == "invalid_argument" and "plan" in with_plan["message"]
+    anyio = pytest.importorskip("anyio")
+    full = {t.name: getattr(t, "input_schema", None) or getattr(t, "inputSchema")
+            for t in anyio.run(mcp_server.build_server(repo, profile="full").list_tools)}
+    prop = full["analyze"]["properties"]["intent"]
+    assert [set(o["enum"]) for o in prop["anyOf"] if "enum" in o] == [set(INTENTS)] and prop.get("default") is None
+    core = {t.name: getattr(t, "input_schema", None) or getattr(t, "inputSchema")
+            for t in anyio.run(mcp_server.build_server(repo).list_tools)}
+    assert "intent" not in core["analyze"]["properties"]
 
 
 def test_analyze_keeps_the_interpretation_under_a_small_cap(repo, analysis):

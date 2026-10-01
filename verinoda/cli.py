@@ -1405,6 +1405,36 @@ def cmd_trace(args) -> int:
     return 0 if res["status"] == "found" else 2
 
 
+def cmd_schema(args) -> int:
+    """Tables, models, migrations and injection read from the code; with --db, a local SQLite file compared."""
+    from verinoda import dataschema, index
+
+    repo = _repo(args)
+    _need_graph(repo)
+    db = None
+    if args.db:
+        db = Path(args.db)
+        if not db.is_absolute():
+            db = Path.cwd() / db if (Path.cwd() / db).exists() else repo / db
+    g = index.load(repo, augment=False)
+    try:
+        res = dataschema.report(g, db=db, table=args.table)
+    except (FileNotFoundError, OSError) as exc:
+        _emit(args, {"status": "error", "error": str(exc)}, lambda r: print(f"error: {r['error']}", file=sys.stderr))
+        return 2
+    except Exception as exc:  # noqa: BLE001 - a file that is not a SQLite database
+        import sqlite3
+
+        if isinstance(exc, sqlite3.DatabaseError):
+            _emit(args, {"status": "error", "error": f"{args.db}: {exc}"},
+                  lambda r: print(f"error: {r['error']}", file=sys.stderr))
+            return 2
+        raise
+    _emit(args, res, lambda r: _write(dataschema.render(r)))
+    live = res.get("live") or {}
+    return 3 if live.get("only_in_code") or live.get("only_in_database") or live.get("columns") else 0
+
+
 def cmd_routes(args) -> int:
     """The route table and every client call with a URL: linked, ambiguous, unmatched or a method mismatch."""
     from verinoda import cross_service, index
@@ -2168,10 +2198,13 @@ def cmd_analyze(args) -> int:
     question = args.question or ""
     if plan is None and not question.strip():
         raise SystemExit("error: give a question, or a plan file with --plan FILE")
+    if plan is not None and args.intent:
+        raise SystemExit("error: --intent is for a question; a plan's sub-questions carry their own intents")
     b = analysis.Budget(seconds=args.budget_seconds, tool_calls=args.budget_calls,
                         context_tokens=args.budget_tokens)
     res = analysis.analyze(_store(repo), repo, question, plan=plan, budget=b, run_tests=args.run_tests,
-                           challenge=not args.no_challenge, observe=args.observe, refresh=args.refresh)
+                           challenge=not args.no_challenge, observe=args.observe, refresh=args.refresh,
+                           intent=args.intent)
     _emit(args, res, _r_claims)
     return PLAN_EXIT.get(res.get("status"), 0)
 
@@ -3589,6 +3622,50 @@ def cmd_q(args) -> int:
     return 0 if any(r.get("bindings") for r in res["rows"]) else 1
 
 
+def cmd_tq(args) -> int:
+    """Typed questions, batched (exit 0: every answer decided; 1: an unknown or invalid answer; 2: the batch cannot
+    be read; 3: a budget cut the batch)."""
+    from verinoda import tq
+
+    def fail(msg: str) -> int:
+        _emit(args, {"status": "error", "error": msg}, lambda r: print(f"error: {msg}", file=sys.stderr))
+        return 2
+
+    questions: list = list(args.questions or [])
+    if args.file:
+        try:
+            text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            return fail(f"cannot read {args.file}: {exc}")
+        for k, line in enumerate(text.splitlines(), 1):
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if s.startswith("{"):
+                try:
+                    questions.append(json.loads(s))
+                except json.JSONDecodeError as exc:
+                    return fail(f"line {k} of {args.file} is not JSON: {exc.msg}")
+            else:
+                questions.append(s)
+    try:
+        tq.read_batch(questions)   # an unusable batch is refused before the index is touched
+    except tq.BatchError as exc:
+        return fail(str(exc))
+    repo = _repo(args)
+    _need_graph(repo)
+    try:
+        res = tq.ask(repo, questions, verify=args.verify, need=args.need, timeout=args.timeout,
+                     max_expansions=args.max_expansions)
+    except tq.BatchError as exc:
+        return fail(str(exc))
+    _emit(args, tq.compact(res), lambda r: _write(tq.render(res)))
+    if not res["complete"]:
+        return 3
+    decided = all(a["answer"] is not None and a["status"] != "invalid" for a in res["answers"])
+    return 0 if decided and not res.get("truncated") else 1
+
+
 def cmd_taint(args) -> int:
     """Paths from untrusted sources to dangerous calls in the project's Python code."""
     from verinoda import index, slicing, taint
@@ -4278,6 +4355,8 @@ class _VersionAction(argparse.Action):
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from verinoda.question_plan import INTENTS
+
     p = argparse.ArgumentParser(
         prog="verinoda",
         description="Evidence-first codebase analysis (derived from Graphify; not an official Graphify release).",
@@ -4532,6 +4611,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("source")
     sp.add_argument("target")
     sp.add_argument("--mode", choices=["flow", "any"], default="flow")
+    sp = add("schema", cmd_schema, "database tables, ORM models (SQLAlchemy, SQLModel, Django, JPA), migrations (Alembic, "
+                                   "Django, SQL files) and dependency injection (FastAPI Depends, Spring) read from the "
+                                   "code, with the functions that read and write each table; --db compares a local "
+                                   "SQLite file (read only; exit 3 when they differ)")
+    sp.add_argument("--table", help="only this table")
+    sp.add_argument("--db", metavar="FILE", help="a local SQLite database file to compare with (opened read only)")
     sp = add("routes", cmd_routes, "the route table (Flask, FastAPI, Django, Express, NestJS, Next.js, Spring, ...) "
                                    "and every client call with a URL (fetch, axios, requests, httpx, ...): linked to "
                                    "one handler, ambiguous, unmatched or a method mismatch; tRPC, gRPC, GraphQL and "
@@ -4792,6 +4877,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("question", nargs="?", help="the question (optional with --plan: the plan's user_message)")
     sp.add_argument("--plan", metavar="FILE",
                     help="a checked question plan file (under .verinoda/plans/; never JSON on the command line)")
+    sp.add_argument("--intent", choices=INTENTS, metavar="INTENT",
+                    help="what the question asks for, as the caller reads it (" + ", ".join(INTENTS)
+                         + "); used only when the rule reading agrees, else reported (intent_check); never "
+                           "changes a claim's status")
     sp.add_argument("--run-tests", action="store_true", help="run the tests that reach the answer (isolated)")
     sp.add_argument("--observe", action="store_true",
                     help="observe the selected tests with the call tracer (runtime evidence, isolated run)")
@@ -5273,6 +5362,23 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--verify", action="store_true",
                     help="re-read the cited call sites and definitions; a row whose every part is confirmed in "
                          "Python code becomes statically_verified")
+    sp = add("tq", cmd_tq, "typed questions, batched: up to 20 closed questions (exists, which, calls, reaches, route, "
+                           "writes, reads, callers, taint, tested, q), each answered with one value, its status, "
+                           "file:line and why/next, e.g. 'calls create_order_handler place_order' 'callers "
+                           "place_order' (exit 1: an answer is unknown or a question invalid; 2: the batch cannot be "
+                           "read; 3: cut by a budget)")
+    sp.add_argument("questions", nargs="*", metavar="QUESTION",
+                    help="questions in the line form: TYPE OPERAND... [key=value]; quote operands with spaces")
+    sp.add_argument("-f", "--file", metavar="FILE",
+                    help="one question per line, or one JSON object per line ('-': standard input)")
+    sp.add_argument("--verify", action=argparse.BooleanOptionalAction, default=True,
+                    help="re-read the cited call sites and definitions (default on); --no-verify: graph only")
+    sp.add_argument("--need", choices=["inference", "verified"], default="inference",
+                    help="the bar an answer must reach, else enough: no (default inference: strong_inference "
+                         "or better)")
+    sp.add_argument("--timeout", type=float, default=30.0, help="seconds for the whole batch (default 30)")
+    sp.add_argument("--max-expansions", type=int,
+                    help="graph expansions per question (default min(200,000, 1,000,000 / questions))")
     sp = add("taint", cmd_taint, "paths from untrusted sources (request data, argv, environment, route parameters) "
                                  "to dangerous calls (SQL, shell, eval, file paths, ...) in the project's Python "
                                  "code, every hop at file:line; sources, sinks and sanitizers from the library data "

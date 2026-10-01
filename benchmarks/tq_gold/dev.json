@@ -1,0 +1,626 @@
+[
+ {
+  "id": "q-exists-01",
+  "repo": "qlang",
+  "question": "exists save_order",
+  "answer": true,
+  "at": [
+   "app/store.py:6"
+  ]
+ },
+ {
+  "id": "q-exists-02",
+  "repo": "qlang",
+  "question": "exists unused",
+  "answer": true,
+  "at": [
+   "app/store.py:20"
+  ]
+ },
+ {
+  "id": "q-exists-03",
+  "repo": "qlang",
+  "question": "exists Repo.save",
+  "answer": true,
+  "at": [
+   "app/store.py:25"
+  ]
+ },
+ {
+  "id": "q-exists-04",
+  "repo": "qlang",
+  "question": "exists delete_order",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-exists-05",
+  "repo": "qlang",
+  "question": "exists Repo.delete",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-exists-08",
+  "repo": "qlang",
+  "question": "exists find_user",
+  "answer": true,
+  "at": [
+   "app/admin.py:11"
+  ]
+ },
+ {
+  "id": "o-exists-01",
+  "repo": "orders_app",
+  "question": "exists place_order",
+  "answer": true,
+  "at": [
+   "orders/service.py:19"
+  ]
+ },
+ {
+  "id": "o-exists-02",
+  "repo": "orders_app",
+  "question": "exists OrderRepository.save",
+  "answer": true,
+  "at": [
+   "orders/repository.py:15"
+  ]
+ },
+ {
+  "id": "o-exists-04",
+  "repo": "orders_app",
+  "question": "exists cancel_order",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "o-exists-05",
+  "repo": "orders_app",
+  "question": "exists load_settings",
+  "answer": true,
+  "at": [
+   "orders/config.py:9"
+  ]
+ },
+ {
+  "id": "q-which-01",
+  "repo": "qlang",
+  "question": "which save_order in app/store.py|app/service.py",
+  "answer": [
+   "app/store.py"
+  ],
+  "at": [
+   "app/store.py:6"
+  ]
+ },
+ {
+  "id": "q-which-02",
+  "repo": "qlang",
+  "question": "which create_order in app/web.py|app/service.py",
+  "answer": [
+   "app/service.py"
+  ],
+  "at": [
+   "app/service.py:4"
+  ]
+ },
+ {
+  "id": "o-which-01",
+  "repo": "orders_app",
+  "question": "which compute_total in orders/pricing.py|orders/service.py",
+  "answer": [
+   "orders/pricing.py"
+  ],
+  "at": [
+   "orders/pricing.py:6"
+  ]
+ },
+ {
+  "id": "o-which-02",
+  "repo": "orders_app",
+  "question": "which place_order in orders/api.py|orders/repository.py",
+  "answer": [],
+  "at": []
+ },
+ {
+  "id": "q-calls-01",
+  "repo": "qlang",
+  "question": "calls post_order create_order",
+  "answer": true,
+  "at": [
+   "app/web.py:11"
+  ]
+ },
+ {
+  "id": "q-calls-02",
+  "repo": "qlang",
+  "question": "calls create_order save_order",
+  "answer": true,
+  "at": [
+   "app/service.py:6"
+  ]
+ },
+ {
+  "id": "q-calls-03",
+  "repo": "qlang",
+  "question": "calls create_order check",
+  "answer": true,
+  "at": [
+   "app/service.py:5"
+  ]
+ },
+ {
+  "id": "q-calls-05",
+  "repo": "qlang",
+  "question": "calls post_order save_order depth=2",
+  "answer": true,
+  "at": [
+   "app/web.py:11",
+   "app/service.py:6"
+  ]
+ },
+ {
+  "id": "q-calls-06",
+  "repo": "qlang",
+  "question": "calls fact fact",
+  "answer": true,
+  "at": [
+   "rec.py:2"
+  ]
+ },
+ {
+  "id": "q-calls-09",
+  "repo": "qlang",
+  "question": "calls ping leaf",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-calls-10",
+  "repo": "qlang",
+  "question": "calls chain1 leaf",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-calls-11",
+  "repo": "qlang",
+  "question": "calls chain1 leaf depth=3",
+  "answer": true,
+  "at": [
+   "rec.py:20",
+   "rec.py:24",
+   "rec.py:28"
+  ]
+ },
+ {
+  "id": "q-calls-12",
+  "repo": "qlang",
+  "question": "calls persist Repo.save",
+  "answer": true,
+  "at": [
+   "app/service.py:22"
+  ]
+ },
+ {
+  "id": "q-calls-13",
+  "repo": "qlang",
+  "question": "calls leaf chain3",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-calls-14",
+  "repo": "qlang",
+  "question": "calls caller fact",
+  "answer": true,
+  "at": [
+   "rec.py:36"
+  ]
+ },
+ {
+  "id": "q-calls-15",
+  "repo": "qlang",
+  "question": "calls WithMethods.run leaf",
+  "answer": true,
+  "at": [
+   "rec.py:41"
+  ]
+ },
+ {
+  "id": "q-calls-16",
+  "repo": "qlang",
+  "question": "calls get_orders save_order",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-calls-18",
+  "repo": "qlang",
+  "question": "calls through_variable target",
+  "answer": true,
+  "at": [
+   "dyn.py:18"
+  ]
+ },
+ {
+  "id": "q-calls-19",
+  "repo": "qlang",
+  "question": "calls find_user count_users",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "o-calls-04",
+  "repo": "orders_app",
+  "question": "calls compute_total apply_discount",
+  "answer": true,
+  "at": [
+   "orders/pricing.py:8"
+  ]
+ },
+ {
+  "id": "o-calls-05",
+  "repo": "orders_app",
+  "question": "calls place_order OrderRepository.save",
+  "answer": true,
+  "at": [
+   "orders/service.py:22"
+  ]
+ },
+ {
+  "id": "o-calls-06",
+  "repo": "orders_app",
+  "question": "calls fetch_order OrderRepository.get",
+  "answer": true,
+  "at": [
+   "orders/service.py:26"
+  ]
+ },
+ {
+  "id": "o-calls-08",
+  "repo": "orders_app",
+  "question": "calls apply_discount compute_total",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "o-calls-09",
+  "repo": "orders_app",
+  "question": "calls create_order_handler apply_discount",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "o-calls-11",
+  "repo": "orders_app",
+  "question": "calls get_order_handler fetch_order",
+  "answer": true,
+  "at": [
+   "orders/api.py:25"
+  ]
+ },
+ {
+  "id": "q-reaches-01",
+  "repo": "qlang",
+  "question": "reaches chain1 leaf",
+  "answer": true,
+  "at": [
+   "rec.py:20",
+   "rec.py:24",
+   "rec.py:28"
+  ]
+ },
+ {
+  "id": "q-reaches-03",
+  "repo": "qlang",
+  "question": "reaches tri1 tri3",
+  "answer": true,
+  "at": [
+   "rec.py:49",
+   "rec.py:53"
+  ]
+ },
+ {
+  "id": "q-reaches-04",
+  "repo": "qlang",
+  "question": "reaches post_order save_order",
+  "answer": true,
+  "at": [
+   "app/web.py:11",
+   "app/service.py:6"
+  ]
+ },
+ {
+  "id": "q-reaches-05",
+  "repo": "qlang",
+  "question": "reaches get_orders save_order",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-reaches-06",
+  "repo": "qlang",
+  "question": "reaches not_a_handler write_log",
+  "answer": true,
+  "at": [
+   "app/web.py:25",
+   "app/service.py:18"
+  ]
+ },
+ {
+  "id": "q-reaches-08",
+  "repo": "qlang",
+  "question": "reaches caller leaf",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-reaches-09",
+  "repo": "qlang",
+  "question": "reaches outer leaf",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-reaches-10",
+  "repo": "qlang",
+  "question": "reaches run_by_name target",
+  "answer": true,
+  "at": [
+   "dyn.py:13",
+   "dyn.py:9"
+  ]
+ },
+ {
+  "id": "o-reaches-01",
+  "repo": "orders_app",
+  "question": "reaches create_order_handler apply_discount",
+  "answer": true,
+  "at": [
+   "orders/api.py:18",
+   "orders/service.py:21",
+   "orders/pricing.py:8"
+  ]
+ },
+ {
+  "id": "o-reaches-03",
+  "repo": "orders_app",
+  "question": "reaches create_order_handler OrderRepository.save",
+  "answer": true,
+  "at": [
+   "orders/api.py:18",
+   "orders/service.py:22"
+  ]
+ },
+ {
+  "id": "o-reaches-04",
+  "repo": "orders_app",
+  "question": "reaches get_order_handler OrderRepository.get",
+  "answer": true,
+  "at": [
+   "orders/api.py:25",
+   "orders/service.py:26"
+  ]
+ },
+ {
+  "id": "o-reaches-06",
+  "repo": "orders_app",
+  "question": "reaches load_settings compute_total",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-route-02",
+  "repo": "qlang",
+  "question": "route \"GET /orders\" read_orders",
+  "answer": true,
+  "at": [
+   "app/web.py:14"
+  ]
+ },
+ {
+  "id": "q-route-05",
+  "repo": "qlang",
+  "question": "route \"DELETE /orders\" save_order",
+  "answer": null,
+  "at": []
+ },
+ {
+  "id": "q-route-06",
+  "repo": "qlang",
+  "question": "route \"GET /admin/find\" find_user",
+  "answer": true,
+  "at": [
+   "app/admin.py:10"
+  ]
+ },
+ {
+  "id": "q-writes-01",
+  "repo": "qlang",
+  "question": "writes post_order orders",
+  "answer": true,
+  "at": [
+   "app/store.py:7"
+  ]
+ },
+ {
+  "id": "q-writes-02",
+  "repo": "qlang",
+  "question": "writes get_orders orders",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-writes-03",
+  "repo": "qlang",
+  "question": "writes put_item items",
+  "answer": true,
+  "at": [
+   "app/store.py:26"
+  ]
+ },
+ {
+  "id": "q-writes-04",
+  "repo": "qlang",
+  "question": "writes not_a_handler log",
+  "answer": true,
+  "at": [
+   "app/store.py:17"
+  ]
+ },
+ {
+  "id": "q-writes-06",
+  "repo": "qlang",
+  "question": "writes find_user users",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-reads-02",
+  "repo": "qlang",
+  "question": "reads post_order orders",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-reads-04",
+  "repo": "qlang",
+  "question": "reads find_user users",
+  "answer": true,
+  "at": [
+   "app/admin.py:13"
+  ]
+ },
+ {
+  "id": "o-writes-01",
+  "repo": "orders_app",
+  "question": "writes create_order_handler orders",
+  "answer": true,
+  "at": [
+   "orders/repository.py:16"
+  ]
+ },
+ {
+  "id": "o-reads-01",
+  "repo": "orders_app",
+  "question": "reads get_order_handler orders",
+  "answer": true,
+  "at": [
+   "orders/repository.py:23"
+  ]
+ },
+ {
+  "id": "o-reads-02",
+  "repo": "orders_app",
+  "question": "reads create_order_handler orders",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-callers-02",
+  "repo": "qlang",
+  "question": "callers fact",
+  "answer": 2,
+  "at": []
+ },
+ {
+  "id": "q-callers-03",
+  "repo": "qlang",
+  "question": "callers check",
+  "answer": 2,
+  "at": []
+ },
+ {
+  "id": "q-callers-04",
+  "repo": "qlang",
+  "question": "callers unused",
+  "answer": 0,
+  "at": []
+ },
+ {
+  "id": "q-callers-05",
+  "repo": "qlang",
+  "question": "callers save_order",
+  "answer": 1,
+  "at": []
+ },
+ {
+  "id": "q-callers-06",
+  "repo": "qlang",
+  "question": "callers find_user",
+  "answer": 0,
+  "at": []
+ },
+ {
+  "id": "o-callers-01",
+  "repo": "orders_app",
+  "question": "callers place_order",
+  "answer": 3,
+  "at": []
+ },
+ {
+  "id": "o-callers-03",
+  "repo": "orders_app",
+  "question": "callers load_settings",
+  "answer": 0,
+  "at": []
+ },
+ {
+  "id": "o-callers-04",
+  "repo": "orders_app",
+  "question": "callers compute_total",
+  "answer": 2,
+  "at": []
+ },
+ {
+  "id": "q-taint-02",
+  "repo": "qlang",
+  "question": "taint request.json sql",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-taint-03",
+  "repo": "qlang",
+  "question": "taint request.args shell",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-tested-01",
+  "repo": "qlang",
+  "question": "tested tests/test_service.py::test_check check",
+  "answer": true,
+  "at": []
+ },
+ {
+  "id": "o-tested-02",
+  "repo": "orders_app",
+  "question": "tested tests/test_pricing.py::test_compute_total place_order",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "q-q-02",
+  "repo": "qlang",
+  "question": "q 'match (c)-[calls]->(x) where x.name = \"leaf\" return count(c)' as=count",
+  "answer": 2,
+  "at": []
+ },
+ {
+  "id": "q-q-03",
+  "repo": "qlang",
+  "question": "q 'match (f:function) where f.name = \"nothing_here\" return f' as=bool",
+  "answer": false,
+  "at": []
+ },
+ {
+  "id": "o-q-01",
+  "repo": "orders_app",
+  "question": "q 'match (f:function) where f.file = \"orders/pricing.py\" return count(f)' as=count",
+  "answer": 2,
+  "at": []
+ }
+]

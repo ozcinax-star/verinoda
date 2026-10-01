@@ -83,7 +83,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
-| 10.2 | **ORM, DI and database schema (live database opt-in)** | ORM models, dependency-injection bindings, migrations and schema as nodes | agentforge-graph, Graphify, Kodit | the dataflow view reaches a table |
 
 ## 11 - Claim history and memory
 
@@ -100,6 +99,7 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
+| 13.7 | **Measured frequencies for typed answers** | `verinoda benchmark tq-audit`: a held-out calibration table keyed by gold and engine hashes; an answer shows `measured: k/n` only for cells with n of 30 or more; a reliability report for the claim confidence caps (no cap changed) | TypeSafe Jev (calibrated outputs) | the report and its table are committed; a changed engine hides `measured` (test); the report lists observed precision against each cap |
 
 ## 14 - Outputs and views
 

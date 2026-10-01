@@ -78,6 +78,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "project_query",
     "node_inspect",
     "relation_trace",
+    "tq",
     "run_when",
     "history_search",
     "map_view",
@@ -914,6 +915,25 @@ class AtlasTools:
             except Exception:  # noqa: BLE001 - a hook never breaks the agent's Grep
                 return {}
 
+    def tq(self, questions: list, verify: bool = True, need: str = "inference", format: str = "text") -> dict:
+        """Typed questions, batched (:mod:`verinoda.tq`): one line per answer as plain text, or the
+        ``verinoda.tq/1`` object with format='json'. A bad question is answered ``invalid`` with the grammar."""
+        def go():
+            from verinoda import tq
+
+            fmt = _choice(format, ("text", "json"), "format")
+            bar = _choice(need, ("inference", "verified"), "need")
+            try:
+                tq.read_batch(questions)
+                res = tq.ask(self.repo, questions, graph=self._graph(), verify=bool(verify), need=bar,
+                             fresh=self._freshness(), mcp=True, max_chars=self.max_chars)
+            except tq.BatchError as exc:
+                raise ToolFailure("invalid_argument", str(exc), tq.GRAMMAR[:600]) from None
+            if fmt == "json":
+                return tq.compact(res)
+            return {"format": "text", "text": tq.render(res, echo_questions=False)}
+        return self._run("tq", go, need="graph")
+
     def node_inspect(self, name: str) -> dict:
         def go():
             from verinoda import freshness, naming
@@ -1318,15 +1338,27 @@ class AtlasTools:
 
     # -- analysis & claims ----------------------------------------------------------
     def analyze(self, question: str = "", run_tests: bool = False, budget_seconds: float = 60,
-                budget_calls: int = 40, plan_json: str | None = None, observe: bool = False) -> dict:
+                budget_calls: int = 40, plan_json: str | None = None, observe: bool = False,
+                intent: str | None = None) -> dict:
         def go():
             from verinoda import analysis
+            from verinoda.question_plan import INTENTS
 
             q = _opt_text(question) or ""
             plan = _plan_text(plan_json)
             if not q and plan is None:
                 raise ToolFailure("invalid_argument", "question must be a non-empty string (or pass plan_json)",
                                   "pass the user's question, or a checked plan as plan_json")
+            want = _opt_text(intent)
+            if intent is not None and want is None:  # a blank intent is a mistake, not "no intent"
+                raise ToolFailure("invalid_argument", "intent must not be blank",
+                                  "choose one of: " + ", ".join(INTENTS) + ", or leave it out", valid=list(INTENTS))
+            if want is not None and want not in INTENTS:
+                raise ToolFailure("invalid_argument", f"unknown intent {want!r}",
+                                  "choose one of: " + ", ".join(INTENTS) + ", or leave it out", valid=list(INTENTS))
+            if want is not None and plan is not None:
+                raise ToolFailure("invalid_argument", "intent is for a question; a plan's sub-questions carry "
+                                  "their own intents", "leave intent out, or set it in the plan")
             b = analysis.Budget(seconds=_clamp(budget_seconds, 1, 600, "budget_seconds", float),
                                 tool_calls=_clamp(budget_calls, 1, 200, "budget_calls"),
                                 context_tokens=6000)  # same default as `verinoda analyze`
@@ -1334,7 +1366,7 @@ class AtlasTools:
                 g = self._graph_for_analysis(st)
                 res = analysis.analyze(st, self.repo, q, plan=plan, budget=b, run_tests=bool(run_tests),
                                        challenge=True, graph=g if g is not None else self._stale_graph(st),
-                                       observe=bool(observe))
+                                       observe=bool(observe), intent=want)
             ref = res.get("index_refresh") or {}
             if ref.get("skipped") and not ref.get("busy") and ref.get("stale_count"):
                 # too slow to run inside the answer: refresh in the background for the next question
@@ -2028,7 +2060,7 @@ def _error_hint(exc: BaseException, repo: Path) -> str:
 CORE_TOOLS: tuple[str, ...] = (
     "project_query", "analyze", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
     "evidence_inspect", "index_update", "code_check", "decision_check", "dependency_ask", "change_review",
-    "history_search",
+    "history_search", "tq",
 )
 PROFILES: dict[str, tuple[str, ...]] = {"core": CORE_TOOLS, "full": TOOL_NAMES}
 DEFAULT_PROFILE = "core"
@@ -2049,9 +2081,8 @@ GATEWAY_CATALOG: dict[str, str] = {
                      "what it touches",
     "decision_check": "decision_check {changed_only?}: tree vs accepted decisions",
     "dependency_ask": "dependency_ask {source, target}: may source import it",
-    "history_search": "history_search {text, regex?, path?}: when text came/went; {symbol}: its "
-                      "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: "
-                      "compare",
+    "history_search": "history_search {text|symbol|message|base, ...}: when text came/went, commits, compare",
+    "tq": "tq {questions}: typed questions (calls, reaches, callers, which...), many per call",
 }
 
 _INSTRUCTIONS_HEAD = """Verinoda: evidence-first answers about the repository {repo}.
@@ -2075,6 +2106,7 @@ the default branch for a named version; ask only questions_for_user. reference_r
 reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - plan_audit: re-judge an analysis later. lexicon_show: the code words the repository ties to a word.
 - run_when: when a method runs - the event or caller that starts it and the conditions on the way (not evaluated).
+- tq: several closed facts (calls, reaches, callers, exists...) in one call; a no is an absence, ? names next.
 - history_search: when a text appeared or disappeared (the commit is the evidence), commits by message, author,
   path, date or diff content, two revisions compared.
 - claim_verify / claim_challenge: re-check a claim's lines; adversarial check. resolve_call: which definition
@@ -2182,6 +2214,11 @@ DESCRIPTIONS: dict[str, str] = {
         "Paths (up to 3, at most 8 hops) from source to target, each hop with relation, confidence and "
         "file:line. mode='flow': calls; 'any': also uses/imports/inherits. No static path does not prove "
         "there is none at runtime."),
+    "tq": (
+        "Typed questions, up to 20 per call, each answered with one value (yes/no/?/>=N), its status and "
+        "file:line: exists NAME; which NAME in A.py|B.py; calls A B [depth=1]; reaches A B; route \"POST /p\" F; "
+        "writes|reads H TABLE; callers F; taint SOURCE SINK; tested TEST_ID F; q \"QUERY\" [as=bool|count|rows]. "
+        "A no is an absence in the static graph, never verified; counts are lower bounds; ? comes with next."),
     "run_when": (
         "When a method runs: paths back through its callers to the event or scheduler that starts it (JVM "
         "registrations and lambdas: 'at the end of every server tick', '80 ticks later'), each call with the "
@@ -2366,7 +2403,7 @@ DESCRIPTIONS: dict[str, str] = {
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
               "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context"}
+              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -2540,6 +2577,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
             except TypeError:  # pragma: no cover - an older SDK without these arguments
                 continue
 
+    from verinoda.question_plan import INTENTS  # the full analyze's intent values
+
     def register(name: str):
         def deco(fn):
             if name in served:
@@ -2569,6 +2608,18 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         name: Annotated[str, Field(description="Node id, label, 'path/file.py::symbol', 'Class.method' or file path.")],
     ) -> dict[str, Any]:
         return emit(t.node_inspect(name))
+
+    @register("tq")
+    def tq(
+        questions: Annotated[list[Any],
+                             Field(description="Up to 20 questions: lines ('calls A B', 'callers F') or objects "
+                                               "{type, ...}.")],
+        verify: Annotated[bool, Field(description="Re-read call sites and definitions (default true).")] = True,
+        need: Annotated[Literal["inference", "verified"],
+                        Field(description="Below this bar an answer says enough: no.")] = "inference",
+        format: Annotated[Literal["text", "json"], Field(description="'text' (default) or 'json'.")] = "text",
+    ) -> dict[str, Any]:
+        return emit(t.tq(questions, verify=verify, need=need, format=format))
 
     @register("relation_trace")
     def relation_trace(
@@ -2673,9 +2724,14 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
         = "",
         observe: Annotated[bool, Field(description="Trace the tests that reach the answer (isolated copy).")]
         = False,
+        intent: Annotated[Literal[INTENTS] | None,  # type: ignore[valid-type]
+                          Field(description="What the question asks for, as you read it (not with plan_json). "
+                                            "Used only when the rules' reading agrees, else intent_check gives "
+                                            "both and the rules' is used. Never changes a claim's status.")]
+        = None,
     ) -> dict[str, Any]:
         return emit(t.analyze(question, run_tests=run_tests, budget_seconds=budget_seconds,
-                              budget_calls=budget_calls, plan_json=plan_json, observe=observe))
+                              budget_calls=budget_calls, plan_json=plan_json, observe=observe, intent=intent))
 
     @register("plan_audit")
     def plan_audit(
@@ -3077,7 +3133,7 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
         def run_tool(
             name: Annotated[Literal[tuple(behind)], Field(description="The tool.")],  # type: ignore[valid-type]
-            arguments: Annotated[dict[str, Any], Field(description="Its arguments, e.g. {\"name\": \"Cls.method\"}.")]
+            arguments: Annotated[dict[str, Any], Field(description="Its arguments.")]
             = {},  # noqa: B006 - never mutated
         ) -> dict[str, Any]:
             fn = impl[name]

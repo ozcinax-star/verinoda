@@ -64,11 +64,14 @@ SECTIONS = {
 SECTION_ORDER = ["defined_in", "members", "calls", "called_by", "extends", "extended_by", "imports",
                  "imported_by", "references", "referenced_by", "names_data", "named_by", "other_out",
                  "other_in", "claims"]
+# tables, ORM models and injection (verinoda.dataschema): a function writes or reads a table, a model maps to it,
+# a migration changes it, a handler is handed a provider - each a use of the target
+SCHEMA_RELATIONS = ("maps_to", "writes_table", "reads_table", "migrates", "injects")
 GRAPH_RELATIONS = ("calls", "method", "contains", "imports", "imports_from", "references", "uses", "inherits",
-                   "implements")
+                   "implements") + SCHEMA_RELATIONS
 MEMBER_RELATIONS = ("method", "contains")
 # the links along which a change travels: the source USES the target (calls, imports, extends it, names it)
-USE_RELATIONS = ("calls", "imports", "imports_from", "references", "uses", "inherits", "implements")
+USE_RELATIONS = ("calls", "imports", "imports_from", "references", "uses", "inherits", "implements") + SCHEMA_RELATIONS
 MAX_IMPACT = 400            # notes an impact lists (it says when it stopped)
 MAX_ANSWER_ITEMS = 8        # passages in an answer (the rest are listed by place)
 MAX_ANSWER_CHARS = 16_000   # characters of quoted code in an answer
