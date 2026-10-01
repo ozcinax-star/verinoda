@@ -2479,6 +2479,17 @@ def _decide_ask(args, repo: Path) -> int:
             print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if getattr(args, "registry", False) or getattr(args, "network", None):
+        from verinoda import package_check as pc
+
+        pkg = pc.from_import_name(res["source"], res["target"], repo) if res["target_kind"] == "package" else None
+        if pkg is None:
+            res["registry"] = {"kind": "package_check", "packages": [],
+                               "unknown": ("the source file's language has no registry lookup"
+                                           if res["target_kind"] == "package" else
+                                           "the target is a project file: no registry to ask")}
+        else:
+            res["registry"] = pc.check_packages(repo, [pkg], network=getattr(args, "network", None) or "off")
 
     def render(r: dict) -> None:
         tgt = r["target"] + (f" ({r['target_path']})" if r.get("target_path") and r["target_path"] != r["target"]
@@ -2493,6 +2504,14 @@ def _decide_ask(args, repo: Path) -> int:
         print(f"  read: {sc['decisions']} record(s), {sc['guards']} accepted guard(s), {sc['not_applicable']} "
               "not applying")
         print(f"  next: {r['next_step']}")
+        reg = r.get("registry")
+        if reg and reg.get("packages"):
+            from verinoda import package_check as pc
+
+            for ln in pc.render_lines(reg):
+                print(ln)
+        elif reg:
+            print(f"  registry: unknown - {reg['unknown']}")
 
     _emit(args, res, render)
     return da.exit_code(res)
@@ -3698,15 +3717,42 @@ def cmd_check(args) -> int:
     if args.deps:
         from verinoda import depcheck
 
-        if args.paths or args.diff is not None or args.stdin or args.as_path:
+        registry = args.registry or ("new" if args.network else None)
+        if args.paths or (args.diff is not None and not registry) or args.stdin or args.as_path:
             raise SystemExit("error: --deps checks the whole project's manifests; do not also give PATHs, --diff "
-                             "or --stdin")
+                             "(only with --registry: the revision new dependencies are read against) or --stdin")
+        from verinoda import package_check
+
         try:
+            if registry == "all" and args.diff is not None:
+                raise package_check.PackageCheckError("--diff goes with --registry new (the revision new "
+                                                      "dependencies are read against), not with --registry all")
             res = depcheck.check_deps(repo, env=args.env)
+            if registry:
+                res = package_check.add_to_deps(repo, res, which=registry, network=args.network or "off",
+                                                rev=args.diff or "HEAD")
+        except package_check.PackageCheckError as exc:   # a bad revision or argument: never "0 flagged"
+            if getattr(args, "json", False):
+                print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         except ValueError as exc:
             raise SystemExit(f"error: {exc}")
-        _emit(args, res, depcheck.render)
+
+        def render(r: dict) -> None:
+            depcheck.render(r)
+            if r.get("registry"):
+                from verinoda import package_check
+
+                for ln in package_check.render_lines(r["registry"]):
+                    print(ln)
+                for lim in r["registry"]["limits"]:
+                    print(f"limit: {lim}")
+
+        _emit(args, res, render)
         return int(res["exit"])
+    if args.registry or args.network:
+        raise SystemExit("error: --registry and --network go with --deps")
     snippet = None
     if args.stdin:
         if args.paths or args.diff is not None:
@@ -4732,6 +4778,14 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("source", help="the project file that would depend (it may not exist yet)")
     c.add_argument("target", help="a project file, a module (app.db.store) or a package (psycopg)")
     c.add_argument("--decisions-dir", metavar="DIR", help=ddir_help)
+    c.add_argument("--registry", action="store_true",
+                   help="opt-in: for a package outside the project, also ask its public registry (from the source "
+                        "file's language) whether the name exists, its age and downloads, yanked, deprecated or "
+                        "taken down, plus local typo and look-alike name signals; only the name is sent, and only "
+                        "with --network on or cache; the verdict on the guards is unchanged")
+    c.add_argument("--network", choices=NETWORK_CHOICES,
+                   help="with --registry: off (default: nothing sent), cache (an answer from the last 24 hours "
+                        "reused) or on")
     c = add("check", cmd_decide, "check the code against every accepted guard (exit 1 on VIOLATED; exit 3 when "
                                  "something could not be checked - no record while ADR-like files exist, a guard "
                                  "that checked no file, edge or manifest: usable in CI)", parent=dsub)
@@ -5129,6 +5183,16 @@ def build_parser() -> argparse.ArgumentParser:
                     help="instead: the declared dependencies (pyproject, requirements, package.json, Gradle, Maven) "
                          "against the imports - missing, transitive only, unused, in the wrong group (exit 3: "
                          "something found; exit 4: no manifest read)")
+    sp.add_argument("--registry", nargs="?", const="new", choices=("new", "all"),
+                    help="with --deps (opt-in): also ask the public registries (PyPI, npm, crates.io, Maven Central, "
+                         "the Go proxy) about the dependencies the change adds (new: names a manifest declares "
+                         "now and did not declare at --diff REV, default HEAD; all: every declared one) and the imported but "
+                         "undeclared packages - does the name exist, age, downloads, yanked, deprecated, "
+                         "taken down - plus local typo and look-alike name signals; only package names are sent, "
+                         "and only with --network on or cache")
+    sp.add_argument("--network", choices=NETWORK_CHOICES,
+                    help="with --deps --registry: off (default: nothing sent, registry facts unknown), cache "
+                         "(answers cached in the last 24 hours reused, else asked) or on (always asked)")
     sp.add_argument("--env", default="auto", help=env_help)
     sp.add_argument("--all", action="store_true", help="also list the sites that exist and the LOW unknowns")
     sp.add_argument("--sarif", action="store_true", help=SARIF_HELP)

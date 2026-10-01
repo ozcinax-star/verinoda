@@ -2079,6 +2079,25 @@ def _line_of(lines: list[str], needle: str) -> int:
     return 1
 
 
+def _key_line(lines: list[str], tables: tuple[str, ...], name: str) -> int | None:
+    """The line of ``name = ...`` (bare or quoted key) inside one of the TOML ``tables``, or of a
+    ``[TABLE.name]`` header; None when not found (the caller falls back to the first line naming it)."""
+    key = re.compile(r'^\s*(?:"' + re.escape(name) + r'"|\'' + re.escape(name) + r"'|" + re.escape(name)
+                     + r")\s*=")
+    heads = {f"[{t}.{name}]" for t in tables} | {f'[{t}."{name}"]' for t in tables}
+    inside = False
+    for i, ln in enumerate(lines, 1):
+        s = ln.strip()
+        if s.startswith("["):
+            if s.replace(" ", "") in heads:
+                return i
+            inside = s.strip("[] ") in tables
+            continue
+        if inside and key.match(ln):
+            return i
+    return None
+
+
 def dependencies(root: Path) -> dict:
     """Declared dependencies (pyproject, requirements*, setup.py/cfg, package.json, go.mod, Cargo.toml)."""
     try:
@@ -2091,10 +2110,10 @@ def dependencies(root: Path) -> dict:
     manifests: list[str] = []
     req_rx = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(\[[^\]]*\])?\s*(.*)$")
 
-    def add(name, spec, rel, lines, needle, scope, eco):
-        items.append({"name": _norm_dep(name, eco), "spec": (spec or "").strip() or "*", "scope": scope,
-                      "at": f"{rel}:{_line_of(lines, needle)}", "path": rel, "line": _line_of(lines, needle),
-                      "ecosystem": eco})
+    def add(name, spec, rel, lines, needle, scope, eco, line=None):
+        line = line or _line_of(lines, needle)
+        items.append({"name": _norm_dep(name, eco), "declared": name, "spec": (spec or "").strip() or "*",
+                      "scope": scope, "at": f"{rel}:{line}", "path": rel, "line": line, "ecosystem": eco})
 
     def py_req(s, rel, lines, scope):
         s = s.split("#")[0].strip()
@@ -2122,7 +2141,8 @@ def dependencies(root: Path) -> dict:
         poetry = ((data.get("tool") or {}).get("poetry") or {})
         for name, spec in (poetry.get("dependencies") or {}).items():
             if name.lower() != "python":
-                add(name, spec if isinstance(spec, str) else json.dumps(spec), rel, lines, name, "runtime", "python")
+                add(name, spec if isinstance(spec, str) else json.dumps(spec), rel, lines, name, "runtime", "python",
+                    _key_line(lines, ("tool.poetry.dependencies",), name))
     for rp in sorted(list(root.glob("requirements*.txt")) + list(root.glob("requirements/*.txt"))):
         rel = rp.relative_to(root).as_posix()
         manifests.append(rel)
@@ -2196,7 +2216,9 @@ def dependencies(root: Path) -> dict:
         for sect, scope in (("dependencies", "runtime"), ("dev-dependencies", "dev"), ("build-dependencies", "build")):
             for name, spec in (data.get(sect) or {}).items():
                 v = spec if isinstance(spec, str) else (spec.get("version") if isinstance(spec, dict) else None)
-                add(name, v or json.dumps(spec), rel, lines, name, scope, "cargo")
+                add(name, v or json.dumps(spec), rel, lines, name, scope, "cargo", _key_line(lines, (sect,), name))
+                if isinstance(spec, dict):
+                    items[-1]["source"] = json.dumps(spec)   # path, git, workspace, registry, package rename
     return {"items": items, "manifests": manifests}
 
 
