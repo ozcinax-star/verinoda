@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D140)
+## Upgrading from 0.4.0 (D137-D141)
 
 ### D137: Trigram regex index
 
@@ -61,6 +61,14 @@ CLI is missing. The report lists why each agent was found (`agents_found`). Inst
 existing rules: files Verinoda did not write are never overwritten, and uninstall removes only what the
 manifest lists. A Claude Code `.mcp.json` manifest item now also records `created_dirs`, so the first
 install after upgrading rewrites the manifest once (no agent file changes).
+
+### D141: Mixin injection points
+
+New command `verinoda mixin-check [FILE ...] [--json]`: every Mixin method selector, `@At` member target and
+`@Shadow` field or method checked against the target class's bytecode on the build's classpath, `exists` /
+`absent` (with `jar!class` evidence and the nearest real names as a suggestion) or `unknown` with the next step.
+Exit 3: absent; 4: something unknown; 2: no `@Mixin`. `jvmclass.class_code()` and `accesscheck.ClassFiles.code()`
+are new; nothing else changes.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

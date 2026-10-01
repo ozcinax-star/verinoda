@@ -11380,6 +11380,111 @@ so it does not depend on this machine:
 
 In `tests/test_setup.py`, the unknown-agent case now uses a name that is still unknown.
 
+## 114. Mixin injection points (D141, 2026-10-01)
+
+### 114.1 Why
+
+A Mixin names places in a game class with strings the compiler never reads: the method an injector goes into
+(`method = "damage(Lnet/minecraft/entity/damage/DamageSource;F)Z"`), the instruction an `@At` stops at
+(`target = "Lnet/minecraft/entity/LivingEntity;isInvulnerableTo(...)Z"`) and the members a `@Shadow` stands for.
+A wrong one compiles; the game stops at start with an `InvalidInjectionException`, or the injection is skipped.
+`verinoda check` compared only the method name with the target's members (and the Mixin edges read the
+annotations as written), so a wrong descriptor, a wrong `@At` target and a `@Shadow` of the wrong type were never
+caught. MinecraftDev and minecraft-modding-mcp check these against the class files; this decision does the same
+locally, from the jars the build already resolved.
+
+### 114.2 Decisions
+
+- A new command, `verinoda mixin-check [FILE ...] [--json]`, beside `access-check`, reading the same classpath
+  (`jvmclass.discover`: `code_check.classpath`, or the one a Loom build left; one per build, the configured one for
+  a build with none) through `accesscheck.ClassFiles`, which gains `code()`.
+- `jvmclass.class_code()` reads a class file's members with what each method's `Code` attribute references: every
+  call (`invokevirtual`, `invokespecial`, `invokestatic`, `invokeinterface`), field access (`get/putfield`,
+  `get/putstatic`) and `new`, as `[kind, owner, name, descriptor]`. Instructions are walked by their lengths
+  (`tableswitch` / `lookupswitch` padding and `wide` included); an opcode the specification does not define makes
+  that method's code unread (`False`), never a partial list.
+- The sources are read with tree-sitter (`read_mixins()`): `@Mixin` targets (class literals through the file's
+  imports, package, on-demand imports and `java.lang`, nested classes as `Outer$Inner`; `targets` strings), the
+  `method` selectors of every injector `verinoda check` knows, the `@At` of its `at` (one or an array) whose value
+  is `INVOKE`, `INVOKE_ASSIGN`, `INVOKE_STRING`, `FIELD` or `NEW` and which has a `target`, and `@Shadow` fields and
+  methods with their written types, every array dimension kept (`int[][]`), the `prefix` stripped (`shadow$`, Mixin's default, when none is written), `aliases` accepted. Strings joined with `+` and the file's
+  `static final String` constants are read (`jvm_mixins.string_constants`).
+- Selectors as Mixin reads them: `name` and `name*` (every overload), `name(desc)ret`, `Lowner;name(desc)` (an
+  owner other than the target matches nothing, as in Mixin: `absent`); a quantifier is dropped; a regular
+  expression (`/.../`) is `unknown`, not compared.
+- An `@At` target is looked for in the bytecode of the methods its injector's selectors match in the class file
+  (their union), with Mixin's partial matching: an owner, name or descriptor left out matches any. `NEW` takes a
+  class (`pkg/Cls`, `Lpkg/Cls;`) or a constructor descriptor (`(I)Lpkg/Cls;`, then the `new` and the
+  `<init>(I)V` call must both be there; a `(`-target that is no such descriptor is `unknown`, never a crash).
+  When one of the injector's selectors was not compared (a regular expression, or a `method` that is not a
+  constant string this reader resolves) a miss is `unknown`, and the row says which; the nearest of an absent
+  `@At` are looked for among the calls of the ten closest names, so a method with thousands of calls stays
+  cheap.
+- `@Shadow`: a field by name and type, a method by name, parameter types and return type, compared by simple name
+  and array dimensions (a type variable is erased to its bound and not compared).
+- Verdicts: `exists` is `statically_verified`, the evidence `jar!class.class`. `absent` has the same evidence
+  ("mc.jar!.../LivingEntity.class declares no field named helth") and is `strong_inference`, as in
+  `access-check`: the classpath is what the last build resolved and may be older than the build file, so a
+  name missing from it is not proven wrong for the version the build names. The nearest real ones of an
+  `absent` row come by edit distance (at most half the written length, or 3, away; three at most) and are a
+  suggestion: `nearest_status: strong_inference`, and the text output says "a suggestion".
+- `unknown`, never `absent`, when there is nothing to compare with, each with `next`: the target class on no jar of
+  an incomplete classpath (run the Loom build or set `code_check.classpath`), on no jar of a complete one (`verinoda
+  check` reports an unresolved `@Mixin` target), a JDK class (`verinoda api`), a class of the project's own sources
+  (`verinoda check`), an unreadable class file. Also `unknown`: a name declared only in a super class (a Mixin
+  reaches only the target's own members, as `verinoda check` already says), or perhaps declared in a super
+  class whose class file is not read (`java.lang.Object`, on no jar of a real classpath, only for its own method
+  names), an intermediary or SRG name
+  (`method_5643`, `m_1234_`) the named classpath does not carry, an `@At` whose selector matched nothing, an
+  `@At` in a method with no bytecode (abstract, native) or with code this reader could not walk.
+- Exit codes as `access-check`: 3 when something is absent, 4 when something is unknown, 2 when no Java file holds a
+  `@Mixin`, 0 otherwise. No MCP tool: the core profile keeps its five.
+
+### 114.3 Measured
+
+- The verdict-audit fixture `mixmod` (four Mixins) with a planted jar holding its targets: the four selectors
+  `exists`; with a planted `CheckedMixin` of 26 names: 8 planted mistakes `absent` with the right nearest (a
+  misspelt `@At` INVOKE target, an `@At` FIELD with the wrong type, an `@At` NEW with the wrong constructor, a
+  wrong selector descriptor, a misspelt selector, a misspelt `@Shadow` field, a `@Shadow` field of the wrong type,
+  a `@Shadow` method with the wrong parameters), the inherited, intermediary, abstract and project-class cases
+  `unknown`; 30 rows (16 exists, 8 absent, 6 unknown) in 0.3 s, tree-sitter parsing included.
+- Without a classpath every row of the same files is `unknown` with the next step.
+- Not measured on a real mod's Minecraft jar in this change.
+- Review round: a review found `@Shadow shadow$name` compared with its prefix (now stripped by default),
+  multi-dimensional arrays read as one dimension, an owner in a selector ignored, a malformed `@At(NEW)`
+  descriptor aborting the whole command, an `@At` behind a regular-expression selector said to have matched
+  nothing, names maybe inherited from a super class on no jar (`java.lang.Object`, a JDK class) reported
+  `absent`, and `absent` stronger than `access-check`'s for the same evidence (now `strong_inference`). An
+  absent `@At` in a method of 3,000 distinct calls took 5.0 s for its nearest; with the names ranked first the
+  whole test (planted jar written, parsed and checked) takes 0.7 s. The `no_mixins` note names the files
+  given instead of the project's sources when files are given.
+
+### 114.4 Not done
+
+- A game version bumped without a rebuild compares with the older jar; hence `absent` is `strong_inference`.
+- A `@Shadow` field's `prefix` is not stripped (only a method's is).
+- Not checked: `@At` `ordinal`, `opcode`, `shift`, `@Slice`, `CONSTANT` / `LOAD` / `STORE` / `JUMP` points,
+  `@Desc`, MixinExtras `@Expression`, `@Overwrite`, `@Accessor` / `@Invoker` (names stay in `verinoda check`),
+  `@Shadow` across a Mixin's own super classes, Kotlin Mixins, refmaps (names are compared in the classpath's
+  namespace only).
+- Types are compared by simple name: two classes of the same simple name in different packages are not told
+  apart.
+- A Mixin with several targets is checked against each; one where the name is missing is `absent` for that target.
+- The JDK's class files (`ct.sym`) and the project's own compiled classes are not read for bytecode.
+
+### 114.5 Tests
+
+`tests/test_mixincheck.py`: the bytecode reader (references in order past `tableswitch`, `lookupswitch` and `wide`;
+an abstract method has no code; a non-class file is None); selectors, `@At` INVOKE / FIELD / NEW targets and
+`@Shadow` fields and methods against a planted jar, each absent row with its nearest; inherited, intermediary,
+abstract-method and project-class rows unknown; `absent` is `strong_inference`; a `@Shadow` with the default
+`shadow$` prefix and `int[][]` fields and returns found; a selector with another owner absent; a malformed `@At(NEW)`
+descriptor unknown, not a crash; an `@At` behind a regular-expression or unresolved selector unknown with that
+reason; a name maybe inherited from a super class on no jar unknown, `java.lang.Object`'s methods unknown and
+its missing fields absent; the nearest of an `@At` in a method of 3,000 calls; the fixture's own Mixins found; without a classpath everything
+unknown with the next step; edit-distance nearest and the selector / member parsers; the CLI's text, `--json`, exit codes and
+the `no_mixins` note for named files. `tests/jvmfixtures.py` can now write a method's `Code` attribute.
+
 ## Sources
 
 - **Retrieval:**
