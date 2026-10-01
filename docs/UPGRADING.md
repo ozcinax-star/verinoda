@@ -24,7 +24,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.3.2 (D60-D109)
+## Upgrading from 0.3.2 (D60-D110)
 
 ### D63: Running a project's own tests safely
 
@@ -499,6 +499,15 @@ repairs renamed paths and moved line numbers. The MCP tool count is unchanged.
 New: `verinoda hooks install` (and `setup --hooks`) adds post-commit, post-checkout, post-merge and post-rewrite
 hooks that run `verinoda update` in the background (only in the project's own work tree); `verinoda hooks uninstall` removes exactly what it added. Nothing
 changes unless you run it. The MCP tool count is unchanged.
+
+### D110: Ranked repo map under a token budget
+
+`verinoda map --view repo [--target FILE ...] [--max-tokens N]` prints a repo map: the files to read first,
+ranked by PageRank over the file dependency graph toward the files in play (the targets, else the git
+changes), and each class, function and method definition line at `file:line`, until the estimated tokens
+reach N (default 1024). `--json` has the ranks (`strong_inference`) and the counts. The MCP `map_view`
+takes `view: "repo"`, with `targets` as the files in play. The MCP tool count is unchanged, so UPGRADING's
+tool count needs no change.
 
 ### D60-D62
 
