@@ -85,7 +85,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 8.5 | **Path-scoped review rules** | Rule files per directory (like BUGBOT.md), AGENTS.md and CLAUDE.md read as rules; off, warning and error modes | Cursor Bugbot, Greptile, CodeRabbit | a rule under `src/api/` applies only to changes there |
-| 8.7 | **SARIF in and out, CI check status** | Import linter and CodeQL SARIF as evidence; export `review` and `check` as SARIF | GitHub Copilot review, Code Pathfinder | GitHub code scanning shows Verinoda's findings |
 | 8.8 | **Pull request triage (opt-in)** | Open PRs with CI and review state, PR impact, a warning when two PRs touch the same code | Graphify MCP | needs authenticated GitHub access |
 
 ## 9 - Test map and coverage
@@ -94,7 +93,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 |---|---|---|---|---|
 | 9.2 | **Persistent test-to-code map and affected tests** | A stored map from each test to the code it runs, updated on every observed run; "run only these tests" | pytest-testmon, Datadog Test Impact Analysis | `review` prints the command that runs the affected tests |
 | 9.3 | **Mutation testing scoped to the diff** | Surviving mutants on changed lines: do the reaching tests actually check the change? | mutmut, cosmic-ray, PIT, cargo-mutants, Stryker | surviving mutants reported with their line |
-| 9.4 | **Flaky test history** | Per-test pass rate over recorded runs; quarantine list; a fix verified by N reruns | Datadog Test Optimization | `debug rerun` results persist per test |
 
 ## 10 - New graph edges
 
@@ -113,7 +111,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 11.2 | **Memory event history and expiry** | ADD, UPDATE and DELETE events per learning; a time-to-live | mem0 | `memory history ID` shows the events |
 | 11.3 | **Background consolidation** | Between sessions: re-verify stale claims, merge duplicates | Letta sleep-time agents, Cognee memify | stale claims re-checked by the background update |
 | 11.5 | **Typed notes and wikilinks** | Notes with `[category] fact #tag` lines and `[[symbol]]` links; two-way sync with Markdown files | Basic Memory | a note edited in an editor updates the index |
-| 11.6 | **Glob-scoped context** | Decisions, notes and claims attached to globs surface when an agent touches matching files | Kiro steering, Cursor rules | an MCP read of a file returns its scoped notes |
 
 ## 12 - Docs, decisions and specs
 
@@ -136,7 +133,6 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
 | 14.1 | **Evidence-backed code tours** | A tour built from `trace` or the dataflow view, pinned to a commit, re-anchored when code moves; CodeTour format | CodeTour | `verinoda tour` writes a `.tour` file that opens in VS Code |
-| 14.2 | **Named flow maps** | A `trace` or map result saved under a name, shareable and citable by agents | Windsurf/Devin Codemaps | `verinoda map save NAME` and an MCP read by name |
 
 ## 15 - Runtime evidence import
 

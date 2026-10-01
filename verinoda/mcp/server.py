@@ -113,6 +113,7 @@ TOOL_NAMES: tuple[str, ...] = (
     "debug_status",
     "debug_strategy",
     "grep_context",
+    "read_context",
     "change_probe",
 )
 
@@ -125,7 +126,7 @@ RATIONALE_CAP = 5   # rationale comments node_inspect quotes (each at most 200 c
 LIST_CAP = 50
 CODE_CHECK_BUDGET_S = float(os.environ.get("VERINODA_MCP_CHECK_BUDGET_S", "90"))   # code_check holds the server
 VIEWS = ("hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact", "cycles", "outline",
-         "dead", "hotspots", "sides", "repo")
+         "dead", "hotspots", "sides", "repo", "saved")
 DEAD_FIRST_CUT = ("searched.entry_points", "searched.entry_modules")
 VERDICTS = ("confirmed", "qualified", "corrected", "unresolved")
 RESEARCH_KINDS = ("auto", "official_doc", "standard", "paper", "secondary", "reference_repo")
@@ -881,6 +882,21 @@ class AtlasTools:
                 spans.append((a, b))
             self._session_seen[rel] = (stamp, spans)
 
+    def read_context(self, file_path: str) -> dict:
+        """What the project says about one file (decision records, notes, glob-scoped rules: :mod:`verinoda.scoped`)
+        as a Claude Code PostToolUse hook output; ``{}`` when nothing does, or anything is wrong (a Read is never
+        held up)."""
+        from verinoda import scoped
+
+        # no server lock: it reads files only (its own cache has its own lock), so a Read never waits for an analyze
+        try:
+            text = scoped.text(scoped.for_file(self.repo, str(file_path or ""))) if file_path else ""
+        except Exception:  # noqa: BLE001 - a hook never breaks the agent's Read
+            return {}
+        if not text:
+            return {}
+        return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
+
     def grep_context(self, pattern: str, path: str | None = None) -> dict:
         """What the static graph says about the symbols a Grep searched for, as a Claude Code PostToolUse hook
         output (D62): where each one found by its exact name is defined, who calls it and what it calls, in one
@@ -1164,6 +1180,23 @@ class AtlasTools:
                 res["note"] = f"targets are only used by the impact view; ignored for {view}"
             res.update(freshness.summary(fresh))
             return res
+
+        def saved():  # a map kept with `verinoda map save NAME`: its cited files checked again, or the list
+            from verinoda import named_maps
+
+            tg = _str_list(targets, "targets")
+            if len(tg) > 1:
+                raise ToolFailure("invalid_argument", "the saved view reads one map: targets=[name]",
+                                  "targets=[] lists the saved maps")
+            if not tg:
+                return named_maps.listing(self.repo)
+            res = named_maps.read(self.repo, tg[0])
+            if res["status"] == "invalid_name":
+                raise ToolFailure("invalid_argument", res["message"], "targets=[] lists the saved maps")
+            return res
+        if view == "saved":  # the status, as_of and changed files are never cut before the saved result
+            return self._run("map_view", saved, keep=("status", "name", "as_of", "changed_files", "changed_count",
+                                                      "claims", "next_step"))
         if view != "dead":
             return self._run("map_view", go, need="graph")
         # the dead view's claims are the answer: the lists of what was searched give way first
@@ -2008,15 +2041,15 @@ GATEWAY = "run_tool"
 GATEWAY_CATALOG: dict[str, str] = {
     "node_inspect": "node_inspect {name}: a symbol's definition and edges with file:line",
     "relation_trace": "relation_trace {source, target, mode?: flow|any}: call paths between symbols",
-    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead|hotspots|sides|repo, "
-                "targets?}",
+    "map_view": "map_view {view: hierarchy|dependencies|dataflow|config|tests|history|impact|cycles|outline|dead|hotspots|sides|repo|"
+                "saved, targets?}",
     "claim_list": "claim_list {status?}, claim_inspect {claim_id}, evidence_inspect {evidence_id}: earlier claims, "
                   "their evidence re-checked",
     "change_review": "change_review {targets?, change?: body|signature|remove} before editing, {since_last?} after: "
                      "what it touches",
-    "decision_check": "decision_check {changed_only?: true}: tree vs accepted decisions",
+    "decision_check": "decision_check {changed_only?}: tree vs accepted decisions",
     "dependency_ask": "dependency_ask {source, target}: may source import it",
-    "history_search": "history_search {text, regex?, path?}: when text appeared/disappeared; {symbol}: its "
+    "history_search": "history_search {text, regex?, path?}: when text came/went; {symbol}: its "
                       "commits; {message?, author?, since?, until?, diff?, path?}: commits; {base, head?}: "
                       "compare",
 }
@@ -2054,6 +2087,7 @@ reference_id) inspects one at its pin; reference_compare compares a mechanism.
 - debug_start before the first edit of a bug fix, debug_attempt after every edit; on stop=true stop editing, run
   strategies[0] with debug_strategy and show debug_status. Never say "fixed": the repro passed at tree T in run R.
 - grep_context: what the Grep hook adds (definition, callers, callees of a searched symbol).
+- read_context: what the Read/Edit hook adds (decision records, notes and rules about the file).
 - change_probe: after editing a Python function, its base and working-tree versions on generated inputs. A
   difference is a behaviour change, not a bug; say "no difference found in N inputs", never "verified"; a refusal,
   inconclusive or incomplete is not a pass."""
@@ -2108,7 +2142,8 @@ def served_tools(repo: Path, profile: str) -> tuple[str, ...]:
     if profile == "core" and not _has_decision_records(Path(repo)):
         names = tuple(n for n in names if n not in ("decision_check", "dependency_ask"))
     if profile == "core":
-        names = (*names, "grep_context")  # the Grep hook's call (D62), reached through run_tool, never listed
+        # the Grep hook's call (D62) and the Read/Edit hook's: reached through run_tool, never listed
+        names = (*names, "grep_context", "read_context")
     return names
 
 
@@ -2165,8 +2200,9 @@ DESCRIPTIONS: dict[str, str] = {
         "fewest dependencies to cut), outline (the wiki page tree; targets = page ids for their Mermaid "
         "diagrams), dead (code no entry point reaches, as claims), hotspots (files and functions by changes x "
         "complexity), sides (client-only code reachable from server code, each path as a claim), or repo (files "
-        "ranked by PageRank toward the targets, with their signatures, under a token budget). 'coverage' "
-        "states the method and its limits."),
+        "ranked by PageRank toward the targets, with their signatures, under a token budget), or saved (a map "
+        "kept with `verinoda map save`: targets=[name]; status current, or stale when a file it cites changed; "
+        "no targets: the list). 'coverage' states the method and its limits."),
     "change_review": (
         "What a change touches, by concern: the working tree vs HEAD (base=REV, staged), or planned targets "
         "('path.py[::Name]') + change. Dependents, findings ('no finding' is not 'safe'), tests reaching it, "
@@ -2252,6 +2288,10 @@ DESCRIPTIONS: dict[str, str] = {
     "grep_context": (
         "The Grep hook's call (install --hooks): what the static call graph says about the symbols a Grep pattern "
         "names - definition, callers, callees - as a PostToolUse hook output; {} when it knows none."),
+    "read_context": (
+        "The Read/Edit hook's call: what the project says about one file - decision records whose guards name it, "
+        "the user's notes on it or on a glob matching it, Cursor/Kiro rules for it - as a PostToolUse hook "
+        "output; {} when nothing does."),
     "index_update": (
         "Re-index after editing files (on a folder never scanned: the first scan); claims whose files changed "
         "become stale. mode: noop | incremental | full | first_scan."),
@@ -2324,7 +2364,7 @@ DESCRIPTIONS: dict[str, str] = {
 
 _READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
               "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
-              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask"}
+              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context"}
 _OPEN_WORLD = {"reference_research", "reference_compare", "feedback_submit", "feedback_process", "reference_resolve"}
 
 
@@ -2569,12 +2609,13 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     @register("map_view")
     def map_view(
         view: Annotated[Literal["hierarchy", "dependencies", "dataflow", "config", "tests", "history", "impact",
-                                "cycles", "outline", "dead", "hotspots", "sides", "repo"],
+                                "cycles", "outline", "dead", "hotspots", "sides", "repo", "saved"],
                         Field(description="Which architecture view to return.")],
         targets: Annotated[list[str] | None, Field(description="impact view: changed files or symbols (default = "
                                                                "git working-tree changes); outline view: page ids "
                                                                "whose diagrams to return; repo view: files in "
-                                                               "play (default the same changes).")] = None,
+                                                               "play (default the same changes); saved view: "
+                                                               "the map's name.")] = None,
     ) -> dict[str, Any]:
         return emit(t.map_view(view, targets=targets))
 
@@ -2993,6 +3034,12 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
     ) -> dict[str, Any]:
         return emit(t.grep_context(pattern, path))
 
+    @register("read_context")
+    def read_context(
+        file_path: Annotated[str, Field(description="The file the agent read or edited.")],
+    ) -> dict[str, Any]:
+        return emit(t.read_context(file_path))
+
     if slim:
         # the core menu's analyze and code_check: the arguments a question or an edit needs (the full profile, and
         # the CLI, keep the rest: plans, test runs, tracing, budgets, environments)
@@ -3016,7 +3063,8 @@ def build_server(repo: Path | str, tools: AtlasTools | None = None, *, profile: 
 
         add("analyze", analyze_core, DESCRIPTIONS["analyze"])
         add("code_check", code_check_core, DESCRIPTIONS["code_check"])
-    behind = [n for n in (*CORE_TOOLS, "grep_context") if n in impl and n not in listed] if GATEWAY in listed else []
+    behind = [n for n in (*CORE_TOOLS, "grep_context", "read_context") if n in impl and n not in listed] \
+        if GATEWAY in listed else []
     if behind:
         import inspect
 
