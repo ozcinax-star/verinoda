@@ -3986,8 +3986,11 @@ def build_parser() -> argparse.ArgumentParser:
                                      "lines name")
     ssub_spec = sp.add_subparsers(dest="spec_cmd", required=True)
     c = add("check", cmd_spec, "every criterion of the spec files with its evidence status: verified (a verified "
-                               "claim), tested (a test that exists), broken (a reference that no longer resolves), "
-                               "unevidenced (exit 1: broken, unevidenced or a duplicate id; 3: not checked)",
+                               "claim whose cited lines still match), tested (a test that is defined), "
+                               "tested_inferred (a JS/TS test found by its title), broken (a reference that no "
+                               "longer resolves, or a stale claim), unchecked, unevidenced (exit 1: broken, "
+                               "unevidenced, a duplicate id or a malformed spec line such as a SHALL with no id; "
+                               "3: something not checked; 2: an error, such as an unreadable folder setting)",
             parent=ssub_spec)
     c.add_argument("--specs-dir", metavar="DIR",
                    help="the specs folder (default: specs.dir in .verinoda/config.json, [specs] dir in "
