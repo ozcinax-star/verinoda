@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D152)
+## Upgrading from 0.4.0 (D137-D153)
 
 ### D137: Trigram regex index
 
@@ -171,6 +171,15 @@ does not fit; exit 3) appears in `summary` of every `check` result (0 without `-
 checker both report may carry `confirmed_by`, `checker_says` or `own_verdict`. A checker not found, not run,
 timed out or failing is exit 4 with the next step. Without the option `check` is unchanged. No MCP tool changes;
 MCP `code_check` never runs a checker.
+
+### D153: Runtime diff between base and head
+
+`verinoda observe` gains `--compare REF`: the same tests are also run at commit REF and the result gains
+`runtime_diff` (calls, library calls, SQL, routes, exceptions raised, test outcomes added, removed or changed).
+`review --observe` runs the selected tests at the review's base too (runs of another commit are never taken as the
+latest run) and adds `tests.observe.runtime_diff`; it also
+records SQL now (the flaws recorder), so it takes about twice as long. Runs gain `raise` records (Python 3.12+) and
+per-test `exc`; `runtime.trace.observe()` takes `ref=`. Nothing to migrate; the MCP tools are unchanged.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
