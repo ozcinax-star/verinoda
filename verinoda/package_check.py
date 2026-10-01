@@ -5,7 +5,9 @@ Opt-in and network-gated. The only thing sent anywhere is a package name, to its
 when the network mode is ``on`` or ``cache`` (never by default): PyPI (the JSON API, and the Simple API for
 the PEP 792 project status), npm (the registry document and the weekly download count), crates.io (the crate
 API), Maven Central (``maven-metadata.xml``) and the Go module proxy (``@latest``). No credentials, no code,
-no file contents.
+no file contents. Never sent: a local, workspace, VCS or URL dependency (no registry holds it: skipped) and a
+name behind a private registry the project configures (:func:`private_sources`: ``unknown``), so a private
+name cannot leak to a public registry.
 
 Per package, two kinds of signals:
 
@@ -52,8 +54,11 @@ REGISTRY = {"python": "pypi", "pypi": "pypi", "npm": "npm", "cargo": "cargo", "g
 REGISTRY_NAME = {"pypi": "PyPI", "npm": "npm", "cargo": "crates.io", "go": "the Go module proxy",
                  "maven": "Maven Central"}
 FLAG = ("not_found", "quarantined", "security_holding")
-CAUTION = ("yanked", "deprecated", "archived", "young", "few_downloads", "known_vulnerabilities", "typo_of",
-           "separator_confusable")
+CAUTION = ("no_release", "yanked", "deprecated", "archived", "young", "few_downloads", "known_vulnerabilities",
+           "typo_of", "separator_confusable")
+LOOKALIKE = ("typo_of", "separator_confusable")
+# a near name used this much is a package of its own, not a squat: its look-alike signal is only weak
+WIDELY_USED = {"last week": 50_000, "last 90 days": 500_000}
 # words a made-up package name often adds to a real one
 _GENERIC = {"py", "python", "python3", "js", "node", "lib", "libs", "utils", "util", "tools", "tool", "toolkit",
             "helper", "helpers", "sdk", "api", "client", "core", "easy", "simple", "plus", "pro", "extra",
@@ -63,6 +68,10 @@ _NODE_BUILTINS = {"assert", "async_hooks", "buffer", "child_process", "cluster",
                   "inspector", "module", "net", "os", "path", "perf_hooks", "process", "punycode", "querystring",
                   "readline", "repl", "stream", "string_decoder", "sys", "timers", "tls", "trace_events", "tty",
                   "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib"}
+_RUST_BUILTIN = {"std", "core", "alloc", "proc_macro", "proc-macro", "test", "crate", "self", "super"}
+# Python import roots several distributions share: the import names no single distribution
+_PY_NAMESPACES = {"google", "azure", "zope", "jaraco", "backports", "sphinxcontrib", "ruamel", "oslo", "plone",
+                  "collective", "flufl", "pyannote", "opentelemetry"}
 
 
 class PackageCheckError(ValueError):
@@ -76,28 +85,40 @@ def registry_of(ecosystem: str) -> str | None:
 
 
 def normalize(registry: str, name: str) -> str:
-    """The name as the registry compares it (PEP 503 for PyPI; lower case for npm and crates.io)."""
+    """The name as the registry compares it: PEP 503 for PyPI, ``-`` and ``_`` the same crate on crates.io,
+    exact for npm (``JSONStream`` and ``jsonstream`` are two packages), Maven and Go."""
     n = str(name or "").strip()
     if registry == "pypi":
         return re.sub(r"[-_.]+", "-", n).lower()
-    if registry in ("npm", "cargo"):
-        return n.lower()
+    if registry == "cargo":
+        return re.sub(r"[-_]", "-", n).lower()
     return n
 
 
-_POPULAR: dict[str, list[str]] | None = None
+def _fold(registry: str, name: str) -> str:
+    """The name for comparing with the popular list (lower case everywhere)."""
+    return normalize(registry, name).lower()
+
+
+_DATA: dict | None = None
+
+
+def _data() -> dict:
+    global _DATA
+    if _DATA is None:
+        try:
+            raw = json.loads((Path(__file__).parent / "data" / "popular_packages.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raw = {}
+        _DATA = {"popular": {k: list(dict.fromkeys(_fold(k, x) for x in v)) for k, v in raw.items()
+                             if isinstance(v, list)},
+                 "legit": {k: {_fold(k, x) for x in v} for k, v in (raw.get("near_but_legitimate") or {}).items()
+                           if isinstance(v, list)}}
+    return _DATA
 
 
 def popular(registry: str) -> list[str]:
-    global _POPULAR
-    if _POPULAR is None:
-        try:
-            data = json.loads((Path(__file__).parent / "data" / "popular_packages.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            data = {}
-        _POPULAR = {k: list(dict.fromkeys(normalize(k, x) for x in v)) for k, v in data.items()
-                    if isinstance(v, list)}
-    return _POPULAR.get(registry, [])
+    return _data()["popular"].get(registry, [])
 
 
 def _distance(a: str, b: str, cap: int) -> int:
@@ -121,15 +142,23 @@ def _distance(a: str, b: str, cap: int) -> int:
 
 
 def _bare(name: str) -> str:
-    return re.sub(r"[-_.]+", "", name.split("/")[-1] if name.startswith("@") else name)
+    """The name without ``-``, ``_`` and ``.`` (an npm scope and its ``/`` are kept: ``@types/express`` is not
+    ``express``)."""
+    return re.sub(r"[-_.]+", "", name)
 
 
 def name_signals(registry: str, name: str) -> list[dict]:
-    """Local, offline signals from the name alone (``strong_inference`` at most)."""
-    n = normalize(registry, name)
+    """Local, offline signals from the name alone (``strong_inference`` at most). Names on the bundled list,
+    names it lists as legitimate near-names, and ``@types/`` packages of a popular name get none."""
+    n = _fold(registry, name)
     pop = popular(registry)
-    if not n or n in pop:
+    if not n or n in pop or n in _data()["legit"].get(registry, set()):
         return []
+    if registry == "npm" and n.startswith("@types/"):
+        inner = n[len("@types/"):]
+        inner = "@" + inner.replace("__", "/") if "__" in inner else inner
+        if inner in pop:
+            return []
     out: list[dict] = []
     src = "the bundled list of popular names (verinoda/data/popular_packages.json)"
     bare = _bare(n)
@@ -172,6 +201,10 @@ def skip_reason(registry: str, name: str, imported: bool = True) -> str | None:
         return "a module of the Python standard library"
     if imported and registry == "npm" and (n.startswith("node:") or n in _NODE_BUILTINS):
         return "a Node.js built-in module"
+    if registry == "go" and "." not in n.split("/")[0]:
+        return "a package of the Go standard library (no dot in the first path element)"
+    if imported and registry == "cargo" and n in _RUST_BUILTIN:
+        return "a crate built into Rust or a path keyword"
     return None
 
 
@@ -261,9 +294,16 @@ def _lookup_pypi(transport, name: str, now: float) -> dict:
         ps = sdata.get("project-status")
         project_status = ps.get("status") if isinstance(ps, dict) else None
     if st == "not_found":
-        if project_status:
+        if project_status and project_status != "active":
             return _answer("pypi", name, url, resp, True, {"project_status": project_status},
                            _status_signals(project_status, name, simple_url))
+        if not serr and _status(sresp) == "ok":
+            # the project exists (the Simple API knows it) but the JSON API has no release to show
+            return _answer("pypi", name, simple_url, sresp, True,
+                           {"project_status": project_status, "installable_release": False},
+                           [{"signal": "no_release", "url": simple_url,
+                             "claim": f"PyPI knows the project {name} but the JSON API answered {resp.status}: it has "
+                                      "no installable release"}])
         if serr or _status(sresp) not in ("ok", "not_found"):
             return _fail("pypi", name, url, "unreachable",
                          "the JSON API answered 404 but the Simple API could not be read to confirm it")
@@ -428,7 +468,9 @@ def _lookup_maven(transport, name: str, now: float) -> dict:
         root = ET.fromstring(resp.body)
     except ET.ParseError:
         return _bad("maven", name, url, "with XML that cannot be read")
-    vs = [v.text for v in root.iter("version") if v.text]
+    if root.tag != "metadata":   # an HTML error or portal page answered with 200 is no artifact
+        return _bad("maven", name, url, f"with a <{root.tag[:40]}> document, not Maven metadata")
+    vs =[v.text for v in root.iter("version") if v.text]
     latest = root.findtext("versioning/release") or root.findtext("versioning/latest") or (vs[-1] if vs else None)
     upd = root.findtext("versioning/lastUpdated")
     return _answer("maven", name, url, resp, True, {"latest": latest, "versions": len(vs), "last_updated": upd})
@@ -447,6 +489,7 @@ def cache_path(repo: Path) -> Path:
 
 
 def _load_cache(path: Path) -> dict:
+    """The cache entries (a file that cannot be read, or is not this schema, holds none)."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -455,19 +498,212 @@ def _load_cache(path: Path) -> dict:
     return ent if isinstance(ent, dict) else {}
 
 
-def _save_cache(path: Path, entries: dict) -> None:
+def _valid_entry(hit) -> dict | None:
+    """A cache entry as it was written, or None (a hand-edited or damaged entry is a miss, never a crash)."""
+    if not isinstance(hit, dict):
+        return None
+    ans = hit.get("answer")
+    try:
+        epoch = float(hit.get("epoch"))
+    except (TypeError, ValueError):
+        return None
+    if epoch != epoch or epoch in (float("inf"), float("-inf")):
+        return None
+    if not isinstance(ans, dict) or ans.get("registry") not in REGISTRY_NAME or not isinstance(ans.get("name"), str) \
+            or not isinstance(ans.get("exists"), bool) or not isinstance(ans.get("url"), str) \
+            or not isinstance(ans.get("facts", {}), dict) or not isinstance(ans.get("observed", []), list) \
+            or not all(isinstance(o, dict) and isinstance(o.get("signal"), str) and isinstance(o.get("claim"), str)
+                       for o in ans.get("observed", [])):
+        return None
+    return {**hit, "epoch": epoch}
+
+
+def _save_cache(path: Path, new: dict) -> None:
+    """Merge ``new`` into the entries on disk now (another run may have written since this one read) and
+    replace the file in one step (a temporary file and ``os.replace``), so a reader never sees half a file."""
+    import os
+    import tempfile
+
+    if not new:
+        return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(json.dumps({"schema": SCHEMA, "entries": entries}, ensure_ascii=False, indent=1,
-                                    sort_keys=True).encode("utf-8"))
+        entries = {k: v for k, v in _load_cache(path).items() if _valid_entry(v)}
+        entries.update(new)
+        fd, tmp = tempfile.mkstemp(prefix=".package-check.", suffix=".tmp", dir=str(path.parent))
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(json.dumps({"schema": SCHEMA, "entries": entries}, ensure_ascii=False, indent=1,
+                                sort_keys=True).encode("utf-8"))
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:   # Windows: a reader holds the file for a moment
+                time.sleep(0.05 * (attempt + 1))
+        os.unlink(tmp)
     except OSError:
         pass
 
 
+# -- private registries -------------------------------------------------------------------------------------
+
+def _rel_at(repo: Path, p: Path, line: int | None = None) -> str:
+    try:
+        rel = p.relative_to(repo).as_posix()
+    except ValueError:
+        rel = str(p)
+    return f"{rel}:{line}" if line else rel
+
+
+def private_sources(repo: Path, env: dict | None = None) -> dict:
+    """The package sources the project configures besides the public registries, each with where it is set:
+    ``npm`` (``.npmrc`` ``@scope:registry=`` per scope, ``registry=`` for all), ``pypi`` (``--index-url`` /
+    ``--extra-index-url`` / ``--find-links`` in requirements files, ``pip.conf`` / ``pip.ini``, uv, Poetry and
+    PDM sources, the ``PIP_*`` / ``UV_*`` index variables), ``cargo`` (``.cargo/config.toml`` registries and a
+    replaced crates.io), ``go`` (``GOPRIVATE`` / ``GONOPROXY`` patterns from the environment, read lazily)."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:  # pragma: no cover - py3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    repo = Path(repo)
+    env = os_environ() if env is None else env
+    out: dict = {"npm": {"scopes": {}, "all": None}, "pypi": [], "cargo": {"registries": {}, "replaced": None},
+                 "go": None}
+
+    def lines(p: Path) -> list[str]:
+        try:
+            return p.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return []
+
+    npmrc = repo / ".npmrc"
+    for i, ln in enumerate(lines(npmrc), 1):
+        s = ln.split("#")[0].split(";")[0].strip()
+        m = re.match(r"^(@[\w.-]+):registry\s*=\s*(\S+)", s)
+        if m:
+            out["npm"]["scopes"][m.group(1).lower()] = f"{_rel_at(repo, npmrc, i)} ({m.group(2)})"
+            continue
+        m = re.match(r"^registry\s*=\s*(\S+)", s)
+        if m and "registry.npmjs.org" not in m.group(1):
+            out["npm"]["all"] = f"{_rel_at(repo, npmrc, i)} ({m.group(1)})"
+    reg_env = env.get("npm_config_registry") or env.get("NPM_CONFIG_REGISTRY")
+    if reg_env and "registry.npmjs.org" not in reg_env:
+        out["npm"]["all"] = f"the environment (npm_config_registry={reg_env})"
+
+    reqs = sorted(list(repo.glob("requirements*.txt")) + list(repo.glob("requirements/*.txt")))
+    for p in reqs:
+        for i, ln in enumerate(lines(p), 1):
+            m = re.match(r"^\s*(-i|--index-url|--extra-index-url|-f|--find-links)(?:\s+|=)(\S+)", ln)
+            if m:
+                out["pypi"].append(f"{_rel_at(repo, p, i)} ({m.group(1)} {m.group(2)})")
+    for conf in (repo / "pip.conf", repo / "pip.ini"):
+        for i, ln in enumerate(lines(conf), 1):
+            m = re.match(r"^\s*(index-url|extra-index-url|find-links)\s*=\s*(\S+)", ln)
+            if m:
+                out["pypi"].append(f"{_rel_at(repo, conf, i)} ({m.group(1)} = {m.group(2)})")
+    for cfg_name, prefix in (("pyproject.toml", ("tool",)), ("uv.toml", ())):
+        p = repo / cfg_name
+        if not p.is_file():
+            continue
+        try:
+            data = tomllib.loads(p.read_text(encoding="utf-8", errors="replace"))
+        except Exception:  # noqa: BLE001 - an unreadable file configures nothing here
+            continue
+        tool = (data.get("tool") or {}) if prefix else {"uv": data}
+        uv = tool.get("uv") or {}
+        if uv.get("index") or uv.get("index-url") or uv.get("extra-index-url") or uv.get("find-links"):
+            out["pypi"].append(f"{cfg_name} ({'[tool.uv]' if prefix else 'uv.toml'} package index)")
+        if (tool.get("poetry") or {}).get("source"):
+            out["pypi"].append(f"{cfg_name} ([[tool.poetry.source]])")
+        if (tool.get("pdm") or {}).get("source"):
+            out["pypi"].append(f"{cfg_name} ([[tool.pdm.source]])")
+    for var in ("PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_FIND_LINKS", "UV_INDEX_URL", "UV_EXTRA_INDEX_URL",
+                "UV_INDEX", "UV_DEFAULT_INDEX"):
+        if env.get(var):
+            out["pypi"].append(f"the environment ({var})")
+
+    for p in (repo / ".cargo" / "config.toml", repo / ".cargo" / "config"):
+        if not p.is_file():
+            continue
+        try:
+            data = tomllib.loads(p.read_text(encoding="utf-8", errors="replace"))
+        except Exception:  # noqa: BLE001
+            continue
+        for name in (data.get("registries") or {}):
+            out["cargo"]["registries"][str(name)] = _rel_at(repo, p)
+        rep = ((data.get("source") or {}).get("crates-io") or {}).get("replace-with")
+        if rep:
+            out["cargo"]["replaced"] = f"{_rel_at(repo, p)} (crates-io replaced with {rep})"
+    return out
+
+
+def os_environ() -> dict:
+    import os
+
+    return dict(os.environ)
+
+
+def _go_private(env: dict) -> list[tuple[str, str]]:
+    """``GOPRIVATE`` / ``GONOPROXY`` patterns: the environment, else ``go env`` when Go is installed."""
+    import shutil
+    import subprocess
+
+    pats: list[tuple[str, str]] = []
+    vals = {v: env.get(v) for v in ("GOPRIVATE", "GONOPROXY")}
+    if not any(vals.values()) and shutil.which("go"):
+        try:
+            r = subprocess.run(["go", "env", "GOPRIVATE", "GONOPROXY"], capture_output=True, text=True, timeout=10)
+            got = r.stdout.splitlines() if r.returncode == 0 else []
+            vals = {"GOPRIVATE": got[0] if got else "", "GONOPROXY": got[1] if len(got) > 1 else ""}
+        except (OSError, subprocess.SubprocessError):
+            pass
+    for var, val in vals.items():
+        for pat in str(val or "").split(","):
+            if pat.strip():
+                pats.append((pat.strip(), var))
+    return pats
+
+
+def _go_matches(module: str, pattern: str) -> bool:
+    """Go's rule: the pattern matches a path prefix with as many elements as the pattern has."""
+    import fnmatch
+
+    n = pattern.count("/") + 1
+    return fnmatch.fnmatchcase("/".join(module.split("/")[:n]), pattern)
+
+
+def _private_reason(reg: str, name: str, private: dict, env: dict) -> str | None:
+    if reg == "npm":
+        npm = private.get("npm") or {}
+        scope = name.split("/")[0].lower() if name.startswith("@") else None
+        if scope and scope in (npm.get("scopes") or {}):
+            return f"the scope {scope} is installed from a private registry ({npm['scopes'][scope]})"
+        if npm.get("all"):
+            return f"npm packages are installed from a configured registry ({npm['all']})"
+    if reg == "pypi" and private.get("pypi"):
+        src = private["pypi"]
+        return (f"the project configures another package index ({src[0]}" + (f" and {len(src) - 1} more" if
+                len(src) > 1 else "") + "): a name may be a private package, and sending it to PyPI would leak it")
+    if reg == "cargo" and (private.get("cargo") or {}).get("replaced"):
+        return f"crates.io is replaced ({private['cargo']['replaced']})"
+    if reg == "go":
+        if private.get("go") is None:
+            private["go"] = _go_private(env)
+        for pat, var in private["go"]:
+            if _go_matches(name, pat):
+                return f"the module matches {var} pattern {pat}: a private module"
+    return None
+
+
 # -- the check ----------------------------------------------------------------------------------------------
 
+def _counts(s: dict) -> bool:
+    return s.get("status") != "weak_inference"
+
+
 def _verdict(signals: list[dict], exists) -> str:
-    kinds = {s["signal"] for s in signals}
+    kinds = {s["signal"] for s in signals if _counts(s)}
     if kinds & set(FLAG):
         return "flagged"
     if kinds & set(CAUTION):
@@ -480,32 +716,52 @@ def _record_signals(ans: dict, now: float) -> list[dict]:
     when = ans.get("observed_at")
     out = [{**o, "status": "observed", "observed_at": when} for o in ans.get("observed") or []]
     f = ans.get("facts") or {}
-    reg = REGISTRY_NAME.get(ans["registry"], ans["registry"])
+    reg = REGISTRY_NAME.get(ans.get("registry"), str(ans.get("registry")))
     if isinstance(f.get("age_days"), int) and f["age_days"] < YOUNG_DAYS:
-        out.append({"signal": "young", "status": "observed", "observed_at": when, "url": ans["url"],
-                    "claim": f"{ans['name']} was first published on {reg} {f['age_days']} day(s) before the check "
-                             f"({f.get('first_release')})"})
+        out.append({"signal": "young", "status": "observed", "observed_at": when, "url": ans.get("url"),
+                    "claim": f"{ans.get('name')} was first published on {reg} {f['age_days']} day(s) before the "
+                             f"check ({f.get('first_release')})"})
     dl = f.get("downloads")
     if isinstance(dl, dict) and isinstance(dl.get("count"), int):
         few = FEW_NPM_WEEKLY if dl.get("period") == "last week" else FEW_CRATES_RECENT
         if dl["count"] < few:
             out.append({"signal": "few_downloads", "status": "observed", "observed_at": when, "url": dl.get("url"),
-                        "claim": f"{ans['name']} was downloaded {dl['count']} time(s) in the {dl['period']} "
+                        "claim": f"{ans.get('name')} was downloaded {dl['count']} time(s) in the {dl.get('period')} "
                                  f"(under {few})"})
     return out
 
 
+def _weaken_if_widely_used(signals: list[dict], facts: dict) -> None:
+    """A look-alike name the registry shows widely used is a package of its own: weak_inference, no caution."""
+    dl = facts.get("downloads") if isinstance(facts, dict) else None
+    if not (isinstance(dl, dict) and isinstance(dl.get("count"), int)):
+        return
+    floor = WIDELY_USED.get(dl.get("period"))
+    if floor is None or dl["count"] < floor:
+        return
+    for s in signals:
+        if s["signal"] in LOOKALIKE:
+            s["status"] = "weak_inference"
+            s["claim"] += f" - but it was downloaded {dl['count']:,} times in the {dl['period']}, so it is likely " \
+                          "a package of its own"
+
+
 def check_packages(repo: Path, packages: list[dict], *, network: str = "off", transport=None,
-                   now: float | None = None, ttl_hours: float = TTL_HOURS, cache_file: Path | None = None) -> dict:
-    """Check ``packages`` (``{"ecosystem", "name", "why"?, "evidence"?}``) against their registries (see the
-    module). ``transport``: anything with ``get(url, accept=None)`` returning a transport ``Response``; the live,
-    SSRF-guarded one when None and the network mode needs it."""
+                   now: float | None = None, ttl_hours: float = TTL_HOURS, cache_file: Path | None = None,
+                   private: dict | None = None, env: dict | None = None) -> dict:
+    """Check ``packages`` against their registries (see the module). A package is ``{"ecosystem", "name"
+    (the name to look up, as declared), "why"?, "evidence"?, "imported"?, "skip"? (a reason: a local, VCS or
+    URL source - never asked), "hold"? (a reason: a private source - never sent, unknown)}``. ``transport``:
+    anything with ``get(url, accept=None)`` returning a transport ``Response``; the live, SSRF-guarded one when
+    None and the network mode needs it. ``private``: :func:`private_sources` (read from ``repo`` when None)."""
     if network not in NETWORK_MODES:
         raise PackageCheckError(f"network mode must be off, cache or on, not {network!r}")
     now = time.time() if now is None else now
+    env = os_environ() if env is None else env
+    private = private_sources(repo, env) if private is None else private
     path = cache_file or cache_path(repo)
     cache = _load_cache(path)
-    dirty = False
+    written: dict = {}
     ttl = ttl_hours * 3600
     results: list[dict] = []
     seen: dict[tuple[str, str], dict] = {}
@@ -513,28 +769,35 @@ def check_packages(repo: Path, packages: list[dict], *, network: str = "off", tr
         reg = registry_of(p.get("ecosystem"))
         name = str(p.get("name") or "").strip()
         base = {"ecosystem": p.get("ecosystem"), "name": name, **({"why": p["why"]} if p.get("why") else {}),
-                **({"evidence": p["evidence"]} if p.get("evidence") else {})}
+                **({"evidence": p["evidence"]} if p.get("evidence") else {}),
+                **({"declared_as": p["declared_as"]} if p.get("declared_as") else {})}
         if reg is None:
             results.append({**base, "verdict": "unknown", "signals": [],
                             "unknown": f"no registry lookup for {p.get('ecosystem')} dependencies"})
             continue
-        skip = skip_reason(reg, name, imported=bool(p.get("imported")))
+        skip = p.get("skip") or skip_reason(reg, name, imported=bool(p.get("imported")))
         if skip:
             results.append({**base, "registry": reg, "verdict": "skipped", "signals": [], "skipped": skip})
+            continue
+        hold = p.get("hold") or _private_reason(reg, name, private, env)
+        if hold:
+            results.append({**base, "registry": reg, "exists": None, "verdict": "unknown", "signals": [],
+                            "unknown": f"not sent: {hold}",
+                            "next_step": "check the name against the registry the project installs it from"})
             continue
         norm = normalize(reg, name)
         if (reg, norm) in seen:   # one question per package; the second mention keeps its own evidence
             results.append({**seen[(reg, norm)], **base})
             continue
         key = f"{reg}:{norm}"
-        hit = cache.get(key) if isinstance(cache.get(key), dict) else None
+        hit = _valid_entry(cache.get(key))
         ans = None
         note = None
         if network == "off":
             note = (f"network is off, so {REGISTRY_NAME[reg]} was not asked" +
-                    (f" (a cached answer from {hit.get('observed_at')} exists: --network cache reuses it)"
+                    (f" (a cached answer from {hit['answer'].get('observed_at')} exists: --network cache reuses it)"
                      if hit else ""))
-        elif network == "cache" and hit and now - float(hit.get("epoch") or 0) < ttl:
+        elif network == "cache" and hit and now - hit["epoch"] < ttl:
             ans = {**hit["answer"], "from_cache": True}
         else:
             if transport is None:
@@ -547,13 +810,14 @@ def check_packages(repo: Path, packages: list[dict], *, network: str = "off", tr
                 note = (f"{REGISTRY_NAME[reg]} could not be read ({got['failure']}: {got.get('error')})")
                 if hit:
                     ans = {**hit["answer"], "from_cache": True}
-                    note += f"; the answer cached at {hit.get('observed_at')} is shown"
+                    note += f"; the answer cached at {hit['answer'].get('observed_at')} is shown"
             else:
                 ans = {**got, "from_cache": False}
-                cache[key] = {"observed_at": got.get("observed_at"), "epoch": now, "answer": got}
-                dirty = True
+                written[key] = cache[key] = {"observed_at": got.get("observed_at"), "epoch": now, "answer": got}
         signals = _record_signals(ans, now) if ans else []
         signals += name_signals(reg, name)
+        if ans:
+            _weaken_if_widely_used(signals, ans.get("facts") or {})
         exists = ans.get("exists") if ans else None
         res = {**base, "registry": reg, "exists": exists, "verdict": _verdict(signals, exists), "signals": signals}
         if ans:
@@ -562,20 +826,23 @@ def check_packages(repo: Path, packages: list[dict], *, network: str = "off", tr
         if note:
             res["unknown"] = note
         res["next_step"] = _next(res, network)
-        seen[(reg, norm)] = {k: v for k, v in res.items() if k not in ("why", "evidence")}
+        seen[(reg, norm)] = {k: v for k, v in res.items() if k not in ("why", "evidence", "declared_as")}
         results.append(res)
-    if dirty:
-        _save_cache(path, cache)
+    _save_cache(path, written)
     summary = {v: sum(1 for r in results if r["verdict"] == v)
                for v in ("flagged", "caution", "ok", "unknown", "skipped")}
     limits = [
-        "only package names are sent, and only to the public registry of their ecosystem; a private registry or "
-        "mirror the project installs from is not asked, so a private package can look missing",
+        "only package names are sent, and only to the public registry of their ecosystem; names the project "
+        "installs from a private index, scope, registry or Go module pattern it configures are not sent "
+        "(unknown); a source configured outside the project (a user-level pip.conf or .npmrc) is not read",
+        "local, workspace, VCS and URL dependencies are skipped: no registry holds them",
         "age, downloads and malware signals are what the registry shows without an account; no registry here "
         "scans packages for malicious code, so a package with no signal is not shown to be safe",
-        "name signals compare with a small bundled list of popular names: strong_inference at most",
+        "name signals compare with a small bundled list of popular names: strong_inference at most, and weak "
+        "when the registry shows the near name widely used",
         "PyPI download counts are not read (its JSON API has none; pypistats.org rate-limits anonymous use); Go "
-        "and Maven Central give no first release date in one request",
+        "and Maven Central give no first release date in one request; Maven Central is the only Maven "
+        "repository asked",
     ]
     return {"kind": "package_check", "network": network, "packages": results, "summary": summary,
             "cache": str(path), "limits": limits}
@@ -601,88 +868,283 @@ def _next(res: dict, network: str) -> str:
 
 # -- what the change adds -----------------------------------------------------------------------------------
 
-MANIFEST_GLOBS = ("*pyproject.toml", "*requirements*.txt", "*setup.py", "*setup.cfg", "*package.json", "*go.mod",
-                  "*Cargo.toml", "*.gradle", "*.gradle.kts", "*pom.xml", "*.versions.toml")
+class NotGitError(PackageCheckError):
+    """The project is not in a git work tree: there is no change to read."""
+
+
+_MANIFEST_RX = re.compile(r"^(package\.json|pyproject\.toml|go\.mod|Cargo\.toml|requirements.*\.txt|setup\.py|"
+                          r"setup\.cfg|pom\.xml|.*\.gradle(\.kts)?|.*\.versions\.toml|gradle\.properties)$")
+
+
+def _git(repo: Path, *args: str, data: bytes | None = None) -> bytes:
+    import subprocess
+
+    r = subprocess.run(["git", "-C", str(repo), "-c", "core.quotepath=off", *args], input=data,
+                       capture_output=True, timeout=120)
+    if r.returncode != 0:
+        raise PackageCheckError(f"git {' '.join(args[:2])} failed: "
+                                f"{r.stderr.decode('utf-8', 'replace').strip()[:200]}")
+    return r.stdout
+
+
+def resolve_rev(repo: Path, rev: str) -> str:
+    """``rev`` as a commit of ``repo``'s work tree. :class:`NotGitError` outside one, :class:`PackageCheckError`
+    for anything that is not one commit (a revision never starts with ``-``: it cannot be read as an option)."""
+    rev = (rev or "HEAD").strip()
+    try:
+        inside = _git(repo, "rev-parse", "--is-inside-work-tree").strip() == b"true"
+    except (PackageCheckError, OSError):
+        inside = False
+    if not inside:
+        raise NotGitError(f"{repo} is not a git work tree")
+    if not rev or rev.startswith("-") or any(c in rev for c in "\0\n\r"):
+        raise PackageCheckError(f"--diff {rev!r}: not a revision")
+    try:
+        sha = _git(repo, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}").decode().strip()
+    except PackageCheckError:
+        sha = ""
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
+        raise PackageCheckError(f"--diff {rev}: not a commit of this repository")
+    return sha
+
+
+def declared_at(repo: Path, rev: str) -> dict[str, set[str]]:
+    """The dependency names each manifest declared at ``rev``, read the way the working tree is read
+    (:func:`verinoda.guards.declared_dependencies` over the manifests of that commit, written to a temporary
+    folder): ``{path: {name, ...}}``."""
+    import shutil
+    import tempfile
+
+    from verinoda.guards import declared_dependencies
+
+    sha = resolve_rev(repo, rev)
+    names = [n for n in _git(repo, "ls-tree", "-r", "--name-only", "-z", sha).decode("utf-8", "replace").split("\0")
+             if n and _MANIFEST_RX.match(n.rsplit("/", 1)[-1]) and "node_modules/" not in n]
+    prefix = _git(repo, "rev-parse", "--show-prefix").decode("utf-8", "replace").strip()
+    tmp = Path(tempfile.mkdtemp(prefix="verinoda-manifests-"))
+    try:
+        for rel in names:
+            try:
+                body = _git(repo, "cat-file", "blob", f"{sha}:{prefix}{rel}")
+            except PackageCheckError:
+                continue
+            dst = tmp / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(body)
+        items = declared_dependencies(tmp, names).get("items") or []
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    out: dict[str, set[str]] = {}
+    for it in items:
+        out.setdefault(str(it.get("path")), set()).add(str(it.get("name") or "").lower())
+    return out
 
 
 def added_dependencies(repo: Path, items: list[dict], rev: str = "HEAD") -> list[dict]:
-    """The declarations (``guards.declared_dependencies`` items) on lines the working tree changed against
-    ``rev`` whose name the file at ``rev`` did not mention (a new dependency, not a version change). A new,
-    untracked manifest adds all of its own. Raises :class:`PackageCheckError` outside a git work tree."""
-    import subprocess
+    """The declarations (``guards.declared_dependencies`` items) whose name the same manifest did not declare at
+    ``rev``: a new dependency, not a version change, and not a name the old file only mentioned (a comment, a
+    script). A manifest that did not exist at ``rev`` adds all of its own. :class:`NotGitError` outside a git
+    work tree, :class:`PackageCheckError` for a revision that is not a commit."""
+    before = declared_at(Path(repo), rev)
+    return [it for it in items
+            if str(it.get("name") or "").lower() not in before.get(str(it.get("path")), set())]
 
-    from verinoda.codecheck import changed_lines
 
-    repo = Path(repo)
+# -- where a declaration comes from -------------------------------------------------------------------------
+
+_NPM_NOT_REGISTRY = ("workspace:", "file:", "link:", "portal:", "git+", "git:", "git@", "github:", "gitlab:",
+                     "bitbucket:", "gist:", "http://", "https://", "patch:", "exec:", "./", "../", "/", "~")
+
+
+def _npm_source(name: str, spec: str) -> dict:
+    s = (spec or "").strip()
+    if s.startswith("npm:"):
+        real = s[4:]
+        at = real.rfind("@")
+        if at > 0:
+            real = real[:at]
+        return {"name": real, "declared_as": name} if real else {"skip": f"an npm alias with no package ({s})"}
+    if s.startswith(_NPM_NOT_REGISTRY) or re.fullmatch(r"[\w.-]+/[\w.-]+(#.*)?", s):
+        return {"skip": f"a local, workspace, VCS or URL source ({s[:80]}): no registry holds it"}
+    return {}
+
+
+def _cargo_source(name: str, spec: str, table: str | None) -> dict:
+    t = None
+    for raw in (table, spec):
+        if raw and raw.strip().startswith("{"):
+            try:
+                t = json.loads(raw)
+            except ValueError:
+                t = None
+            if isinstance(t, dict):
+                break
+    if not isinstance(t, dict):
+        return {}
+    if t.get("path") or t.get("git"):
+        return {"skip": f"a {'path' if t.get('path') else 'git'} dependency ({t.get('path') or t.get('git')}): no "
+                        "registry holds it"}
+    if t.get("workspace") is True:
+        return {"skip": "inherited from the workspace's [workspace.dependencies] (not read here)"}
+    if t.get("registry") or t.get("registry-index"):
+        return {"hold": f"from the registry {t.get('registry') or t.get('registry-index')}, not crates.io"}
+    if isinstance(t.get("package"), str) and t["package"] != name:
+        return {"name": t["package"], "declared_as": name}
+    return {}
+
+
+def _python_source(name: str, spec: str, uv_sources: dict) -> dict:
+    s = (spec or "").strip()
+    if s.startswith("@"):
+        return {"skip": f"a direct URL dependency (PEP 508 {s[:80]}): no registry is asked for it"}
+    if s.startswith("{"):
+        try:
+            t = json.loads(s)
+        except ValueError:
+            t = None
+        if isinstance(t, dict):
+            if t.get("path") or t.get("git") or t.get("url") or t.get("develop"):
+                return {"skip": "a path, git or URL dependency (Poetry): no registry holds it"}
+            if t.get("source"):
+                return {"hold": f"from the Poetry source {t['source']}"}
+    u = uv_sources.get(normalize("pypi", name))
+    if isinstance(u, dict):
+        if u.get("path") or u.get("git") or u.get("url") or u.get("workspace"):
+            return {"skip": "a path, git, URL or workspace source ([tool.uv.sources]): no registry holds it"}
+        if u.get("index"):
+            return {"hold": f"from the uv index {u['index']} ([tool.uv.sources])"}
+    return {}
+
+
+def _uv_sources(repo: Path) -> dict:
     try:
-        changed = changed_lines(repo, rev, globs=MANIFEST_GLOBS)
-    except ValueError as exc:
-        raise PackageCheckError(str(exc)) from None
-    old: dict[str, set[str]] = {}
+        import tomllib  # type: ignore[import-not-found]
+    except ImportError:  # pragma: no cover - py3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+    p = Path(repo) / "pyproject.toml"
+    try:
+        data = tomllib.loads(p.read_text(encoding="utf-8", errors="replace"))
+    except Exception:  # noqa: BLE001 - no file, or one that cannot be read: no sources
+        return {}
+    src = ((data.get("tool") or {}).get("uv") or {}).get("sources") or {}
+    return {normalize("pypi", k): v for k, v in src.items()} if isinstance(src, dict) else {}
 
-    def key(s: str) -> str:
-        return re.sub(r"[-_.]+", "-", s).lower()
 
-    def before(rel: str) -> set[str]:
-        """The name-like words of the file at ``rev`` (whole words: ``request`` is not ``requests``)."""
-        if rel not in old:
-            r = subprocess.run(["git", "-C", str(repo), "show", f"{rev}:./{rel}"], capture_output=True, timeout=60)
-            text = r.stdout.decode("utf-8", "replace") if r.returncode == 0 else ""
-            old[rel] = {key(w) for w in re.findall(r"@?[A-Za-z0-9][A-Za-z0-9._/@-]*", text)}
-        return old[rel]
-
-    out = []
-    for it in items:
-        rel, line = it.get("path"), it.get("line")
-        if rel not in changed:
+def go_replacements(repo: Path) -> dict[str, str]:
+    """``replace`` directives of the root ``go.mod``: module -> its replacement (a path or a module)."""
+    try:
+        lines = (Path(repo) / "go.mod").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return {}
+    out: dict[str, str] = {}
+    block = False
+    for ln in lines:
+        s = ln.split("//")[0].strip()
+        if s.startswith("replace ("):
+            block = True
             continue
-        lines = changed[rel]
-        if lines is not None and line not in lines:
+        if block and s == ")":
+            block = False
             continue
-        if lines is not None:
-            words = before(rel)
-            name = str(it.get("name") or "")
-            parts = [p for p in name.split(":") if p] if ":" in name else [name]   # group:artifact: both
-            if parts and all(key(p) in words for p in parts):
-                continue
-        out.append(it)
+        if block or s.startswith("replace "):
+            m = re.match(r"^(?:replace\s+)?(\S+)(?:\s+\S+)?\s+=>\s+(\S+)", s)
+            if m:
+                out[m.group(1)] = m.group(2)
     return out
 
 
-def from_declarations(items: list[dict], why: str) -> list[dict]:
-    """Packages to check from declaration items (each with its declaration as evidence)."""
+def _go_source(name: str, replaces: dict[str, str]) -> dict:
+    to = replaces.get(name)
+    if not to:
+        return {}
+    if to.startswith((".", "/")) or re.match(r"^[A-Za-z]:[\\/]", to) or "." not in to.split("/")[0]:
+        return {"skip": f"replaced by the local path {to} in go.mod"}
+    return {"name": to, "declared_as": name}
+
+
+def from_declarations(items: list[dict], why: str, repo: Path | None = None) -> list[dict]:
+    """Packages to check from declaration items, each with its declaration as evidence: the name as declared
+    (npm and Maven names are case-sensitive), an npm alias or a Cargo ``package =`` rename read as the real
+    package, a local, workspace, VCS or URL source skipped, a named private source held back."""
+    uv = _uv_sources(repo) if repo is not None else {}
+    replaces = go_replacements(repo) if repo is not None else {}
     out = []
     for it in items:
         eco = it.get("ecosystem")
-        if registry_of(eco) is None:
+        reg = registry_of(eco)
+        if reg is None:
             continue
-        out.append({"ecosystem": eco, "name": it.get("name"), "why": why,
+        name = str(it.get("declared") or it.get("name") or "")
+        spec = str(it.get("spec") or "")
+        src = (_npm_source(name, spec) if reg == "npm" else
+               _cargo_source(name, spec, it.get("source")) if reg == "cargo" else
+               _python_source(name, spec, uv) if reg == "pypi" else
+               _go_source(name, replaces) if reg == "go" else {})
+        out.append({"ecosystem": eco, "name": name, "why": why, **src,
                     "evidence": [{"locator": it.get("at") or f"{it.get('path')}:{it.get('line')}",
-                                  "role": "declaration", "excerpt": it.get("spec") or ""}]})
+                                  "role": "declaration", "excerpt": spec}]})
     return out
 
 
-def from_import_name(source: str, target: str) -> dict | None:
+_GO_HOSTS3 = ("github.com", "gitlab.com", "bitbucket.org", "codeberg.org", "golang.org", "go.googlesource.com")
+
+
+def go_module_of(path: str, requires: list[str]) -> str | None:
+    """The module a Go import path belongs to: the longest ``go.mod`` require that prefixes it, else the first
+    three elements on hosts whose modules are ``host/owner/repo``; None when it cannot be told."""
+    best = max((r for r in requires if path == r or path.startswith(r + "/")), key=len, default=None)
+    if best:
+        return best
+    parts = path.split("/")
+    if parts[0] in _GO_HOSTS3 and len(parts) >= 3:
+        return "/".join(parts[:3])
+    if parts[0] == "gopkg.in" and len(parts) >= 2:
+        return "/".join(parts[:2])
+    return None
+
+
+def from_import_name(source: str, target: str, repo: Path | None = None) -> dict | None:
     """The package a proposed import names (``decide ask``): the registry from the source file's language, the
-    distribution for a known Python import name, the npm package of a deep specifier. None when the language
-    has no registry lookup."""
+    distribution for a known Python import name, the npm package of a deep specifier, the Go module of a package
+    path, the crate of a Rust path. None when the language has no registry lookup."""
     suffix = Path(source).suffix.lower()
     t = target.strip()
+    why = {"why": "proposed import", "imported": True}
     if suffix in (".py", ".pyi"):
         from verinoda.depcheck import PY_ALIASES
 
-        name = PY_ALIASES.get(t) or PY_ALIASES.get(t.split(".")[0]) or t.split(".")[0]
-        return {"ecosystem": "python", "name": name, "why": "proposed import", "imported": True}
+        name = PY_ALIASES.get(t) or PY_ALIASES.get(t.split(".")[0])
+        if not name and t.split(".")[0] in _PY_NAMESPACES:
+            return {"ecosystem": "python", "name": t, **why,
+                    "hold": f"{t.split('.')[0]} is a namespace several distributions share: the import does not "
+                            "name the distribution (give the distribution name)"}
+        return {"ecosystem": "python", "name": name or t.split(".")[0], **why}
     if suffix in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte"):
         parts = t.split("/")
         name = "/".join(parts[:2]) if t.startswith("@") else parts[0]
-        return {"ecosystem": "npm", "name": name, "why": "proposed import", "imported": True}
+        return {"ecosystem": "npm", "name": name, **why}
     if suffix == ".rs":
-        return {"ecosystem": "cargo", "name": t.split("::")[0], "why": "proposed import", "imported": True}
+        return {"ecosystem": "cargo", "name": t.split("::")[0], **why}
     if suffix == ".go":
-        return {"ecosystem": "go", "name": t, "why": "proposed import", "imported": True}
+        if "." not in t.split("/")[0]:
+            return {"ecosystem": "go", "name": t, **why}   # the standard library: skipped
+        requires: list[str] = []
+        if repo is not None:
+            from verinoda.research import dependencies
+
+            try:
+                requires = [str(i["name"]) for i in dependencies(Path(repo)).get("items") or []
+                            if i.get("ecosystem") == "go"]
+            except Exception:  # noqa: BLE001 - an unreadable go.mod: no requires
+                requires = []
+        mod = go_module_of(t, requires)
+        if mod is None:
+            return {"ecosystem": "go", "name": t, **why,
+                    "hold": "a Go package path whose module is not known (not required by go.mod, not a "
+                            "host/owner/repo path): give the module path"}
+        return {"ecosystem": "go", "name": mod, **why}
     if suffix in (".java", ".kt", ".kts", ".groovy", ".scala") and re.fullmatch(r"[\w.-]+:[\w.-]+", t):
-        return {"ecosystem": "maven", "name": t.lower(), "why": "proposed dependency"}
+        return {"ecosystem": "maven", "name": t, "why": "proposed dependency"}
     return None
 
 
@@ -694,6 +1156,8 @@ def render_lines(r: dict) -> list[str]:
         if p["verdict"] == "skipped":
             continue
         head = f"  {p['verdict'].upper():<8} {p['name']} ({REGISTRY_NAME.get(p.get('registry'), p.get('ecosystem'))}"
+        if p.get("declared_as"):
+            head += f", declared as {p['declared_as']}"
         if p.get("why"):
             head += f", {p['why']}"
         out.append(head + ")")
@@ -704,8 +1168,9 @@ def render_lines(r: dict) -> list[str]:
             out.append(f"      {sg['signal']} ({sg['status']}): {sg['claim']}{at}")
         f = p.get("facts") or {}
         bits = [f"latest {f['latest']}" if f.get("latest") else "",
-                f"first release {f['first_release'][:10]}" if f.get("first_release") else "",
-                f"{f['downloads']['count']} downloads ({f['downloads']['period']})" if f.get("downloads") else "",
+                f"first release {str(f['first_release'])[:10]}" if f.get("first_release") else "",
+                f"{f['downloads']['count']} downloads ({f['downloads']['period']})"
+                if isinstance(f.get("downloads"), dict) else "",
                 "from the cache" if p.get("from_cache") else ""]
         if any(bits):
             out.append("      " + ", ".join(b for b in bits if b))
@@ -718,13 +1183,20 @@ def render_lines(r: dict) -> list[str]:
 
 # -- check --deps --registry --------------------------------------------------------------------------------
 
+REGISTRY_FINDINGS = ("not_in_registry", "registry_signal", "lookalike_name")
+
+
 def add_to_deps(repo: Path, res: dict, *, which: str = "new", network: str = "off", rev: str = "HEAD",
-                transport=None, now: float | None = None) -> dict:
+                transport=None, now: float | None = None, private: dict | None = None,
+                env: dict | None = None) -> dict:
     """Extend a ``depcheck.check_deps`` result with the registry check of the dependencies the change adds
-    (``which="new"``: declarations on lines changed against ``rev`` naming a package the file did not name
-    before) or of every declared one (``"all"``), plus the packages code imports but no manifest declares
-    (``missing``). A flagged or cautioned package becomes a finding (``not_in_registry``, ``registry_signal``)
-    and makes the exit 3."""
+    (``which="new"``: names a manifest declares now and did not declare at ``rev``) or of every declared one
+    (``"all"``), plus the packages code imports but no manifest declares (``missing``). Registry facts and
+    name signals become separate findings with their own status: ``not_in_registry`` (observed: the registry
+    has no such name), ``registry_signal`` (observed: taken down, yanked, deprecated, young, few downloads, ...)
+    and ``lookalike_name`` (strong_inference: near a popular name). Any of them makes the exit 3. A revision
+    that is not a commit raises :class:`PackageCheckError`; outside a git work tree ``new`` checks the
+    undeclared imports only and says so."""
     from verinoda.guards import declared_dependencies
 
     if which not in ("new", "all"):
@@ -733,45 +1205,52 @@ def add_to_deps(repo: Path, res: dict, *, which: str = "new", network: str = "of
     items = declared_dependencies(repo).get("items") or []
     limits: list[str] = []
     if which == "all":
-        pkgs = from_declarations(items, "declared")
+        pkgs = from_declarations(items, "declared", repo)
     else:
         try:
-            pkgs = from_declarations(added_dependencies(repo, items, rev), f"added since {rev}")
-        except PackageCheckError as exc:
+            pkgs = from_declarations(added_dependencies(repo, items, rev), f"added since {rev}", repo)
+        except NotGitError:
             pkgs = []
-            limits.append(f"the added dependencies could not be found ({exc}); --registry all checks every "
-                          "declared one")
+            limits.append("not a git work tree, so the dependencies a change adds cannot be read: only the "
+                          "undeclared imports were checked (--registry all checks every declared one)")
     for f in res.get("findings") or []:
         if f.get("finding") == "missing" and f.get("ecosystem") in ("python", "npm"):
-            pkgs.append({"ecosystem": f["ecosystem"], "name": f["package"], "why": "imported, not declared",
-                         "imported": True, "evidence": [e for e in f.get("evidence") or []
-                                                        if e.get("role") == "import"][:3]})
+            pkg = {"ecosystem": f["ecosystem"], "name": f["package"], "why": "imported, not declared",
+                   "imported": True, "evidence": [e for e in f.get("evidence") or [] if e.get("role") == "import"][:3]}
+            if f["ecosystem"] == "python" and f["package"] in _PY_NAMESPACES:
+                pkg["hold"] = (f"{f['package']} is a namespace several distributions share: the import does not name "
+                               "the distribution")
+            pkgs.append(pkg)
     skipped = sorted({str(i.get("ecosystem")) for i in items if registry_of(i.get("ecosystem")) is None})
     if skipped:
         limits.append(f"{', '.join(skipped)} declarations have no registry lookup")
-    reg = check_packages(repo, pkgs, network=network, transport=transport, now=now)
+    reg = check_packages(repo, pkgs, network=network, transport=transport, now=now, private=private, env=env)
     reg["which"] = which
     reg["limits"] = limits + reg["limits"]
     res["registry"] = reg
+    findings = res.setdefault("findings", [])
     for p in reg["packages"]:
-        if p["verdict"] not in ("flagged", "caution"):
-            continue
-        kinds = {s["signal"] for s in p["signals"]}
-        observed = [s for s in p["signals"] if s["status"] == "observed"]
-        status = "observed" if observed else max((s["status"] for s in p["signals"]),
-                                                 key=("weak_inference", "strong_inference").index)
-        evidence = list(p.get("evidence") or []) + [
-            {"locator": s["url"], "role": "registry", "excerpt": f"{s['claim']} (at {s.get('observed_at')})"}
-            for s in observed if s.get("url")]
-        res.setdefault("findings", []).append({
-            "finding": "not_in_registry" if "not_found" in kinds else "registry_signal",
-            "ecosystem": p["ecosystem"], "package": p["name"], "status": status,
-            "claim": "; ".join(s["claim"] for s in p["signals"]), "evidence": evidence,
-            "next_step": p.get("next_step", "")})
+        observed = [s for s in p["signals"] if s["status"] == "observed"
+                    and s["signal"] in set(FLAG) | set(CAUTION)]
+        if observed:
+            kinds = {s["signal"] for s in observed}
+            evidence = list(p.get("evidence") or []) + [
+                {"locator": s["url"], "role": "registry", "excerpt": f"{s['claim']} (at {s.get('observed_at')})"}
+                for s in observed if s.get("url")]
+            findings.append({"finding": "not_in_registry" if "not_found" in kinds else "registry_signal",
+                             "ecosystem": p["ecosystem"], "package": p["name"], "status": "observed",
+                             "claim": "; ".join(s["claim"] for s in observed), "evidence": evidence,
+                             "next_step": p.get("next_step", "")})
+        looks = [s for s in p["signals"] if s["signal"] in LOOKALIKE and s["status"] == "strong_inference"]
+        if looks:
+            findings.append({"finding": "lookalike_name", "ecosystem": p["ecosystem"], "package": p["name"],
+                             "status": "strong_inference", "claim": "; ".join(s["claim"] for s in looks),
+                             "evidence": list(p.get("evidence") or []),
+                             "next_step": f"compare {p['name']} with {looks[0]['like']}: use the package you meant"})
     summary = res.setdefault("summary", {})
-    summary["not_in_registry"] = sum(1 for f in res["findings"] if f["finding"] == "not_in_registry")
-    summary["registry_signal"] = sum(1 for f in res["findings"] if f["finding"] == "registry_signal")
-    if summary["not_in_registry"] or summary["registry_signal"]:
+    for k in REGISTRY_FINDINGS:
+        summary[k] = sum(1 for f in findings if f["finding"] == k)
+    if any(summary[k] for k in REGISTRY_FINDINGS):
         res["exit"] = 3
-        res["exit_because"] = f"{len(res['findings'])} finding(s)"
+        res["exit_because"] = f"{len(findings)} finding(s)"
     return res

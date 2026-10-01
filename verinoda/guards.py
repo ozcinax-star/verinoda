@@ -1842,6 +1842,7 @@ def _catalogs(root: Path, files: list[str]) -> tuple[dict[str, dict], list[str]]
                 continue
             if g_ and n_:
                 out[f"{acc}.{key(alias)}"] = {"name": f"{g_}:{n_}".lower(), "short": n_.lower(), "spec": spec or "*",
+                                              "declared": f"{g_}:{n_}",
                                               "via": f"{rel}:{line_of('libraries', alias)}"}
         for alias, v in (data.get("plugins") or {}).items():
             pid = v.get("id") if isinstance(v, dict) else str(v).partition(":")[0]
@@ -1876,6 +1877,7 @@ def _catalog_items(text: str, rel: str, build: str, catalog: dict) -> list[dict]
                 if not isinstance(e, dict):
                     continue
                 items.append({"name": e["name"], "short": e["short"], "spec": e["spec"],
+                              **({"declared": e["declared"]} if e.get("declared") else {}),
                               "scope": "plugin" if e.get("plugin") else m.group(1), "at": f"{rel}:{i}", "path": rel,
                               "line": i, "ecosystem": "gradle-plugin" if e.get("plugin") else "maven", "build": build,
                               "ref": ref, "via": e["via"]})
@@ -1929,6 +1931,7 @@ def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[
                 sm = re.search(r"<scope>\s*([^<]+?)\s*</scope>", block)
                 line = text.count("\n", 0, m.start(1) + am.start()) + 1  # the <artifactId> line names it
                 items.append({"name": f"{gm.group(1)}:{am.group(1)}".lower(), "short": am.group(1).lower(),
+                              "declared": f"{gm.group(1)}:{am.group(1)}",
                               "spec": vm.group(1) if vm else "*", "scope": sm.group(1) if sm else "compile",
                               "at": f"{rel}:{line}", "path": rel, "line": line, "ecosystem": "maven", "build": build})
             continue
@@ -1945,6 +1948,7 @@ def _gradle_maven(root: Path, all_files: list[str] | None = None) -> tuple[list[
                           r"(?::([^'\"]+))?['\"]", ln)
             if m:
                 items.append({"name": f"{m.group(2)}:{m.group(3)}".lower(), "short": m.group(3).lower(),
+                              "declared": f"{m.group(2)}:{m.group(3)}",
                               "spec": m.group(4) or "*", "scope": m.group(1), "at": f"{rel}:{i}", "path": rel,
                               "line": i, "ecosystem": "maven", "build": build})
     return items, skipped, read
@@ -2041,7 +2045,8 @@ def _workspace_packages(root: Path, files: list[str]) -> tuple[list[dict], list[
             deps = pkg.get(sect) if isinstance(pkg, dict) else None
             for name, spec in (deps or {}).items() if isinstance(deps, dict) else ():
                 line = next((i for i, ln in enumerate(lines, 1) if f'"{name}"' in ln), 1)
-                items.append({"name": str(name).lower(), "spec": str(spec), "scope": scope, "at": f"{rel}:{line}",
+                items.append({"name": str(name).lower(), "declared": str(name), "spec": str(spec), "scope": scope,
+                              "at": f"{rel}:{line}",
                               "path": rel, "line": line, "ecosystem": "npm", "build": "project"})
     return items, read, list(unmatched)
 

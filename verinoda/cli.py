@@ -2482,7 +2482,7 @@ def _decide_ask(args, repo: Path) -> int:
     if getattr(args, "registry", False) or getattr(args, "network", None):
         from verinoda import package_check as pc
 
-        pkg = pc.from_import_name(res["source"], res["target"]) if res["target_kind"] == "package" else None
+        pkg = pc.from_import_name(res["source"], res["target"], repo) if res["target_kind"] == "package" else None
         if pkg is None:
             res["registry"] = {"kind": "package_check", "packages": [],
                                "unknown": ("the source file's language has no registry lookup"
@@ -3680,13 +3680,21 @@ def cmd_check(args) -> int:
         if args.paths or (args.diff is not None and not registry) or args.stdin or args.as_path:
             raise SystemExit("error: --deps checks the whole project's manifests; do not also give PATHs, --diff "
                              "(only with --registry: the revision new dependencies are read against) or --stdin")
+        from verinoda import package_check
+
         try:
+            if registry == "all" and args.diff is not None:
+                raise package_check.PackageCheckError("--diff goes with --registry new (the revision new "
+                                                      "dependencies are read against), not with --registry all")
             res = depcheck.check_deps(repo, env=args.env)
             if registry:
-                from verinoda import package_check
-
                 res = package_check.add_to_deps(repo, res, which=registry, network=args.network or "off",
                                                 rev=args.diff or "HEAD")
+        except package_check.PackageCheckError as exc:   # a bad revision or argument: never "0 flagged"
+            if getattr(args, "json", False):
+                print(json.dumps({"status": "error", "exit": 2, "error": str(exc)[:600]}, ensure_ascii=False))
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         except ValueError as exc:
             raise SystemExit(f"error: {exc}")
 
@@ -5126,8 +5134,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "something found; exit 4: no manifest read)")
     sp.add_argument("--registry", nargs="?", const="new", choices=("new", "all"),
                     help="with --deps (opt-in): also ask the public registries (PyPI, npm, crates.io, Maven Central, "
-                         "the Go proxy) about the dependencies the change adds (new: declared on lines changed "
-                         "against --diff REV, default HEAD; all: every declared one) and the imported but "
+                         "the Go proxy) about the dependencies the change adds (new: names a manifest declares "
+                         "now and did not declare at --diff REV, default HEAD; all: every declared one) and the imported but "
                          "undeclared packages - does the name exist, age, downloads, yanked, deprecated, "
                          "taken down - plus local typo and look-alike name signals; only package names are sent, "
                          "and only with --network on or cache")
