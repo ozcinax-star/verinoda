@@ -131,8 +131,14 @@ class PathResolver:
         relative tail (``WispTest.java``, ``src\\lib.rs``) matches the one file
         that ends with it.
         """
+        found = self.matches(raw)
+        return found[0] if len(found) == 1 else None
+
+    def matches(self, raw: str | None) -> list[str]:
+        """Every repository path :meth:`resolve` weighs equally for ``raw``: one when it resolves, several when the
+        longest whole suffix is shared (the ambiguity), none outside the repository."""
         if not raw:
-            return None
+            return []
         s = raw.strip().strip("\"'")
         if s.startswith("file:///"):
             s = s[len("file:///"):]
@@ -142,21 +148,21 @@ class PathResolver:
         low = s.lower()
         m = _COPY_ROOT.match(s)
         if m and m.group(1) in self.files:
-            return m.group(1)
+            return [m.group(1)]
         for r in self.roots:
             if low.startswith(r + "/") and s[len(r) + 1:] in self.files:
-                return s[len(r) + 1:]
+                return [s[len(r) + 1:]]
         if any(f in low for f in _FOREIGN):
-            return None
+            return []
         s = re.sub(r"^(?:\./)+", "", s)
         if s in self.files:
-            return s
+            return [s]
         parts = [p for p in s.split("/") if p and p != "."]
         if not parts:
-            return None
-        cands = self.by_name.get(parts[-1], [])
-        best, best_len, tie = None, 0, False
-        for c in cands:
+            return []
+        best: list[str] = []
+        best_len = 0
+        for c in sorted(self.by_name.get(parts[-1], [])):
             cp = c.split("/")
             k = 0
             while k < min(len(cp), len(parts)) and cp[-1 - k] == parts[-1 - k]:
@@ -164,11 +170,9 @@ class PathResolver:
             if k < len(cp) and k < len(parts):  # neither path is a whole suffix of the other
                 continue
             if k > best_len:
-                best, best_len, tie = c, k, False
+                best, best_len = [c], k
             elif k == best_len:
-                tie = True
-        if best is None or tie:
-            return None
+                best.append(c)
         return best
 
     def resolve_java(self, cls: str, file_name: str | None) -> str | None:

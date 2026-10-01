@@ -1,0 +1,53 @@
+[
+  {
+    "event_id": "9f3c2a7d51e04b0c8a1d2e3f4a5b6c7d",
+    "platform": "python",
+    "exception": {
+      "values": [
+        {
+          "type": "ValueError",
+          "value": "bad qty",
+          "module": "builtins",
+          "stacktrace": {
+            "frames": [
+              {"filename": "requests/api.py", "abs_path": "/usr/lib/python3.12/site-packages/requests/api.py",
+               "lineno": 59, "function": "request", "module": "requests.api", "in_app": false},
+              {"filename": "shop\\orders.py", "abs_path": "C:\\Users\\dev\\shop\\orders.py", "lineno": 12,
+               "function": "checkout", "module": "shop.orders", "in_app": true,
+               "context_line": "    return order.place()"},
+              {"filename": "shop/orders.py", "abs_path": "/srv/app/shop/orders.py", "lineno": 7,
+               "function": "place", "module": "shop.orders", "in_app": true,
+               "context_line": "            raise ValueError(\"bad qty\")",
+               "vars": {"self": "<Order>", "token": "do-not-keep"}},
+              {"filename": "shop/util.py", "abs_path": "/srv/app/shop/util.py", "lineno": 40,
+               "function": "helper", "module": "shop.util", "in_app": true},
+              {"filename": "shop/orders.py", "abs_path": "/srv/app/shop/orders.py", "lineno": 3,
+               "function": "place", "module": "shop.orders", "in_app": true},
+              {"filename": "config.py", "abs_path": "/srv/app/config.py", "lineno": 2,
+               "function": "load", "module": "config", "in_app": true},
+              {"filename": "shop/gone.py", "abs_path": "/srv/app/shop/gone.py", "lineno": 5,
+               "function": "vanished", "module": "shop.gone", "in_app": true},
+              {"filename": "shop/orders.py", "abs_path": "/srv/app/shop/orders.py", "lineno": 5,
+               "function": "place", "module": "shop.orders", "in_app": true,
+               "context_line": "    def place_old(self):"}
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "eventID": "0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e",
+    "platform": "java",
+    "entries": [
+      {"type": "message", "data": {"formatted": "closing"}},
+      {"type": "exception", "data": {"values": [
+        {"type": "IllegalStateException", "value": "closed", "stacktrace": {"frames": [
+          {"filename": "Thread.java", "module": "java.lang.Thread", "function": "run", "lineno": 840,
+           "in_app": false},
+          {"filename": "Foo.java", "module": "com.example.Foo", "function": "bar", "lineno": 5, "in_app": true}
+        ]}}
+      ]}}
+    ]
+  }
+]
