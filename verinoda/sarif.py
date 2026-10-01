@@ -211,8 +211,9 @@ def from_check(res: dict) -> dict:
             continue
         detail = s.get("message") or s.get("why") or ""
         status = CHECK_STATUS[v]
-        if s.get("source") == "checker":   # the project's own type checker said so in this run
-            status = "observed" if v != "unknown" else "unknown"
+        if s.get("source") == "checker":   # the project's own type checker said so in this run; a package it
+            # did not find is the environment it read, as with Verinoda's own not_installed
+            status = "observed" if v in ("absent", "mismatch") else CHECK_STATUS[v]
         elif v == "absent" and (s.get("source") not in ("stdlib", "project")
                                 or str(s.get("container") or "").startswith("sys.path")):
             status = "strong_inference"   # judged against what is installed or built here

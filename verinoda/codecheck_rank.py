@@ -708,11 +708,11 @@ def rank_sites(env, repo: Path, sites: list[dict], checked: list[tuple], jedi: b
 
 
 def order_key(site: dict) -> tuple:
-    """Sort key: absent, HIGH unknown, not installed, MEDIUM (and unranked) unknown, guarded, LOW unknown,
-    exists; then path, line and column."""
+    """Sort key: absent and mismatch, HIGH unknown, not installed, MEDIUM (and unranked) unknown, guarded, LOW
+    unknown, exists; then path, line and column."""
     v = site["verdict"]
     if v == "unknown":
         slot = {"high": 1, "low": 5}.get(site.get("rank") or "", 3)
     else:
-        slot = {"absent": 0, "not_installed": 2, "guarded": 4, "exists": 6}.get(v, 3)
+        slot = {"absent": 0, "mismatch": 0, "not_installed": 2, "guarded": 4, "exists": 6}.get(v, 3)
     return slot, site["path"], site["line"], site["col"]

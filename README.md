@@ -755,8 +755,12 @@ in this project's environment?
   compiler read are then type-checked, not imports only. Nothing is installed
   or downloaded (no `npx`, no `pip`; pyright's PyPI wrapper is not started); a
   checker that is not found, runs past `--checker-timeout` (300 s) or prints
-  output that cannot be read is exit 4 with the next step. CLI only: the MCP
-  server never starts a program of the project.
+  output that cannot be read is exit 4 with the next step. Trust is the
+  boundary: in a project you have not trusted (`verinoda trust`), no program
+  inside the repository is started, pyright is not run, and mypy is not run
+  when the repository's configuration names `plugins` or a
+  `python_executable`. CLI only: the MCP server never starts a program of the
+  project.
 - `verinoda api packaging.specifiers.SpecifierSet` lists the real members
   before a call is written. Existence and signature shape only: a real name
   used wrongly is not detected.

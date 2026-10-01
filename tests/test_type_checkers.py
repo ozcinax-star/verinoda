@@ -18,7 +18,18 @@ import pytest
 from verinoda import cli, codecheck, precise
 from verinoda import codecheck_external as cx
 
-ABS = "__ROOT__"   # replaced by the project's root in recorded output
+@pytest.fixture(autouse=True)
+def trusted(monkeypatch):
+    """The projects of these tests are trusted unless a test says otherwise (``untrust``)."""
+    from verinoda import paths
+
+    monkeypatch.setattr(paths, "is_trusted", lambda repo: True)
+
+
+def untrust(monkeypatch):
+    from verinoda import paths
+
+    monkeypatch.setattr(paths, "is_trusted", lambda repo: False)
 
 
 def fake(bin_dir: Path, name: str, body: str, monkeypatch) -> Path:
@@ -363,9 +374,9 @@ def test_parsers_and_classification(tmp_path):
     assert cx.classify("mypy", "name-defined", 'Name "x" is not defined') == "name"
     assert cx.classify("mypy", "attr-defined", 'Module "os" has no attribute "x"') == "import"
     assert cx.classify("pyright", "", '"foo" is not defined') == "name"
-    assert cx._verdict("tsc", "import", "TS2307", "Cannot find module 'left-pad' or its corresponding type "
+    assert cx.verdict_of("tsc", "import", "TS2307", "Cannot find module 'left-pad' or its corresponding type "
                        "declarations.")[0] == "not_installed"
-    assert cx._verdict("tsc", "import", "TS2307", "Cannot find module './nope'.")[0] == "absent"
+    assert cx.verdict_of("tsc", "import", "TS2307", "Cannot find module './nope'.")[0] == "absent"
     with pytest.raises(ValueError):
         cx.parse_pyright("no json here", tmp_path)
     d, n = cx.parse_mypy_text("a.py:1: error: Bad  [misc]\nSuccess: no issues found in 1 source file\ngarbage\n",
@@ -392,3 +403,273 @@ def test_output_lines_not_understood_are_never_a_pass(tmp_path, monkeypatch):
     res = codecheck.check(proj, ["pkg/mod.py"], env="none", use_cache=False, checker="mypy")
     assert res["checker"][0]["status"] == "ran" and res["checker"][0]["unparsed_lines"] == 1
     assert res["exit"] == 4 and any("not understood" in n for n in res["incomplete"])
+
+
+# -- review round: regression tests ------------------------------------------------------------------------
+
+MARK_BODY = 'open(os.path.join(os.environ["FAKE_MARK_DIR"], "ran-" + os.path.basename(sys.argv[0])), "w").close()\n'
+
+
+def marks(tmp_path: Path, monkeypatch) -> Path:
+    d = tmp_path / "marks"
+    d.mkdir(exist_ok=True)
+    monkeypatch.setenv("FAKE_MARK_DIR", str(d))
+    return d
+
+
+def test_untrusted_project_programs_are_not_started(tmp_path, monkeypatch):
+    untrust(monkeypatch)
+    isolate_path(tmp_path, monkeypatch)
+    m = marks(tmp_path, monkeypatch)
+    proj = ts_project(tmp_path)
+    fake(proj / "node_modules" / ".bin", "tsc", MARK_BODY + TSC_BODY, monkeypatch)
+    sub = "Scripts" if os.name == "nt" else "bin"
+    (proj / "pkg").mkdir()
+    (proj / "pkg" / "mod.py").write_text(PY_SRC, "utf-8")
+    fake(proj / ".venv" / sub, "mypy", MARK_BODY + MYPY_BODY, monkeypatch)
+    res = codecheck.check(proj, ["src/app.ts", "pkg/mod.py"], env="none", use_cache=False, checker="auto")
+    assert not list(m.iterdir())   # nothing the repository supplies ran
+    runs = {r["tool"]: r for r in res["checker"]}
+    assert runs["tsc"]["status"] == "not_run" and "not trusted" in runs["tsc"]["note"]
+    assert "verinoda trust" in runs["tsc"]["next_step"] and "never run it for them" in runs["tsc"]["next_step"]
+    py = [r for r in res["checker"] if r["tool"] != "tsc"][0]
+    assert py["status"] == "not_run" and "verinoda trust" in py["next_step"]
+    assert res["exit"] == 4 and not [s for s in res["sites"] if s.get("source") == "checker"]
+
+
+def test_untrusted_mypy_with_plugins_and_pyright_are_not_run(tmp_path, monkeypatch):
+    untrust(monkeypatch)
+    pathbin = isolate_path(tmp_path, monkeypatch)
+    m = marks(tmp_path, monkeypatch)
+    proj = py_project(tmp_path)
+    fake(pathbin, "mypy", MARK_BODY + MYPY_BODY, monkeypatch)
+    fake(pathbin, "pyright", MARK_BODY + PYRIGHT_BODY, monkeypatch)
+    (proj / "mypy.ini").write_text("[mypy]\nplugins = evil_plugin\n", "utf-8")
+    res = codecheck.check(proj, ["pkg/mod.py"], env="none", use_cache=False, checker="mypy")
+    assert res["checker"][0]["status"] == "not_run" and "mypy.ini sets plugins" in res["checker"][0]["note"]
+    res = codecheck.check(proj, ["pkg/mod.py"], env="none", use_cache=False, checker="pyright")
+    assert res["checker"][0]["status"] == "not_run" and "not trusted" in res["checker"][0]["note"]
+    assert not list(m.iterdir())
+    # without code-running settings, a mypy on PATH (the user's own) runs in an untrusted project
+    (proj / "mypy.ini").write_text("[mypy]\nstrict = True\n", "utf-8")
+    res = codecheck.check(proj, ["pkg/mod.py"], env="none", use_cache=False, checker="auto")
+    assert res["checker"][0]["tool"] == "mypy" and res["checker"][0]["status"] == "ran"
+
+
+def test_a_file_named_like_an_option_stays_a_file(tmp_path, monkeypatch):
+    pathbin = isolate_path(tmp_path, monkeypatch)
+    proj = tmp_path / "opt"
+    proj.mkdir()
+    (proj / "--python-executable=evil.py").write_text("x = 1\n", "utf-8")
+    log = tmp_path / "argv.json"
+    monkeypatch.setenv("FAKE_ARGV_LOG", str(log))
+    fake(pathbin, "mypy", 'if argv == ["--version"]:\n    print("mypy 1.11.2"); sys.exit(0)\n'
+                          'json.dump(argv, open(os.environ["FAKE_ARGV_LOG"], "w"))\nsys.exit(0)', monkeypatch)
+    res = codecheck.check(proj, [str(proj / "--python-executable=evil.py")], env="none", use_cache=False,
+                          checker="mypy")
+    argv = json.loads(log.read_text("utf-8"))
+    assert argv[-2:] == ["--", "./--python-executable=evil.py"]
+    assert not any(a.startswith("--python-executable") for a in argv)
+    assert res["checker"][0]["status"] == "ran"
+
+
+def test_mypy_blocking_error_is_not_a_complete_run(tmp_path, monkeypatch):
+    pathbin = isolate_path(tmp_path, monkeypatch)
+    proj = py_project(tmp_path)
+    fake(pathbin, "mypy", 'if argv == ["--version"]:\n    print("mypy 1.5.1"); sys.exit(0)\n'
+                          'print("pkg/other.py:1: error: invalid syntax  [syntax]")\nsys.exit(2)', monkeypatch)
+    res = codecheck.check(proj, ["pkg/mod.py"], env="none", use_cache=False, checker="mypy")
+    run = res["checker"][0]
+    assert run["status"] == "failed" and "blocking error" in run["note"] and "pkg/other.py:1" in run["note"]
+    assert res["exit"] == 4 and res["status"] != "checked"
+
+
+def test_tsc_syntax_error_leaves_the_file_unchecked(tmp_path, monkeypatch):
+    isolate_path(tmp_path, monkeypatch)
+    proj = ts_project(tmp_path)
+    fake(proj / "node_modules" / ".bin", "tsc",
+         'if argv == ["--version"]:\n    print("Version 5.4.5"); sys.exit(0)\n'
+         'print("src/lib.ts(9,1): error TS1005: \'}\' expected.")\n'
+         'print(os.path.join(root, "src/lib.ts").replace(os.sep, "/"))\nsys.exit(2)', monkeypatch)
+    res = codecheck.check(proj, ["src/lib.ts"], env="none", use_cache=False, checker="tsc")
+    assert not [s for s in res["sites"] if s.get("source") == "checker"]
+    assert [u["path"] for u in res["not_checked"]] == ["src/lib.ts"]
+    assert res["exit"] == 4 and any("TS1005" in n and "syntax error" in n for n in res["incomplete"])
+
+
+def test_type_checked_reads_tsconfig_as_jsonc_and_ts_nocheck(tmp_path):
+    cfg = tmp_path / "tsconfig.json"
+    js = tmp_path / "a.js"
+    js.write_text("export const a = 1;\n", "utf-8")
+    ts = tmp_path / "b.ts"
+    ts.write_text("// @ts-nocheck\nexport const b: number = 'x';\n", "utf-8")
+    cfg.write_text('{\n  "compilerOptions": {\n    // "checkJs": true,\n    "allowJs": true,\n  }\n}\n', "utf-8")
+    assert not cx._type_checked(js, cfg)
+    cfg.write_text('{"compilerOptions": {/* "checkJs": true */ "checkJs": false}}', "utf-8")
+    assert not cx._type_checked(js, cfg)
+    cfg.write_text('{"compilerOptions": {"checkJs": true, "outDir": "http://x//y"}}', "utf-8")
+    assert cx._type_checked(js, cfg)
+    assert not cx._type_checked(ts, cfg)   # @ts-nocheck: a TypeScript file is not checked either
+
+
+def test_ts_nocheck_file_stays_imports_only(tmp_path, monkeypatch):
+    isolate_path(tmp_path, monkeypatch)
+    proj = ts_project(tmp_path)
+    (proj / "src" / "lib.ts").write_text("// @ts-nocheck\n" + LIB_SRC, "utf-8")
+    fake(proj / "node_modules" / ".bin", "tsc", TSC_BODY, monkeypatch)
+    res = codecheck.check(proj, ["src/lib.ts"], env="none", use_cache=False, checker="tsc")
+    assert [u["path"] for u in res["not_checked"]] == ["src/lib.ts"]
+
+
+def test_one_site_per_import_finding(tmp_path, monkeypatch):
+    isolate_path(tmp_path, monkeypatch)
+    proj = ts_project(tmp_path)
+    (proj / "src" / "app.ts").write_text('import { x } from "./nope";\nexport const y = x;\n', "utf-8")
+    fake(proj / "node_modules" / ".bin", "tsc",
+         'if argv == ["--version"]:\n    print("Version 5.4.5"); sys.exit(0)\n'
+         'print("src/app.ts(1,19): error TS2307: Cannot find module \'./nope\' or its corresponding type '
+         'declarations.")\nprint(os.path.join(root, "src/app.ts").replace(os.sep, "/"))\nsys.exit(2)', monkeypatch)
+    res = codecheck.check(proj, ["src/app.ts"], env="none", use_cache=False, checker="tsc", include_exists=True)
+    on1 = [s for s in res["sites"] if s["line"] == 1 and s["kind"] == "import" and s["name"] == "./nope"]
+    assert len(on1) == 1 and on1[0]["confirmed_by"] == "tsc 5.4.5 TS2307" and on1[0].get("source") != "checker"
+    assert res["summary"]["absent"] == sum(1 for s in res["sites"] if s["verdict"] == "absent")
+
+
+def test_one_site_per_python_import_finding(tmp_path, monkeypatch):
+    pathbin = isolate_path(tmp_path, monkeypatch)
+    proj = tmp_path / "y"
+    proj.mkdir()
+    (proj / "use.py").write_text("import yaml\n", "utf-8")
+    fake(pathbin, "mypy", 'if argv == ["--version"]:\n    print("mypy 1.11.2"); sys.exit(0)\n'
+                          'print(json.dumps({"file": "use.py", "line": 1, "column": 0, "message": '
+                          '\'Library stubs not installed for "yaml"\', "hint": None, "code": "import-untyped", '
+                          '"severity": "error"}))\nsys.exit(1)', monkeypatch)
+    res = codecheck.check(proj, ["use.py"], env="none", use_cache=False, checker="mypy", include_exists=True)
+    on1 = [s for s in res["sites"] if s["line"] == 1]
+    assert len(on1) == 1
+    if precise.available()[0]:
+        assert on1[0]["verdict"] == "not_installed" and "unknown (mypy 1.11.2 import-untyped)" in on1[0]["checker_says"]
+
+
+def test_verdicts_of_review_cases(tmp_path):
+    cfg = tmp_path / "tsconfig.json"
+    cfg.write_text('{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["src/*"]}}}', "utf-8")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "here.ts").write_text("export {}\n", "utf-8")
+    v = cx.verdict_of
+    assert cx.classify("tsc", "TS7016", "Could not find a declaration file for module 'x'.") == "import"
+    assert v("tsc", "import", "TS7016", "Could not find a declaration file for module 'x'.")[0] == "unknown"
+    assert v("tsc", "import", "TS2307", "Cannot find module '@/missing'.", cfg=cfg)[0] == "absent"
+    assert v("tsc", "import", "TS2307", "Cannot find module '@/here'.", cfg=cfg)[0] == "unknown"
+    assert v("tsc", "import", "TS2307", "Cannot find module 'lodash'.", cfg=cfg)[0] == "unknown"   # baseUrl
+    msg = "Cannot find name 'require'. Do you need to install type definitions for node? Try `npm i --save-dev " \
+          "@types/node`."
+    assert cx.classify("tsc", "TS2580", msg) == "name"
+    verdict, why = v("tsc", "name", "TS2580", msg)
+    assert verdict == "not_installed" and "@types/node" in why
+    (tmp_path / "proj").mkdir()
+    (tmp_path / "proj" / "app").mkdir()
+    (tmp_path / "proj" / "app" / "__init__.py").write_text("", "utf-8")
+    (tmp_path / "proj" / "app" / "real.py").write_text("", "utf-8")
+    m = 'Cannot find implementation or library stub for module named "app.gone"'
+    assert v("mypy", "import", "import-not-found", m, repo=tmp_path / "proj")[0] == "absent"
+    m = 'Cannot find implementation or library stub for module named "app.real"'
+    assert v("mypy", "import", "import-not-found", m, repo=tmp_path / "proj")[0] == "unknown"
+    m = 'Cannot find implementation or library stub for module named "requests"'
+    assert v("mypy", "import", "import-not-found", m, repo=tmp_path / "proj")[0] == "not_installed"
+    assert cx.classify("mypy", "union-attr", 'Item "None" of "A | None" has no attribute "x"') == "type"
+    assert cx.classify("pyright", "reportOptionalMemberAccess", '"x" is not a known attribute of "None"') == "type"
+    assert cx.classify("pyright", "reportAttributeAccessIssue",
+                       'Cannot assign to attribute "x" for class "A*"\n  Attribute "x" has no defined setter') == "type"
+
+
+def test_checker_not_installed_import_is_not_an_exit_3(tmp_path, monkeypatch):
+    pathbin = isolate_path(tmp_path, monkeypatch)
+    proj = tmp_path / "ni"
+    proj.mkdir()
+    (proj / "use.py").write_text("x = 1\n\n\ny = 2\n", "utf-8")
+    fake(pathbin, "mypy", 'if argv == ["--version"]:\n    print("mypy 1.11.2"); sys.exit(0)\n'
+                          'for l in (1, 4):\n'
+                          '    print(json.dumps({"file": "use.py", "line": l, "column": 0, "message": '
+                          '\'Cannot find implementation or library stub for module named "requests"\', '
+                          '"hint": None, "code": "import-not-found", "severity": "error"}))\nsys.exit(1)', monkeypatch)
+    res = codecheck.check(proj, ["use.py"], env="none", use_cache=False, checker="mypy")
+    assert res["summary"]["not_installed"] == 2 and res["exit"] == 0   # like Verinoda's own not_installed
+
+
+def test_sarif_levels_of_checker_sites():
+    from verinoda import sarif
+
+    def site(v):
+        return {"at": "a.py:1:1", "path": "a.py", "line": 1, "col": 1, "kind": "import", "expr": "x", "verdict": v,
+                "source": "checker", "message": "m"}
+    log = sarif.from_check({"sites": [site("not_installed"), site("absent"), site("mismatch")], "exit": 3})
+    levels = {r["ruleId"].split("/")[1]: r["level"] for r in log["runs"][0]["results"]}
+    assert levels == {"not_installed": "warning", "absent": "error", "mismatch": "error"}
+
+
+@pytest.mark.skipif(os.name != "nt", reason="cmd.exe metacharacters matter for .cmd launchers")
+def test_cmd_metacharacters_in_the_launcher_path_are_refused(tmp_path, monkeypatch):
+    isolate_path(tmp_path, monkeypatch)
+    m = marks(tmp_path, monkeypatch)
+    base = tmp_path / "a&b"
+    base.mkdir()
+    proj = ts_project(base)
+    fake(proj / "node_modules" / ".bin", "tsc", MARK_BODY + TSC_BODY, monkeypatch)
+    res = codecheck.check(proj, ["src/app.ts"], env="none", use_cache=False, checker="tsc")
+    run = res["checker"][0]
+    assert run["status"] == "not_run" and "cmd.exe" in run["note"] and res["exit"] == 4
+    assert not list(m.iterdir())
+
+
+@pytest.mark.parametrize("value", ["inf", "nan", "0", "-1"])
+def test_checker_timeout_must_be_finite_and_positive(tmp_path, value):
+    proj = tmp_path / "p"
+    proj.mkdir()
+    with pytest.raises(SystemExit, match="--checker-timeout"):
+        cli.main(["check", ".", "--repo", str(proj), "--checker", "mypy", "--checker-timeout", value])
+    with pytest.raises(ValueError):
+        cx.run_checkers(proj, "mypy", [], [], timeout=float(value))
+
+
+def test_minor_review_fixes(tmp_path, monkeypatch):
+    from verinoda import codecheck_rank
+
+    a = {"verdict": "mismatch", "path": "b", "line": 1, "col": 1}
+    b = {"verdict": "not_installed", "path": "a", "line": 1, "col": 1}
+    assert codecheck_rank.order_key(a) < codecheck_rank.order_key(b)
+    # mypy: context lines are not "not understood"; a note on another line is not joined to the error
+    d, n = cx.parse_mypy_text('pkg/a.py: note: In function "go":\npkg/a.py:3:1: error: Bad  [misc]\n'
+                              'pkg/a.py:9:1: note: unrelated\npkg/a.py:3:1: note: about line 3\n', tmp_path)
+    assert n == 0 and len(d) == 1 and "unrelated" not in d[0].message
+    d, n = cx.parse_mypy_text('pkg/a.py:3:1: error: Bad  [misc]\npkg/a.py:3:1: note: about line 3\n', tmp_path)
+    assert "about line 3" in d[0].message
+    # pip wrapper detection reads a bounded head and tail
+    big = tmp_path / "pyright.exe"
+    big.write_bytes(b"MZ" + b"\0" * (9 * 1024 * 1024) + b"from pyright.cli import entrypoint")
+    assert cx._pip_pyright(big)
+
+
+def test_tsc_global_error_with_a_program_is_incomplete(tmp_path, monkeypatch):
+    isolate_path(tmp_path, monkeypatch)
+    proj = ts_project(tmp_path)
+    fake(proj / "node_modules" / ".bin", "tsc",
+         'if argv == ["--version"]:\n    print("Version 5.4.5"); sys.exit(0)\n'
+         'print("error TS5083: Cannot read file \'base.json\'.")\n'
+         'print(os.path.join(root, "src/lib.ts").replace(os.sep, "/"))\nsys.exit(1)', monkeypatch)
+    res = codecheck.check(proj, ["src/lib.ts"], env="none", use_cache=False, checker="tsc")
+    assert res["checker"][0]["status"] == "ran" and res["exit"] == 4
+    assert any("TS5083" in n for n in res["incomplete"])
+
+
+def test_runaway_output_stops_the_checker(tmp_path, monkeypatch):
+    isolate_path(tmp_path, monkeypatch)
+    proj = ts_project(tmp_path)
+    monkeypatch.setattr(cx, "MAX_OUTPUT", 200_000)
+    fake(proj / "node_modules" / ".bin", "tsc",
+         'if argv == ["--version"]:\n    print("Version 5.4.5"); sys.exit(0)\n'
+         'while True:\n    sys.stdout.write("x" * 10000 + "\\n"); sys.stdout.flush()', monkeypatch)
+    t0 = time.perf_counter()
+    res = codecheck.check(proj, ["src/app.ts"], env="none", use_cache=False, checker="tsc", checker_timeout=60)
+    assert time.perf_counter() - t0 < 40
+    assert res["exit"] == 4 and any("passed" in n and "stopped" in n for n in res["incomplete"])
