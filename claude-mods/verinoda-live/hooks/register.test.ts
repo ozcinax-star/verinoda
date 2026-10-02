@@ -33,6 +33,7 @@ function world(on: On, graph: GraphState[] | 'fails' = [{ locked: false, behind:
       const state = graph[Math.min(polls.length - 1, graph.length - 1)]
       return { value: { exitCode: 0, stdout: JSON.stringify(state), stderr: '' } } as never
     }
+    if (e.argv[1] === 'check') return { value: { exitCode: 0, stdout: '{"sites": []}', stderr: '' } } as never // check.test.ts
     runs.push([...e.argv])
     return { value: { exitCode: 0, stdout: '{}', stderr: '' } } as never
   })

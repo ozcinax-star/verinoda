@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { AutoMode, ContextInfo, IndexKind, IndexState, Notice, ReviewInfo } from '../types'
+import type { AutoMode, CheckInfo, ContextInfo, IndexKind, IndexState, Notice, ReviewInfo } from '../types'
 import { frameRows, MASCOT_HEIGHT, MASCOT_WIDTH } from './mascot'
 import type { MascotProps, Mood } from './mascot'
 
@@ -33,6 +33,16 @@ const GRAPH_STATE =
 const EDIT_TOOLS = ['Edit', 'Write', 'NotebookEdit'] as const
 const SHELL_TOOLS = ['Bash', 'PowerShell'] as const
 
+// After each edit of a file `verinoda check` reads (Python, Java, Kotlin), the names the edited lines use that do not
+// exist in the project or its environment are told to the model with the edit's result. A cached check takes about
+// 3 s; the first one in an environment builds a name index (about 90 s on sqlmodel), so the session start warms it
+// on a snippet that is not in the project. The edit never waits longer than CHECK_TIMEOUT_MS for it.
+const CHECKABLE = /\.(py|pyi|java|kt|kts)$/i
+const CHECK_TIMEOUT_MS = 60_000
+const WARM_TIMEOUT_MS = 300_000
+const CHECK_NOTE_MAX = 8
+const WARM_SNIPPET = 'import os\n\n\ndef _verinoda_warm(x):\n    return os.path.join(x.name, "a")\n'
+
 // A prompt worth a code search: a question by its mark, its first word or a Turkish question particle. Boundaries
 // are spelled out because \b is ASCII-only and Turkish words end in letters it does not know.
 const END = String.raw`(?=[\s?.,!:;]|$)`
@@ -58,6 +68,8 @@ const idx = atom({ plugin: 'verinoda-live', key: 'idx' } as const, CHECKING)
 const notice = atom({ plugin: 'verinoda-live', key: 'notice' } as const, null as Notice | null)
 const auto = atom({ plugin: 'verinoda-live', key: 'auto' } as const, 'off' as AutoMode)
 const guard = atom({ plugin: 'verinoda-live', key: 'guard' } as const, false)
+const check = atom({ plugin: 'verinoda-live', key: 'check' } as const, true)
+const lastCheck = atom({ plugin: 'verinoda-live', key: 'lastCheck' } as const, null as CheckInfo | null)
 const lastContext = atom({ plugin: 'verinoda-live', key: 'lastContext' } as const, null as ContextInfo | null)
 const lastReview = atom({ plugin: 'verinoda-live', key: 'lastReview' } as const, null as ReviewInfo | null)
 const reviewing = atom({ plugin: 'verinoda-live', key: 'reviewing' } as const, null as string | null)
@@ -116,6 +128,46 @@ export function nudgeBlock(root: string, verinoda: string): string {
     'as needed. Use this CLI with --repo: a Verinoda MCP server, if one is connected, may index another folder. ' +
     'Its claims carry file:line evidence and a status; never state an inference or unknown as fact.'
   )
+}
+
+export function isCheckable(path: string): boolean {
+  return CHECKABLE.test(path)
+}
+
+type CheckSite = { at?: string; path?: string; expr?: string; name?: string; verdict?: string; message?: string;
+  nearest?: { name?: string }[] }
+
+// A file under the project, relative to it, slashes forward and case kept (it is shown and passed on as spelled).
+function relPath(root: string, file: string): string {
+  const r = root.replace(/\\/g, '/').replace(/\/+$/, '')
+  return file.replace(/\\/g, '/').slice(r.length + 1)
+}
+
+function badSites(report: { sites?: CheckSite[] }, rel: string): CheckSite[] {
+  return (report.sites ?? []).filter(s =>
+    (s.verdict === 'absent' || s.verdict === 'mismatch') && norm(s.path ?? '') === norm(rel))
+}
+
+// The note the model reads after an edit: the edited file's sites `verinoda check` found absent or mismatched (an
+// unknown is not checked, so it is never reported), with the nearest real names; undefined when there are none.
+export function checkNote(root: string, file: string, report: { sites?: CheckSite[] }, cli: string): string | undefined {
+  const rel = relPath(root, file)
+  const bad = badSites(report, rel)
+  if (bad.length === 0) return undefined
+  const lines = bad.slice(0, CHECK_NOTE_MAX).map(s => {
+    const near = (s.nearest ?? []).map(n => n.name).filter(Boolean).slice(0, 3)
+    return `- ${s.at ?? rel} ${s.expr ?? s.name ?? ''}: ${s.message ?? s.verdict}${near.length ? `; nearest: ${near.join(', ')}` : ''}`
+  })
+  const more = bad.length > CHECK_NOTE_MAX ? [`(${bad.length - CHECK_NOTE_MAX} more: ${cli} check --diff --repo ${root})`] : []
+  return [
+    `[Verinoda check] The lines you just changed in ${rel} use ` +
+      `${bad.length === 1 ? 'a name that does' : `${bad.length} names that do`} not exist in this project or its ` +
+      'environment (a static check; runtime-made names are never reported):',
+    ...lines,
+    ...more,
+    'Fix them before relying on this code; the nearest real names are listed, and ' +
+      `${cli} api <module or class> --repo ${root} lists what one defines.`,
+  ].join('\n')
 }
 
 // `verinoda query` reads filters in its question (path: file: lang: symbol: is:, /regex/, AND OR NOT); a prompt is
@@ -203,12 +255,56 @@ async function setGuard($: EngineInterface, value: boolean): Promise<void> {
   await $.store.set('guard', value)
 }
 
-// Both settings start off; what the person chose last is kept in the store.
+async function setCheck($: EngineInterface, value: boolean): Promise<void> {
+  await update($, check, () => value)
+  await $.store.set('check', value)
+}
+
+// Auto-context and commit review start off, the check after edits on; what the person chose last is kept in the store.
 async function loadSettings($: EngineInterface): Promise<void> {
   const mode = asMode(await $.store.get('auto'))
   const isGuard = (await $.store.get('guard')) === true
+  const isCheck = (await $.store.get('check')) !== false
   await update($, auto, () => mode)
   await update($, guard, () => isGuard)
+  await update($, check, () => isCheck)
+}
+
+// `check --diff` reads the lines changed against HEAD (and new files whole); a project without git, or a diff the
+// CLI cannot read, falls back to the edited file whole. Exit 3 (something absent) and 4 (something not checked) are
+// answers too. Whatever happens, the edit itself has already gone through.
+async function runCheck($: EngineInterface, root: string, file: string): Promise<{ sites?: CheckSite[] } | undefined> {
+  for (const argv of [[cfg.cli, 'check', '--diff', '--json', '--repo', root], [cfg.cli, 'check', file, '--json', '--repo', root]]) {
+    try {
+      const { exitCode, stdout } = await $.process.run(argv, { cwd: root, timeoutMs: CHECK_TIMEOUT_MS })
+      if (exitCode !== 0 && exitCode !== 3 && exitCode !== 4) continue
+      const report = JSON.parse(stdout) as { sites?: CheckSite[] }
+      if (typeof report === 'object' && report !== null) return report
+    } catch {
+      return undefined // a timeout or a CLI that will not start: the second command would wait as long
+    }
+  }
+  return undefined
+}
+
+async function checkEdit($: EngineInterface, root: string, file: string): Promise<string | undefined> {
+  const report = await runCheck($, root, file)
+  const note = report === undefined ? undefined : checkNote(root, file, report, cfg.cli)
+  const at = await $.clock.now()
+  const rel = relPath(root, file)
+  const n = report === undefined ? 0 : badSites(report, rel).length
+  await update($, lastCheck, () => ({ file: rel, n, ok: report !== undefined, at }))
+  return note
+}
+
+// The first check in an environment builds its name index; done once at session start, on code outside the project.
+async function warmCheck($: EngineInterface, root: string): Promise<void> {
+  try {
+    await $.process.run([cfg.cli, 'check', '--stdin', '--as', '_verinoda_warm.py', '--json', '--repo', root],
+      { cwd: root, stdin: WARM_SNIPPET, timeoutMs: WARM_TIMEOUT_MS })
+  } catch {
+    // a cold first check is slower, nothing more
+  }
 }
 
 type GraphState = { locked: boolean; behind: number }
@@ -571,6 +667,14 @@ export const MODE_HINT: Record<AutoMode, string> = {
 }
 export const OUTSIDE_HINT = '▲ Oturum proje dışında başladı; bağlam eklenmez'
 export const GUARD_HINT = 'Commit sonrası risk ve bulgular bildirilir'
+export const CHECK_HINT = "Python/Java/Kotlin düzenlemesindeki var olmayan isimler Claude'a söylenir"
+
+export function checkLine(c: CheckInfo | null): { text: string; tone: Tone } | null {
+  if (c === null) return null
+  if (!c.ok) return { text: `Son kontrol çalışmadı: ${c.file} (düzenleme yapıldı)`, tone: 'warn' }
+  if (c.n === 0) return { text: `Son kontrol: ${c.file} · temiz`, tone: 'idle' }
+  return { text: `Son kontrol: ${c.file} · ${c.n} isim bulunamadı, Claude'a söylendi`, tone: 'warn' }
+}
 
 export function contextLine(c: ContextInfo | null): { text: string; tone: Tone } | null {
   if (c === null) return null
@@ -608,24 +712,29 @@ export const register: Register = (on, options) => {
     await $.command.register({ name: 'verinoda-update', description: 'Re-index the files edited this session now.' })
     await $.command.register({ name: 'verinoda-auto', description: 'Code questions: nudge (start with Verinoda analyze), search (attach results) or off.' })
     await $.command.register({ name: 'verinoda-guard', description: 'Review each commit with Verinoda afterwards: on, off, or toggle.' })
+    await $.command.register({ name: 'verinoda-check', description: 'Check each edit of Python/Java/Kotlin code for names that do not exist: on, off, or toggle.' })
     // not plain `verinoda`: the Verinoda agent skill of that name takes `/verinoda` first
     await $.command.register({ name: 'verinoda-panel', description: 'Open the Verinoda pane: index state, settings, last context and review.' })
     publish($)
     background(checkGraph($))
+    if (live.root !== undefined && (await read($, check))) background(warmCheck($, live.root))
     return next(e)
   })
 
   on('tool.call', { tool: EDIT_TOOLS }, async ($, e, next) => {
     const ran = await next(e)
-    if (live.root === undefined || ran.deny !== undefined || ran.isError === true) return ran
+    const root = live.root
+    if (root === undefined || ran.deny !== undefined || ran.isError === true) return ran
 
     const path = e.tool === 'NotebookEdit' ? e.notebook_path : e.tool === 'Edit' || e.tool === 'Write' ? e.file_path : undefined
     const file = path === undefined ? '' : norm(path)
-    if (file.startsWith(`${norm(live.root)}/`) && !file.includes('/.verinoda/')) {
-      live.pending.add(file)
-      publish($)
-    }
-    return ran
+    if (!file.startsWith(`${norm(root)}/`) || file.includes('/.verinoda/')) return ran
+    live.pending.add(file)
+    publish($)
+    if (path === undefined || !isCheckable(path) || !(await read($, check))) return ran
+    // the edit has gone through: nothing the check does may change that
+    const note = await checkEdit($, root, path.replace(/\\/g, '/')).catch(() => undefined)
+    return note === undefined ? ran : { ...ran, context: [...(ran.context ?? []), note] }
   })
 
   // After a command that moved the project's HEAD (a commit, an amend, an alias of either), review what it changed;
@@ -681,6 +790,13 @@ export const register: Register = (on, options) => {
     return { text: `review after commits ${value ? 'on' : 'off'}` }
   })
 
+  on('command.run', { command: 'verinoda-check' }, async ($, e) => {
+    const value = settingCommand(e.args, await read($, check))
+    if (value === undefined) return { text: 'usage: /verinoda-check [on|off]' }
+    await setCheck($, value)
+    return { text: `check after edits ${value ? 'on' : 'off'}` }
+  })
+
   on('command.run', { command: 'verinoda-panel' }, async $ => {
     await $.ui.open({ id: PANE, title: 'Verinoda', focus: true })
     return { text: 'Verinoda pane opened.' }
@@ -696,6 +812,8 @@ export const register: Register = (on, options) => {
     const rev = await read($, lastReview)
     const sha = await read($, reviewing)
     const isExpanded = await read($, expanded)
+    const isCheck = await read($, check)
+    const lastChk = await read($, lastCheck)
 
     const columns = Math.max(20, e.props.bodyColumns ?? 48)
     const isInline = e.props.placement === 'inline'
@@ -805,18 +923,42 @@ export const register: Register = (on, options) => {
       count(GUARD_HINT)
     }
 
+    // 5 · the check after edits: the same two-option control; k always flips it; the last check under it
+    const lastLine = checkLine(lastChk)
+    const checkEl = (
+      <Box key="check" flexDirection="column">
+        <Box flexDirection={columns < 40 ? 'column' : 'row'} columnGap={1}>
+          <Text bold={!isInline}>{isInline ? 'Kontrol' : 'Kod kontrolü'}</Text>
+          <Button key="check-on" label={isCheck ? '● Açık' : 'Açık'} hotkey={isCheck ? undefined : 'k'}
+            variant={isCheck ? 'primary' : 'secondary'} onPress={() => (isCheck ? undefined : setCheck($, true))} />
+          <Button key="check-off" label={isCheck ? 'Kapalı' : '● Kapalı'} hotkey={isCheck ? 'k' : undefined}
+            variant={isCheck ? 'secondary' : 'primary'} onPress={() => (isCheck ? setCheck($, false) : undefined)} />
+        </Box>
+        {!isInline && <Text dimColor wrap="wrap">{CHECK_HINT}</Text>}
+        {lastLine !== null && (
+          <Text key="check-last" dimColor={lastLine.tone === 'idle'} color={lastLine.tone === 'warn' ? 'yellow' : undefined}
+            wrap="truncate">{lastLine.text}</Text>
+        )}
+      </Box>
+    )
+    if (!isInline) {
+      used += 2 + (columns < 40 ? 2 : 0)
+      count(CHECK_HINT)
+      if (lastLine !== null) used += 1
+    }
+
     if (isInline) {
       return (
         <Box flexDirection="column">
           {indexBlock}
           {reviewBlock}
-          <Box flexDirection="row" columnGap={2} flexWrap="wrap">{contextEl}{guardEl}</Box>
+          <Box flexDirection="row" columnGap={2} flexWrap="wrap">{contextEl}{guardEl}{checkEl}</Box>
         </Box>
       )
     }
 
-    // 5 · footer: only the keys that exist in this drawing
-    const keys = [action !== null ? 'u güncelle' : '', '1-3 bağlam', 'r inceleme', isCut ? 'd ayrıntı' : ''].filter(Boolean)
+    // 6 · footer: only the keys that exist in this drawing
+    const keys = [action !== null ? 'u güncelle' : '', '1-3 bağlam', 'r inceleme', 'k kontrol', isCut ? 'd ayrıntı' : ''].filter(Boolean)
     const footer = e.props.isFocused ? keys.join(' · ') : 'Kısayollar için ctrl+x tab'
     used += 2 // the footer and the gap above it
 
@@ -851,6 +993,7 @@ export const register: Register = (on, options) => {
         {reviewBlock}
         {contextEl}
         {guardEl}
+        {checkEl}
         {mascot}
         <Text dimColor wrap="truncate">{footer}</Text>
       </Box>

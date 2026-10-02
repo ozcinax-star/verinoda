@@ -39,6 +39,7 @@ function world(on: On, opts: { cwd?: string; query?: { exitCode: number; stdout:
     return { value: undefined }
   })
   on('process.run', ($, e) => {
+    if (e.argv[1] === 'check') return { value: { exitCode: 0, stdout: '{"sites": []}', stderr: '' } } as never // check.test.ts
     runs.push([...e.argv])
     if (e.argv[1] === 'query') return { value: { stderr: '', ...(opts.query ?? { exitCode: 0, stdout: '## a.py:1-3 f\n1 def f(): ...' }) } } as never
     if (e.argv[0] === 'git') {
@@ -399,6 +400,6 @@ describe('pane', () => {
     expect(await pane.find({ text: /çıkış 1: locked/ })).toBeDefined()
     expect((await pane.find({ key: 'update' }))?.props.label).toBe('Tekrar dene')
     expect(flat(await pane.drawn({ in: 'mascot-client' }))).toContain('Bir şey ters gitti')
-    expect(await pane.find({ text: /^u güncelle · 1-3 bağlam · r inceleme$/ })).toBeDefined()
+    expect(await pane.find({ text: /^u güncelle · 1-3 bağlam · r inceleme · k kontrol$/ })).toBeDefined()
   })
 })

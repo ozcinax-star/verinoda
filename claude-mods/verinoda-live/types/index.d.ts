@@ -52,6 +52,14 @@ export type ReviewInfo = {
   at: number // ms
 }
 
+// The last check of an edit (`verinoda check`): what the model was told, for the pane.
+export type CheckInfo = {
+  file: string // the edited file, relative to the project
+  n: number // names reported absent or mismatched on the edited lines
+  ok: boolean // false: the check could not run (the edit went through all the same)
+  at: number // ms
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'verinoda-live': {
@@ -60,6 +68,8 @@ declare module 'claude-code' {
       notice: Notice | null
       auto: AutoMode
       guard: boolean
+      check: boolean // check every edit of a Python, Java or Kotlin file (on unless turned off)
+      lastCheck: CheckInfo | null
       lastContext: ContextInfo | null
       lastReview: ReviewInfo | null
       reviewing: string | null // the short sha of the commit under review
