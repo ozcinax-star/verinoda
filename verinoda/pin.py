@@ -18,11 +18,17 @@ name):
    round-trips through Python source (literals, Decimal, Fraction, dates,
    enum members, project dataclasses). Other calls are skipped and counted by
    reason; an input seen with two different results is dropped.
-4. **Generated file** (default ``tests/pinned/test_pin_<name>.py``; never over
-   an existing file without ``force``): one test per input, asserting the
-   recorded result with types compared all the way down, or the exception's
-   exact type and message. The header names the commit, the copy's tree hash
-   and the tests the inputs came from.
+4. **Generated file** (default ``tests/pinned/test_pin_<module>__<name>.py``;
+   only a plain path inside the repository, no link or junction on the way;
+   ``force`` replaces only a file this command generated for the same
+   function): one test per input, asserting the recorded result by
+   ``_pin_key`` - types, float signs, Decimal exponents, set elements, dict
+   key order and every dataclass field compared all the way down - or the
+   exception's exact type and message. Before anything is written, every
+   name and value source the recorder produced is checked here (dotted
+   names; values parse to literals, allowed constructors or project
+   classes). The header names the commit, the copy's tree hash and the tests
+   the inputs came from.
 5. **Replay**: the generated file runs once in a fresh copy of the working
    tree (the file added on top). Only the tests that pass are kept: one that
    fails on replay is nondeterministic (time, randomness, state the tests set
@@ -41,8 +47,11 @@ stays pinned - and it says nothing about other inputs.
 from __future__ import annotations
 
 import ast
+import builtins
 import json
 import keyword
+import os
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -117,16 +126,125 @@ def _target(repo: Path, symbol: str, files: list[str]) -> tuple[str, str, str | 
     return rel, qual, kind, None, lines
 
 
-def _out_path(qual: str, out: str | None) -> str:
-    rel = (out or f"{DEFAULT_DIR}/test_pin_{qual.replace('.', '_')}.py").replace("\\", "/").strip()
-    while rel.startswith("./"):
-        rel = rel[2:]
-    if not rel or rel.startswith("/") or experiments.path_escape(rel) or not treestate.safe_path(rel) \
-            or any(ord(c) < 32 for c in rel):
-        raise ValueError(f"--out {rel!r} must be a file path inside the repository")
-    if not rel.endswith(".py"):
-        raise ValueError(f"--out {rel!r} must be a .py file")
-    return rel
+def default_name(rel: str, qual: str) -> str:
+    """``tests/pinned/test_pin_<module path>__<qualified name>.py``: two functions of one name in different
+    modules get different files."""
+    mod = rel[:-3] if rel.endswith(".py") else rel
+    clean = "".join(c if c.isalnum() or c == "_" else "_" for c in mod.replace("/", "_"))
+    return f"{DEFAULT_DIR}/test_pin_{clean}__{qual.replace('.', '__')}.py"
+
+
+def _out_path(qual: str, out: str | None, rel: str = "") -> str:
+    """The repository-relative file to write, checked lexically (see :func:`check_dest` for the file system)."""
+    rel_out = (out or default_name(rel, qual)).replace("\\", "/").strip()
+    while rel_out.startswith("./"):
+        rel_out = rel_out[2:]
+    if not rel_out or rel_out.startswith("/") or experiments.path_escape(rel_out) \
+            or not treestate.safe_path(rel_out) or any(ord(c) < 32 for c in rel_out) or ":" in rel_out:
+        raise ValueError(f"--out {rel_out!r} must be a file path inside the repository")
+    hidden = [p for p in rel_out.split("/")[:-1] if p.startswith(".")]
+    if hidden:
+        raise ValueError(f"--out {rel_out!r} is under the hidden folder {hidden[0]}: a pinned test is written where "
+                         "pytest collects it")
+    if not rel_out.endswith(".py"):
+        raise ValueError(f"--out {rel_out!r} must be a .py file")
+    return rel_out
+
+
+def _is_link(p: Path) -> bool:
+    try:
+        if p.is_symlink():
+            return True
+        isjunction = getattr(os.path, "isjunction", None)
+        if isjunction is not None:
+            return bool(isjunction(p))
+        st = os.lstat(p)   # Python < 3.12 on Windows: a junction is a reparse point
+        return bool(getattr(st, "st_file_attributes", 0) & 0x400)
+    except OSError:
+        return False
+
+
+def check_dest(repo: Path, out_rel: str) -> Path:
+    """The file to write, on the file system: inside the repository after resolving, and no folder on the way
+    (nor the file) is a symbolic link or a junction. ValueError otherwise."""
+    root = Path(repo).resolve()
+    dest = root / out_rel
+    p = root
+    for part in out_rel.split("/"):
+        p = p / part
+        if _is_link(p):
+            raise ValueError(f"{out_rel}: {p.relative_to(root).as_posix()} is a symbolic link or junction; a pinned "
+                             "test is written only to a plain path inside the repository")
+    try:
+        dest.resolve().relative_to(root)
+    except (ValueError, OSError):
+        raise ValueError(f"{out_rel} resolves outside the repository") from None
+    if dest.exists() and not dest.is_file():
+        raise ValueError(f"{out_rel} exists and is not a file")
+    return dest
+
+
+GENERATED_MARK = "# Generated by verinoda pin"
+
+
+def _regenerate_line(sym: str, out: str | None = None) -> str:
+    """The header line naming the pinned function (``out``: a path other than the default)."""
+    return f"# Regenerate: verinoda pin {_one_line(sym)}" + (f" --out {_one_line(out)}" if out else "") + " --force"
+
+
+def replaceable(dest: Path, sym: str) -> str | None:
+    """Why ``dest`` (an existing file) may not be replaced by the pin of ``sym``, or None: only a file this
+    command generated for the same function is."""
+    try:
+        with open(dest, "rb") as fh:
+            head = fh.read(64 * 1024).decode("utf-8", "replace").splitlines()
+    except OSError as exc:
+        return f"it cannot be read ({type(exc).__name__})"
+    if not head or not head[0].startswith(GENERATED_MARK):
+        return "it was not generated by verinoda pin"
+    comments = []
+    for line in head:
+        if not line.startswith("#"):
+            break
+        comments.append(line)
+    mine = f"# Regenerate: verinoda pin {_one_line(sym)} --"
+    if not any(line.startswith(mine) for line in comments):
+        return f"it pins another function, not {sym}"
+    return None
+
+
+def _destination_refused(repo: Path, out_rel: str, sym: str, force: bool) -> str | None:
+    """Why the file may not be written (None: it may): a link on the way, a path that resolves outside the
+    repository, or an existing file that is not this function's pin (with ``force``) or any file (without)."""
+    try:
+        dest = check_dest(repo, out_rel)
+    except ValueError as exc:
+        return str(exc)
+    if not dest.exists():
+        return None
+    if not force:
+        return f"{out_rel} exists (pass --force to replace a file verinoda pin generated for {sym})"
+    why = replaceable(dest, sym)
+    return f"{out_rel} exists and is not replaced: {why}" if why else None
+
+
+def write_file(repo: Path, out_rel: str, sym: str, data: bytes, *, force: bool) -> None:
+    """Write the generated file after checking the destination again: a new file is created exclusively, an
+    existing one is replaced only when ``force`` is given and it is this function's pin."""
+    check_dest(repo, out_rel)
+    dest = Path(repo).resolve() / out_rel
+    parent = dest.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    check_dest(repo, out_rel)   # a folder made just now, or a link put there while the tests ran
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if dest.exists():
+        why = _destination_refused(repo, out_rel, sym, force)
+        if why:
+            raise ValueError(why)
+        flags = os.O_WRONLY | os.O_TRUNC | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(dest, flags, 0o644)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
 
 
 # -- test selection ---------------------------------------------------------------------------------
@@ -153,7 +271,9 @@ def select(store: Store, repo: Path, rel: str, qual: str, def_lines: tuple[int, 
     for t in static:
         if t not in ids:
             ids.append(t)
-    ids = [t for t in ids if not (exclude and t.split("::")[0] == exclude)][:MAX_TESTS]
+    # earlier pins call the function with inputs they were generated from: not new inputs
+    ids = [t for t in ids if not ((exclude and t.split("::")[0] == exclude) or t.startswith(DEFAULT_DIR + "/"))]
+    ids = ids[:MAX_TESTS]
     return ids, {"test_map": len(mapped), "static": len(static), "graph": g is not None}
 
 
@@ -178,6 +298,155 @@ def parse_output(data: bytes) -> dict:
     return out
 
 
+# -- checking what the recorder wrote ---------------------------------------------------------------
+#
+# The recorder runs inside the project's test process, so its output is checked here before any of it is
+# written into the user's tree: names must be dotted identifiers, and every value must parse to a literal,
+# an allowed standard constructor, a class defined in the project, or a name read from a recorded import.
+
+_DOTTED = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\Z")
+STD_CALLS = frozenset({"float", "set", "frozenset", "decimal.Decimal", "fractions.Fraction", "datetime.date",
+                       "datetime.datetime", "datetime.time", "datetime.timedelta", "datetime.timezone"})
+DROP_UNSAFE = "the recorded source is not a literal value Verinoda writes (checked before writing)"
+
+
+def dotted(name) -> bool:
+    return isinstance(name, str) and bool(_DOTTED.match(name)) and not any(
+        keyword.iskeyword(p) or (p.startswith("__") and p.endswith("__")) for p in name.split("."))
+
+
+def module_matches(module: str, rel: str) -> bool:
+    """Is ``module`` a name the file ``rel`` can be imported under (``src/pkg/mod.py`` as ``pkg.mod``)?"""
+    path = rel[:-3] if rel.endswith(".py") else rel
+    if path.endswith("/__init__"):
+        path = path[: -len("/__init__")]
+    path = path.replace("/", ".")
+    return dotted(module) and (path == module or path.endswith("." + module))
+
+
+class SourceCheck:
+    """Checks recorded sources against the project's files (the classes a call may construct)."""
+
+    def __init__(self, repo: Path, files: list[str]):
+        self.repo = Path(repo)
+        self.py = [f for f in files if f.endswith(".py")]
+        self._classes: dict[str, set[str]] = {}
+
+    def classes(self, module: str) -> set[str]:
+        """Qualified names of the classes defined in the project file(s) ``module`` can name."""
+        from verinoda import probe
+
+        got = self._classes.get(module)
+        if got is None:
+            got = set()
+            for f in self.py:
+                if module_matches(module, f):
+                    tree = probe._parse(probe._read(self.repo, f) or "")
+                    if tree is not None:
+                        got |= {q for q, n in probe._defs(tree).items() if isinstance(n, ast.ClassDef)}
+            self._classes[module] = got
+        return got
+
+    def _split(self, name: str, imports: set[str]) -> tuple[str, str] | None:
+        """(the recorded import ``name`` starts with, the rest), the longest import first."""
+        for m in sorted(imports, key=len, reverse=True):
+            if name.startswith(m + "."):
+                return m, name[len(m) + 1:]
+        return None
+
+    def project_class(self, name: str, imports: set[str]) -> bool:
+        cut = self._split(name, imports)
+        return cut is not None and cut[1] in self.classes(cut[0])
+
+    def _chain(self, node) -> str | None:
+        parts = []
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if not isinstance(node, ast.Name):
+            return None
+        name = ".".join([node.id, *reversed(parts)])
+        return name if dotted(name) else None
+
+    def _ok(self, node, imports: set[str]) -> bool:
+        if isinstance(node, ast.Constant):
+            return type(node.value) in (int, float, str, bytes, bool, type(None))
+        if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+            return all(not isinstance(e, ast.Starred) and self._ok(e, imports) for e in node.elts)
+        if isinstance(node, ast.Dict):
+            return all(k is not None and self._ok(k, imports) and self._ok(v, imports)
+                       for k, v in zip(node.keys, node.values))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return isinstance(node.operand, ast.Constant) and type(node.operand.value) in (int, float)
+        if isinstance(node, ast.Call):
+            name = self._chain(node.func)
+            if name is None:
+                return False
+            if name in STD_CALLS:
+                if "." in name and name.split(".")[0] not in imports:
+                    return False
+            elif not self.project_class(name, imports):
+                return False
+            return all(not isinstance(a, ast.Starred) and self._ok(a, imports) for a in node.args) and \
+                all(k.arg is not None and self._ok(k.value, imports) for k in node.keywords)
+        if isinstance(node, ast.Attribute):   # an enum member or a constant such as datetime.timezone.utc
+            name = self._chain(node)
+            return name is not None and self._split(name, imports) is not None
+        if isinstance(node, ast.Subscript):   # an enum member by a name that is not an identifier
+            name = self._chain(node.value)
+            return name is not None and self._split(name, imports) is not None \
+                and isinstance(node.slice, ast.Constant) and type(node.slice.value) is str
+        return False
+
+    def value(self, src, imports: set[str]) -> bool:
+        if not isinstance(src, str) or len(src) > 100_000:
+            return False
+        try:
+            tree = ast.parse(src, mode="eval")
+        except (SyntaxError, ValueError, RecursionError, MemoryError):
+            return False
+        try:
+            return self._ok(tree.body, imports)
+        except RecursionError:
+            return False
+
+    def exception(self, ref, imports: set[str]) -> bool:
+        if not dotted(ref):
+            return False
+        if "." not in ref:
+            t = getattr(builtins, ref, None)
+            return isinstance(t, type) and issubclass(t, BaseException)
+        return self._split(ref, imports) is not None
+
+    def case(self, c: dict, module: str, kind: str) -> bool:
+        """Is every part of the recorded case safe to write?"""
+        imports = c.get("imports")
+        if not isinstance(imports, list) or not all(dotted(m) for m in imports):
+            return False
+        names = {*imports, module}
+        call = c["call"]
+        args, kwargs, recv = call.get("args") or [], call.get("kwargs") or [], call.get("self")
+        if not isinstance(args, list) or not isinstance(kwargs, list):
+            return False
+        if kind == "method":
+            if not self.value(recv, names):
+                return False
+        elif recv is not None:
+            return False
+        if not all(self.value(a, names) for a in args):
+            return False
+        for kv in kwargs:
+            if not (isinstance(kv, list) and len(kv) == 2 and isinstance(kv[0], str) and self.value(kv[1], names)):
+                return False
+        outs = c["outs"]
+        if len(outs) != 1 or not isinstance(outs[0], dict):
+            return False
+        o = outs[0]
+        if "e" in o:
+            return self.exception(o["e"], names) and isinstance(o.get("m"), str)
+        return self.value(o.get("r"), names)
+
+
 def _passed(phases: dict) -> bool:
     return phases.get("call") == "passed" and phases.get("setup") in (None, "passed") \
         and phases.get("teardown") in (None, "passed")
@@ -185,20 +454,15 @@ def _passed(phases: dict) -> bool:
 
 # -- the generated file -----------------------------------------------------------------------------
 
-SAME_SOURCE = '''
-
-def _pin_same(a, b):
-    """Equal values of the same types all the way down (1 == 1.0 == True is not enough); NaN equals NaN."""
-    if type(a) is not type(b):
-        return False
-    if type(a) is float:
-        return a == b or (a != a and b != b)
-    if type(a) in (list, tuple):
-        return len(a) == len(b) and all(_pin_same(x, y) for x, y in zip(a, b))
-    if type(a) is dict:
-        return a.keys() == b.keys() and all(_pin_same(a[k], b[k]) for k in a)
-    return bool(a == b)
-'''
+def same_source() -> str:
+    """The comparison helpers of the generated file: the recorder's own ``_pin_key`` and ``_pin_same``,
+    copied from :mod:`verinoda.runtime.pin_plugin`, so the file compares values by the rule the recorder
+    checked them with."""
+    text = plugin_source().decode("utf-8")
+    tree = ast.parse(text)
+    parts = [ast.get_source_segment(text, n) for n in tree.body
+             if isinstance(n, ast.FunctionDef) and n.name in ("_pin_key", "_pin_same")]
+    return "".join("\n\n" + s + "\n" for s in parts)
 
 
 def _call_source(module: str, qual: str, kind: str, call: dict) -> str:
@@ -230,7 +494,7 @@ def _tests_of(cases: list[dict]) -> list[str]:
 
 
 def render(sym: str, module: str, qual: str, kind: str, cases: list[dict], *, commit: str | None,
-           tree: str | None, dirty: bool = False) -> str:
+           tree: str | None, dirty: bool = False, out: str | None = None) -> str:
     """The pytest file for ``cases`` (each with one recorded result)."""
     imports = {module}
     for c in cases:
@@ -264,10 +528,10 @@ def render(sym: str, module: str, qual: str, kind: str, cases: list[dict], *, co
              "# returned (or the exception it raised) then. A failure after a change means the behaviour on that "
              "input",
              "# changed: decide whether that was intended. This pins current behaviour; it is not a specification.",
-             f"# Regenerate: verinoda pin {_one_line(sym)} --force", ""]
+             _regenerate_line(sym, out), ""]
     head += (["import pytest", ""] if raises else [])
-    head += [f"import {m}" for m in sorted(imports)]
-    return "\n".join(head + SAME_SOURCE.rstrip("\n").split("\n") + body) + "\n"
+    head += [f"import {m}" for m in sorted(imports | {"dataclasses"})]
+    return "\n".join(head + same_source().rstrip("\n").split("\n") + body) + "\n"
 
 
 # -- runs -------------------------------------------------------------------------------------------
@@ -314,11 +578,14 @@ def pin(store: Store, repo: Path, symbol: str, *, tests: list[str] | None = None
     if why:
         return {**res, "status": "unsupported", "headline": f"{sym}: {why}",
                 "next_step": "pin a top-level function, a static or class method, or a method of a dataclass"}
-    out_rel = _out_path(qual, out)
+    out_rel = _out_path(qual, out, rel)
+    named_out = out_rel if out and out_rel != default_name(rel, qual) else None
     res["generated"] = out_rel
-    if (repo / out_rel).exists() and not force:
-        return {**res, "status": "refused", "headline": f"{out_rel} exists; nothing was run",
-                "next_step": "pass --force to replace it, or --out another path"}
+    refused = _destination_refused(repo, out_rel, sym, force)
+    if refused:
+        return {**res, "status": "refused", "headline": f"{refused}; nothing was run",
+                "next_step": "pass --force to replace it, or --out another path" if "--force" in refused
+                else "name another file with --out"}
     if tests:
         ids = [str(t).replace("\\", "/") for t in tests]
         selection = {"given": len(ids)}
@@ -364,11 +631,17 @@ def pin(store: Store, repo: Path, symbol: str, *, tests: list[str] | None = None
     res["calls"] = int(h.get("calls") or 0)
     res["skipped_calls"] = h.get("skipped") or {}
     module = h.get("module")
+    if module is not None and (module == "__main__" or not module_matches(module, rel)):
+        return {**res, "status": "unsupported", "headline": f"{sym} ran as module {_one_line(repr(module))}, which "
+                                                            f"a test cannot import as {rel} by name"}
     dropped: Counter = Counter()
     cand = []
+    check = SourceCheck(repo, files)
     for c in rec["cases"]:
         if len(c["outs"]) != 1:
             dropped[DROP_INCONSISTENT] += 1
+        elif not check.case(c, module, kind):
+            dropped[DROP_UNSAFE] += 1
         else:
             cand.append(c)
     if len(cand) > max_cases:
@@ -380,10 +653,7 @@ def pin(store: Store, repo: Path, symbol: str, *, tests: list[str] | None = None
                 f"none of the {res['calls']} call(s) of {qual} could be pinned")
         return {**res, "status": "nothing_pinned", "headline": f"{what}; nothing was written",
                 "next_step": "see skipped_calls for the reasons, or name other tests with --tests"}
-    if not all(p.isidentifier() for p in module.split(".")) or module == "__main__":
-        return {**res, "status": "unsupported", "headline": f"{sym} ran as module {module!r}, which a test cannot "
-                                                            "import by name"}
-    text = render(sym, module, qual, kind, cand, commit=commit, tree=res["tree"], dirty=dirty)
+    text = render(sym, module, qual, kind, cand, commit=commit, tree=res["tree"], dirty=dirty, out=named_out)
     exp1, rp = _replay(store, repo, out_rel, text, sym=sym, commit=commit, timeout=t_out,
                        what=f"the {len(cand)} generated test(s) pass on the working tree")
     res["replay_run"] = exp1["id"]
@@ -406,7 +676,7 @@ def pin(store: Store, repo: Path, symbol: str, *, tests: list[str] | None = None
                                                         "state: pin a deterministic part of it"}
     final_exp = exp1
     if len(kept) < len(cand):
-        text = render(sym, module, qual, kind, kept, commit=commit, tree=res["tree"], dirty=dirty)
+        text = render(sym, module, qual, kind, kept, commit=commit, tree=res["tree"], dirty=dirty, out=named_out)
         final_exp, _ = _replay(store, repo, out_rel, text, sym=sym, commit=commit, timeout=t_out,
                                what=f"the {len(kept)} kept test(s) pass on the working tree")
         res["confirm_run"] = final_exp["id"]
@@ -418,27 +688,40 @@ def pin(store: Store, repo: Path, symbol: str, *, tests: list[str] | None = None
     elif exp1["outcome"] != "pass":
         return {**res, "status": "inconclusive", "headline": f"the replay run ended {exp1['outcome']} although its "
                                                              "tests passed", "logs": exp1["logs"]}
-    dest = repo / out_rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(text.encode("utf-8"))
+    try:
+        write_file(repo, out_rel, sym, text.encode("utf-8"), force=force)
+    except (ValueError, OSError) as exc:
+        return {**res, "status": "refused", "headline": f"not written: {exc}",
+                "next_step": "name another file with --out"}
+    failing = len(failed)
     res.update(written=True, status="pinned", run_id=final_exp["id"], tests_from=_tests_of(kept)[:20],
                headline=f"pinned {sym} on {len(kept)} input(s) at {_at(commit, dirty)}: {out_rel}"
-                        + (f" ({sum(dropped.values())} dropped)" if dropped else ""))
+                        + (f" ({sum(dropped.values())} dropped)" if dropped else "")
+                        + (f"; {failing} of the recording run's tests failed, so some inputs may come from a "
+                           "failing test" if failing else ""))
+    if failing:
+        res["next_step"] = ("read tests_failed: an input recorded while a test failed pins the behaviour that test "
+                            "rejects")
     if record:
         try:
-            res["claim"] = _record_claim(store, repo, sym, out_rel, len(kept), _at(commit, dirty), final_exp)
+            res["claim"] = _record_claim(store, repo, sym, out_rel, len(kept), _at(commit, dirty), final_exp,
+                                         failing=failing)
         except Exception as exc:  # noqa: BLE001 - the written file stands without its claim
             res["claim_error"] = f"{type(exc).__name__}: {exc}"
     return res
 
 
-def _record_claim(store: Store, repo: Path, sym: str, out_rel: str, n: int, at: str, exp: dict) -> dict:
+def _record_claim(store: Store, repo: Path, sym: str, out_rel: str, n: int, at: str, exp: dict, *,
+                  failing: int = 0) -> dict:
     from verinoda.claims import Claims
 
     snap = store.latest_snapshot()
     project = (snap or {}).get("project") or Path(repo).name
     text = (f"{sym}'s behaviour on these {n} inputs is pinned at {at}: the generated tests in {out_rel} pass in "
             f"run {exp['id']} (working-tree copy {((exp.get('tree') or {}).get('hash') or '?')[:12]}).")
+    if failing:
+        text += (f" The inputs were recorded in a run where {failing} test(s) failed: pinned behaviour may be what "
+                 "a failing test rejects.")
     c = Claims(store, repo).create(text, project=project, snapshot=snap, subjects=[sym], status="experiment_verified",
                                    kind="test_run", spec={"experiment": exp["id"], "pin": {"file": out_rel, "cases": n,
                                                                                           "at": at}},

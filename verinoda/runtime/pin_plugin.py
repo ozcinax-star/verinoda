@@ -223,17 +223,33 @@ def encode(v, imports: set, depth: int = 0, seen: set | None = None) -> str:
     raise _Skip(f"unsupported type {t.__module__}.{t.__qualname__}")
 
 
-def same(a, b) -> bool:
-    """Equal values of the same types all the way down (1 == 1.0 == True is not enough); NaN equals NaN."""
-    if type(a) is not type(b):
-        return False
-    if type(a) is float:
-        return a == b or (a != a and b != b)
-    if type(a) in (list, tuple):
-        return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
-    if type(a) is dict:
-        return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
-    return bool(a == b)
+# _pin_key and _pin_same are copied verbatim into every generated file (verinoda.pin reads them from this
+# file): the recorder and the pinned tests compare values by the same rule.
+
+def _pin_key(v):
+    """Text that differs when a type or a value differs anywhere inside: 1, 1.0 and True; 0.0 and -0.0;
+    Decimal('3') and Decimal('3.00'); {1} and {1.0}; dict keys and their order; every dataclass field (also
+    those with compare=False). NaN gives the same text as NaN."""
+    t = type(v)
+    tag = t.__module__ + "." + t.__qualname__
+    if t is list or t is tuple:
+        return tag + "[" + ", ".join([_pin_key(x) for x in v]) + "]"
+    if t is set or t is frozenset:
+        return tag + "{" + ", ".join(sorted([_pin_key(x) for x in v])) + "}"
+    if t is dict:
+        return tag + "{" + ", ".join([_pin_key(k) + ": " + _pin_key(x) for k, x in v.items()]) + "}"
+    if dataclasses.is_dataclass(v) and not isinstance(v, type):
+        return tag + "(" + ", ".join([f.name + "=" + _pin_key(getattr(v, f.name))
+                                      for f in dataclasses.fields(v)]) + ")"
+    return tag + ":" + repr(v)
+
+
+def _pin_same(a, b):
+    """The same types and values all the way down (see _pin_key)."""
+    return _pin_key(a) == _pin_key(b)
+
+
+same = _pin_same
 
 
 _SAFE_BUILTINS = {"float": float, "set": set, "frozenset": frozenset}
@@ -317,12 +333,43 @@ def _arguments(code, frame) -> list:
     return out
 
 
+def _shares_object(values) -> bool:
+    """Does a mutable object (list, dict, set, dataclass instance) occur twice among ``values`` (also nested)?
+    The generated call rebuilds each occurrence as its own copy, so a change through one would not show in
+    the other."""
+    seen: set = set()
+    todo = [(v, 0) for v in values]
+    while todo:
+        v, depth = todo.pop()
+        t = type(v)
+        if depth > MAX_DEPTH:
+            continue
+        mutable = t in (list, dict, set) or (dataclasses.is_dataclass(v) and not isinstance(v, type))
+        if mutable:
+            if id(v) in seen:
+                return True
+            seen.add(id(v))
+        if t in (list, tuple, set, frozenset):
+            todo += [(x, depth + 1) for x in v]
+        elif t is dict:
+            todo += [(x, depth + 1) for kv in v.items() for x in kv]
+        elif dataclasses.is_dataclass(v) and not isinstance(v, type):
+            todo += [(getattr(v, f.name, None), depth + 1) for f in dataclasses.fields(v)]
+    return False
+
+
 def _call_entry(code, frame) -> dict:
     """The call as sources, or raise :class:`_Skip`."""
     if code.co_flags & _GEN_FLAGS:
         raise _Skip("generator or coroutine function")
     imports: set = set()
     args = _arguments(code, frame)
+    flat = []
+    for kind, _name, value in args:
+        flat += list(value.values()) if kind == "starstar" and type(value) is dict else \
+            list(value) if kind == "star" and type(value) is tuple else [value]
+    if _shares_object(flat):
+        raise _Skip("arguments share an object")
     recv = None
     cls_name = TARGET_QUAL.rpartition(".")[0]
     if KIND in ("method", "class"):

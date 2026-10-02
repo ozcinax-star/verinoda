@@ -12,6 +12,7 @@ import os
 os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 
 import ast  # noqa: E402
+import dataclasses  # noqa: E402
 import datetime  # noqa: E402
 import decimal  # noqa: E402
 import fractions  # noqa: E402
@@ -85,7 +86,7 @@ def _marks(fn):
 def test_pinned_file_passes_on_the_current_tree_and_backs_an_experiment_verified_claim(orders):
     repo, st, res = orders
     assert res["status"] == "pinned", res
-    assert res["generated"] == "tests/pinned/test_pin_apply_discount.py" and res["written"] is True
+    assert res["generated"] == "tests/pinned/test_pin_orders_pricing__apply_discount.py" and res["written"] is True
     assert res["selection"]["static"] >= 4 and "tests/test_pricing.py::test_compute_total" in res["tests"]
     assert res["cases"] == {"recorded": 4, "kept": 4, "dropped": {}}
     assert res["skipped_calls"] == {} and res["calls"] == 4
@@ -288,7 +289,7 @@ def test_calls_with_values_that_do_not_rebuild_are_skipped_with_the_reason(toy):
     res = _pin(toy, "toy/core.py::handle")
     assert res["status"] == "nothing_pinned" and res["written"] is False
     assert res["skipped_calls"] == {"unsupported type builtins.object": 1}
-    assert not (repo / "tests" / "pinned" / "test_pin_handle.py").exists()
+    assert not (repo / "tests" / "pinned" / "test_pin_toy_core__handle.py").exists()
 
 
 def test_instance_methods_of_other_classes_and_generators_are_unsupported_without_a_run(tmp_path):
@@ -324,7 +325,7 @@ def test_out_paths_must_stay_inside_the_repository():
         pin._out_path("f", "../elsewhere/test_x.py")
     with pytest.raises(ValueError):
         pin._out_path("f", "tests/test_x.txt")
-    assert pin._out_path("Money.zero", None) == "tests/pinned/test_pin_Money_zero.py"
+    assert pin._out_path("Money.zero", None, "toy/core.py") == "tests/pinned/test_pin_toy_core__Money__zero.py"
 
 
 # -- the value encoder (in-process: the plugin module is inert when imported by Verinoda) ---------
@@ -373,3 +374,239 @@ def test_exceptions_are_named_by_an_importable_type_and_their_message():
         plug.exception_source(RuntimeError("<object at 0x0000>"), set())
     with pytest.raises(plug._Skip, match="not an Exception"):
         plug.exception_source(KeyboardInterrupt(), set())
+
+
+# -- review round: strict comparison, the destination, what the recorder wrote, aliases -------------
+
+@dataclasses.dataclass
+class _P:
+    x: int
+    note: str = dataclasses.field(default="", compare=False)
+
+
+def _generated_same():
+    ns: dict = {"dataclasses": dataclasses}
+    exec(pin.same_source(), ns)  # noqa: S102 - the helper text every generated file carries
+    return ns["_pin_same"]
+
+
+@pytest.mark.parametrize("before, after", [
+    (-0.0, 0.0),
+    (decimal.Decimal("3.00"), decimal.Decimal("3")),
+    ({1.0}, {1}),
+    (frozenset({True}), frozenset({1})),
+    ({1.0: "v"}, {1: "v"}),
+    (_P(1, "orig"), _P(1, "CHANGED")),
+    ({"a": 1, "b": 2}, {"b": 2, "a": 1}),
+    ([{"k": (decimal.Decimal("1.0"),)}], [{"k": (decimal.Decimal("1"),)}]),
+])
+def test_the_comparison_sees_changes_plain_equality_misses(before, after):
+    assert before == after   # what the first version compared with
+    for same in (plug.same, _generated_same()):
+        assert not same(before, after) and same(before, before)
+
+
+def test_the_generated_file_carries_the_recorders_comparison():
+    text = pin.render("toy/core.py::f", "toy.core", "f", "function",
+                      [{"call": {"self": None, "args": ["1"], "kwargs": []}, "imports": [], "outs": [{"r": "-0.0"}]}],
+                      commit=None, tree=None)
+    assert "def _pin_key(v):" in text and "import dataclasses" in text
+    helpers = text.split("\n\n\ndef test_")[0].replace("import toy.core\n", "")
+    ns: dict = {}
+    exec(compile(helpers, "gen", "exec"), ns)  # noqa: S102 - imports and helpers only
+    assert ns["_pin_same"](float("nan"), float("nan")) and not ns["_pin_same"](-0.0, 0.0)
+
+
+SHAPES = '''import dataclasses
+from decimal import Decimal
+
+
+@dataclasses.dataclass
+class P:
+    x: int
+    note: str = dataclasses.field(default="", compare=False)
+
+
+def shapes(n):
+    return (-0.0 * n, Decimal(n).quantize(Decimal("0.01")), {float(n)}, {float(n): "v"}, P(n, "orig"))
+'''
+SHAPES_MUTANTS = {
+    "float sign": ("-0.0 * n", "0.0 * n"),
+    "Decimal exponent": ('Decimal(n).quantize(Decimal("0.01"))', "Decimal(n)"),
+    "set element type": ("{float(n)}, {", "{n}, {"),
+    "dict key type": ('{float(n): "v"}', '{n: "v"}'),
+    "dataclass field without compare": ('P(n, "orig")', 'P(n, "CHANGED")'),
+}
+
+
+@pytest.fixture(scope="module")
+def shapes(tmp_path_factory):
+    repo = tmp_path_factory.mktemp("pin") / "shapes"
+    _write(repo, {**{k: v for k, v in TOY.items() if k != "tests/test_core.py"}, "toy/shapes.py": SHAPES,
+                  "tests/test_shapes.py": "from toy.shapes import shapes\n\n\ndef test_shapes():\n"
+                                          "    assert shapes(1)[0] == 0\n"})
+    _commit(repo)
+    st = open_store(repo, create=True)
+    res = pin.pin(st, repo, "toy/shapes.py::shapes", tests=["tests/test_shapes.py"])
+    yield repo, res
+    st.close()
+
+
+@_marks
+@pytest.mark.parametrize("what", sorted(SHAPES_MUTANTS))
+def test_pinned_file_fails_on_changes_equality_alone_misses(shapes, tmp_path, what):
+    repo, res = shapes
+    assert res["status"] == "pinned", res
+    copy = tmp_path / "changed"
+    shutil.copytree(repo, copy, ignore=shutil.ignore_patterns(".verinoda", "__pycache__", ".git"))
+    old, new = SHAPES_MUTANTS[what]
+    src = copy / "toy" / "shapes.py"
+    assert old.encode() in src.read_bytes()
+    src.write_bytes(src.read_bytes().replace(old.encode(), new.encode()))
+    assert _run_file(copy, res["generated"])["outcome"] == "fail"
+
+
+def _link_dir(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))   # no administrator rights needed
+    else:
+        os.symlink(target, link, target_is_directory=True)
+
+
+def test_a_link_or_junction_on_the_way_is_refused_before_anything_runs(tmp_path):
+    repo, outside = tmp_path / "repo", tmp_path / "outside"
+    _write(repo, TOY)
+    outside.mkdir()
+    _link_dir(repo / "tests" / "jn", outside)
+    with pytest.raises(ValueError, match="link or junction"):
+        pin.check_dest(repo, "tests/jn/test_x.py")
+    st = open_store(repo, create=True)
+    try:
+        res = pin.pin(st, repo, "toy/core.py::price", tests=["tests/test_core.py"], out="tests/jn/test_x.py")
+    finally:
+        st.close()
+    assert res["status"] == "refused" and "record_run" not in res and not res["written"]
+    assert list(outside.iterdir()) == []
+    with pytest.raises(ValueError, match="link or junction"):
+        pin.write_file(repo, "tests/jn/test_y.py", "toy/core.py::price", b"x = 1\n", force=False)
+    assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize("out", [".venv/Lib/site-packages/zz.py", ".github/x.py", "tests/x.py:ads", "a/../../x.py"])
+def test_hidden_folders_and_odd_paths_are_refused(out):
+    with pytest.raises(ValueError):
+        pin._out_path("f", out, "toy/core.py")
+
+
+def test_default_names_hold_the_module_and_force_replaces_only_this_functions_pin(tmp_path):
+    assert pin.default_name("pkg_a/util.py", "parse") != pin.default_name("pkg_b/util.py", "parse")
+    assert pin.default_name("m.py", "Cls.m") != pin.default_name("m.py", "Cls_m")
+    _write(tmp_path, {"orders/api.py": "def handler():\n    return 1\n"})
+    other = pin.render("pkg_a/util.py::parse", "pkg_a.util", "parse", "function",
+                       [{"call": {"self": None, "args": ["1"], "kwargs": []}, "imports": [], "outs": [{"r": "1"}]}],
+                       commit=None, tree=None)
+    _write(tmp_path, {"tests/pinned/a.py": other})
+    sym = "pkg_b/util.py::parse"
+    assert "not generated by verinoda pin" in pin._destination_refused(tmp_path, "orders/api.py", sym, True)
+    assert "pins another function" in pin._destination_refused(tmp_path, "tests/pinned/a.py", sym, True)
+    assert "--force" in pin._destination_refused(tmp_path, "tests/pinned/a.py", "pkg_a/util.py::parse", False)
+    assert pin._destination_refused(tmp_path, "tests/pinned/a.py", "pkg_a/util.py::parse", True) is None
+    assert pin._destination_refused(tmp_path, "tests/pinned/new.py", sym, False) is None
+    with pytest.raises(ValueError, match="not generated by verinoda pin"):
+        pin.write_file(tmp_path, "orders/api.py", sym, b"x = 1\n", force=True)
+    assert (tmp_path / "orders" / "api.py").read_bytes() == b"def handler():\n    return 1\n"
+    pin.write_file(tmp_path, "tests/pinned/new.py", sym, b"x = 1\n", force=False)
+    with pytest.raises(ValueError, match="--force"):
+        pin.write_file(tmp_path, "tests/pinned/new.py", sym, b"y = 2\n", force=False)
+    assert (tmp_path / "tests" / "pinned" / "new.py").read_bytes() == b"x = 1\n"
+
+
+def test_force_on_a_production_module_is_refused_before_anything_runs(tmp_path):
+    _write(tmp_path, TOY)
+    st = open_store(tmp_path, create=True)
+    try:
+        res = pin.pin(st, tmp_path, "toy/core.py::price", tests=["tests/test_core.py"], out="toy/__init__.py",
+                      force=True)
+    finally:
+        st.close()
+    assert res["status"] == "refused" and "not generated by verinoda pin" in res["headline"]
+    assert "record_run" not in res and (tmp_path / "toy" / "__init__.py").read_bytes() == b""
+
+
+def _case(**kw):
+    c = {"call": {"self": None, "args": ["1"], "kwargs": []}, "imports": [], "outs": [{"r": "1"}]}
+    for k, v in kw.items():
+        if k in ("args", "kwargs", "self"):
+            c["call"][k] = v
+        else:
+            c[k] = v
+    return c
+
+
+@pytest.mark.parametrize("case, ok", [
+    (_case(), True),
+    (_case(imports=["decimal"], outs=[{"r": "decimal.Decimal('1.10')"}]), True),
+    (_case(imports=["datetime"], args=["datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)"]), True),
+    (_case(args=["toy.core.Tier.GOLD", "toy.core.Money(amount=1, currency='EUR')"]), True),
+    (_case(outs=[{"e": "ValueError", "m": "bad 'x'\n"}]), True),
+    (_case(imports=["os; open('INJECTED_MARK', 'w').write('x')"]), False),
+    (_case(imports=["os"], args=["os.system('x')"]), False),
+    (_case(args=["__import__('os').getcwd()"]), False),
+    (_case(args=["toy.core.price(1, 2)"]), False),
+    (_case(args=["(lambda: 1)()"]), False),
+    (_case(args=["1); import os; (1"]), False),
+    (_case(outs=[{"r": "toy.core.__class__"}]), False),
+    (_case(outs=[{"e": "ValueError) as x:\n    pass\nwith pytest.raises(ValueError", "m": ""}]), False),
+    (_case(outs=[{"e": "print", "m": ""}]), False),
+    (_case(kwargs=[["x", "open('f')"]]), False),
+    (_case(self="toy.core.Money(amount=1)"), False),
+])
+def test_what_the_recorder_wrote_is_checked_before_it_is_written(tmp_path, case, ok):
+    _write(tmp_path, TOY)
+    check = pin.SourceCheck(tmp_path, ["toy/__init__.py", "toy/core.py"])
+    assert check.case(case, "toy.core", "function") is ok
+
+
+INJECT_CONFTEST = '''import json
+import os
+
+import pytest
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_unconfigure(config):
+    path = os.path.join(os.environ.get("VERINODA_ARTIFACTS") or ".", "pin.jsonl")
+    if os.environ.get("VERINODA_PIN_MODE") != "record" or not os.path.exists(path):
+        return
+    lines = []
+    for raw in open(path, encoding="utf-8").read().splitlines():
+        rec = json.loads(raw)
+        if rec.get("k") == "case":
+            rec["imports"] = ["os; open('INJECTED_MARK', 'w').write('x')"]
+        lines.append(json.dumps(rec))
+    open(path, "w", encoding="utf-8").write(chr(10).join(lines) + chr(10))
+'''
+
+
+@_marks
+def test_a_tampered_recording_writes_nothing_into_the_tree(tmp_path):
+    _write(tmp_path, {**TOY, "tests/conftest.py": INJECT_CONFTEST})
+    _commit(tmp_path)
+    st = open_store(tmp_path, create=True)
+    try:
+        res = pin.pin(st, tmp_path, "toy/core.py::price", tests=["tests/test_core.py"])
+    finally:
+        st.close()
+    assert res["status"] == "nothing_pinned" and res["written"] is False, res
+    assert res["cases"]["dropped"] == {pin.DROP_UNSAFE: 2}
+    assert not (tmp_path / "tests" / "pinned").exists() and not (tmp_path / "INJECTED_MARK").exists()
+
+
+def test_arguments_that_share_an_object_are_detected():
+    a = [1]
+    assert plug._shares_object([a, a]) and plug._shares_object([[a, a]]) and plug._shares_object([{"k": a}, a])
+    p = _P(1)
+    assert plug._shares_object([p, p])
+    assert not plug._shares_object([[1], [1]]) and not plug._shares_object([(1,), (1,)])
+    assert not plug._shares_object(["s", "s", 1, 1])

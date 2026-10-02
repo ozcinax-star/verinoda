@@ -5606,8 +5606,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="pytest node ids or paths to run (default: the tests the test map or the index shows "
                          "reaching FUNCTION, at most 50)")
     sp.add_argument("--max-cases", type=int, default=50, help="inputs to pin at most (default 50, at most 500)")
-    sp.add_argument("--out", metavar="PATH", help="the file to write (default tests/pinned/test_pin_<name>.py)")
-    sp.add_argument("--force", action="store_true", help="replace the file when it exists")
+    sp.add_argument("--out", metavar="PATH", help="the file to write, a plain path inside the repository (default "
+                         "tests/pinned/test_pin_<module>__<name>.py)")
+    sp.add_argument("--force", action="store_true",
+                    help="replace the file when verinoda pin generated it for the same function")
     sp.add_argument("--timeout", type=float, help="seconds per run (default: twice the experiment timeout)")
     sp.add_argument("--no-record", action="store_true", help="do not record the claim")
     sp = add("inventory", cmd_inventory, "an inventory computed, not estimated: named searches (-s NAME PATTERN), "
