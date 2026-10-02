@@ -14,10 +14,14 @@ from pathlib import Path
 
 # the real-world study runs the build under test from its checkout: that executable is a tool, not a leak
 LEAK = re.compile(r"gold\.json|questions\.json|prep\.json|benchmark/questions|benchmarks/results|realworld/gold"
+                  r"|plan\.json|tree_new\.json|stale/hist"
                   r"|verinoda-mod(?!/\.venv/scripts/verinoda\.exe)"
-                  r"|(?:agent|rw)/[^/\s\"']+/(?:none|verinoda|graphify)\b")
+                  r"|(?:agent|rw)/[^/\s\"']+/(?:none|verinoda|graphify)\b"
+                  r"|stale/[^/\s\"']+/(?:none|stale|fresh)\b")
 ARM_DIR = {"none": "none", "verinoda": "verinoda", "graphify": "graphify",
-           "verinoda_first": "verinoda", "graphify_first": "graphify", "auto_context": "none"}
+           "verinoda_first": "verinoda", "graphify_first": "graphify", "auto_context": "none",
+           "verinoda_stale": "stale", "verinoda_fresh": "fresh"}
+STUDY = {"rw ": "rw", "st ": "stale"}  # label prefix -> the study's folder of working copies
 
 
 def labels(wf_dir: Path) -> dict[str, str]:
@@ -35,8 +39,8 @@ def usage(wf_dir: Path) -> dict[str, dict]:
         files = list(wf_dir.rglob(f"agent-{aid}.jsonl"))
         if not files:
             continue
-        study = "rw" if label.startswith("rw ") else "agent"
-        key = label.removeprefix("r2 ").removeprefix("r3 ").removeprefix("rw ")
+        study = next((s for p, s in STUDY.items() if label.startswith(p)), "agent")
+        key = label.removeprefix("r2 ").removeprefix("r3 ").removeprefix("rw ").removeprefix("st ")
         set_name, rest = key.split("/", 1)
         arm = rest.split(":")[1]
         own = f"{study}/{set_name.lower()}/{ARM_DIR[arm]}"  # the transcript text is lowercased
