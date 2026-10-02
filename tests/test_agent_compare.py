@@ -135,3 +135,53 @@ def test_declared_aliases_are_resolved_only_where_the_answer_declares_them():
     out = sensitivity_rw.resolve_aliases(answer)
     assert "src/core/Gson.java:647-649" in out and "`src/core/Gson.java:12`" in out and "XG:3" in out
     assert sensitivity_rw.resolve_aliases("no alias here, Gson.java:4") == "no alias here, Gson.java:4"
+
+
+score_stale = _load("score_stale")
+TREE = {"src/core/Client.php": 120, "src/Handler/CurlFactory.php": 400}
+TRAPS = [{"text": "doTransfer", "kind": "identifier", "old_source": "src/core/Client.php:90"},
+         {"text": "src/Old.php", "kind": "path", "old_source": "src/Old.php:10"}]
+
+
+def test_stale_citations_are_missing_files_lines_past_the_end_and_old_trap_locations():
+    answer = ("send() calls transfer (src/core/Client.php:40); it used to be in src/Old.php:12, "
+              "see Client.php:300 and core/Client.php:91; CurlFactory.php:50 is fine")
+    assert score_stale.stale_citations(answer, TREE, TRAPS) == {"missing_file": 1, "past_end": 1, "old_location": 1}
+    assert score_stale.stale_citations("nothing cited", TREE, TRAPS) == {"missing_file": 0, "past_end": 0,
+                                                                         "old_location": 0}
+
+
+def test_trap_mentions_are_whole_words_for_identifiers_and_substrings_for_paths():
+    assert score_stale.trap_mentions("calls doTransfer() then reads src/Old.php", TRAPS) == ["doTransfer", "src/Old.php"]
+    assert score_stale.trap_mentions("calls doTransferAsync", TRAPS) == []
+
+
+def test_stale_study_scores_facts_and_pairs_fresh_against_stale():
+    questions = [{"repo": "r", "qid": f"q{i}", "question": "?", "stale_traps": TRAPS,
+                  "facts": [{"id": f"f{i}", "fact": "x", "source": "src/core/Client.php:40"}]} for i in (1, 2)]
+    sessions = [{"repo": "r", "qid": "q1", "arm": "verinoda_fresh", "answer": "src/core/Client.php:41"},
+                {"repo": "r", "qid": "q1", "arm": "verinoda_stale", "answer": "src/Old.php:10"},
+                {"repo": "r", "qid": "q2", "arm": "verinoda_fresh", "answer": "src/core/Client.php:40"},
+                {"repo": "r", "qid": "q2", "arm": "verinoda_stale", "answer": "src/core/Client.php:40"}]
+    res = score_stale.score(sessions, questions, {"r": TREE})
+    assert res["overall"]["verinoda_fresh"]["found"] == 2 and res["overall"]["verinoda_stale"]["found"] == 1
+    assert res["overall"]["verinoda_stale"]["stale_citations"] == 1
+    p = score_stale.paired(res["per_question"], "verinoda_fresh", "verinoda_stale", "found")
+    assert p["n"] == 2 and p["diff"] == 1 and (p["wins"], p["ties"], p["losses"]) == (1, 1, 0)
+    assert p["ci95"][0] <= 1 <= p["ci95"][1]
+
+
+def test_usage_reads_stale_study_sessions_and_flags_the_history_and_other_copies(tmp_path):
+    wf = tmp_path / "wf"
+    wf.mkdir()
+    (wf / "journal.jsonl").write_text(
+        json.dumps({"type": "started", "agentId": "a1", "label": "st gin-gonic__gin/q2:verinoda_stale"}) + "\n",
+        encoding="utf-8")
+    _transcript(wf / "agent-a1.jsonl", [{"message": {"id": "m1", "usage": {"output_tokens": 1}, "content": [
+        {"type": "tool_use", "name": "Read", "input": {"file_path": "C:/b/stale/gin-gonic__gin/stale/gin.go"}},
+        {"type": "tool_use", "name": "Read", "input": {"file_path": "C:/b/stale/gin-gonic__gin/fresh/gin.go"}},
+        {"type": "tool_use", "name": "Bash", "input": {"command": "git -C C:/b/stale/hist/gin-gonic__gin log"}},
+        {"type": "tool_use", "name": "Read", "input": {"file_path": "C:/b/stale/tree_new.json"}}]}}])
+    a = usage.usage(wf)["gin-gonic__gin/q2:verinoda_stale"]
+    assert a["tool_calls"] == 4
+    assert sorted(a["leaks"]) == ["stale/gin-gonic__gin/fresh", "stale/hist", "tree_new.json"]
