@@ -1,7 +1,7 @@
 """The 2026-10-02 ContextBench rerun against the 2026-09-28 run, instance by instance on the instances both have.
 
-The rerun was stopped by its runner's time limit after 34 of the 80 pre-registered instances (the runner takes the
-largest checkouts first, so these 34 are not a stratified sample of the 80; every language is present). Both runs
+The rerun was stopped by its runner's time limit, twice, after 40 of the 80 pre-registered instances (the runner takes
+the largest checkouts first, so these 40 are not a stratified sample of the 80; every language is present). Both runs
 are scored by the same evaluator on the same instances; the differences are the tools: Verinoda 3f0e72c -> 5999912,
 Graphify 0.9.69 -> 0.9.73. BM25 is the same code on the same checkouts and is the control.
 
@@ -45,8 +45,8 @@ def main() -> None:
     langs = Counter(new[i]["lang"] for i in ids)
     lines = [f"Instances in both runs: {len(ids)} ({', '.join(f'{k} {v}' for k, v in sorted(langs.items()))}).", "",
              "Cited view, first 6,000 characters (the primary comparison of 2026-09-28):", "",
-             "| approach | file recall per instance old -> new | file recall micro old -> new | cited span F1 old -> new | "
-             "paired per instance (file recall): better / same / worse |", "|---|---|---|---|---|"]
+             ("| approach | file recall per instance old -> new | file recall micro old -> new | cited span F1 old -> new | "
+              "paired per instance (file recall): better / same / worse |"), "|---|---|---|---|---|"]
     result = {"instances": ids, "by_language": dict(langs), "arms": {}}
     for arm, name in ARMS:
         key = f"{arm}|cited|capped"
@@ -59,8 +59,8 @@ def main() -> None:
                      f"{sn['span']['f1_micro']} | {better} / {same} / {worse} |")
     text = "\n".join(lines) + "\n"
     print(text)
-    (HERE / "compare.md").write_text(text, encoding="utf-8")
-    (HERE / "compare.json").write_text(json.dumps(result, indent=1) + "\n", encoding="utf-8")
+    (HERE / "compare.md").write_bytes(text.encode("utf-8"))
+    (HERE / "compare.json").write_bytes((json.dumps(result, indent=1) + "\n").encode("utf-8"))
 
 
 if __name__ == "__main__":

@@ -36,9 +36,10 @@ Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-
   129/319. Since fd30f5b three held-out facts were lost; bisects name D60 (numbered passage lines take budget) and
   D58 (refuted context is counted, not printed), whose own commit messages record them. `verinoda_user_tr`'s gold
   failed the harness's check (a text alternative absent from its pinned corpus); fixed, with a test.
-- **ContextBench** (`contextbench-2026-10-02/`, 34 of the 80 pre-registered instances before the runner's time
-  limit; the same instances paired with 2026-09-28): BM25 identical on all 34 (the harness reproduces); analyze's
-  file recall 0.39 -> 0.47 (8 better, 0 worse); query 0.578 -> 0.568; Graphify 0.9.73 as 0.9.69.
+- **ContextBench** (`contextbench-2026-10-02/`, 40 of the 80 pre-registered instances, stopped twice by the
+  runner's time limit; the same instances paired with 2026-09-28): BM25 identical on all 40 (the harness
+  reproduces); analyze's file recall 0.41 -> 0.47 (8 better, 1 worse); query 0.561 -> 0.553; Graphify 0.9.73 as
+  0.9.69.
 - **Agents in the loop** (`agent-compare-2026-10-02/`, 57 questions, 399 Claude Code sessions, pre-registered):
   offered Verinoda, the agent called it in 6 of 57 sessions; told to start with analyze it found the same facts as
   searching by hand (212 vs 212) at 0.84x input tokens, 0.78x output tokens and 0.71x tool calls (95 % intervals

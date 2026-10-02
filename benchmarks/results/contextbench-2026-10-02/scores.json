@@ -14120,5 +14120,2496 @@
   },
   "checkout_mb": 5.0,
   "total_s": 163.2
+ },
+ {
+  "id": "ponylang__ponyc-3973",
+  "lang": "c",
+  "gold_sizes": {
+   "file": 5,
+   "span": 37947,
+   "line": 1511,
+   "symbol": 41
+  },
+  "ceiling": {
+   "file": 1.0,
+   "span": 1.0,
+   "line": 1.0,
+   "symbol": 1.0
+  },
+  "cells": {
+   "vq|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 7
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 1842
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 57
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 5
+    },
+    "chars": 5940
+   },
+   "vq|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 5,
+     "pred": 19
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 14162
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 522
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 53
+    },
+    "chars": 5940
+   },
+   "vq|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 7
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 1842
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 57
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 5
+    },
+    "chars": 5940
+   },
+   "vq|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 5,
+     "pred": 19
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 14162
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 522
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 53
+    },
+    "chars": 5940
+   },
+   "va|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 1586
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 48
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 4
+    },
+    "chars": 6000
+   },
+   "va|cited|capped": {
+    "file": {
+     "inter": 2,
+     "gold": 5,
+     "pred": 20
+    },
+    "span": {
+     "inter": 3503,
+     "gold": 37947,
+     "pred": 15942
+    },
+    "line": {
+     "inter": 151,
+     "gold": 1511,
+     "pred": 600
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 41,
+     "pred": 21
+    },
+    "chars": 6000
+   },
+   "va|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 7
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 1842
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 57
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 5
+    },
+    "chars": 9502
+   },
+   "va|cited|uncapped": {
+    "file": {
+     "inter": 3,
+     "gold": 5,
+     "pred": 31
+    },
+    "span": {
+     "inter": 3503,
+     "gold": 37947,
+     "pred": 26659
+    },
+    "line": {
+     "inter": 151,
+     "gold": 1511,
+     "pred": 1017
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 41,
+     "pred": 65
+    },
+    "chars": 9502
+   },
+   "gq|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 28
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 1588
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 27
+    },
+    "chars": 6000
+   },
+   "gq|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 28
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 1588
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 27
+    },
+    "chars": 6000
+   },
+   "gq|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 5,
+     "pred": 39
+    },
+    "span": {
+     "inter": 21,
+     "gold": 37947,
+     "pred": 2136
+    },
+    "line": {
+     "inter": 1,
+     "gold": 1511,
+     "pred": 59
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 34
+    },
+    "chars": 7355
+   },
+   "gq|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 5,
+     "pred": 39
+    },
+    "span": {
+     "inter": 21,
+     "gold": 37947,
+     "pred": 2136
+    },
+    "line": {
+     "inter": 1,
+     "gold": 1511,
+     "pred": 59
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 34
+    },
+    "chars": 7355
+   },
+   "bm25|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 4920
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 180
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 3
+    },
+    "chars": 5733
+   },
+   "bm25|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 4920
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 180
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 3
+    },
+    "chars": 5733
+   },
+   "bm25|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 4920
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 180
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 3
+    },
+    "chars": 5733
+   },
+   "bm25|cited|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 5,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 37947,
+     "pred": 4920
+    },
+    "line": {
+     "inter": 0,
+     "gold": 1511,
+     "pred": 180
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 41,
+     "pred": 3
+    },
+    "chars": 5733
+   }
+  },
+  "v_index_s": 51.87,
+  "v_index_rc": 0,
+  "g_index_s": 32.48,
+  "g_index_rc": 0,
+  "bm25_index_s": 8.82,
+  "arms": {
+   "vq": {
+    "rc": 0,
+    "s": 2.903,
+    "chars": 5940
+   },
+   "va": {
+    "rc": 0,
+    "s": 6.714,
+    "chars": 9502
+   },
+   "gq": {
+    "rc": 0,
+    "s": 3.765,
+    "chars": 7355
+   },
+   "bm25": {
+    "rc": 0,
+    "s": 0.109,
+    "chars": 5733
+   }
+  },
+  "checkout_mb": 4.7,
+  "total_s": 138.6
+ },
+ {
+  "id": "jqlang__jq-2919",
+  "lang": "c",
+  "gold_sizes": {
+   "file": 1,
+   "span": 16011,
+   "line": 456,
+   "symbol": 10
+  },
+  "ceiling": {
+   "file": 1.0,
+   "span": 1.0,
+   "line": 1.0,
+   "symbol": 1.0
+  },
+  "cells": {
+   "vq|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 5
+    },
+    "span": {
+     "inter": 1105,
+     "gold": 16011,
+     "pred": 3861
+    },
+    "line": {
+     "inter": 29,
+     "gold": 456,
+     "pred": 85
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 10,
+     "pred": 4
+    },
+    "chars": 5959
+   },
+   "vq|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 12
+    },
+    "span": {
+     "inter": 8799,
+     "gold": 16011,
+     "pred": 648511
+    },
+    "line": {
+     "inter": 223,
+     "gold": 456,
+     "pred": 17248
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 10,
+     "pred": 6
+    },
+    "chars": 5959
+   },
+   "vq|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 5
+    },
+    "span": {
+     "inter": 1105,
+     "gold": 16011,
+     "pred": 3861
+    },
+    "line": {
+     "inter": 29,
+     "gold": 456,
+     "pred": 85
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 10,
+     "pred": 4
+    },
+    "chars": 5959
+   },
+   "vq|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 12
+    },
+    "span": {
+     "inter": 8799,
+     "gold": 16011,
+     "pred": 648511
+    },
+    "line": {
+     "inter": 223,
+     "gold": 456,
+     "pred": 17248
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 10,
+     "pred": 6
+    },
+    "chars": 5959
+   },
+   "va|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 2
+    },
+    "span": {
+     "inter": 733,
+     "gold": 16011,
+     "pred": 965
+    },
+    "line": {
+     "inter": 17,
+     "gold": 456,
+     "pred": 25
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 10,
+     "pred": 1
+    },
+    "chars": 6000
+   },
+   "va|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 9
+    },
+    "span": {
+     "inter": 8799,
+     "gold": 16011,
+     "pred": 24466
+    },
+    "line": {
+     "inter": 223,
+     "gold": 456,
+     "pred": 682
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 10,
+     "pred": 5
+    },
+    "chars": 6000
+   },
+   "va|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 5
+    },
+    "span": {
+     "inter": 1105,
+     "gold": 16011,
+     "pred": 3861
+    },
+    "line": {
+     "inter": 29,
+     "gold": 456,
+     "pred": 85
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 10,
+     "pred": 4
+    },
+    "chars": 10310
+   },
+   "va|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 16
+    },
+    "span": {
+     "inter": 8799,
+     "gold": 16011,
+     "pred": 650706
+    },
+    "line": {
+     "inter": 223,
+     "gold": 456,
+     "pred": 17315
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 10,
+     "pred": 9
+    },
+    "chars": 10310
+   },
+   "gq|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 10
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 725
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 22
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 10,
+     "pred": 23
+    },
+    "chars": 4287
+   },
+   "gq|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 10
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 725
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 22
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 10,
+     "pred": 23
+    },
+    "chars": 4287
+   },
+   "gq|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 10
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 725
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 22
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 10,
+     "pred": 23
+    },
+    "chars": 4287
+   },
+   "gq|cited|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 10
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 725
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 22
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 10,
+     "pred": 23
+    },
+    "chars": 4287
+   },
+   "bm25|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 5372
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 142
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 10,
+     "pred": 3
+    },
+    "chars": 5995
+   },
+   "bm25|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 5372
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 142
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 10,
+     "pred": 3
+    },
+    "chars": 5995
+   },
+   "bm25|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 5372
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 142
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 10,
+     "pred": 3
+    },
+    "chars": 5995
+   },
+   "bm25|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 16011,
+     "pred": 5372
+    },
+    "line": {
+     "inter": 0,
+     "gold": 456,
+     "pred": 142
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 10,
+     "pred": 3
+    },
+    "chars": 5995
+   }
+  },
+  "v_index_s": 47.81,
+  "v_index_rc": 0,
+  "g_index_s": 14.54,
+  "g_index_rc": 0,
+  "bm25_index_s": 1.34,
+  "arms": {
+   "vq": {
+    "rc": 0,
+    "s": 4.017,
+    "chars": 5959
+   },
+   "va": {
+    "rc": 0,
+    "s": 6.598,
+    "chars": 10310
+   },
+   "gq": {
+    "rc": 0,
+    "s": 1.64,
+    "chars": 4287
+   },
+   "bm25": {
+    "rc": 0,
+    "s": 0.166,
+    "chars": 5995
+   }
+  },
+  "checkout_mb": 4.4,
+  "total_s": 104.6
+ },
+ {
+  "id": "vuejs__core-8538",
+  "lang": "typescript",
+  "gold_sizes": {
+   "file": 8,
+   "span": 66669,
+   "line": 2501,
+   "symbol": 120
+  },
+  "ceiling": {
+   "file": 1.0,
+   "span": 1.0,
+   "line": 1.0,
+   "symbol": 1.0
+  },
+  "cells": {
+   "vq|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 328,
+     "gold": 66669,
+     "pred": 2033
+    },
+    "line": {
+     "inter": 7,
+     "gold": 2501,
+     "pred": 68
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 4
+    },
+    "chars": 5951
+   },
+   "vq|cited|capped": {
+    "file": {
+     "inter": 2,
+     "gold": 8,
+     "pred": 19
+    },
+    "span": {
+     "inter": 2006,
+     "gold": 66669,
+     "pred": 69910
+    },
+    "line": {
+     "inter": 61,
+     "gold": 2501,
+     "pred": 2183
+    },
+    "symbol": {
+     "inter": 3,
+     "gold": 120,
+     "pred": 23
+    },
+    "chars": 5951
+   },
+   "vq|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 328,
+     "gold": 66669,
+     "pred": 2033
+    },
+    "line": {
+     "inter": 7,
+     "gold": 2501,
+     "pred": 68
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 4
+    },
+    "chars": 5951
+   },
+   "vq|cited|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 8,
+     "pred": 19
+    },
+    "span": {
+     "inter": 2006,
+     "gold": 66669,
+     "pred": 69910
+    },
+    "line": {
+     "inter": 61,
+     "gold": 2501,
+     "pred": 2183
+    },
+    "symbol": {
+     "inter": 3,
+     "gold": 120,
+     "pred": 23
+    },
+    "chars": 5951
+   },
+   "va|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 328,
+     "gold": 66669,
+     "pred": 2033
+    },
+    "line": {
+     "inter": 7,
+     "gold": 2501,
+     "pred": 68
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 4
+    },
+    "chars": 6000
+   },
+   "va|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 8,
+     "pred": 9
+    },
+    "span": {
+     "inter": 524,
+     "gold": 66669,
+     "pred": 37885
+    },
+    "line": {
+     "inter": 12,
+     "gold": 2501,
+     "pred": 1195
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 13
+    },
+    "chars": 6000
+   },
+   "va|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 328,
+     "gold": 66669,
+     "pred": 2033
+    },
+    "line": {
+     "inter": 7,
+     "gold": 2501,
+     "pred": 68
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 4
+    },
+    "chars": 8075
+   },
+   "va|cited|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 8,
+     "pred": 20
+    },
+    "span": {
+     "inter": 2006,
+     "gold": 66669,
+     "pred": 70331
+    },
+    "line": {
+     "inter": 61,
+     "gold": 2501,
+     "pred": 2199
+    },
+    "symbol": {
+     "inter": 3,
+     "gold": 120,
+     "pred": 26
+    },
+    "chars": 8075
+   },
+   "gq|shown|capped": {
+    "file": {
+     "inter": 2,
+     "gold": 8,
+     "pred": 44
+    },
+    "span": {
+     "inter": 102,
+     "gold": 66669,
+     "pred": 880
+    },
+    "line": {
+     "inter": 2,
+     "gold": 2501,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 2
+    },
+    "chars": 6000
+   },
+   "gq|cited|capped": {
+    "file": {
+     "inter": 2,
+     "gold": 8,
+     "pred": 44
+    },
+    "span": {
+     "inter": 102,
+     "gold": 66669,
+     "pred": 880
+    },
+    "line": {
+     "inter": 2,
+     "gold": 2501,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 2
+    },
+    "chars": 6000
+   },
+   "gq|shown|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 8,
+     "pred": 48
+    },
+    "span": {
+     "inter": 102,
+     "gold": 66669,
+     "pred": 957
+    },
+    "line": {
+     "inter": 2,
+     "gold": 2501,
+     "pred": 48
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 2
+    },
+    "chars": 6577
+   },
+   "gq|cited|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 8,
+     "pred": 48
+    },
+    "span": {
+     "inter": 102,
+     "gold": 66669,
+     "pred": 957
+    },
+    "line": {
+     "inter": 2,
+     "gold": 2501,
+     "pred": 48
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 120,
+     "pred": 2
+    },
+    "chars": 6577
+   },
+   "bm25|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 66669,
+     "pred": 5091
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2501,
+     "pred": 166
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 120,
+     "pred": 8
+    },
+    "chars": 5951
+   },
+   "bm25|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 66669,
+     "pred": 5091
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2501,
+     "pred": 166
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 120,
+     "pred": 8
+    },
+    "chars": 5951
+   },
+   "bm25|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 66669,
+     "pred": 5091
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2501,
+     "pred": 166
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 120,
+     "pred": 8
+    },
+    "chars": 5951
+   },
+   "bm25|cited|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 8,
+     "pred": 6
+    },
+    "span": {
+     "inter": 0,
+     "gold": 66669,
+     "pred": 5091
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2501,
+     "pred": 166
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 120,
+     "pred": 8
+    },
+    "chars": 5951
+   }
+  },
+  "v_index_s": 65.99,
+  "v_index_rc": 0,
+  "g_index_s": 55.17,
+  "g_index_rc": 0,
+  "bm25_index_s": 10.77,
+  "arms": {
+   "vq": {
+    "rc": 0,
+    "s": 2.541,
+    "chars": 5951
+   },
+   "va": {
+    "rc": 0,
+    "s": 4.559,
+    "chars": 8075
+   },
+   "gq": {
+    "rc": 0,
+    "s": 2.279,
+    "chars": 6577
+   },
+   "bm25": {
+    "rc": 0,
+    "s": 0.034,
+    "chars": 5951
+   }
+  },
+  "checkout_mb": 4.4,
+  "total_s": 162.5
+ },
+ {
+  "id": "sveltejs__svelte-14629",
+  "lang": "javascript",
+  "gold_sizes": {
+   "file": 15,
+   "span": 67908,
+   "line": 2238,
+   "symbol": 291
+  },
+  "ceiling": {
+   "file": 1.0,
+   "span": 1.0,
+   "line": 1.0,
+   "symbol": 1.0
+  },
+  "cells": {
+   "vq|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 7
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 1250
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 25
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 0
+    },
+    "chars": 1996
+   },
+   "vq|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 9
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 20525
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 528
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 7
+    },
+    "chars": 1996
+   },
+   "vq|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 7
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 1250
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 25
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 0
+    },
+    "chars": 1996
+   },
+   "vq|cited|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 9
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 20525
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 528
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 7
+    },
+    "chars": 1996
+   },
+   "va|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 7
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 1250
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 25
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 0
+    },
+    "chars": 3472
+   },
+   "va|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 15,
+     "pred": 11
+    },
+    "span": {
+     "inter": 167,
+     "gold": 67908,
+     "pred": 20707
+    },
+    "line": {
+     "inter": 3,
+     "gold": 2238,
+     "pred": 532
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 291,
+     "pred": 8
+    },
+    "chars": 3472
+   },
+   "va|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 7
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 1250
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 25
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 0
+    },
+    "chars": 3472
+   },
+   "va|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 15,
+     "pred": 11
+    },
+    "span": {
+     "inter": 167,
+     "gold": 67908,
+     "pred": 20707
+    },
+    "line": {
+     "inter": 3,
+     "gold": 2238,
+     "pred": 532
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 291,
+     "pred": 8
+    },
+    "chars": 3472
+   },
+   "gq|shown|capped": {
+    "file": {
+     "inter": 2,
+     "gold": 15,
+     "pred": 36
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 2807
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 40
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 3
+    },
+    "chars": 6000
+   },
+   "gq|cited|capped": {
+    "file": {
+     "inter": 2,
+     "gold": 15,
+     "pred": 36
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 2807
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 40
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 3
+    },
+    "chars": 6000
+   },
+   "gq|shown|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 15,
+     "pred": 40
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 3105
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 3
+    },
+    "chars": 6691
+   },
+   "gq|cited|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 15,
+     "pred": 40
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 3105
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 3
+    },
+    "chars": 6691
+   },
+   "bm25|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 9
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 5246
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 148
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 4
+    },
+    "chars": 5953
+   },
+   "bm25|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 9
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 5246
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 148
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 4
+    },
+    "chars": 5953
+   },
+   "bm25|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 9
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 5246
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 148
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 4
+    },
+    "chars": 5953
+   },
+   "bm25|cited|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 15,
+     "pred": 9
+    },
+    "span": {
+     "inter": 0,
+     "gold": 67908,
+     "pred": 5246
+    },
+    "line": {
+     "inter": 0,
+     "gold": 2238,
+     "pred": 148
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 291,
+     "pred": 4
+    },
+    "chars": 5953
+   }
+  },
+  "v_index_s": 341.59,
+  "v_index_rc": 0,
+  "g_index_s": 268.63,
+  "g_index_rc": 0,
+  "bm25_index_s": 119.84,
+  "arms": {
+   "vq": {
+    "rc": 0,
+    "s": 3.567,
+    "chars": 1996
+   },
+   "va": {
+    "rc": 0,
+    "s": 11.726,
+    "chars": 3472
+   },
+   "gq": {
+    "rc": 0,
+    "s": 4.098,
+    "chars": 6691
+   },
+   "bm25": {
+    "rc": 0,
+    "s": 0.077,
+    "chars": 5953
+   }
+  },
+  "checkout_mb": 5.3,
+  "total_s": 840.7
+ },
+ {
+  "id": "mui__material-ui-39196",
+  "lang": "typescript",
+  "gold_sizes": {
+   "file": 3,
+   "span": 15553,
+   "line": 573,
+   "symbol": 26
+  },
+  "ceiling": {
+   "file": 1.0,
+   "span": 1.0,
+   "line": 1.0,
+   "symbol": 1.0
+  },
+  "cells": {
+   "vq|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 7
+    },
+    "span": {
+     "inter": 124,
+     "gold": 15553,
+     "pred": 3731
+    },
+    "line": {
+     "inter": 5,
+     "gold": 573,
+     "pred": 52
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 26,
+     "pred": 4
+    },
+    "chars": 5906
+   },
+   "vq|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 23
+    },
+    "span": {
+     "inter": 1853,
+     "gold": 15553,
+     "pred": 34788
+    },
+    "line": {
+     "inter": 64,
+     "gold": 573,
+     "pred": 931
+    },
+    "symbol": {
+     "inter": 4,
+     "gold": 26,
+     "pred": 24
+    },
+    "chars": 5906
+   },
+   "vq|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 7
+    },
+    "span": {
+     "inter": 124,
+     "gold": 15553,
+     "pred": 3731
+    },
+    "line": {
+     "inter": 5,
+     "gold": 573,
+     "pred": 52
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 26,
+     "pred": 4
+    },
+    "chars": 5906
+   },
+   "vq|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 23
+    },
+    "span": {
+     "inter": 1853,
+     "gold": 15553,
+     "pred": 34788
+    },
+    "line": {
+     "inter": 64,
+     "gold": 573,
+     "pred": 931
+    },
+    "symbol": {
+     "inter": 4,
+     "gold": 26,
+     "pred": 24
+    },
+    "chars": 5906
+   },
+   "va|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 4
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 2634
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 28
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 1
+    },
+    "chars": 6000
+   },
+   "va|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 17
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 12467
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 328
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 12
+    },
+    "chars": 6000
+   },
+   "va|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 7
+    },
+    "span": {
+     "inter": 124,
+     "gold": 15553,
+     "pred": 3731
+    },
+    "line": {
+     "inter": 5,
+     "gold": 573,
+     "pred": 52
+    },
+    "symbol": {
+     "inter": 2,
+     "gold": 26,
+     "pred": 4
+    },
+    "chars": 9558
+   },
+   "va|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 35
+    },
+    "span": {
+     "inter": 1853,
+     "gold": 15553,
+     "pred": 40136
+    },
+    "line": {
+     "inter": 64,
+     "gold": 573,
+     "pred": 1107
+    },
+    "symbol": {
+     "inter": 4,
+     "gold": 26,
+     "pred": 35
+    },
+    "chars": 9558
+   },
+   "gq|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 28
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 1312
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 34
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 10
+    },
+    "chars": 6000
+   },
+   "gq|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 28
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 1312
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 34
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 10
+    },
+    "chars": 6000
+   },
+   "gq|shown|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 3,
+     "pred": 55
+    },
+    "span": {
+     "inter": 54,
+     "gold": 15553,
+     "pred": 2764
+    },
+    "line": {
+     "inter": 2,
+     "gold": 573,
+     "pred": 73
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 26,
+     "pred": 25
+    },
+    "chars": 10084
+   },
+   "gq|cited|uncapped": {
+    "file": {
+     "inter": 2,
+     "gold": 3,
+     "pred": 55
+    },
+    "span": {
+     "inter": 54,
+     "gold": 15553,
+     "pred": 2764
+    },
+    "line": {
+     "inter": 2,
+     "gold": 573,
+     "pred": 73
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 26,
+     "pred": 25
+    },
+    "chars": 10084
+   },
+   "bm25|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 5174
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 137
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 14
+    },
+    "chars": 5868
+   },
+   "bm25|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 5174
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 137
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 14
+    },
+    "chars": 5868
+   },
+   "bm25|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 5174
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 137
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 14
+    },
+    "chars": 5868
+   },
+   "bm25|cited|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 5
+    },
+    "span": {
+     "inter": 0,
+     "gold": 15553,
+     "pred": 5174
+    },
+    "line": {
+     "inter": 0,
+     "gold": 573,
+     "pred": 137
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 26,
+     "pred": 14
+    },
+    "chars": 5868
+   }
+  },
+  "v_index_s": 1978.81,
+  "v_index_rc": 0,
+  "g_index_s": 1584.4,
+  "g_index_rc": 0,
+  "bm25_index_s": 618.1,
+  "arms": {
+   "vq": {
+    "rc": 0,
+    "s": 22.337,
+    "chars": 5906
+   },
+   "va": {
+    "rc": 0,
+    "s": 79.166,
+    "chars": 9558
+   },
+   "gq": {
+    "rc": 0,
+    "s": 20.261,
+    "chars": 10084
+   },
+   "bm25": {
+    "rc": 0,
+    "s": 0.605,
+    "chars": 5868
+   }
+  },
+  "checkout_mb": 163.8,
+  "total_s": 4635.2
+ },
+ {
+  "id": "alibaba__fastjson2-2775",
+  "lang": "java",
+  "gold_sizes": {
+   "file": 1,
+   "span": 2444,
+   "line": 64,
+   "symbol": 3
+  },
+  "ceiling": {
+   "file": 1.0,
+   "span": 1.0,
+   "line": 1.0,
+   "symbol": 1.0
+  },
+  "cells": {
+   "vq|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 4
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 1838
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 6
+    },
+    "chars": 5983
+   },
+   "vq|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 19
+    },
+    "span": {
+     "inter": 2444,
+     "gold": 2444,
+     "pred": 171847
+    },
+    "line": {
+     "inter": 64,
+     "gold": 64,
+     "pred": 4330
+    },
+    "symbol": {
+     "inter": 3,
+     "gold": 3,
+     "pred": 190
+    },
+    "chars": 5983
+   },
+   "vq|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 4
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 1838
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 6
+    },
+    "chars": 5983
+   },
+   "vq|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 19
+    },
+    "span": {
+     "inter": 2444,
+     "gold": 2444,
+     "pred": 171847
+    },
+    "line": {
+     "inter": 64,
+     "gold": 64,
+     "pred": 4330
+    },
+    "symbol": {
+     "inter": 3,
+     "gold": 3,
+     "pred": 190
+    },
+    "chars": 5983
+   },
+   "va|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 0
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 0
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 0
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 0
+    },
+    "error": "no_context_extracted",
+    "chars": 6000
+   },
+   "va|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 15
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 41365
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 1032
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 84
+    },
+    "chars": 6000
+   },
+   "va|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 4
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 1838
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 44
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 6
+    },
+    "chars": 12369
+   },
+   "va|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 26
+    },
+    "span": {
+     "inter": 2444,
+     "gold": 2444,
+     "pred": 211861
+    },
+    "line": {
+     "inter": 64,
+     "gold": 64,
+     "pred": 5330
+    },
+    "symbol": {
+     "inter": 3,
+     "gold": 3,
+     "pred": 260
+    },
+    "chars": 12369
+   },
+   "gq|shown|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 31
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 1253
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 36
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 42
+    },
+    "chars": 6000
+   },
+   "gq|cited|capped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 31
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 1253
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 36
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 42
+    },
+    "chars": 6000
+   },
+   "gq|shown|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 34
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 1486
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 42
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 47
+    },
+    "chars": 6939
+   },
+   "gq|cited|uncapped": {
+    "file": {
+     "inter": 1,
+     "gold": 1,
+     "pred": 34
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 1486
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 42
+    },
+    "symbol": {
+     "inter": 1,
+     "gold": 3,
+     "pred": 47
+    },
+    "chars": 6939
+   },
+   "bm25|shown|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 3
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 5421
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 89
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 6
+    },
+    "chars": 5984
+   },
+   "bm25|cited|capped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 3
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 5421
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 89
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 6
+    },
+    "chars": 5984
+   },
+   "bm25|shown|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 3
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 5421
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 89
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 6
+    },
+    "chars": 5984
+   },
+   "bm25|cited|uncapped": {
+    "file": {
+     "inter": 0,
+     "gold": 1,
+     "pred": 3
+    },
+    "span": {
+     "inter": 0,
+     "gold": 2444,
+     "pred": 5421
+    },
+    "line": {
+     "inter": 0,
+     "gold": 64,
+     "pred": 89
+    },
+    "symbol": {
+     "inter": 0,
+     "gold": 3,
+     "pred": 6
+    },
+    "chars": 5984
+   }
+  },
+  "v_index_s": 349.13,
+  "v_index_rc": 0,
+  "g_index_s": 256.5,
+  "g_index_rc": 0,
+  "bm25_index_s": 43.16,
+  "arms": {
+   "vq": {
+    "rc": 0,
+    "s": 11.098,
+    "chars": 5983
+   },
+   "va": {
+    "rc": 0,
+    "s": 47.894,
+    "chars": 12369
+   },
+   "gq": {
+    "rc": 0,
+    "s": 11.365,
+    "chars": 6939
+   },
+   "bm25": {
+    "rc": 0,
+    "s": 0.073,
+    "chars": 5984
+   }
+  },
+  "checkout_mb": 139.3,
+  "total_s": 763.3
  }
 ]
