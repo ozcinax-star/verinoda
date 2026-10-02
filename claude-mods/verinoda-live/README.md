@@ -35,6 +35,11 @@ stale index led the agent into describing removed code (it reads the files on di
 `analyze` refreshes a stale index by itself, so there the mod adds nothing; on the larger ones a stale index cost
 about a fifth more input tokens than no index, and the fresh one brought that back (significant in one of two runs).
 
+And the check after edits (`benchmarks/results/agent-compare-guard-2026-10-02/`, 30 coding tasks, 60 real sessions):
+with it and without it the agent passed every hidden test and left no name that does not exist; the check never
+fired, because the agent read the code before every edit. It works (a deliberate removed name is caught and the model
+told), it costs about nothing, and it is on by default as a safety net; it did not change an outcome in this study.
+
 So neither mode is a measured win on real code: **nudge** trades input tokens for output tokens at the same facts,
 **search** costs facts. Both stay off until the person turns one on. What the mod adds regardless of the mode is
 an index that stays fresh while Claude edits, and commit reviews.
