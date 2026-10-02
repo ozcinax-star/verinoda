@@ -211,3 +211,24 @@ def test_guard_notes_are_counted_from_the_hook_context_and_bad_sites_from_the_ch
     report = {"sites": [{"at": "a.py:1:2", "verdict": "absent"}, {"at": "a.py:3:1", "verdict": "unknown"},
                         {"at": "b.py:9:9", "verdict": "mismatch"}]}
     assert guard_run.bad_sites(report) == ["a.py:1:2", "b.py:9:9"]
+
+
+score_guard = _load("score_guard")
+
+
+def test_guard_scores_pair_tasks_both_arms_ran_and_leave_unknown_checks_out_of_the_sites_pair():
+    tasks = [{"id": i, "repo": "graphify", "prompt_names_helpers": []} for i in ("a", "b", "c")]
+    row = lambda i, arm, passed, bad: {"id": i, "arm": arm, "passed": passed, "check_bad_sites": bad,
+                                       "notes": 1 if arm == "guard" and bad == [] else 0, "num_turns": 5,
+                                       "cost_usd": 0.5, "seconds": 60}
+    res = [row("a", "plain", False, ["x.py:1:1"]), row("a", "guard", True, []),
+           row("b", "plain", True, []), row("b", "guard", True, []),
+           row("c", "plain", True, None), row("c", "guard", False, []),
+           row("d", "plain", True, [])]  # not a task of the study
+    c = score_guard.cells(res, tasks)
+    assert sorted(c) == ["a", "b", "c"]
+    s = score_guard.summary(c)
+    assert s["plain"]["passed"] == 2 and s["guard"]["passed"] == 2 and s["plain"]["absent_sites"] == 1
+    d = score_guard.decide(c)
+    assert d["passes guard-plain"]["diff"] == 0 and d["passes guard-plain"]["n"] == 3
+    assert d["absent sites plain-guard"]["n"] == 2 and d["absent sites plain-guard"]["diff"] == 1
