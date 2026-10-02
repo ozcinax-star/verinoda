@@ -223,6 +223,23 @@ describe('auto-context', () => {
     expect((await $.prompt.submit(ask(QUESTION, { kind: 'sdk' }))).context?.length).toBe(1)
   })
 
+  test('a long question (a pasted bug report) is nudged but never searched with', async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    const { runs } = world(on)
+    const long = `Where should this be fixed? ${'The light stays on after the timeout. '.repeat(100)}`
+    expect(long.length).toBeGreaterThan(2_000)
+    expect(looksLikeCodeQuestion(long)).toBe(false)
+    expect(looksLikeCodeQuestion(long, 20_000)).toBe(true)
+    expect(looksLikeCodeQuestion('x'.repeat(20_001) + '?', 20_000)).toBe(false)
+    await $.session.start(START)
+    await $.command.run({ ...run('nudge'), command: 'verinoda-auto' } as never)
+    expect((await $.prompt.submit(ask(long))).context?.length).toBe(1)
+    await $.command.run({ ...run('search'), command: 'verinoda-auto' } as never)
+    expect((await $.prompt.submit(ask(long))).context ?? []).toEqual([])
+    expect(runs.filter(r => r[1] === 'query').length).toBe(0)
+  })
+
   test('the setting starts the mode where nothing was chosen yet', { options: { auto: 'nudge' } }, async ($, on) => {
     mock.clock(on)
     mock.store(on)

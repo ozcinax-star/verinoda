@@ -113,9 +113,12 @@ export function isPersonsPrompt(origin: { kind: string; asUser?: true } | undefi
     (origin.kind === 'plugin' && origin.asUser === true)
 }
 
-export function looksLikeCodeQuestion(text: string): boolean {
+// `max` is what a prompt may be to count: a search takes the prompt as its query, so it stays short (2,000); a nudge
+// searches nothing, and a bug report pasted into the question is still a question about where the code is.
+export const NUDGE_MAX_CHARS = 20_000
+export function looksLikeCodeQuestion(text: string, max = 2_000): boolean {
   const t = text.trim()
-  if (t.length < 12 || t.length > 2_000 || /^[/!#]/.test(t)) return false
+  if (t.length < 12 || t.length > max || /^[/!#]/.test(t)) return false
   return t.includes('?') || QUESTION_START.test(t) || QUESTION_PARTICLE.test(t) || QUESTION_ANYWHERE.test(t)
 }
 
@@ -757,9 +760,9 @@ export const register: Register = (on, options) => {
   // A code question typed in the project gets the nudge (or, in search mode, Verinoda's results) as context.
   on('prompt.submit', async ($, e, next) => {
     const isUser = isPersonsPrompt(e.origin)
-    if (live.root === undefined || !isUser || !isInside(live.cwd, live.root) || !looksLikeCodeQuestion(e.text)) return next(e)
+    if (live.root === undefined || !isUser || !isInside(live.cwd, live.root)) return next(e)
     const mode = await read($, auto)
-    if (mode === 'off') return next(e)
+    if (mode === 'off' || !looksLikeCodeQuestion(e.text, mode === 'nudge' ? NUDGE_MAX_CHARS : 2_000)) return next(e)
     let block: string | undefined
     if (mode === 'nudge') {
       const nudge = nudgeBlock(live.root, cfg.cli)

@@ -309,3 +309,20 @@ def test_big_scores_pair_arms_on_recall_and_leave_network_sessions_out_in_the_se
     d2 = rep["without sessions that looked something up on the network"]["decisions"]["verinoda_mod - none"]
     assert d2["n"] == 2 and d2["diff"] == 0.5
     assert score_big.cell(["c.py", "a.py"], ["a.py", "b.py"]) == {"recall": 0.5, "solved": 0, "hit1": 0, "precision": 0.5, "named": 2}
+
+
+def test_big_status_difference_is_what_a_run_changed_not_what_the_setup_added(tmp_path):
+    import subprocess
+
+    def git(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    git("init", "-q")
+    (tmp_path / "a.py").write_bytes(b"x = 1\n")
+    git("add", "-A")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    (tmp_path / ".mcp.json").write_bytes(b"{}")  # the setup's file, there before the run
+    before = big_run.status_paths(str(tmp_path))
+    assert before == {"?? .mcp.json"}
+    (tmp_path / "a.py").write_bytes(b"x = 2\n")  # what a run changed
+    assert sorted(big_run.status_paths(str(tmp_path)) ^ before) == [" M a.py"]

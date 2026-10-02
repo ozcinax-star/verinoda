@@ -168,6 +168,13 @@ def one(cfg: dict, task: dict, arm: str) -> dict:
             "output_tokens": int(usage.get("output_tokens") or 0), "answer": answer, **st}
 
 
+def status_paths(copy: str) -> set[str]:
+    """What `git status` shows in a working copy: the setup's own files are in it before the run, so what a run
+    changed is the difference between the two."""
+    out = subprocess.run(["git", "-C", copy, "status", "--porcelain"], capture_output=True, text=True, check=False).stdout
+    return set(out.splitlines())
+
+
 def main() -> int:
     cfg = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     tasks = json.loads(Path(cfg["tasks"]).read_text(encoding="utf-8"))["tasks"]
@@ -177,6 +184,7 @@ def main() -> int:
         done = {(r["id"], r["arm"]) for r in map(json.loads, out.read_text(encoding="utf-8").splitlines()) if r}
     todo = [(t, a) for t in tasks for a in cfg["arms"] if (t["id"], a) not in done]
     lock = threading.Lock()
+    before = {a: status_paths(cfg["copies"][a]) for a in cfg["arms"]}
     print(f"{len(todo)} sessions to run ({len(done)} done)", flush=True)
 
     def work(item):
@@ -192,9 +200,8 @@ def main() -> int:
     with ThreadPoolExecutor(cfg.get("workers", 8)) as ex:
         list(ex.map(work, todo))
     for arm in cfg["arms"]:
-        dirty = subprocess.run(["git", "-C", cfg["copies"][arm], "status", "--porcelain"], capture_output=True, text=True,
-                               check=False).stdout.splitlines()
-        print(f"{arm}: {len(dirty)} paths changed in the working copy after the run", flush=True)
+        changed = sorted(status_paths(cfg["copies"][arm]) ^ before[arm])
+        print(f"{arm}: {len(changed)} paths changed in the working copy by the run {changed[:5]}", flush=True)
     print("all done", flush=True)
     return 0
 
