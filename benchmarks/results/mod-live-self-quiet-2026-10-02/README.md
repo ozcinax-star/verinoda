@@ -38,3 +38,12 @@ appends only for the process that opened it, so the child wrote from its inherit
 it started (shown in a test). The log is now opened with true append access for every writer, and every start or
 refusal is logged with its time and pid. A 12-cycle add/del repeat is in `bg_repro` (see the branch notes); the
 missing build did not recur in its first cycles.
+
+**Which code these runs measured.** The harness ran `python -m verinoda` with the corpus as its working directory,
+and this corpus is Verinoda's own source: Python put the corpus first on `sys.path`, so every command here (and
+the 12-cycle `bg_repro`, whose 24 background builds all caught up in 101-152 s) ran the corpus's code, 5999912, not
+the build installed for the run. The seconds and ratios above are therefore 5999912's, which is what the table
+claims; the two fixes above were not exercised by these runs (the ranking fix was measured separately on the eight
+sets, the log fix in a test and an in-process replay where the start line survived a 2-minute build). The harness
+now runs `python -P -m verinoda`, which keeps the working directory off `sys.path` (with a test). On
+`mod-live-2026-10-02/` (the bundled example corpus, no `verinoda/` package) the installed build ran.

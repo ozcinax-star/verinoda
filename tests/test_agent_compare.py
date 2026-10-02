@@ -82,3 +82,15 @@ def test_paired_bootstrap_is_deterministic_and_brackets_the_ratio():
     r1 = paired.boot_ratio(a, b)
     assert r1 == paired.boot_ratio(a, b)
     assert r1[0] == 100 / 120 and r1[1] <= r1[0] <= r1[2]
+
+
+score_rw = _load("score_rw")
+
+
+def test_real_world_facts_are_found_by_a_citation_near_any_source_line():
+    srcs = score_rw.sources("lib/core/Axios.js:40, lib/core/dispatchRequest.js:18-20")
+    assert srcs == [("lib/core/Axios.js", 40), ("lib/core/dispatchRequest.js", 18)]
+    assert score_rw.found(srcs, "it builds the chain (lib/core/Axios.js:42)")  # within 3 lines
+    assert score_rw.found(srcs, "see core/dispatchRequest.js:10-17")  # a range ending 1 line before
+    assert not score_rw.found(srcs, "lib/core/Axios.js:44 and Axios.js")  # 4 lines away; a bare file name
+    assert not score_rw.found(srcs, "lib/other/Axios.js:40")  # another file of that name
