@@ -1292,6 +1292,7 @@ def run(
     commit: str | None = None, plugins: dict[str, bytes] | None = None,
     env_extra: dict[str, str] | None = None, ref: str | None = None, overlay: list[str] | None = None,
     file_ids: dict[str, str] | None = None, replay: dict[str, bytes | None] | None = None,
+    add_files: dict[str, bytes] | None = None,
 ) -> dict:
     """Run one experiment and record it (and its evidence) in the store.
 
@@ -1307,7 +1308,9 @@ def run(
     user's tree, index and ``.git`` are untouched), optionally with
     working-tree files ``overlay`` copied on top (labelled in ``source``), or
     with recorded contents ``replay`` ({path: bytes, or None to leave the file
-    out}) written on top: a tree the debug ledger recorded. The same policy and isolation apply either way. ``result["tree"]`` is the
+    out}) written on top: a tree the debug ledger recorded. ``add_files``
+    ({path: bytes}) writes new contents on top of a working-tree copy, such as
+    a generated test file (listed in ``source["added"]``). The same policy and isolation apply either way. ``result["tree"]`` is the
     identity of what ran (:mod:`verinoda.treestate`: tree hash over content
     ids, computed while copying); ``file_ids`` (a dict) receives the per-file
     content ids.
@@ -1325,6 +1328,8 @@ def run(
         commit = commit or sha
     elif overlay or replay:
         raise ValueError("overlay and replay apply to a commit copy only (give ref)")
+    if add_files and ref is not None:
+        raise ValueError("add_files applies to a working-tree copy only (with ref, use replay)")
     for name in plugins or {}:
         if not PLUGIN_NAME_RE.match(name):
             raise ValueError(f"plugin file name must be a plain module file name, not {name!r}")
@@ -1408,6 +1413,9 @@ def run(
             if not_copied:
                 source["skipped"] = not_copied[:50]
                 source["skipped_total"] = len(not_copied)
+            if add_files:
+                _replay(copy, dict(add_files), ids)
+                source["added"] = sorted(add_files)
             where = f"copy of {repo}"
     except Exception:
         shutil.rmtree(work, ignore_errors=True)
@@ -1555,6 +1563,8 @@ def run(
         on = f" (on commit {source['commit'][:12]}" + (f" + working-tree {', '.join(source['overlay'])}"
                                                        if source.get("overlay") else "") \
             + (f" + {source['replayed']} recorded file(s)" if source.get("replayed") else "") + ")"
+    elif source.get("added"):
+        on = f" (working tree + added {', '.join(source['added'][:5])})"
     ev = {
         "source_type": "test_result" if is_test else "experiment",
         "locator": f"run {eid}{on}: {' '.join(argv)}",

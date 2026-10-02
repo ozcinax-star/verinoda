@@ -3587,6 +3587,23 @@ def cmd_probe(args) -> int:
     return 0 if res.get("status") in PROBE_QUIET else 3
 
 
+def cmd_pin(args) -> int:
+    """Pin one Python function's current behaviour as a generated pytest file (opt-in; runs the project's tests)."""
+    from verinoda import pin
+
+    repo = _repo(args)
+    st = _store(repo, create=True)
+    try:
+        res = pin.pin(st, repo, args.symbol, tests=args.tests or None, max_cases=args.max_cases, out=args.out,
+                      force=args.force, timeout=args.timeout, record=not args.no_record)
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from None
+    finally:
+        st.close()
+    _emit(args, res, lambda r: _write(pin.render_text(r)))
+    return 0 if res.get("status") == "pinned" else 3
+
+
 def cmd_inventory(args) -> int:
     """Named searches counted by unit and group, with a condition over their counts (exit 1: nothing counted, 3:
     the counts are lower bounds)."""
@@ -5579,6 +5596,22 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--test-file", metavar="PATH",
                     help="the file to write (default tests/test_<name>_<template>.py)")
     sp.add_argument("--no-record", action="store_true", help="do not record claims for the findings")
+    sp = add("pin", cmd_pin, "pin one Python function's current behaviour: run the tests that reach it (isolated "
+                             "copy, trusted projects only), record its inputs and results, write a pytest file of "
+                             "the cases that pass again on replay (exit 3 unless something was pinned)")
+    sp.add_argument("symbol", metavar="FUNCTION",
+                    help="path.py::name, path.py::Class.method (static, class, or a dataclass's method) or a unique "
+                         "name")
+    sp.add_argument("--tests", nargs="+", metavar="SELECT",
+                    help="pytest node ids or paths to run (default: the tests the test map or the index shows "
+                         "reaching FUNCTION, at most 50)")
+    sp.add_argument("--max-cases", type=int, default=50, help="inputs to pin at most (default 50, at most 500)")
+    sp.add_argument("--out", metavar="PATH", help="the file to write, a plain path inside the repository (default "
+                         "tests/pinned/test_pin_<module>__<name>.py)")
+    sp.add_argument("--force", action="store_true",
+                    help="replace the file when verinoda pin generated it for the same function")
+    sp.add_argument("--timeout", type=float, help="seconds per run (default: twice the experiment timeout)")
+    sp.add_argument("--no-record", action="store_true", help="do not record the claim")
     sp = add("inventory", cmd_inventory, "an inventory computed, not estimated: named searches (-s NAME PATTERN), "
                                          "each hit in its file, line or symbol (--unit), the units a condition "
                                          "over the counts keeps (--where 'a and not b', 'a >= 3'), counted by "
