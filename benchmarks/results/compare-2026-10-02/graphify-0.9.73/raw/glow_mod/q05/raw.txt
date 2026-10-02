@@ -1,0 +1,194 @@
+$ grep -rniE 'glowmod|ritual|tick|fonksiyonu|nereden|çağrılıyor' .   # 157 matching lines in 33 files
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:1: package com.example.glowmod.repair;
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:3: import com.example.glowmod.config.GlowConfig;
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:7: import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:13: /** Puts back blocks the ritual removed, a few per tick, after a short delay. */
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:15: private record Pending(ServerWorld world, BlockPos pos, BlockState state, long dueTick) {
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:24: ServerTickEvents.END_SERVER_TICK.register(RepairScheduler::tick);
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:29: long due = world.getServer().getTicks() + GlowConfig.get().repairDelayTicks();
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:33: private static void tick(MinecraftServer server) {
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:34: int budget = GlowConfig.get().blocksPerTick();
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:35: while (budget-- > 0 && !QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks()) {
+src/main/java/com/example/glowmod/config/GlowConfig.java:1: package com.example.glowmod.config;
+src/main/java/com/example/glowmod/config/GlowConfig.java:3: import com.example.glowmod.GlowMod;
+src/main/java/com/example/glowmod/config/GlowConfig.java:14: /** Settings from config/glowmod.yml; every missing key falls back to {@link #DEFAULTS}. */
+src/main/java/com/example/glowmod/config/GlowConfig.java:15: public record GlowConfig(int ritualWispCount, double naturalChance, int blocksPerTick, int repairDelayTicks,
+src/main/java/com/example/glowmod/config/GlowConfig.java:17: private static final String FILE_NAME = "glowmod.yml";
+src/main/java/com/example/glowmod/config/GlowConfig.java:39: GlowMod.LOGGER.error("could not read {}, using defaults", file, e);
+src/main/java/com/example/glowmod/config/GlowConfig.java:49: number(wisp, "ritual_count", DEFAULTS.ritualWispCount()).intValue(),
+src/main/java/com/example/glowmod/config/GlowConfig.java:51: number(repair, "blocks_per_tick", DEFAULTS.blocksPerTick()).intValue(),
+src/main/java/com/example/glowmod/config/GlowConfig.java:52: number(repair, "delay_ticks", DEFAULTS.repairDelayTicks()).intValue(),
+src/main/resources/glowmod.yml:1: # Glow Mod settings. Copied to config/glowmod.yml on first start; edit that copy,
+src/main/resources/glowmod.yml:5: # how many wisps the lantern ritual calls around the altar
+src/main/resources/glowmod.yml:6: ritual_count: 4
+src/main/resources/glowmod.yml:11: # how many blocks burnt by the ritual are put back per server tick
+src/main/resources/glowmod.yml:12: blocks_per_tick: 8
+src/main/resources/glowmod.yml:13: # ticks to wait after the ritual before repairing starts (20 ticks = 1 second)
+src/main/resources/glowmod.yml:14: delay_ticks: 40
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:1: # Lantern ritual, run at the altar. The effects live here; the wisps are called by the mod.
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:2: scoreboard objectives add glowmod.ritual dummy
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:3: kill @e[type=minecraft:marker,tag=glowmod.altar,distance=..1]
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:4: summon minecraft:marker ~ ~ ~ {Tags:["glowmod.altar"]}
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:5: scoreboard players set @e[type=minecraft:marker,tag=glowmod.altar,distance=..1] glowmod.ritual 200
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:7: function glowmod:ritual/tick
+src/main/resources/data/glowmod/function/ritual/tick.mcfunction:1: # One step of the ritual effects; keeps rescheduling itself while an altar has time left.
+src/main/resources/data/glowmod/function/ritual/tick.mcfunction:2: execute as @e[type=minecraft:marker,tag=glowmod.altar] at @s run particle minecraft:end_rod ~ ~1 ~ 1.5 0.5 1.5 0.01 6
+src/main/resources/data/glowmod/function/ritual/tick.mcfunction:3: scoreboard players remove @e[type=minecraft:marker,tag=glowmod.altar] glowmod.ritual 1
+src/main/resources/data/glowmod/function/ritual/tick.mcfunction:4: kill @e[type=minecraft:marker,tag=glowmod.altar,scores={glowmod.ritual=..0}]
+src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5: execute if entity @e[type=minecraft:marker,tag=glowmod.altar] run schedule function glowmod:ritual/tick 1t
+src/main/java/com/example/glowmod/command/GlowCommands.java:1: package com.example.glowmod.command;
+src/main/java/com/example/glowmod/command/GlowCommands.java:3: import com.example.glowmod.config.GlowConfig;
+src/main/java/com/example/glowmod/command/GlowCommands.java:4: import com.example.glowmod.entity.Wisp;
+... (117 more matching lines not shown)
+
+==> src/main/java/com/example/glowmod/repair/RepairScheduler.java:1-48 <==
+     1	package com.example.glowmod.repair;
+     2	
+     3	import com.example.glowmod.config.GlowConfig;
+     4	import java.util.ArrayDeque;
+     5	import java.util.Deque;
+     6	import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+     7	import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+     8	import net.minecraft.block.BlockState;
+     9	import net.minecraft.server.MinecraftServer;
+    10	import net.minecraft.server.world.ServerWorld;
+    11	import net.minecraft.util.math.BlockPos;
+    12	
+    13	/** Puts back blocks the ritual removed, a few per tick, after a short delay. */
+    14	public final class RepairScheduler {
+    15	    private record Pending(ServerWorld world, BlockPos pos, BlockState state, long dueTick) {
+    16	    }
+    17	
+    18	    private static final Deque<Pending> QUEUE = new ArrayDeque<>();
+    19	
+    20	    private RepairScheduler() {
+    21	    }
+    22	
+    23	    public static void register() {
+    24	        ServerTickEvents.END_SERVER_TICK.register(RepairScheduler::tick);
+    25	        ServerLifecycleEvents.SERVER_STOPPING.register(RepairScheduler::temizle);
+    26	    }
+    27	
+    28	    public static void kaydet(ServerWorld world, BlockPos pos, BlockState state) {
+    29	        long due = world.getServer().getTicks() + GlowConfig.get().repairDelayTicks();
+    30	        QUEUE.addLast(new Pending(world, pos, state, due));
+    31	    }
+    32	
+    33	    private static void tick(MinecraftServer server) {
+    34	        int budget = GlowConfig.get().blocksPerTick();
+    35	        while (budget-- > 0 && !QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks()) {
+    36	            Pending p = QUEUE.pollFirst();
+    37	            p.world().setBlockState(p.pos(), p.state());
+    38	        }
+    39	    }
+    40	
+    41	    /** The server is stopping: every block still waiting is put back at once, then the queue is emptied. */
+    42	    private static void temizle(MinecraftServer server) {
+    43	        for (Pending p : QUEUE) {
+    44	            p.world().setBlockState(p.pos(), p.state());
+    45	        }
+    46	        QUEUE.clear();
+    47	    }
+    48	}
+
+==> src/main/java/com/example/glowmod/config/GlowConfig.java:1-64 <==
+     1	package com.example.glowmod.config;
+     2	
+     3	import com.example.glowmod.GlowMod;
+     4	import java.io.IOException;
+     5	import java.io.InputStream;
+     6	import java.io.Reader;
+     7	import java.nio.file.Files;
+     8	import java.nio.file.Path;
+     9	import java.util.Map;
+    10	import java.util.Objects;
+    11	import net.fabricmc.loader.api.FabricLoader;
+    12	import org.yaml.snakeyaml.Yaml;
+    13	
+    14	/** Settings from config/glowmod.yml; every missing key falls back to {@link #DEFAULTS}. */
+    15	public record GlowConfig(int ritualWispCount, double naturalChance, int blocksPerTick, int repairDelayTicks,
+    16	                         int maxSummonDistance) {
+    17	    private static final String FILE_NAME = "glowmod.yml";
+    18	    private static final GlowConfig DEFAULTS = new GlowConfig(4, 0.02, 8, 40, 8);
+    19	    private static volatile GlowConfig current = DEFAULTS;
+    20	
+    21	    public static GlowConfig get() {
+    22	        return current;
+    23	    }
+    24	
+    25	    /** Reads the file; on first start the commented default is copied out of the mod jar first. */
+    26	    public static void load() {
+    27	        Path file = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
+    28	        try {
+    29	            if (Files.notExists(file)) {
+    30	                try (InputStream in = GlowConfig.class.getResourceAsStream("/" + FILE_NAME)) {
+    31	                    Files.copy(Objects.requireNonNull(in, "default " + FILE_NAME + " missing from the jar"), file);
+    32	                }
+    33	            }
+    34	            try (Reader reader = Files.newBufferedReader(file)) {
+    35	                Map<String, Object> root = new Yaml().load(reader);
+    36	                current = parse(root == null ? Map.of() : root);
+    37	            }
+    38	        } catch (IOException | RuntimeException e) {
+    39	            GlowMod.LOGGER.error("could not read {}, using defaults", file, e);
+    40	            current = DEFAULTS;
+    41	        }
+    42	    }
+    43	
+    44	    private static GlowConfig parse(Map<String, Object> root) {
+    45	        Map<String, Object> wisp = section(root, "wisp");
+    46	        Map<String, Object> repair = section(root, "repair");
+    47	        Map<String, Object> network = section(root, "network");
+    48	        return new GlowConfig(
+    49	                number(wisp, "ritual_count", DEFAULTS.ritualWispCount()).intValue(),
+    50	                number(wisp, "natural_chance", DEFAULTS.naturalChance()).doubleValue(),
+    51	                number(repair, "blocks_per_tick", DEFAULTS.blocksPerTick()).intValue(),
+    52	                number(repair, "delay_ticks", DEFAULTS.repairDelayTicks()).intValue(),
+    53	                number(network, "max_summon_distance", DEFAULTS.maxSummonDistance()).intValue());
+    54	    }
+    55	
+    56	    @SuppressWarnings("unchecked")
+    57	    private static Map<String, Object> section(Map<String, Object> root, String key) {
+    58	        return root.get(key) instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    59	    }
+    60	
+    61	    private static Number number(Map<String, Object> section, String key, Number fallback) {
+    62	        return section.get(key) instanceof Number n ? n : fallback;
+    63	    }
+    64	}
+
+==> src/main/resources/glowmod.yml:1-18 <==
+     1	# Glow Mod settings. Copied to config/glowmod.yml on first start; edit that copy,
+     2	# then run /glow reload (or restart the server).
+     3	
+     4	wisp:
+     5	  # how many wisps the lantern ritual calls around the altar
+     6	  ritual_count: 4
+     7	  # chance (0..1) that a freshly loaded swamp chunk gets a wisp at night
+     8	  natural_chance: 0.02
+     9	
+    10	repair:
+    11	  # how many blocks burnt by the ritual are put back per server tick
+    12	  blocks_per_tick: 8
+    13	  # ticks to wait after the ritual before repairing starts (20 ticks = 1 second)
+    14	  delay_ticks: 40
+    15	
+    16	network:
+    17	  # a client may only ask for a wisp this many blocks away from the player
+    18	  max_summon_distance: 8
+
+==> src/main/resources/data/glowmod/function/ritual/start.mcfunction:1-7 <==
+     1	# Lantern ritual, run at the altar. The effects live here; the wisps are called by the mod.
+     2	scoreboard objectives add glowmod.ritual dummy
+     3	kill @e[type=minecraft:marker,tag=glowmod.altar,distance=..1]
+     4	summon minecraft:marker ~ ~ ~ {Tags:["glowmod.altar"]}
+     5	scoreboard players set @e[type=minecraft:marker,tag=glowmod.altar,distance=..1] glowmod.ritual 200
+     6	playsound minecraft:block.beacon.activate block @a[distance=..24] ~ ~ ~ 1 0.8
+     7	function glowmod:ritual/tick
+
+==> src/main/resources/data/glowmod/function/ritual/tick.mcfunction:1-5 <==
+     1	# One step of the ritual effects; keeps rescheduling itself while an altar has time left.
+     2	execute as @e[type=minecraft:marker,tag=glowmod.altar] at @s run particle minecraft:end_rod ~ ~1 ~ 1.5 0.5 1.5 0.01 6
+     3	scoreboard players remove @e[type=minecraft:marker,tag=glowmod.altar] glowmod.ritual 1
+     4	kill @e[type=minecraft:marker,tag=glowmod.altar,scores={glowmod.ritual=..0}]
+     5	execute if entity @e[type=minecraft:marker,tag=glowmod.altar] run schedule function glowmod:ritual/tick 1t

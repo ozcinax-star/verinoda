@@ -1,0 +1,343 @@
+$ grep -rniE 'kopya|klasörler|nasıl|bulunuyor' .   # 11 matching lines in 4 files
+verinoda/question_plan.py:253: TR_WEAK: dict[str, list[str]] = {"flow": [r"\bnasil\b"]}
+verinoda/question_plan.py:291: "usage": [(r"\bnasil kullan\w*", False), (r"\bornek\w*", False), (r"\bkullanim\w*", False)],
+verinoda/question_plan.py:304: TR_INTERROGATIVES = frozenset("ne neyi neler nedir nerede nereye nereden neresi hangi hangisi hangileri nasil neden "
+verinoda/question_plan.py:415: re.compile(r"\s+ve\s+(?=(?:\w+\s+)?(?:ne|neyi|neler|nerede|nereye|nereden|hangi|hangisi|nasil|neden|nicin|"
+verinoda/question_plan.py:420: re.compile(r",\s+(?=(?:ne|neyi|nerede|nereye|nereden|hangi|nasil|neden|kim)\b)"),
+verinoda/question_plan.py:1449: "kodda", "kodun", "yeri", "yerde", "sey", "sekil", "hangi", "nasil")
+verinoda/textnorm.py:41: """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin niye
+verinoda/textnorm.py:177: """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin
+verinoda/ui/static/app.js:202: path: "iki not nasıl bağlı: yol A ile B", open: "bir notu oku", ask: "koddan cevaplanan bir soru" },
+verinoda/ui/static/app.js:739: const QUESTION_WORDS = /^(how|what|where|why|which|who|when|does|do|is|are|can|nasıl|ne|neden|nerede|hangi|kim|niçin|niye)\b/i;
+verinoda/retrieval.py:76: r"cagir\w*|akis\w*|nasil calis\w*|hangi fonksiyon\w*)\b", re.I)
+
+==> verinoda/question_plan.py:1-329 <==  (truncated at char cap; file has 1817 lines)
+     1	"""Question plans: what the user asked, checked against the code before any work.
+     2	
+     3	Design: docs/DESIGN.md D1-D4 and D8. A plan (``verinoda.question_plan/1``,
+     4	schema in ``verinoda/schemas/question_plan.v1.json``) restates the user's
+     5	message as sub-questions with intents and checkable ``done_when`` criteria,
+     6	the words that name code (mentions) and the references with the version the
+     7	user meant. The host agent may write it; otherwise :func:`draft` builds the
+     8	same object from rules, so analysis always runs through a plan.
+     9	
+    10	:func:`check` is deterministic and offline (local git at most). In order:
+    11	
+    12	1. **schema** - a validator for the flat schema subset (type, enum, const,
+    13	   required, properties, additionalProperties, items, pattern, min/max);
+    14	2. **integrity** - unique ids, every referenced id exists, ``depends_on`` plus
+    15	   ``subject_from`` form a DAG (Kahn), limits (6 sub-questions, 20 mentions,
+    16	   10 references, 5 candidates);
+    17	3. **grounding** - every mention/reference text occurs verbatim in the user
+    18	   message (NFC, Turkish fold, case fold, apostrophes unified) or, for
+    19	   ``source=conversation``, in ``conversation_context``;
+    20	4. **versions** - every version-like token in the message (``v0.3``, a SHA,
+    21	   ``#12``, ``PR 12``, ``2.31`` next to a version word) is carried by some
+    22	   reference (``version_dropped`` otherwise); relative version words
+    23	   ("eski sürüm", "previous version") need ``version.source=user_relative``
+    24	   and produce a version clarification;
+    25	5. **cross-checks** (warnings, never overrides) - intent vs ``done_when``
+    26	   kind, language, and the rule-based intents (``intent_divergence``);
+    27	6. **mention linking** (:func:`link_mentions`) in evidence tiers - exact id
+    28	   1.00, path 0.95, ``Class.method`` 0.95, exact label 0.95, folded label
+    29	   0.85, identifier parts 0.75, fuzzy (rapidfuzz ratio >= 90) 0.60, lexicon
+    30	   0.5 x association, seed dictionary 0.45, text hit 0.40. Host candidates
+    31	   that match nothing are rejected and never used as seeds. Status: *linked*
+    32	   (>= 0.70 and 0.15 ahead of the next family), *ambiguous*, *weak*
+    33	   (0.40-0.70; claims carry the uncertainty) or *unlinked* (unknown + next
+    34	   step). Before an ambiguous entity is asked about, a graph probe checks
+    35	   whether the choice changes the answer; if not, the families are merged
+    36	   silently (``family_merged``). Domain concepts ("order", "sipariş") are
+    37	   expected to match many names and are always merged;
+    38	7. **clarifications** - at most 3, from fixed Turkish/English templates, with
+    39	   options drawn only from grounded candidates plus ``__all__``/``__other__``.
+    40	
+    41	Status: ``invalid`` (errors), ``needs_clarification`` or ``ready``.
+    42	
+    43	:func:`draft` segments the message (a clause becomes a sub-question only when
+    44	it has its own question or intent cue), reads intents from bilingual cue
+    45	tables (with *domain shadowing*: a Turkish cue that is also a domain word of
+    46	this repository - "gider", "yazar", "kayıt" - needs a second cue), maps
+    47	Turkish case suffixes to roles (ablative = source, dative = target),
+    48	resolves anaphora ("bunu", "it") through ``subject_from``, and tags every
+    49	element with ``derived_by``.
+    50	"""
+    51	
+    52	from __future__ import annotations
+    53	
+    54	import hashlib
+    55	import json
+    56	import math
+    57	import re
+    58	from collections import defaultdict
+    59	from functools import lru_cache
+    60	from importlib import resources
+    61	from pathlib import Path, PurePosixPath
+    62	
+    63	from verinoda import textnorm as tn
+    64	
+    65	SCHEMA_ID = "verinoda.question_plan/1"
+    66	CHECK_SCHEMA_ID = "verinoda.plan_check/1"
+    67	DRAFT_RULES = "question_plan.draft/1"
+    68	
+    69	INTENTS = ("locate", "define", "flow", "callers", "dataflow", "config", "tests", "why", "history", "impact",
+    70	           "behaviour", "compare_reference", "performance", "architecture", "usage")
+    71	DONE_KINDS = ("location_verified", "path_found", "set_enumerated", "claim_exists", "decision_found",
+    72	              "proposition_checked", "reference_pinned", "comparison_done")
+    73	LIMITS = {"sub_questions": 6, "mentions": 20, "references": 10, "candidates": 5}
+    74	THRESHOLDS = {"link": 0.70, "weak": 0.40, "margin": 0.15, "fuzzy": 90, "did_you_mean": 85,
+    75	              "max_clarifications": 3}
+    76	TIER_SCORES = {"exact_id": 1.0, "path": 0.95, "qualified": 0.95, "exact_label": 0.95, "label_folded": 0.85,
+    77	               "identifier_parts": 0.75, "fuzzy": 0.60, "seed_dictionary": 0.45, "text_hit": 0.40}
+    78	LEXICON_FACTOR = 0.5     # a lexicon match scores 0.5 x its association score
+    79	NAME_TIERS = frozenset({"exact_id", "path", "qualified", "exact_label", "label_folded"})
+    80	ENTITY_KINDS = frozenset({"symbol", "file", "module", "config_key", "env_var", "test", "cli_command", "endpoint",
+    81	                          "db_table", "error_message"})
+    82	
+    83	# intent -> (default done_when kind, min_status, detail)
+    84	DEFAULT_DONE: dict[str, tuple[str, str, str]] = {
+    85	    "locate": ("location_verified", "statically_verified", "file:line of the definition the sub-question is about"),
+    86	    "define": ("location_verified", "statically_verified", "file:line of the definition, with what it does"),
+    87	    "flow": ("path_found", "strong_inference", "a directed call path between the subjects, every hop with file:line"),
+    88	    "callers": ("set_enumerated", "strong_inference", "the callers with call-site lines, or an explicit none-found"),
+    89	    "dataflow": ("claim_exists", "strong_inference", "the path that takes the data to persistence, with file:line"),
+    90	    "config": ("claim_exists", "statically_verified", "the configuration reads that decide it, with file:line"),
+    91	    "tests": ("set_enumerated", "strong_inference", "tests reaching the subject, or an explicit none-found"),
+    92	    "why": ("decision_found", "primary_source_verified", "a decision record or commit that states the reason"),
+    93	    "history": ("decision_found", "primary_source_verified", "the commits that changed it"),
+    94	    "impact": ("set_enumerated", "strong_inference", "the code and tests that depend on the subject"),
+    95	    "behaviour": ("proposition_checked", "statically_verified", "the proposition checked against the code"),
+    96	    "compare_reference": ("comparison_done", "primary_source_verified", "both versions pinned and compared"),
+    97	    "performance": ("claim_exists", "strong_inference", "code that determines the cost, with file:line"),
+    98	    "architecture": ("claim_exists", "strong_inference", "the modules and their dependencies"),
+    99	    "usage": ("claim_exists", "strong_inference", "an entry point or example showing the use"),
+   100	}
+   101	INTENT_DONE_OK: dict[str, frozenset[str]] = {
+   102	    "locate": frozenset({"location_verified", "claim_exists"}),
+   103	    "define": frozenset({"location_verified", "claim_exists"}),
+   104	    "flow": frozenset({"path_found", "claim_exists"}),
+   105	    "callers": frozenset({"set_enumerated", "claim_exists"}),
+   106	    "dataflow": frozenset({"claim_exists", "path_found"}),
+   107	    "config": frozenset({"claim_exists", "location_verified", "set_enumerated"}),
+   108	    "tests": frozenset({"set_enumerated", "claim_exists"}),
+   109	    "why": frozenset({"decision_found", "claim_exists"}),
+   110	    "history": frozenset({"decision_found", "claim_exists"}),
+   111	    "impact": frozenset({"set_enumerated", "claim_exists"}),
+   112	    "behaviour": frozenset({"proposition_checked", "claim_exists"}),
+   113	    "compare_reference": frozenset({"comparison_done", "reference_pinned"}),
+   114	    "performance": frozenset({"claim_exists"}),
+   115	    "architecture": frozenset({"claim_exists"}),
+   116	    "usage": frozenset({"claim_exists", "location_verified"}),
+   117	}
+   118	INTENT_NAMES_TR = {
+   119	    "locate": "konum", "define": "tanım", "flow": "akış", "callers": "çağıranlar", "dataflow": "veri yolu",
+   120	    "config": "yapılandırma", "tests": "testler", "why": "gerekçe", "history": "geçmiş", "impact": "etki",
+   121	    "behaviour": "davranış", "compare_reference": "karşılaştırma", "performance": "performans",
+   122	    "architecture": "mimari", "usage": "kullanım",
+   123	}
+   124	
+   125	# -- schema ---------------------------------------------------------------------------------------
+   126	
+   127	
+   128	@lru_cache(maxsize=1)
+   129	def schema() -> dict:
+   130	    """The packaged JSON Schema of ``verinoda.question_plan/1``."""
+   131	    raw = resources.files("verinoda").joinpath("schemas/question_plan.v1.json").read_text(encoding="utf-8")
+   132	    return json.loads(raw)
+   133	
+   134	
+   135	_TYPES = {"object": dict, "array": list, "string": str, "boolean": bool, "number": (int, float)}
+   136	
+   137	
+   138	def _type_ok(value, t: str) -> bool:
+   139	    if t == "integer":
+   140	        return isinstance(value, int) and not isinstance(value, bool)
+   141	    if t == "number":
+   142	        return isinstance(value, (int, float)) and not isinstance(value, bool)
+   143	    return isinstance(value, _TYPES[t])
+   144	
+   145	
+   146	def _validate(value, sch: dict, at: str, out: list[dict]) -> None:
+   147	    if "const" in sch and value != sch["const"]:
+   148	        out.append(_problem(at, "schema", f"must be {sch['const']!r}", f"set it to {sch['const']!r}"))
+   149	        return
+   150	    if "enum" in sch and value not in sch["enum"]:
+   151	        out.append(_problem(at, "schema", f"{value!r} is not one of {sch['enum']}", "use one of the listed values"))
+   152	        return
+   153	    t = sch.get("type")
+   154	    if t and not _type_ok(value, t):
+   155	        out.append(_problem(at, "schema", f"expected {t}, got {type(value).__name__}", f"send a {t}"))
+   156	        return
+   157	    if isinstance(value, str):
+   158	        if len(value) < sch.get("minLength", 0):
+   159	            out.append(_problem(at, "schema", "must not be empty", "fill it in"))
+   160	        if "pattern" in sch and not re.search(sch["pattern"], value):
+   161	            out.append(_problem(at, "schema", f"{value!r} does not match {sch['pattern']}", "use ids like q1, m1, r1"))
+   162	    elif isinstance(value, list):
+   163	        if len(value) < sch.get("minItems", 0):
+   164	            out.append(_problem(at, "schema", f"needs at least {sch['minItems']} item(s)", "add the missing items"))
+   165	        if "maxItems" in sch and len(value) > sch["maxItems"]:
+   166	            out.append(_problem(at, "limit", f"at most {sch['maxItems']} item(s) allowed", "keep the best ones"))
+   167	        if "items" in sch:
+   168	            for i, item in enumerate(value):
+   169	                _validate(item, sch["items"], f"{at}/{i}", out)
+   170	    elif isinstance(value, dict):
+   171	        props = sch.get("properties", {})
+   172	        for req in sch.get("required", ()):
+   173	            if req not in value:
+   174	                out.append(_problem(f"{at}/{req}", "schema", "required field is missing", f"add '{req}'"))
+   175	        extra = sch.get("additionalProperties", True)
+   176	        for k, v in value.items():
+   177	            if k in props:
+   178	                _validate(v, props[k], f"{at}/{k}", out)
+   179	            elif extra is False:
+   180	                out.append(_problem(f"{at}/{k}", "schema", "unknown field", "remove it (see `verinoda plan schema`)"))
+   181	            elif isinstance(extra, dict):
+   182	                _validate(v, extra, f"{at}/{k}", out)
+   183	
+   184	
+   185	def _problem(at: str, code: str, msg: str, fix: str = "") -> dict:
+   186	    return {"at": at or "/", "code": code, "msg": msg, "fix": fix}
+   187	
+   188	
+   189	def validate(plan) -> list[dict]:
+   190	    """Schema problems of a plan object (``[]`` when it conforms)."""
+   191	    out: list[dict] = []
+   192	    _validate(plan, schema(), "", out)
+   193	    return out
+   194	
+   195	
+   196	def parse(obj) -> tuple[dict | None, list[dict]]:
+   197	    """A plan from a dict, a JSON string or a path to a JSON file; ``(plan, problems)``."""
+   198	    if isinstance(obj, dict):
+   199	        plan = obj
+   200	    else:
+   201	        text = obj
+   202	        if isinstance(obj, Path) or (isinstance(obj, str) and not obj.lstrip().startswith("{")
+   203	                                     and len(obj) < 1024 and Path(obj).is_file()):
+   204	            try:
+   205	                text = Path(obj).read_text(encoding="utf-8-sig")
+   206	            except OSError as exc:
+   207	                return None, [_problem("/", "schema", f"cannot read plan file: {exc}", "check the path")]
+   208	        try:
+   209	            plan = json.loads(text)
+   210	        except (TypeError, ValueError) as exc:
+   211	            return None, [_problem("/", "schema", f"not valid JSON: {exc}",
+   212	                                   "write the plan to a file under .verinoda/plans/ instead of the command line")]
+   213	    return (plan if isinstance(plan, dict) else None), validate(plan)
+   214	
+   215	
+   216	def plan_hash(plan: dict) -> str:
+   217	    """``sha256:<hex>`` of the canonical JSON (sorted keys, compact separators)."""
+   218	    canon = json.dumps(plan, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+   219	    return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
+   220	
+   221	
+   222	# -- intent cues ----------------------------------------------------------------------------------
+   223	
+   224	EN_CUES: dict[str, list[str]] = {
+   225	    "callers": [r"\bwho calls\b", r"\bwhat calls\b", r"\bcallers?\b", r"\bcalled (by|from)\b", r"\bused by\b",
+   226	                r"\bcall ?sites?\b", r"\bwhere is .+ (called|used)\b",
+   227	                r"\bwhich (functions?|methods?|code|modules?|classes?) (calls?|uses?)\b"],
+   228	    "performance": [r"\bslow\w*", r"\bperformance\b", r"\blatency\b", r"\bfaster\b", r"\bbottlenecks?\b",
+   229	                    r"\bspeed\b"],
+   230	    "why": [r"\bwhy\b", r"\brationale\b", r"\breasons?\b", r"\bdecided to\b", r"\bdecision\b", r"\bmotivation\b"],
+   231	    "history": [r"\bwhen (was|were|did)\b", r"\bwho (changed|wrote|added|introduced|removed)\b",
+   232	                r"\bwhich (commit|pr|pull request)\b", r"\bhistory\b", r"\bsince when\b"],
+   233	    "impact": [r"\bimpact\w*", r"\baffect\w*", r"\bbreak(s|ing)?\b", r"\bchang(e|es|ed|ing)\b"],
+   234	    "tests": [r"\btest(s|ed|ing)?\b", r"\bcoverage\b", r"\bcover(s|ed)?\b", r"\bexercis(e|es|ed)\b",
+   235	              r"\bretest\w*"],
+   236	    "compare_reference": [r"\bdiffer\w*", r"\bcompar\w*", r"\bvs\.?(?=\s)", r"\bversus\b"],
+   237	    "config": [r"\bconfig\w*", r"\benv\b", r"\benvironment\b", r"\bsettings?\b", r"\bvariables?\b",
+   238	               r"\b(controls?|determines?|decides?)\b", r"\boptions?\b", r"\bflags?\b"],
+   239	    "flow": [r"\bflows?\b", r"\bpath\b", r"\breach(es|ed)?\b", r"\btrace\b", r"\bfrom\b.+\bto\b",
+   240	             r"\bhow (does|do)\b", r"\bcall (chain|graph|path|stack)\b", r"\bcalls?\b", r"\bcalled\b"],
+   241	    "behaviour": [r"\bwhat happens (when|if)\b", r"\bbefore\b", r"\bafter\b",
+   242	                  r"^\s*(does|do|is|are|can|will|should|could|would|did|was|were)\b", r"\bwhat if\b"],
+   243	    "locate": [r"\bwhere\b", r"\bwhich (files?|modules?|functions?|classes?|methods?|lines?|packages?)\b",
+   244	               r"\bdefined\b", r"\blocated\b", r"\bin which (file|module)\b"],
+   245	    "dataflow": [r"\bpersist\w*", r"\bstor(e|ed|es|ing|age)\b", r"\bdatabases?\b", r"\bdb\b", r"\bsql\b",
+   246	                 r"\bsav(e|es|ed|ing)\b", r"\bwrit(e|es|ten|ing)\b", r"\binsert\w*"],
+   247	    "define": [r"\bwhat (is|are)\b", r"\bmeans?\b", r"\bmeaning\b", r"\bwhat does .+ do\b", r"\bpurpose of\b"],
+   248	    "usage": [r"\bhow (do|can|should) (i|we|you) (use|call|run|configure)\b", r"\bexamples?\b", r"\busage\b"],
+   249	    "architecture": [r"\barchitecture\b", r"\boverview\b", r"\bstructure\b", r"\blayers?\b"],
+   250	}
+   251	# Weak cues count only when no other cue fires in the clause.
+   252	EN_WEAK: dict[str, list[str]] = {}
+   253	TR_WEAK: dict[str, list[str]] = {"flow": [r"\bnasil\b"]}
+   254	# (pattern, shadowable): a shadowable cue is also a common domain noun; it needs a
+   255	# second cue of the same intent when the word is part of this repository's vocabulary.
+   256	TR_CUES: dict[str, list[tuple[str, bool]]] = {
+   257	    "callers": [(r"\bkim(ler)? (cagir|kullan)\w*", False), (r"\bnere(ler)?den (cagri|cagril|kullanil)\w*", False),
+   258	                # passive: "kimler tarafından çağrılıyor", "hangi sınıflar tarafından kullanılıyor"
+   259	                # the verb only: not the participle "tarafindan kullanilan port" or the noun "cagri"
+   260	                (r"\btarafindan (cagril|kullanil)(?!an\b|dig|mis\b)\w*", False),
+   261	                (r"\bkim(ler)?\b[^.?!]{0,30}\b(cagril|kullanil)\w*", False),
+   262	                (r"\bcagiran\w*", False), (r"\bkullanan\w*", False), (r"\bkullanildig\w*", False),
+   263	                (r"\bcagrildig\w*", False),
+   264	                (r"\bhangi (fonksiyon|metot|metod|modul|sinif)\w* (cagir|kullan)\w*", False)],
+   265	    "performance": [(r"\byavas\w*", False), (r"\bperformans\w*", False), (r"\bhizli\w*", False),
+   266	                    (r"\bgecikme\w*", False)],
+   267	    "why": [(r"\bneden\b(?!\s+ol)", False), (r"\bnicin\b", False), (r"\bniye\b", False), (r"\bgerekce\w*", False),
+   268	            (r"\bkarar\w*", False), (r"\bsebe[bp]\w*", False)],
+   269	    "history": [(r"\bne zaman\b", False), (r"\bkim(ler)? (degistir|yazdi|ekledi|sildi)\w*", False),
+   270	                (r"\bhangi commit\w*", False), (r"\bgecmis\w*", False)],
+   271	    "impact": [(r"\betki\w*", False), (r"\bdegis(?!ken)\w*", False), (r"\bboz\w*", False)],
+   272	    "tests": [(r"\btest\w*", False), (r"\bkapsa\w*", False), (r"\bsina(ma|n)\w*", False)],
+   273	    "compare_reference": [(r"\bfark\w*", False), (r"\bkarsilastir\w*", False), (r"\bbizimki\w*", False)],
+   274	    "config": [(r"\byapilandir\w*", False), (r"\bayar\w*", False), (r"\bortam degisken\w*", False),
+   275	               (r"\bortam\b", False), (r"\bbelirl(e|iyor|er|en|ey)\w*", False), (r"\bkontrol ed\w*", False),
+   276	               (r"\bdegisken\w*", False), (r"\bkonfig\w*", False)],
+   277	    "flow": [(r"\bulas\w*", False), (r"\bakis\w*", False), (r"\bakar\b", False),
+   278	             (r"\bgec(iyor|ir|er|ti|tig)\w*", False), (r"\bgidiyor\b|\bgit(ti|tig|mesi|mek)\w*", False),
+   279	             (r"\bgider\b", True), (r"\bcagri (yol|zincir)\w*", False), (r"\bcagir\w*", False),
+   280	             (r"\bcagri\w*", False)],
+   281	    "behaviour": [(r"\bm[iu]\b", False), (r"\bm[iu](dir|sun|yim|yiz)\b", False), (r"\bonce\b", False),
+   282	                  (r"\bsonra\b", False), (r"\bolursa\b", False), (r"\bne olu(r|yor)\w*", False)],
+   283	    "locate": [(r"\bnere\w*", False),
+   284	               (r"\bhangi (dosya|modul|fonksiyon|sinif|metot|metod|satir|paket|klasor)\w*", False),
+   285	               (r"\btanimli\w*|\btanimlan\w*|\btanimi\b", False)],
+   286	    "dataflow": [(r"\bveritaban\w*", False), (r"\bkalici\w*", False), (r"\bkayde\w*|\bkaydet\w*", False),
+   287	                 (r"\byaz(?!ilim|dir|ar\b)\w*", False), (r"\byazar\b", True), (r"\bkayit\w*|\bkaydi\w*", True),
+   288	                 (r"\bdepola\w*", False), (r"\bsakla\w*", False)],
+   289	    "define": [(r"\bnedir\b", False), (r"\bne ise yarar\b", False), (r"\bne yapar\b", False),
+   290	               (r"\bne demek\w*", False), (r"\banlami\w*", False)],
+   291	    "usage": [(r"\bnasil kullan\w*", False), (r"\bornek\w*", False), (r"\bkullanim\w*", False)],
+   292	    "architecture": [(r"\bmimari\w*", False), (r"\bgenel bakis\w*", False), (r"\bkatman\w*", False)],
+   293	}
+   294	# Primary-intent precedence when a clause carries several cues.
+   295	PRIORITY = ("callers", "performance", "why", "history", "impact", "tests", "compare_reference", "config", "usage",
+   296	            "flow", "behaviour", "locate", "dataflow", "define", "architecture")
+   297	_EN_RX = {k: [re.compile(p) for p in v] for k, v in EN_CUES.items()}
+   298	_EN_WEAK_RX = {k: [re.compile(p) for p in v] for k, v in EN_WEAK.items()}
+   299	_TR_WEAK_RX = {k: [re.compile(p) for p in v] for k, v in TR_WEAK.items()}
+   300	_TR_RX = {k: [(re.compile(p), s) for p, s in v] for k, v in TR_CUES.items()}
+   301	
+   302	EN_INTERROGATIVES = frozenset("what where which how why who whom whose when does do is are can should could would "
+   303	                              "will did was were".split())
+   304	TR_INTERROGATIVES = frozenset("ne neyi neler nedir nerede nereye nereden neresi hangi hangisi hangileri nasil neden "
+   305	                              "nicin niye kim kimi kime kimin mi mu midir mudur".split())
+   306	EN_ANAPHORS = frozenset("it its this that these those they them their".split())
+   307	TR_ANAPHORS = frozenset("bunu onu sunu bunlar onlar bunlari onlari sunlari bunun onun sunun buna ona suna bu su o "
+   308	                        "bunda onda".split())
+   309	_ABLATIVE = ("den", "dan", "ten", "tan", "nden", "ndan")
+   310	_DATIVE_TAIL = ("ine", "ina", "ye", "ya")  # dative endings safe to read without an apostrophe
+   311	
+   312	
+   313	def _uses_turkish_cues(text: str) -> bool:
+   314	    """Turkish letters, two Turkish function words, or one Turkish question word ("kayit nerede")."""
+   315	    if tn.has_turkish(text):
+   316	        return True
+   317	    return any(w in tn.TR_QUESTION_WORDS for w in re.findall(r"[a-z]+", tn.fold_tr(text)))
+   318	
+   319	
+   320	def _shadowed(word: str, lexicon) -> bool:
+   321	    """Is a Turkish cue word also a domain word of this repository?"""
+   322	    if lexicon is None:
+   323	        return False
+   324	    if lexicon.has(word):
+   325	        return True
+   326	    return any(hit["targets"] for hit in lexicon.seed([word]))
+   327	
+   328	
+   329	def clause_cues(text: str, lexicon=None) -> list[dict]:

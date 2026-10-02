@@ -1,0 +1,53 @@
+## repoatlas/evidence.py:71-73 content_hash
+  called by: _h_why (repoatlas/analysis.py:929); source_evidence (repoatlas/evidence.py:175) <- _src_ev (repoatlas/analysis.py:269), _h_why (repoatlas/analysis.py:902), _create (repoatlas/benchmark/critique_eval.py:209), replay (repoatlas/benchmark/staleness.py:385) (+62); _legacy_search (repoatlas/evidence.py:191) <- check_source (repoatlas/evidence.py:235); check_source (repoatlas/evidence.py:215) <- replay (repoatlas/benchmark/staleness.py:452), _evidence_changes (repoatlas/claims.py:932), challenge (repoatlas/critique.py:399), _cited_range (repoatlas/entail.py:308) (+20); url_evidence (repoatlas/evidence.py:301) <- _research_issue (repoatlas/research.py:1741), _research_document (repoatlas/research.py:803), test_url_evidence_hashes_the_text (tests/test_evidence.py:235); add (repoatlas/feedback.py:635) <- cmd_feedback (repoatlas/cli.py:372), test_wrong_critique_is_recorded_but_claim_confirmed (tests/test_feedback.py:112), test_valid_critique_with_correction_supersedes (tests/test_feedback.py:143), test_valid_critique_without_correction_contradicts_and_leaves_statement_unknown (tests/test_feedback.py:179) (+20); resolution_evidence (repoatlas/precise.py:544) <- test_resolution_evidence_is_anchored_on_the_call_line (tests/test_precise.py:241); _site_hash (repoatlas/question_plan.py:685) <- _cand (repoatlas/question_plan.py:799) (+8)
+71 def content_hash(text: str) -> str:
+72     norm = "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").split("\n"))
+73     return "sha256:" + hashlib.sha256(norm.encode("utf-8")).hexdigest()
+## repoatlas/evidence.py:125-178 def source_evidence( repo: Path, path: str, start: int, end: int | None = None, *, commit: str | None, source_type: str = "source_code", meta: dict | None = None, anchor: bool = True, ) -> dict | None
+  doc: Build a source-line evidence record, or None if the lines cannot be evidence.
+  calls: _file_lines@151, anchor_for_file@165, content_hash@175, _excerpt@176
+  called by: _src_ev (repoatlas/analysis.py:269) <- _call_order (repoatlas/analysis.py:1050), _edge_claim (repoatlas/analysis.py:282), _context_claims (repoatlas/analysis.py:508), _path_claim (repoatlas/analysis.py:550) (+2); _h_why (repoatlas/analysis.py:902); _create (repoatlas/benchmark/critique_eval.py:209) <- evaluate (repoatlas/benchmark/critique_eval.py:246); replay (repoatlas/benchmark/staleness.py:385) <- main (repoatlas/benchmark/staleness.py:660), test_history_replay_recall_is_one_and_nothing_is_silently_wrong (tests/test_staleness_harness.py:88); cmd_claim (repoatlas/cli.py:306); challenge (repoatlas/critique.py:472) <- analyze (repoatlas/analysis.py:1553), evaluate (repoatlas/benchmark/critique_eval.py:249), cmd_challenge (repoatlas/cli.py:342), process (repoatlas/feedback.py:864) (+31); _eval_proposition (repoatlas/feedback.py:170) <- _h_behaviour (repoatlas/analysis.py:985), process (repoatlas/feedback.py:887); _exclusive_correction (repoatlas/feedback.py:204) <- _correct (repoatlas/feedback.py:237) (+58)
+  const repoatlas/evidence.py:66: DOC_SUFFIXES = (".md", ".markdown", ".rst", ".adoc")
+  repoatlas/evidence.py:131-144
+132 Refused (None): a reversed or empty range, a range past the end of the
+133 file, lines that are blank (an empty string hashes to a constant that
+134 would "re-check" forever), and paths that resolve outside ``repo`` -
+135 unless the caller names the checkout explicitly with ``meta={"root": ...}``
+136 (reference repositories), in which case the path must stay inside that
+137 root. With ``anchor`` (the default) the lines are anchored to their symbol,
+138 module statement or Markdown section when the language is supported.
+139 """
+140 end = end or start
+141 if start < 1 or end < start:
+142     return None
+143 root = Path((meta or {}).get("root") or repo).resolve()
+144 target = (root / path).resolve()
+  repoatlas/evidence.py:170-178
+170     "locator": f"{path}:{start}" + (f"-{end}" if end != start else ""),
+171     "path": path,
+172     "line_start": start,
+173     "line_end": end,
+174     "commit_sha": commit,
+175     "content_hash": content_hash(text),
+176     "excerpt": _excerpt(text),
+177     "meta": meta,
+178 }
+## repoatlas/evidence.py:294-304 url_evidence
+  calls: content_hash@301, _excerpt@302
+  called by: _research_issue (repoatlas/research.py:1741) <- research_full (repoatlas/research.py:1956); _research_document (repoatlas/research.py:803) <- _research_issue (repoatlas/research.py:1728), research_full (repoatlas/research.py:1969); test_url_evidence_hashes_the_text (tests/test_evidence.py:235)
+294 def url_evidence(url: str, text: str, *, source_type: str, version: str | None,
+295                  meta: dict | None = None) -> dict:
+296     return {
+297         "source_type": source_type,
+298         "locator": url,
+299         "url": url,
+300         "version": version,
+301         "content_hash": content_hash(text),
+302         "excerpt": _excerpt(text.strip()),
+303         "meta": meta or {},
+304     }
+repoatlas/evidence.py:271-291 def graph_edge_evidence(edge: dict, *, graph_path: str, commit: str | None) -> dict
+## repoatlas/evidence.py:317-344 def summarize(ev: dict, *, location: dict | None = None, grade: str | None = None) -> dict
+  called by: test_relocations_are_appended_to_evidence_locations (tests/test_evidence.py:180); test_add_validates_source_type_and_summarize_is_small (tests/test_evidence.py:227)
+… 876 more candidates not shown: repoatlas/evidence.py:181-191 def _legacy_search(lines: list[str], ev: dict, n: int) -> list[int]; repoatlas/anchors.py:121-124 def text_hash(text: str) -> str; tests/test_evidence.py:234-238 def test_url_evidence_hashes_the_text(); repoatlas/evidence.py:194-243 def check_source(repo: Path, ev: dict) -> SourceCheck
+next: verinoda query "…" --max-chars 12000

@@ -1,0 +1,76 @@
+expanded: kor ocagi->ember_forge, kor ocagi->ember, kor ocagi->forg (+10 more)
+## src/main/resources/assets/emberforge/lang/tr_tr.json:1-17 emberforge:tr_tr
+  names: `emberforge:ember_forge` (line 2, lang) -> src/main/resources/assets/emberforge/models/block/ember_forge.json; `emberforge:cinder_ore` (line 3, lang) -> src/main/resources/assets/emberforge/models/block/cinder_ore.json (+2)
+ 1 {
+ 2   "block.emberforge.ember_forge": "Kor Ocağı",
+ 3   "block.emberforge.cinder_ore": "Cüruf Cevheri",
+ 4   "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+ 5   "item.emberforge.forge_hammer": "Demirci Çekici",
+ 6   "itemGroup.emberforge": "Emberforge",
+ 7   "container.emberforge.ember_forge": "Kor Ocağı",
+ 8   "gui.emberforge.stoke": "Körükle",
+ 9   "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+10   "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+11   "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+12   "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+13   "command.emberforge.heat": "Ocak ısısı: %s",
+14   "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+15   "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+16   "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+17 }
+## src/main/resources/assets/emberforge/models/item/ember_forge.json:1-3 emberforge:item/ember_forge
+  names: `emberforge:block/ember_forge` (line 2, id) -> src/main/resources/assets/emberforge/models/block/ember_forge.json
+  named by: getDisplayName (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:172) as `emberforge:ember_forge` (lang, kind not stated: inferred); ModBlocks (src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:23) as `ember_forge` (bare name, inferred); ModBlocks (src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:35) as `ember_forge` (bare name, inferred) (+9 more)
+1 {
+2   "parent": "emberforge:block/ember_forge"
+3 }
+## src/main/resources/assets/emberforge/models/block/ember_forge.json:1-8 emberforge:block/ember_forge
+  named by: getDisplayName (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:172) as `emberforge:ember_forge` (lang, kind not stated: inferred); ModBlocks (src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:23) as `ember_forge` (bare name, inferred); ModBlocks (src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:35) as `ember_forge` (bare name, inferred) (+15 more)
+1 {
+2   "parent": "minecraft:block/orientable",
+3   "textures": {
+4     "top": "emberforge:block/ember_forge_top",
+5     "front": "emberforge:block/ember_forge_front",
+6     "side": "emberforge:block/ember_forge_side"
+7   }
+8 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:154-160 EmberForgeBlockEntity.saveAdditional
+154 @Override
+155 protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+156     super.saveAdditional(tag, registries);
+157     tag.put("Items", items.serializeNBT(registries));
+158     tag.putInt("Heat", heat);
+159     tag.putInt("Progress", progress);
+160 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:49-52 EmberForgeBlock.createBlockStateDefinition
+49 @Override
+50 protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+51     builder.add(FACING, LIT);
+52 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:39-42 EmberForgeBlock.EmberForgeBlock
+39 public EmberForgeBlock(Properties properties) {
+40     super(properties);
+41     registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(LIT, false));
+42 }
+## src/main/java/net/ashvale/emberforge/registry/ModTags.java:20-22 ModTags.blockTag
+20 private static TagKey<Block> blockTag(String name) {
+21     return TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(EmberForge.MOD_ID, name));
+22 }
+src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:18-40 public final class ModBlocks
+src/main/resources/data/emberforge/recipe/ember_forge.json:1-24 {
+src/main/resources/assets/emberforge/blockstates/ember_forge.json:1-12 {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:34-115 public class EmberForgeBlock extends BaseEntityBlock
+src/main/java/net/ashvale/emberforge/registry/ModTags.java:10-26 public final class ModTags
+src/main/java/net/ashvale/emberforge/registry/ModTags.java:16-18 private static TagKey<Item> itemTag(String name)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:170-173 @Override public Component getDisplayName()
+src/main/resources/data/emberforge/loot_table/blocks/ember_forge.json:1-21 {
+src/main/resources/assets/emberforge/models/block/cinder_ore.json:1-6 {
+src/main/resources/assets/emberforge/models/item/cinder_ore.json:1-3 {
+src/main/resources/assets/emberforge/models/item/forge_hammer.json:1-6 {
+src/main/resources/assets/emberforge/lang/en_us.json:1-17 {
+src/main/java/net/ashvale/emberforge/client/ClientSetup.java:15-18 @SubscribeEvent public static void registerScreens(RegisterMenuScreensEvent event)
+src/main/resources/assets/emberforge/models/item/cinder_ingot.json:1-6 {
+src/main/java/net/ashvale/emberforge/registry/ModMenus.java:12-20 public final class ModMenus
+… 107 more candidates not shown: src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 public static void serverTick(Level level, ; src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:99-107 @Override protected void onRemove(BlockState stat; src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:162-164 public ItemStackHandler getItems(); src/main…
+next: verinoda query "…" --max-chars 12000

@@ -1,0 +1,67 @@
+## src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21-22 HeatMath.addHeat
+  calls: addHeat@22
+  called by: stoke (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141); serverTick (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82); addHeat (src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22); heatStaysBetweenZeroAndTheMaximum (src/test/java/net/ashvale/emberforge/HeatMathTest.java:23)
+21 @JvmStatic
+22 fun addHeat(current: Int, amount: Int): Int = addHeat(current, amount, EmberConfig.MAX_HEAT.get())
+## src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:9-36 object HeatMath
+  src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:8-8
+8 /** Heat rules of the Ember Forge. */
+  src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:23-26
+24 @JvmStatic
+25 fun addHeat(current: Int, amount: Int, maxHeat: Int): Int = (current + amount).coerceIn(0, maxHeat)
+## src/test/java/net/ashvale/emberforge/HeatMathTest.java:21-25 HeatMathTest.heatStaysBetweenZeroAndTheMaximum
+  calls: addHeat@23
+21 @Test
+22 void heatStaysBetweenZeroAndTheMaximum() {
+23     assertEquals(200, HeatMath.addHeat(190, 40, 200));
+24     assertEquals(0, HeatMath.addHeat(5, -10, 200));
+25 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge)
+  calls: heatForFuel@79, addHeat@82, canOutput@94?, progressPerTick@97, finish@99?, cooled@107
+  runs: every tick of that block entity (registered at src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72)
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:85-90
+86 if (level.getGameTime() % 40 == 0 && level.getBlockState(pos.below()).is(ModTags.FORGE_HEAT_SOURCES)) {
+87     forge.heat = HeatMath.addHeat(forge.heat, 2);
+88     changed = true;
+89 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144 EmberForgeBlockEntity.stoke
+  calls: addHeat@141
+  called by: useItemOn (src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83)?; handleStoke (src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39)?
+140 public void stoke(Player player) {
+141     heat = HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get());
+142     setChanged();
+143     player.displayClientMessage(Component.translatable("message.emberforge.stoked", heat), true);
+144 }
+## src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:31-35 HeatMath.progressPerTick
+  called by: serverTick (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:97); noProgressBelowTheRecipesMinimumHeat (src/test/java/net/ashvale/emberforge/HeatMathTest.java:11); progressGrowsWithHeatButIsCapped (src/test/java/net/ashvale/emberforge/HeatMathTest.java:17)
+31 @JvmStatic
+32 fun progressPerTick(heat: Int, minHeat: Int): Int {
+33     if (heat < minHeat) return 0
+34     return (1 + (heat - minHeat) / HEAT_PER_EXTRA_STEP).coerceAtMost(MAX_STEPS)
+35 }
+## src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14-19 HeatMath.heatForFuel
+  called by: serverTick (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79)
+14 @JvmStatic
+15 fun heatForFuel(stack: ItemStack): Int {
+16     if (stack.isEmpty || !stack.`is`(ModTags.FORGE_FUELS)) return 0
+17     val base = EmberConfig.HEAT_PER_FUEL.get()
+18     return if (stack.`is`(Items.BLAZE_ROD)) base * 2 else base
+19 }
+src/test/java/net/ashvale/emberforge/HeatMathTest.java:9-13 @Test void noProgressBelowTheRecipesMinimumHeat()
+src/test/java/net/ashvale/emberforge/HeatMathTest.java:15-19 @Test void progressGrowsWithHeatButIsCapped()
+src/test/java/net/ashvale/emberforge/HeatMathTest.java:8-26 class HeatMathTest
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:123-125 public static int cooled(int heat, long gameTime, int decayInterval)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider
+src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:1-1 package net.ashvale.emberforge.heat
+config/emberforge-common.toml:5-23 [forge]
+src/main/resources/data/emberforge/neoforge/biome_modifier/add_cinder_ore.json:1-6 {
+src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41 public final class EmberConfig
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:24-87 public record ForgingRecipe(Ingredient ingredient, ItemStack result, int forgeTime, int minHeat) implements Recipe<Sing…
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:36-64 private EmberForgeMenu(int containerId, Inventory inventory, BlockPos pos, IItemHandler items, ContainerData data)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:133-138 private void finish(ForgingRecipe recipe)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:127-131 private boolean canOutput(ItemStack result)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:166-168 public int getHeat()
+src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41 static void handleStoke(StokeForgePayload payload, IPayloadContext context)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:76-87 @Override protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Playe…
+… 73 more candidates not shown: src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:49-52 @Override protected void createBlockStateDefinitio; src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:70-72 public int getHeat(); src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:34-42 private fun reportHeat(source: CommandSourceStack,; src/main/java/net/ashvale/emberfo…
+next: verinoda query "…" --max-chars 12000

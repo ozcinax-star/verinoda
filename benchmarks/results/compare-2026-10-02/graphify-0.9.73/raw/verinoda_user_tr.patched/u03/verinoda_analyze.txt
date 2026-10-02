@@ -1,0 +1,80 @@
+analysis ana_df253d99f7c2, snapshot snp_146247647180 (commit 91533f3f3b)
+understood as: Anladığım (kurallarla): q1 [etki] Sayfa indeks değişince kendini nasıl yeniliyor? (karşılıklar: Sayfa=page, indeks=index)
+q1 [unmet] impact: Sayfa indeks değişince kendini nasıl yeniliyor?
+claims:
+  [weak_inference] verinoda/ui/static/app.js:159 contains: noIndex: "Bu projenin henüz indeksi yok: içinde `verinoda scan .` çalıştırıp sayfayı yenileyin.",  (clm_6f5de66f4495)
+  [strong_inference] `commands()` calls `setMode()` (verinoda/ui/static/app.js:1596) (uncertain: which definition the call at verinoda/ui/static/app.js:1596 binds to is checked for Python only)  (clm_4acf3aa54014)
+  [strong_inference] `commands()` calls `goGraph3d()` (verinoda/ui/static/app.js:1597) (uncertain: which definition the call at verinoda/ui/static/app.js:1597 binds to is checked for Python only)  (clm_9e7d86ce448e)
+  [strong_inference] `commands()` calls `graphKey()` (verinoda/ui/static/app.js:1600) (uncertain: which definition the call at verinoda/ui/static/app.js:1600 binds to is checked for Python only)  (clm_f2226ef1530b)
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_6f5de66f4495: weak_inference -> weak_inference  
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: değişince->degisenl, değişince->degisen, değişince->degisenleri (+5 more)
+## verinoda/ui/static/app.js:1592-1608 commands
+  calls: setMode@1596, goGraph3d@1597, startTour@1597, goGraph@1599, showChanges@1599, graphKey@1600, showKeys@1605
+  called by: matchCommands (verinoda/ui/static/app.js:1610)
+1592 function commands() {
+1593   const cs = [
+1594     { words: "graph graf view görünüm harita map", label: t("cmd.graph"), key: "G", run: () => { location.hash = "#/graph"; } },
+1595     G3 ? { words: "3d 2d view görünüm mode boyut üç düz", label: mode3d ? t("cmd.to2d") : t("cmd.to3d"), key: "V",
+1596       run: () => { if ($("#graphview").hidden) { mode3d = !mode3d; store.set("vn.graph3d", mode3d ? "1" : "0"); location.hash = "#/graph"; } else setMode(!mo…
+1597     G3 ? { words: "tour tur gezinti gez bölgeler regions overview özet", label: t("cmd.tour"), key: "T", run: () => goGraph3d().then(() => { if (!tour) start…
+1598     OFFLINE ? null : { words: "changed changes değişen değişenler what ne diff", label: t("cmd.changes"), key: "C",
+1599       run: () => goGraph().then(() => { const b = $("#global-changes"); b.checked = true; showChanges(true); }) },
+1600     { words: "fit all hepsi hepsini sığdır reset everything", label: t("cmd.fit"), key: "R", run: () => goGraph().then(() => graphKey({ key: "r" })) },
+1601     { words: "home start başlangıç ana sayfa", label: t("cmd.home"), run: () => { location.hash = "#/"; } },
+1602     { words: "notes notlarım my notes kendi", label: t("myNotes"), run: () => { location.hash = "#/"; } },
+1603     { words: "theme tema dark light koyu açık", label: t("theme"), run: () => $("#btn-theme").click() },
+1604     { words: "language dil türkçe english ingilizce", label: t("cmd.lang"), run: () => $("#btn-lang").click() },
+1605     { words: "help keys shortcuts kısayol kısayollar yardım tuşlar", label: t("keysTitle"), key: "?", run: () => showKeys() },
+1606   ];
+1607   return cs.filter(Boolean);
+1608 }
+## verinoda/ui/static/app.js:134-145 (module level)
+134 highlight: "Notları vurgula…", labels: "Etiketler", fit: "Sığdır", close: "Kapat", back: "Geri", forward: "İleri",
+135 colorBy: "Renk", byFolder: "klasör", byCommunity: "topluluk",
+136 editor: "Editör", openIn: "Aç:", noEditor: "editör yok",
+137 myNote: "Notum", myNotes: "Notlarım", addNote: "+ Not", edit: "Düzenle", save: "Kaydet", cancel: "Vazgeç",
+138 del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder…
+139 nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
+140 changedSince: "Değişenler", changedInfo: "indeksten sonra değişti", affectedInfo: "bunları kullanıyor",
+141 refreshed: "İndeks güncellendi: sayfa artık onu gösteriyor.", updating: "İndeks güncelleniyor…",
+142 staleNote: "Bu dosya indeksten sonra değişti: bağlantılar ve satırlar kaymış olabilir. `verinoda update` onu alır.",
+143 ask: "Soruyu cevapla", answerFor: "Cevap", answerMore: "Ayrıca ilgili", answerNone: "Projede bunu cevaplayan bir şey yok.",
+144 answerStale: "indeksten sonra değişti (satırlar kaymış olabilir):", answerExp: "ayrıca arandı",
+145 impact: "Etki", impactTitle: "Etkilenebilecekler", impactNone: "Projede bunu kullanan yok.",
+## verinoda/ui/data.py:189-192 Atlas.version
+  doc: Which index the page sees: it changes when graph.json or search.db does (a page polls it).
+  calls: _key@191
+  called by: make_handler (verinoda/ui/server.py:289)?
+189 def version(self) -> str:
+190     """Which index the page sees: it changes when graph.json or search.db does (a page polls it)."""
+191     g, s = self._key()
+192     return f"{g[0]}-{g[1]}-{(s or (0, 0))[0]}-{(s or (0, 0))[1]}"
+## verinoda/ui/export.py:236-258 render
+236 def render(data: dict) -> str:
+237     """The page with its script, style and data inline."""
+238     page, css, js, g3 = _static("index.html"), _static("app.css"), _static("app.js"), _static("graph3d.js")
+239     if "</script" in js.lower() or "</script" in g3.lower() or "</style" in css.lower():
+240         raise ValueError("the page's script or style would end its own element")
+241     csp = (f"default-src 'none'; script-src {_sha256(g3)} {_sha256(js)}; style-src {_sha256(css)}; img-src data:; "
+242            "base-uri 'none'; form-action 'none'")
+243     title = f"{data['stats'].get('project') or 'project'} · Verinoda"
+244     esc = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+245     head_old = '<meta charset="utf-8">'
+246     replacements = [
+247         (head_old, f'{head_old}\n<meta http-equiv="Content-Security-Policy" content="{csp}">'),
+248         ("<title>Verinoda</title>", f"<title>{esc}</title>"),
+249         ('<link rel="stylesheet" href="app.css">', f"<style>{css}</style>"),
+250         ('<script src="graph3d.js"></script>', f"<script>{g3}</script>"),
+251         ('<script src="app.js"></script>',
+252          f'<script type="application/json" id="verinoda-data">{_json_for_html(data)}</script>\n<script>{js}</script>'),
+253     ]
+254     for old, new in replacements:
+255         if page.count(old) != 1:
+256             raise ValueError(f"the page template changed: {old!r}")
+257         page = page.replace(old, new)
+258     return page
+## verinoda/references/resolver.py:1358-1363 def _resolve_page(ctx: _Ctx, r: dict, questions: list[dict]) -> None
+… 598 more candidates not shown: verinoda/ui/static/app.js:1934-1950 async function followIndex(first = false) { // first: the key of the index the page ; verinoda/ui/static/app.js:1925-1926 (module level); verinoda/references/resolver.py:1431-1474 _resolve_one; verinoda/ui/static/app.js:1518-1550 graphKey
+next: verinoda query "…" --max-chars 12000

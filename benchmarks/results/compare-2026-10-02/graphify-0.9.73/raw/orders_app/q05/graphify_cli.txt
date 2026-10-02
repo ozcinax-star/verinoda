@@ -1,0 +1,24 @@
+Graph: graphify-out/graph.json (41 nodes) | Traversal: BFS depth=2 | Start: ['Persistence layer: the only module that talks to SQLite.', 'sqlite3', 'orders-app'] | 9 nodes found
+
+NODE Persistence layer: the only module that talks to SQLite. [src=orders/repository.py loc=L1 community=repository.py]
+NODE sqlite3 [src= loc= community=repository.py]
+NODE orders-app [src=pyproject.toml loc=L1 community=orders-app]
+NODE repository.py [src=orders/repository.py loc=L1 community=repository.py]
+NODE OrderRepository [src=orders/repository.py loc=L8 community=OrderRepository]
+NODE service.py [src=orders/service.py loc=L1 community=service.py]
+NODE api.py [src=orders/api.py loc=L1 community=api.py]
+NODE test_service.py [src=tests/test_service.py loc=L1 community=service.py]
+NODE config.py [src=orders/config.py loc=L1 community=repository.py]
+EDGE Persistence layer: the only module that talks to SQLite. --rationale_for [EXTRACTED]--> repository.py at=orders/repository.py:L1
+EDGE repository.py --imports [EXTRACTED context=import]--> sqlite3 at=orders/repository.py:L3
+EDGE api.py --imports_from [EXTRACTED context=import]--> repository.py at=orders/api.py:L3
+EDGE repository.py --imports_from [EXTRACTED context=import]--> config.py at=orders/repository.py:L5
+EDGE service.py --imports_from [EXTRACTED context=import]--> repository.py at=orders/service.py:L5
+EDGE test_service.py --imports_from [EXTRACTED context=import]--> repository.py at=tests/test_service.py:L3
+EDGE repository.py --contains [EXTRACTED]--> OrderRepository at=orders/repository.py:L8
+EDGE api.py --imports [EXTRACTED context=import]--> OrderRepository at=orders/api.py:L3
+EDGE api.py --imports_from [EXTRACTED context=import]--> service.py at=orders/api.py:L4
+EDGE service.py --imports_from [EXTRACTED context=import]--> config.py at=orders/service.py:L3
+EDGE service.py --imports [EXTRACTED context=import]--> OrderRepository at=orders/service.py:L5
+EDGE test_service.py --imports [EXTRACTED context=import]--> OrderRepository at=tests/test_service.py:L3
+EDGE test_service.py --imports_from [EXTRACTED context=import]--> service.py at=tests/test_service.py:L4

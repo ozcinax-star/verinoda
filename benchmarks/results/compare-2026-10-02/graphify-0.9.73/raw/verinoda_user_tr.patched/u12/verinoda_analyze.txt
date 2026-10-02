@@ -1,0 +1,88 @@
+analysis ana_dbc908620b6e, snapshot snp_146247647180 (commit 91533f3f3b)
+understood as: Anladığım (kurallarla): q1 [etki] --watch dosya değişikliğini nasıl fark ediyor? (karşılıklar: değişikliğini=change, fark=diff)
+plan links: watch -> verinoda/claims.py:960-961
+q1 [unmet] impact: --watch dosya değişikliğini nasıl fark ediyor?
+claims:
+  [statically_verified] `Watcher` is defined at verinoda/ui/server.py:60-133  (clm_c04e2189f562)
+  [statically_verified] `_get()` is defined at verinoda/ui/server.py:252-317  (clm_bf2aae82727e)
+  [statically_verified] `changed_claim_files()` calls `watches_tests()` (verinoda/claims.py:978)  (clm_5594f92faa89)
+  [unknown] Changing verinoda/ui/server.py possibly affects verinoda/cli.py, verinoda/__main__.py; tests to run: none found (uncertain: dynamic/reflective dependents are missed; a dependent is 'possibly affected', not proven broken)  (clm_3bffdc9ff41e)
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_3bffdc9ff41e: unknown -> unknown  no supporting evidence recorded
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: değişikliğini->degisenl, değişikliğini->degisen, değişikliğini->degisenleri (+5 more)
+## verinoda/ui/server.py:60-133 Watcher
+  doc: ``verinoda ui --watch``: run ``verinoda update`` when the project's files change.
+  called by: start (verinoda/ui/server.py:330)
+  verinoda/ui/server.py:60-62
+60 class Watcher(threading.Thread):
+61     """``verinoda ui --watch``: run ``verinoda update`` when the project's files change.
+## verinoda/ui/static/app.js:182-193 (module level)
+182 prevRegion: "Önceki", nextRegion: "Sonraki", tourResume: "Sürdür", tourPause: "Duraklat", tourAt: "Tur: {n} bölgenin {i}.",
+183 tourDone: "Tur bitti: projenin tamamı yeniden karşında.",
+184 say: {
+185   data: "Bir veri dosyası: kod onu kaynak kimliğiyle anıyor.",
+186   docOut: "{name} projenin {outs} dosyasından söz ediyor.", docIn: "{ins} dosya {name} belgesinden söz ediyor.",
+187   docBoth: "{name} projenin {outs} dosyasından söz ediyor, {ins} dosya da ondan söz ediyor.",
+188   both: "{name}: {ins} dosya onu kullanıyor, o {outs} dosyayı kullanıyor.",
+189   used: "{name}: {ins} dosya onu kullanıyor, kendisi projenin hiçbir dosyasını kullanmıyor: geri kalanın dayandığı bir parça.",
+190   uses: "{name}: {outs} dosyayı kullanıyor, onu kullanan yok: bir giriş noktası, betik ya da test.",
+191   alone: "{name} başka dosyalara bağlı değil.",
+192   region: "{name}: {n} dosya, aralarında {links} bağlantı.",
+193   talks: "En çok birlikte çalıştığı: {list}.",
+## verinoda/ui/server.py:252-317 def _get(self, *, head: bool) -> None
+  calls: _host_ok@253, _json@254, _static@260, _send@263, _relations@281, _flag@282
+  called by: do_HEAD (verinoda/ui/server.py:167); do_GET (verinoda/ui/server.py:170)
+  const verinoda/ui/server.py:31: STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
+  const verinoda/ui/server.py:57: TOKEN_META = '<meta name="verinoda-token" content="">'
+  verinoda/ui/server.py:263-276
+263     self._send(HTTPStatus.OK, body, ctype, head=head)
+264     return
+265 if not url.path.startswith("/api/"):
+266     self._json(HTTPStatus.NOT_FOUND, {"error": "not_found", "message": url.path}, head=head)
+267     return
+268 qs = parse_qs(url.query)
+269 nid = (qs.get("id") or [""])[0]
+270 try:
+271     route = url.path[len("/api/"):]
+272     if route == "stats":
+273         obj = atlas.stats()
+274     elif route == "tree":
+275         obj = atlas.tree()
+276     elif route == "search":
+  verinoda/ui/server.py:287-300
+287     obj = atlas.impact(nid, int((qs.get("depth") or ["3"])[0] or 3), tests=_flag(qs, "tests", True))
+288 elif route == "version":
+289     obj = {"key": atlas.version(), "watch": None if watcher is None else
+290            {"running": watcher.running, "updates": watcher.updates, "error": watcher.error}}
+291 elif route == "changes":
+292     obj = atlas.changes()
+293 elif route == "answer":
+294     obj = atlas.answer((qs.get("q") or [""])[0])
+295 elif route == "path":
+296     obj = atlas.path((qs.get("from") or [""])[0], (qs.get("to") or [""])[0])
+297 elif route == "global":
+298     obj = atlas.global_graph(tests=_flag(qs, "tests", True), data=_flag(qs, "data", True),
+299                              relations=_relations(qs))
+300 else:
+## verinoda/ui/server.py:322-338 start
+322 def start(repo: Path | str, *, port: int = 0, read_only: bool = False,
+323           watch: bool = False) -> tuple[ThreadingHTTPServer, str]:
+324     """Load the project and start serving in a background thread; returns (server, url).
+325     ``watch``: also run ``verinoda update`` when files change (:class:`Watcher`, ``server.watcher``)."""
+326     atlas = Atlas(repo)
+327     atlas.ensure()  # a missing index fails here, before a browser opens
+328     holder = [0]
+329     token = "" if read_only else secrets.token_urlsafe(24)
+330     watcher = Watcher(atlas.repo) if watch else None
+331     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(atlas, holder, token, watcher))
+332     server.watcher = watcher  # type: ignore[attr-defined]
+333     if watcher is not None:
+334         watcher.start()
+335     server.daemon_threads = True
+336     holder[0] = server.server_address[1]
+337     threading.Thread(target=server.serve_forever, name="verinoda-ui", daemon=True).start()
+338     return server, f"http://127.0.0.1:{holder[0]}/"
+## verinoda/claims.py:964-983 def changed_claim_files(store: Store, claim: dict, old_files: dict[str, str], new_files: dict[str, str]) -> list[dict]
+… 1412 more candidates not shown: verinoda/architecture_map.py:394-398 def changed_files_from_git(root: Path, base: str | None = None) -> list[str]; verinoda/workflow.py:195-278 def update(store: Store, repo: Path) -> dict; verinoda/ui/server.py:98-133 def run(self) -> None; verinoda/ui/server.py:76-86 def signature(self) -> tuple
+next: verinoda query "…" --max-chars 12000

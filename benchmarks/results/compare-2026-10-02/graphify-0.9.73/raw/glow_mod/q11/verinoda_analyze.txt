@@ -1,0 +1,85 @@
+analysis ana_0be1056c1d72, snapshot snp_96a6e3b2d02d (commit 906a99fb8c)
+understood as: Anladığım (kurallarla): q1 [davranış] Sunucu kapanırken henüz onarılmamış bloklara ne oluyor? (karşılıklar: Sunucu=server, onarılmamış=repair, bloklara=block)
+q1 [not_supported] behaviour: Sunucu kapanırken henüz onarılmamış bloklara ne oluyor?
+  unknown: a behaviour question needs a checkable proposition; the claims above only say where the code is; next: write done_when.proposition as 'A before B in F' or 'regex:<pattern> in:<glob>' in the plan and re-run
+claims:
+  [statically_verified] src/main/resources/glowmod.yml:11 contains: # how many blocks burnt by the ritual are put back per server tick  (clm_402d2dad8e3d)
+  [weak_inference 0.30] `RepairScheduler.kaydet()` calls `Pending` (src/main/java/com/example/glowmod/repair/RepairScheduler.java:30) (uncertain: )  (clm_a0d5d5b9407b)
+  [strong_inference] `Ritual.alaniAc()` calls `RepairScheduler.kaydet()` (src/main/java/com/example/glowmod/ritual/Ritual.java:38) (uncertain: which definition the call at src/main/java/com/example/glowmod/ritual/Ritual.java:38 binds to is checked for Python only)  (clm_b73ee94357fb)
+  +3 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_a0d5d5b9407b: weak_inference -> weak_inference  src/main/java/com/example/glowmod/repair/RepairScheduler.java:30: line 30 names `Pending` but has no call to it
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: sunucu->serv, onarilmamis->repair, bloklara->block
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-47 RepairScheduler.temizle
+  runs: while the server stops (registered at src/main/java/com/example/glowmod/repair/RepairScheduler.java:25)
+42 private static void temizle(MinecraftServer server) {
+43     for (Pending p : QUEUE) {
+44         p.world().setBlockState(p.pos(), p.state());
+45     }
+46     QUEUE.clear();
+47 }
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:28-31 RepairScheduler.kaydet
+  calls: get@29, Pending@30
+  called by: alaniAc (src/main/java/com/example/glowmod/ritual/Ritual.java:38)
+28 public static void kaydet(ServerWorld world, BlockPos pos, BlockState state) {
+29     long due = world.getServer().getTicks() + GlowConfig.get().repairDelayTicks();
+30     QUEUE.addLast(new Pending(world, pos, state, due));
+31 }
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39 RepairScheduler.tick
+  calls: get@34
+  runs: at the end of every server tick (registered at src/main/java/com/example/glowmod/repair/RepairScheduler.java:24)
+33 private static void tick(MinecraftServer server) {
+34     int budget = GlowConfig.get().blocksPerTick();
+35     while (budget-- > 0 && !QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks()) {
+36         Pending p = QUEUE.pollFirst();
+37         p.world().setBlockState(p.pos(), p.state());
+38     }
+39 }
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-26 RepairScheduler.register
+23 public static void register() {
+24     ServerTickEvents.END_SERVER_TICK.register(RepairScheduler::tick);
+25     ServerLifecycleEvents.SERVER_STOPPING.register(RepairScheduler::temizle);
+26 }
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:15-16 Pending
+15 private record Pending(ServerWorld world, BlockPos pos, BlockState state, long dueTick) {
+16 }
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:14-48 public final class RepairScheduler
+  src/main/java/com/example/glowmod/repair/RepairScheduler.java:13-13
+13 /** Puts back blocks the ritual removed, a few per tick, after a short delay. */
+## src/main/java/com/example/glowmod/ritual/Ritual.java:34-42 Ritual.alaniAc
+34 private static void alaniAc(ServerWorld world, BlockPos altar) {
+35     for (BlockPos pos : BlockPos.iterate(altar.add(-RADIUS, 1, -RADIUS), altar.add(RADIUS, 2, RADIUS))) {
+36         BlockState state = world.getBlockState(pos);
+37         if (state.isIn(BlockTags.REPLACEABLE_BY_TREES)) {
+38             RepairScheduler.kaydet(world, pos.toImmutable(), state);
+39             world.setBlockState(pos, Blocks.AIR.getDefaultState());
+40         }
+41     }
+42 }
+src/main/resources/glowmod.yml:10-14 repair:
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:20-21 private RepairScheduler()
+src/main/java/com/example/glowmod/GlowMod.java:19-30 @Override public void onInitialize()
+src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30 private static void onSummonWisp(SummonWispPayload payload, ServerPlayNetworking.Context context)
+src/main/java/com/example/glowmod/config/GlowConfig.java:44-54 private static GlowConfig parse(Map<String, Object> root)
+src/main/java/com/example/glowmod/network/SummonWispPayload.java:10-10 /** Client -> server: "call a wisp at this block". */
+src/main/java/com/example/glowmod/ritual/Ritual.java:21-31 public static void baslat(ServerWorld world, BlockPos altar)
+reference/original-plugin/config.yml:7-9 repair:
+src/main/java/com/example/glowmod/event/LanternEvents.java:18-34 public static void etkinlestir()
+src/main/java/com/example/glowmod/entity/Wisp.java:28-36 public static Wisp spawn(ServerWorld world, BlockPos pos)
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:1-1 package com.example.glowmod.repair;
+src/main/java/com/example/glowmod/command/GlowCommands.java:38-42 private static int ritual(CommandContext<ServerCommandSource> ctx)
+src/main/java/com/example/glowmod/world/WispSpawner.java:22-33 private static void onChunkLoad(ServerWorld world, WorldChunk chunk)
+reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java:13-15 public int blocksPerTick()
+src/main/java/com/example/glowmod/network/ServerNetworking.java:11-31 public final class ServerNetworking
+src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18 public static void register()
+src/main/java/com/example/glowmod/config/GlowConfig.java:15-64 public record GlowConfig(int ritualWispCount, double naturalChance, int blocksPerTick, int repairDelayTicks, int maxSum…
+src/main/java/com/example/glowmod/network/ServerNetworking.java:12-13 private ServerNetworking()
+src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-21 public record SummonWispPayload(BlockPos pos) implements CustomPayload
+src/main/java/com/example/glowmod/util/Datapack.java:25-35 private static void execute(ServerWorld world, Vec3d pos, Identifier id)
+src/main/java/com/example/glowmod/command/GlowCommands.java:27-36 private static int wisp(CommandContext<ServerCommandSource> ctx)
+src/main/java/com/example/glowmod/config/GlowConfig.java:21-23 public static GlowConfig get()
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:1-7 scoreboard objectives add glowmod.ritual dummy
+README.md:1-26 # Glow Mod (example)
+src/client/java/com/example/glowmod/client/GlowModClient.java:25-31 private static void onEndTick(MinecraftClient client)
+… 43 more candidates not shown: src/gametest/java/com/example/glowmod/test/WispTests.java:11-29 public class WispTests implements FabricGameTest; src/main/java/com/example/glowmod/world/WispSpawner.java:18-20 public static void register(); src/main/java/com/example/glowmod/entity/Wisp.java:38-44 @Override public void onDeath(DamageSource damageSource); src/main/java/com/example/glowmod/util/Datap…
+next: verinoda query "…" --max-chars 12000

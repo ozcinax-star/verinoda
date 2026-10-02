@@ -1,0 +1,177 @@
+$ grep -rniE 'emberforge|reset|komutunu|kapatan|ayar|nerede|tanımlanıyor|kontrol|ediliyor' .   # 253 matching lines in 51 files
+src/main/resources/assets/emberforge/lang/en_us.json:2: "block.emberforge.ember_forge": "Ember Forge",
+src/main/resources/assets/emberforge/lang/en_us.json:3: "block.emberforge.cinder_ore": "Cinder Ore",
+src/main/resources/assets/emberforge/lang/en_us.json:4: "item.emberforge.cinder_ingot": "Cinder Ingot",
+src/main/resources/assets/emberforge/lang/en_us.json:5: "item.emberforge.forge_hammer": "Forge Hammer",
+src/main/resources/assets/emberforge/lang/en_us.json:6: "itemGroup.emberforge": "Emberforge",
+src/main/resources/assets/emberforge/lang/en_us.json:7: "container.emberforge.ember_forge": "Ember Forge",
+src/main/resources/assets/emberforge/lang/en_us.json:8: "gui.emberforge.stoke": "Stoke",
+src/main/resources/assets/emberforge/lang/en_us.json:9: "message.emberforge.stoked": "The forge glows hotter (heat %s)",
+src/main/resources/assets/emberforge/lang/en_us.json:10: "message.emberforge.first_cinder": "Warm stone! Here is some coal to light a forge.",
+src/main/resources/assets/emberforge/lang/en_us.json:11: "message.emberforge.reset.heat_source": "There is still a heat source under you.",
+src/main/resources/assets/emberforge/lang/en_us.json:12: "message.emberforge.reset.done": "Nearby Ember Forges were reset.",
+src/main/resources/assets/emberforge/lang/en_us.json:13: "command.emberforge.heat": "Forge heat: %s",
+src/main/resources/assets/emberforge/lang/en_us.json:14: "command.emberforge.heat.not_a_forge": "That block is not an Ember Forge.",
+src/main/resources/assets/emberforge/lang/en_us.json:15: "advancement.emberforge.first_cinder.title": "Smouldering Stone",
+src/main/resources/assets/emberforge/lang/en_us.json:16: "advancement.emberforge.first_cinder.description": "Find some Cinder Ore"
+src/main/resources/assets/emberforge/lang/tr_tr.json:2: "block.emberforge.ember_forge": "Kor Ocağı",
+src/main/resources/assets/emberforge/lang/tr_tr.json:3: "block.emberforge.cinder_ore": "Cüruf Cevheri",
+src/main/resources/assets/emberforge/lang/tr_tr.json:4: "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+src/main/resources/assets/emberforge/lang/tr_tr.json:5: "item.emberforge.forge_hammer": "Demirci Çekici",
+src/main/resources/assets/emberforge/lang/tr_tr.json:6: "itemGroup.emberforge": "Emberforge",
+src/main/resources/assets/emberforge/lang/tr_tr.json:7: "container.emberforge.ember_forge": "Kor Ocağı",
+src/main/resources/assets/emberforge/lang/tr_tr.json:8: "gui.emberforge.stoke": "Körükle",
+src/main/resources/assets/emberforge/lang/tr_tr.json:9: "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+src/main/resources/assets/emberforge/lang/tr_tr.json:10: "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:11: "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:12: "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:13: "command.emberforge.heat": "Ocak ısısı: %s",
+src/main/resources/assets/emberforge/lang/tr_tr.json:14: "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:15: "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+src/main/resources/assets/emberforge/lang/tr_tr.json:16: "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:1: package net.ashvale.emberforge.command
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:4: import net.ashvale.emberforge.block.EmberForgeBlockEntity
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:5: import net.ashvale.emberforge.config.EmberConfig
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:6: import net.ashvale.emberforge.util.ForgeFunctions
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:13: /** /emberforge reset and /emberforge heat <pos>. */
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:18: Commands.literal("emberforge")
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:20: Commands.literal("reset")
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:21: .requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22: .executes { ctx -> if (ForgeFunctions.resetForges(ctx.source)) 1 else 0 }
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:35: val forge = source.level.getBlockEntity(pos) as? EmberForgeBlockEntity
+... (213 more matching lines not shown)
+
+==> src/main/resources/assets/emberforge/lang/en_us.json:1-17 <==
+     1	{
+     2	  "block.emberforge.ember_forge": "Ember Forge",
+     3	  "block.emberforge.cinder_ore": "Cinder Ore",
+     4	  "item.emberforge.cinder_ingot": "Cinder Ingot",
+     5	  "item.emberforge.forge_hammer": "Forge Hammer",
+     6	  "itemGroup.emberforge": "Emberforge",
+     7	  "container.emberforge.ember_forge": "Ember Forge",
+     8	  "gui.emberforge.stoke": "Stoke",
+     9	  "message.emberforge.stoked": "The forge glows hotter (heat %s)",
+    10	  "message.emberforge.first_cinder": "Warm stone! Here is some coal to light a forge.",
+    11	  "message.emberforge.reset.heat_source": "There is still a heat source under you.",
+    12	  "message.emberforge.reset.done": "Nearby Ember Forges were reset.",
+    13	  "command.emberforge.heat": "Forge heat: %s",
+    14	  "command.emberforge.heat.not_a_forge": "That block is not an Ember Forge.",
+    15	  "advancement.emberforge.first_cinder.title": "Smouldering Stone",
+    16	  "advancement.emberforge.first_cinder.description": "Find some Cinder Ore"
+    17	}
+
+==> src/main/resources/assets/emberforge/lang/tr_tr.json:1-17 <==
+     1	{
+     2	  "block.emberforge.ember_forge": "Kor Ocağı",
+     3	  "block.emberforge.cinder_ore": "Cüruf Cevheri",
+     4	  "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+     5	  "item.emberforge.forge_hammer": "Demirci Çekici",
+     6	  "itemGroup.emberforge": "Emberforge",
+     7	  "container.emberforge.ember_forge": "Kor Ocağı",
+     8	  "gui.emberforge.stoke": "Körükle",
+     9	  "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+    10	  "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+    11	  "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+    12	  "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+    13	  "command.emberforge.heat": "Ocak ısısı: %s",
+    14	  "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+    15	  "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+    16	  "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+    17	}
+
+==> src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:1-43 <==
+     1	package net.ashvale.emberforge.command
+     2	
+     3	import com.mojang.brigadier.CommandDispatcher
+     4	import net.ashvale.emberforge.block.EmberForgeBlockEntity
+     5	import net.ashvale.emberforge.config.EmberConfig
+     6	import net.ashvale.emberforge.util.ForgeFunctions
+     7	import net.minecraft.commands.CommandSourceStack
+     8	import net.minecraft.commands.Commands
+     9	import net.minecraft.commands.arguments.coordinates.BlockPosArgument
+    10	import net.minecraft.core.BlockPos
+    11	import net.minecraft.network.chat.Component
+    12	
+    13	/** /emberforge reset and /emberforge heat <pos>. */
+    14	object ForgeCommands {
+    15	    @JvmStatic
+    16	    fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+    17	        dispatcher.register(
+    18	            Commands.literal("emberforge")
+    19	                .then(
+    20	                    Commands.literal("reset")
+    21	                        .requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }
+    22	                        .executes { ctx -> if (ForgeFunctions.resetForges(ctx.source)) 1 else 0 }
+    23	                )
+    24	                .then(
+    25	                    Commands.literal("heat")
+    26	                        .then(
+    27	                            Commands.argument("pos", BlockPosArgument.blockPos())
+    28	                                .executes { ctx -> reportHeat(ctx.source, BlockPosArgument.getLoadedBlockPos(ctx, "pos")) }
+    29	                        )
+    30	                )
+    31	        )
+    32	    }
+    33	
+    34	    private fun reportHeat(source: CommandSourceStack, pos: BlockPos): Int {
+    35	        val forge = source.level.getBlockEntity(pos) as? EmberForgeBlockEntity
+    36	        if (forge == null) {
+    37	            source.sendFailure(Component.translatable("command.emberforge.heat.not_a_forge"))
+    38	            return 0
+    39	        }
+    40	        source.sendSuccess({ Component.translatable("command.emberforge.heat", forge.heat) }, false)
+    41	        return forge.heat
+    42	    }
+    43	}
+
+==> src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:1-26 <==
+     1	package net.ashvale.emberforge.util;
+     2	
+     3	import net.ashvale.emberforge.EmberForge;
+     4	import net.minecraft.commands.CommandSourceStack;
+     5	import net.minecraft.resources.ResourceLocation;
+     6	import net.minecraft.server.MinecraftServer;
+     7	
+     8	/** Runs the mod's data-pack functions from code. */
+     9	public final class ForgeFunctions {
+    10	    public static final String RESET_FORGES = "emberforge:debug/reset_forges";
+    11	
+    12	    private ForgeFunctions() {
+    13	    }
+    14	
+    15	    /** Runs the reset function at the source's position; false when the data pack does not provide it. */
+    16	    public static boolean resetForges(CommandSourceStack source) {
+    17	        MinecraftServer server = source.getServer();
+    18	        ResourceLocation id = ResourceLocation.parse(RESET_FORGES);
+    19	        if (server.getFunctions().get(id).isEmpty()) {
+    20	            EmberForge.LOGGER.warn("Function {} is missing; is the mod's data pack disabled?", id);
+    21	            return false;
+    22	        }
+    23	        server.getCommands().performPrefixedCommand(source, "function " + RESET_FORGES);
+    24	        return true;
+    25	    }
+    26	}
+
+==> README.md:1-22 <==
+     1	# Emberforge (example mod)
+     2	
+     3	A small, fictional NeoForge 1.21.1 mod used as a test corpus for Verinoda. It builds on
+     4	paper only: textures (`.png`) are left out so the example stays plain text, and nothing
+     5	here has been run in a game.
+     6	
+     7	Adds:
+     8	
+     9	- **Ember Forge** - a block that burns fuel into heat and slowly forges its input with
+    10	  `emberforge:forging` recipes. Right-click opens it; a Forge Hammer stokes it.
+    11	- **Cinder Ore** - generated in a few overworld biomes; forged into two Cinder Ingots
+    12	  (a furnace gives one).
+    13	- `/emberforge reset` and `/emberforge heat <pos>` for operators.
+    14	
+    15	Layout:
+    16	
+    17	- `src/main/java` - Java code (registries, block, block entity, menu, recipe, network, events)
+    18	- `src/main/kotlin` - Kotlin code (heat rules, forge screen, commands); needs Kotlin for Forge
+    19	- `src/main/resources/data/emberforge` - recipes, tags, loot tables, worldgen, advancement, functions
+    20	- `src/main/resources/assets/emberforge` - blockstates, models, `en_us` / `tr_tr` translations
+    21	- `config/emberforge-common.toml` - the default common config, for reference
+    22	- `src/test/java` - JUnit tests

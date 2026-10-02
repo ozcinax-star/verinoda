@@ -1,0 +1,23 @@
+$ grep -rniE 'cüruf|cevheri|dünyada|hangi|biyomlarda|nasıl|oluşuyor' .   # 3 matching lines in 1 files
+src/main/resources/assets/emberforge/lang/tr_tr.json:3: "block.emberforge.cinder_ore": "Cüruf Cevheri",
+src/main/resources/assets/emberforge/lang/tr_tr.json:4: "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+src/main/resources/assets/emberforge/lang/tr_tr.json:16: "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+
+==> src/main/resources/assets/emberforge/lang/tr_tr.json:1-17 <==
+     1	{
+     2	  "block.emberforge.ember_forge": "Kor Ocağı",
+     3	  "block.emberforge.cinder_ore": "Cüruf Cevheri",
+     4	  "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+     5	  "item.emberforge.forge_hammer": "Demirci Çekici",
+     6	  "itemGroup.emberforge": "Emberforge",
+     7	  "container.emberforge.ember_forge": "Kor Ocağı",
+     8	  "gui.emberforge.stoke": "Körükle",
+     9	  "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+    10	  "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+    11	  "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+    12	  "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+    13	  "command.emberforge.heat": "Ocak ısısı: %s",
+    14	  "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+    15	  "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+    16	  "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+    17	}

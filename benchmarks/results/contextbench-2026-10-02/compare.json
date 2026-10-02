@@ -1,0 +1,198 @@
+{
+ "instances": [
+  "astropy__astropy-14539",
+  "cli__cli-10048",
+  "django__django-15252",
+  "facebook__zstd-1243",
+  "facebook__zstd-1532",
+  "fasterxml__jackson-core-964",
+  "fasterxml__jackson-databind-3701",
+  "fasterxml__jackson-databind-4015",
+  "fasterxml__jackson-databind-4050",
+  "fasterxml__jackson-databind-4469",
+  "fasterxml__jackson-databind-4641",
+  "huggingface__transformers-13989",
+  "iamkun__dayjs-938",
+  "mui__material-ui-11987",
+  "nlohmann__json-2225",
+  "nlohmann__json-2989",
+  "nlohmann__json-3601",
+  "nlohmann__json-4512",
+  "nushell__nushell-13357",
+  "ponylang__ponyc-2201",
+  "ponylang__ponyc-2247",
+  "ponylang__ponyc-2261",
+  "prettier__prettier-11000",
+  "psf__requests-6028",
+  "pydata__xarray-4966",
+  "scikit-learn__scikit-learn-25931",
+  "simdjson__simdjson-1695",
+  "simdjson__simdjson-2016",
+  "sveltejs__svelte-12098",
+  "sveltejs__svelte-13097",
+  "sympy__sympy-12489",
+  "sympy__sympy-22914",
+  "vuejs__core-9213",
+  "yt-dlp__yt-dlp-5933"
+ ],
+ "by_language": {
+  "python": 9,
+  "go": 1,
+  "c": 5,
+  "java": 6,
+  "javascript": 4,
+  "typescript": 2,
+  "cpp": 6,
+  "rust": 1
+ },
+ "arms": {
+  "vq": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.578,
+     "recall_micro": 0.484,
+     "precision_micro": 0.13,
+     "f1_micro": 0.205
+    },
+    "span": {
+     "recall_per_instance": 0.392,
+     "recall_micro": 0.287,
+     "precision_micro": 0.047,
+     "f1_micro": 0.081
+    },
+    "chars_mean": 5704
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.568,
+     "recall_micro": 0.476,
+     "precision_micro": 0.131,
+     "f1_micro": 0.206
+    },
+    "span": {
+     "recall_per_instance": 0.375,
+     "recall_micro": 0.286,
+     "precision_micro": 0.048,
+     "f1_micro": 0.083
+    },
+    "chars_mean": 5713
+   },
+   "paired_file_recall": [
+    0,
+    33,
+    1
+   ]
+  },
+  "va": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.39,
+     "recall_micro": 0.315,
+     "precision_micro": 0.103,
+     "f1_micro": 0.155
+    },
+    "span": {
+     "recall_per_instance": 0.217,
+     "recall_micro": 0.146,
+     "precision_micro": 0.106,
+     "f1_micro": 0.123
+    },
+    "chars_mean": 5647
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.47,
+     "recall_micro": 0.379,
+     "precision_micro": 0.104,
+     "f1_micro": 0.164
+    },
+    "span": {
+     "recall_per_instance": 0.253,
+     "recall_micro": 0.165,
+     "precision_micro": 0.103,
+     "f1_micro": 0.127
+    },
+    "chars_mean": 6000
+   },
+   "paired_file_recall": [
+    8,
+    26,
+    0
+   ]
+  },
+  "gq": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.376,
+     "recall_micro": 0.266,
+     "precision_micro": 0.038,
+     "f1_micro": 0.067
+    },
+    "span": {
+     "recall_per_instance": 0.005,
+     "recall_micro": 0.003,
+     "precision_micro": 0.017,
+     "f1_micro": 0.005
+    },
+    "chars_mean": 6000
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.378,
+     "recall_micro": 0.274,
+     "precision_micro": 0.042,
+     "f1_micro": 0.072
+    },
+    "span": {
+     "recall_per_instance": 0.005,
+     "recall_micro": 0.003,
+     "precision_micro": 0.018,
+     "f1_micro": 0.005
+    },
+    "chars_mean": 6000
+   },
+   "paired_file_recall": [
+    1,
+    33,
+    0
+   ]
+  },
+  "bm25": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.348,
+     "recall_micro": 0.266,
+     "precision_micro": 0.191,
+     "f1_micro": 0.222
+    },
+    "span": {
+     "recall_per_instance": 0.075,
+     "recall_micro": 0.036,
+     "precision_micro": 0.07,
+     "f1_micro": 0.048
+    },
+    "chars_mean": 5959
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.348,
+     "recall_micro": 0.266,
+     "precision_micro": 0.191,
+     "f1_micro": 0.222
+    },
+    "span": {
+     "recall_per_instance": 0.069,
+     "recall_micro": 0.035,
+     "precision_micro": 0.068,
+     "f1_micro": 0.047
+    },
+    "chars_mean": 5960
+   },
+   "paired_file_recall": [
+    0,
+    34,
+    0
+   ]
+  }
+ }
+}

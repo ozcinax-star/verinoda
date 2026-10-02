@@ -1,0 +1,1326 @@
+{
+ "seed": 20260928,
+ "per_lang": 10,
+ "sample": [
+  {
+   "id": "ponylang__ponyc-3973",
+   "lang": "c",
+   "repo_url": "https://github.com/ponylang/ponyc.git",
+   "commit": "ca368192917b76bb43e0892d4f14cbdf18e1f7d6",
+   "checkout_bytes": 4700000
+  },
+  {
+   "id": "ponylang__ponyc-2261",
+   "lang": "c",
+   "repo_url": "https://github.com/ponylang/ponyc.git",
+   "commit": "682b45d3abd7b24381bfc56423da85c3527785c7",
+   "checkout_bytes": 5600000
+  },
+  {
+   "id": "jqlang__jq-2654",
+   "lang": "c",
+   "repo_url": "https://github.com/jqlang/jq.git",
+   "commit": "c077b95ba2dcaafee39e302cc086bf99fa9248d0",
+   "checkout_bytes": 4099999
+  },
+  {
+   "id": "facebook__zstd-1243",
+   "lang": "c",
+   "repo_url": "https://github.com/facebook/zstd.git",
+   "commit": "df09d4318f0f4f06d76c1e288732f5f9b1d9f59a",
+   "checkout_bytes": 6200000
+  },
+  {
+   "id": "facebook__zstd-637",
+   "lang": "c",
+   "repo_url": "https://github.com/facebook/zstd.git",
+   "commit": "e8e1e13d4fcd6495ba17fb0eafa414d5df7c00b6",
+   "checkout_bytes": 3700000
+  },
+  {
+   "id": "facebook__zstd-1532",
+   "lang": "c",
+   "repo_url": "https://github.com/facebook/zstd.git",
+   "commit": "eb3a7a38270dc2a1f533c1b347f8b9b56e789f8f",
+   "checkout_bytes": 6700000
+  },
+  {
+   "id": "ponylang__ponyc-2201",
+   "lang": "c",
+   "repo_url": "https://github.com/ponylang/ponyc.git",
+   "commit": "f00f95b30dd68c7faaff0aa88508c218bc19f02b",
+   "checkout_bytes": 5500000
+  },
+  {
+   "id": "ponylang__ponyc-1124",
+   "lang": "c",
+   "repo_url": "https://github.com/ponylang/ponyc.git",
+   "commit": "8ae0ecd7dcc1fc483cd964509f4a91ad35419dc3",
+   "checkout_bytes": 4300000
+  },
+  {
+   "id": "ponylang__ponyc-2247",
+   "lang": "c",
+   "repo_url": "https://github.com/ponylang/ponyc.git",
+   "commit": "9e26f0ac4b65462fda4cadbb80cc2fa53e3042b3",
+   "checkout_bytes": 5500000
+  },
+  {
+   "id": "jqlang__jq-2919",
+   "lang": "c",
+   "repo_url": "https://github.com/jqlang/jq.git",
+   "commit": "7f547827e47b5ade563a293329deb4226496d72f",
+   "checkout_bytes": 4400000
+  },
+  {
+   "id": "simdjson__simdjson-1695",
+   "lang": "cpp",
+   "repo_url": "https://github.com/simdjson/simdjson.git",
+   "commit": "35158257c6e79d908723f1a7023362a718579c4f",
+   "checkout_bytes": 6000000
+  },
+  {
+   "id": "catchorg__Catch2-1608",
+   "lang": "cpp",
+   "repo_url": "https://github.com/catchorg/Catch2.git",
+   "commit": "979bbf03bb00bc55ca09783791b5091a2247df68",
+   "checkout_bytes": 3200000
+  },
+  {
+   "id": "fmtlib__fmt-4286",
+   "lang": "cpp",
+   "repo_url": "https://github.com/fmtlib/fmt.git",
+   "commit": "e3ddede6c4ee818825c4e5a6dfa1d384860c27d9",
+   "checkout_bytes": 3000000
+  },
+  {
+   "id": "nlohmann__json-4512",
+   "lang": "cpp",
+   "repo_url": "https://github.com/nlohmann/json.git",
+   "commit": "ee32bfc1c263900d5c31cf8a8c5429048719e42a",
+   "checkout_bytes": 14000000
+  },
+  {
+   "id": "nlohmann__json-2989",
+   "lang": "cpp",
+   "repo_url": "https://github.com/nlohmann/json.git",
+   "commit": "bbdb29c6583e9e68f7f2bdce59a7384f061e0e32",
+   "checkout_bytes": 12000000
+  },
+  {
+   "id": "nlohmann__json-2225",
+   "lang": "cpp",
+   "repo_url": "https://github.com/nlohmann/json.git",
+   "commit": "5ba0f65c34832aa18fb2b582d58a0c1f92c93bfb",
+   "checkout_bytes": 11400000
+  },
+  {
+   "id": "fmtlib__fmt-2394",
+   "lang": "cpp",
+   "repo_url": "https://github.com/fmtlib/fmt.git",
+   "commit": "cfc05e05f08dc0b6fe619831c96f00ee27d99613",
+   "checkout_bytes": 3200000
+  },
+  {
+   "id": "fmtlib__fmt-1663",
+   "lang": "cpp",
+   "repo_url": "https://github.com/fmtlib/fmt.git",
+   "commit": "8d9d528bf52c60864802844e8acf16db09dae19a",
+   "checkout_bytes": 3300000
+  },
+  {
+   "id": "simdjson__simdjson-2016",
+   "lang": "cpp",
+   "repo_url": "https://github.com/simdjson/simdjson.git",
+   "commit": "74bb7b2533af3f063d0794fe3962fb5226c27751",
+   "checkout_bytes": 6500000
+  },
+  {
+   "id": "nlohmann__json-3601",
+   "lang": "cpp",
+   "repo_url": "https://github.com/nlohmann/json.git",
+   "commit": "2d48a4d9c5e8f0a5ce914922eb2a45dc0ec93ee3",
+   "checkout_bytes": 12800000
+  },
+  {
+   "id": "cli__cli-3608",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "026b07d1cfbf23a3ccb4d4703a2496d65e177fcc",
+   "checkout_bytes": 2000000
+  },
+  {
+   "id": "cli__cli-4253",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "e6ff77ce73c201b0ee36d2b802ea45e9e1ad1822",
+   "checkout_bytes": 2300000
+  },
+  {
+   "id": "cli__cli-2351",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "d79eb494d998132f060808e15521cd6a29f1b5fa",
+   "checkout_bytes": 1300000
+  },
+  {
+   "id": "cli__cli-4676",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "3a4d947603603f5dea742442d32bc131e9786d25",
+   "checkout_bytes": 2500000
+  },
+  {
+   "id": "cli__cli-3270",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "157bab18e4c9f9f6f6306c39aa1964d04ec94a71",
+   "checkout_bytes": 2000000
+  },
+  {
+   "id": "cli__cli-5648",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "537dcb27398bd193a094d5fcd3aa9bc67a546328",
+   "checkout_bytes": 3200000
+  },
+  {
+   "id": "cli__cli-495",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "02b4ab5be3d3c0002876a8be65186c0cc8f2a024",
+   "checkout_bytes": 500000
+  },
+  {
+   "id": "cli__cli-7110",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "c6a693c459c22b66a2914ba2794e24d22faa8015",
+   "checkout_bytes": 3800000
+  },
+  {
+   "id": "cli__cli-10048",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "8288011149e71d5658b80ebef393522ba2d0e7cc",
+   "checkout_bytes": 17400000
+  },
+  {
+   "id": "cli__cli-5973",
+   "lang": "go",
+   "repo_url": "https://github.com/cli/cli.git",
+   "commit": "954689ea9f26e3131ca816285eee8930cd8aa835",
+   "checkout_bytes": 3100000
+  },
+  {
+   "id": "alibaba__fastjson2-2775",
+   "lang": "java",
+   "repo_url": "https://github.com/alibaba/fastjson2.git",
+   "commit": "12b40c7ba3e7c30e35977195770c80beb34715c5",
+   "checkout_bytes": 139300000
+  },
+  {
+   "id": "google__gson-1391",
+   "lang": "java",
+   "repo_url": "https://github.com/google/gson.git",
+   "commit": "3f4ac29f9112799a7374a99b18acabd0232ff075",
+   "checkout_bytes": 3000000
+  },
+  {
+   "id": "mockito__mockito-3220",
+   "lang": "java",
+   "repo_url": "https://github.com/mockito/mockito.git",
+   "commit": "a0214364c36c840b259a4e5a0b656378e47d90df",
+   "checkout_bytes": 4200000
+  },
+  {
+   "id": "fasterxml__jackson-databind-4469",
+   "lang": "java",
+   "repo_url": "https://github.com/fasterxml/jackson-databind.git",
+   "commit": "7c9e7c1e2acd9c55926b9d2592fc65234d9c3ff7",
+   "checkout_bytes": 10600000
+  },
+  {
+   "id": "fasterxml__jackson-databind-4015",
+   "lang": "java",
+   "repo_url": "https://github.com/fasterxml/jackson-databind.git",
+   "commit": "9684204f3073580e711320c3531a95bcaffa63ef",
+   "checkout_bytes": 10300000
+  },
+  {
+   "id": "fasterxml__jackson-databind-4641",
+   "lang": "java",
+   "repo_url": "https://github.com/fasterxml/jackson-databind.git",
+   "commit": "3ed7f4572534383e54f9fd0d2521131f64283410",
+   "checkout_bytes": 10700000
+  },
+  {
+   "id": "fasterxml__jackson-core-183",
+   "lang": "java",
+   "repo_url": "https://github.com/fasterxml/jackson-core.git",
+   "commit": "ac6d8e22847c19b2695cbd7d1f418e07a9a3dbb2",
+   "checkout_bytes": 1500000
+  },
+  {
+   "id": "fasterxml__jackson-databind-4050",
+   "lang": "java",
+   "repo_url": "https://github.com/fasterxml/jackson-databind.git",
+   "commit": "035fba39559386e16a5017060a6047e733b18599",
+   "checkout_bytes": 10400000
+  },
+  {
+   "id": "fasterxml__jackson-databind-3701",
+   "lang": "java",
+   "repo_url": "https://github.com/fasterxml/jackson-databind.git",
+   "commit": "dd733c4c5c48e49c4ee7f0bebce3ff939d0bcf03",
+   "checkout_bytes": 691000000
+  },
+  {
+   "id": "fasterxml__jackson-core-964",
+   "lang": "java",
+   "repo_url": "https://github.com/fasterxml/jackson-core.git",
+   "commit": "2b53cce78c6ca037938e6f26d6935c5f9b8c07dd",
+   "checkout_bytes": 5000000
+  },
+  {
+   "id": "prettier__prettier-11000",
+   "lang": "javascript",
+   "repo_url": "https://github.com/prettier/prettier.git",
+   "commit": "c8133f8afabbfa0b6a8f88da8a37c8e79d9f5671",
+   "checkout_bytes": 13900000
+  },
+  {
+   "id": "sveltejs__svelte-3702",
+   "lang": "javascript",
+   "repo_url": "https://github.com/sveltejs/svelte.git",
+   "commit": "565931dff957545bf1b8a9ea57cfc097ed1a7e83",
+   "checkout_bytes": 3700000
+  },
+  {
+   "id": "iamkun__dayjs-938",
+   "lang": "javascript",
+   "repo_url": "https://github.com/iamkun/dayjs.git",
+   "commit": "72cdb20552dd5af6c2295bf52075ba19cceb000f",
+   "checkout_bytes": 700000
+  },
+  {
+   "id": "sveltejs__svelte-14629",
+   "lang": "javascript",
+   "repo_url": "https://github.com/sveltejs/svelte.git",
+   "commit": "c66bf178aae18c2b4d8ac189a48cf10c47e4d417",
+   "checkout_bytes": 5300000
+  },
+  {
+   "id": "iamkun__dayjs-734",
+   "lang": "javascript",
+   "repo_url": "https://github.com/iamkun/dayjs.git",
+   "commit": "9ad2e47e0569b23991bb0d5578f49c792c12df08",
+   "checkout_bytes": 600000
+  },
+  {
+   "id": "sveltejs__svelte-13097",
+   "lang": "javascript",
+   "repo_url": "https://github.com/sveltejs/svelte.git",
+   "commit": "cf6b64c6c0220068abb2843fea78b125b8767f44",
+   "checkout_bytes": 22100000
+  },
+  {
+   "id": "sveltejs__svelte-3749",
+   "lang": "javascript",
+   "repo_url": "https://github.com/sveltejs/svelte.git",
+   "commit": "8d7d0ff7dd7b248ca6d9b6b4cac098430c6e6ffa",
+   "checkout_bytes": 3700000
+  },
+  {
+   "id": "sveltejs__svelte-12098",
+   "lang": "javascript",
+   "repo_url": "https://github.com/sveltejs/svelte.git",
+   "commit": "97e5b5285adf05933bdc5cb047cf9df0db832a2e",
+   "checkout_bytes": 21900000
+  },
+  {
+   "id": "serverless__serverless-5571",
+   "lang": "javascript",
+   "repo_url": "https://github.com/serverless/serverless.git",
+   "commit": "fa4ef1159a36355799bba0ace606d3625dd1c24e",
+   "checkout_bytes": 4099999
+  },
+  {
+   "id": "iamkun__dayjs-1319",
+   "lang": "javascript",
+   "repo_url": "https://github.com/iamkun/dayjs.git",
+   "commit": "cc993f0a8d18d33c0137616b80adc86127ba3424",
+   "checkout_bytes": 900000
+  },
+  {
+   "id": "yt-dlp__yt-dlp-5933",
+   "lang": "python",
+   "repo_url": "https://github.com/yt-dlp/yt-dlp.git",
+   "commit": "f079514957401f49db30ec4cd25f8c8246b0c1de",
+   "checkout_bytes": 9200000
+  },
+  {
+   "id": "pylint-dev__pylint-4604",
+   "lang": "python",
+   "repo_url": "https://github.com/pylint-dev/pylint.git",
+   "commit": "1e55ae64624d28c5fe8b63ad7979880ee2e6ef3f",
+   "checkout_bytes": 3200000
+  },
+  {
+   "id": "pydata__xarray-4966",
+   "lang": "python",
+   "repo_url": "https://github.com/pydata/xarray.git",
+   "commit": "37522e991a32ee3c0ad1a5ff8afe8e3eb1885550",
+   "checkout_bytes": 5400000
+  },
+  {
+   "id": "scikit-learn__scikit-learn-25931",
+   "lang": "python",
+   "repo_url": "https://github.com/scikit-learn/scikit-learn.git",
+   "commit": "e3d1f9ac39e4bf0f31430e779acc50fb05fe1b64",
+   "checkout_bytes": 20900000
+  },
+  {
+   "id": "django__django-15252",
+   "lang": "python",
+   "repo_url": "https://github.com/django/django.git",
+   "commit": "361bb8f786f112ee275be136795c0b1ecefff928",
+   "checkout_bytes": 40200000
+  },
+  {
+   "id": "psf__requests-6028",
+   "lang": "python",
+   "repo_url": "https://github.com/psf/requests.git",
+   "commit": "0192aac24123735b3eaf9b08df46429bb770c283",
+   "checkout_bytes": 5100000
+  },
+  {
+   "id": "astropy__astropy-14539",
+   "lang": "python",
+   "repo_url": "https://github.com/astropy/astropy.git",
+   "commit": "c0a24c1dc957a3b565294213f435fefb2ec99714",
+   "checkout_bytes": 33299999
+  },
+  {
+   "id": "sympy__sympy-22914",
+   "lang": "python",
+   "repo_url": "https://github.com/sympy/sympy.git",
+   "commit": "c4e836cdf73fc6aa7bab6a86719a0f08861ffb1d",
+   "checkout_bytes": 35400000
+  },
+  {
+   "id": "huggingface__transformers-13989",
+   "lang": "python",
+   "repo_url": "https://github.com/huggingface/transformers.git",
+   "commit": "408b2d2bd08f667cf4154730cc323c4e49657eed",
+   "checkout_bytes": 31700000
+  },
+  {
+   "id": "sympy__sympy-12489",
+   "lang": "python",
+   "repo_url": "https://github.com/sympy/sympy.git",
+   "commit": "aa9780761ad8c3c0f68beeef3a0ce5caac9e100b",
+   "checkout_bytes": 18700000
+  },
+  {
+   "id": "tokio-rs__tracing-2897",
+   "lang": "rust",
+   "repo_url": "https://github.com/tokio-rs/tracing.git",
+   "commit": "908cc432a5994f6e17c8f36e13c217dc40085704",
+   "checkout_bytes": 2600000
+  },
+  {
+   "id": "tokio-rs__bytes-721",
+   "lang": "rust",
+   "repo_url": "https://github.com/tokio-rs/bytes.git",
+   "commit": "9965a04b5684079bb614addd750340ffc165a9f5",
+   "checkout_bytes": 300000
+  },
+  {
+   "id": "nushell__nushell-13357",
+   "lang": "rust",
+   "repo_url": "https://github.com/nushell/nushell.git",
+   "commit": "5417c89387b67c3192ae9043473b556cd669ee15",
+   "checkout_bytes": 11200000
+  },
+  {
+   "id": "clap-rs__clap-3420",
+   "lang": "rust",
+   "repo_url": "https://github.com/clap-rs/clap.git",
+   "commit": "135b15467eda2394b017f2a7d25cda1417c0feec",
+   "checkout_bytes": 2300000
+  },
+  {
+   "id": "clap-rs__clap-4474",
+   "lang": "rust",
+   "repo_url": "https://github.com/clap-rs/clap.git",
+   "commit": "4d69e56f06d66ff5215a900dc42809d34a2d4184",
+   "checkout_bytes": 2800000
+  },
+  {
+   "id": "clap-rs__clap-2758",
+   "lang": "rust",
+   "repo_url": "https://github.com/clap-rs/clap.git",
+   "commit": "c4780e3305b4c2632c7d843511ae7dfe3652a569",
+   "checkout_bytes": 2000000
+  },
+  {
+   "id": "tokio-rs__tracing-1236",
+   "lang": "rust",
+   "repo_url": "https://github.com/tokio-rs/tracing.git",
+   "commit": "4609f22aff1ad88b81e749e2536761d6ee364d1f",
+   "checkout_bytes": 1900000
+  },
+  {
+   "id": "clap-rs__clap-4248",
+   "lang": "rust",
+   "repo_url": "https://github.com/clap-rs/clap.git",
+   "commit": "8e510650a98a528d3c016cfdfddbe67ae3a470a5",
+   "checkout_bytes": 2700000
+  },
+  {
+   "id": "clap-rs__clap-3684",
+   "lang": "rust",
+   "repo_url": "https://github.com/clap-rs/clap.git",
+   "commit": "17ec7757891a38965e8492f7a0a48e674a9536eb",
+   "checkout_bytes": 2600000
+  },
+  {
+   "id": "tokio-rs__tokio-4519",
+   "lang": "rust",
+   "repo_url": "https://github.com/tokio-rs/tokio.git",
+   "commit": "43c224ff47e41628ca787d116080d69bd7030c3f",
+   "checkout_bytes": 3700000
+  },
+  {
+   "id": "microsoft__vscode-135197",
+   "lang": "typescript",
+   "repo_url": "https://github.com/microsoft/vscode.git",
+   "commit": "a993ada9300a531c09dfa6a1be772b1abc1492ad",
+   "checkout_bytes": 75200000
+  },
+  {
+   "id": "mui__material-ui-34159",
+   "lang": "typescript",
+   "repo_url": "https://github.com/mui/material-ui.git",
+   "commit": "43a929dda5a0776bcc05f4624a5648441d44c7b2",
+   "checkout_bytes": 110800000
+  },
+  {
+   "id": "microsoft__vscode-153857",
+   "lang": "typescript",
+   "repo_url": "https://github.com/microsoft/vscode.git",
+   "commit": "88ffbc7a7a81a926c7969ad7428e2ffc54370f42",
+   "checkout_bytes": 80800000
+  },
+  {
+   "id": "vuejs__core-8538",
+   "lang": "typescript",
+   "repo_url": "https://github.com/vuejs/core.git",
+   "commit": "0e63cbfaf57979e2c6fcfa986281c7521d82d893",
+   "checkout_bytes": 4400000
+  },
+  {
+   "id": "mui__material-ui-11987",
+   "lang": "typescript",
+   "repo_url": "https://github.com/mui/material-ui.git",
+   "commit": "09896d42e6206984a54272cc2059c49a7aa9d54f",
+   "checkout_bytes": 8800000
+  },
+  {
+   "id": "mui__material-ui-34401",
+   "lang": "typescript",
+   "repo_url": "https://github.com/mui/material-ui.git",
+   "commit": "d35d22994887bd83517a99cc8125ad97c402223a",
+   "checkout_bytes": 104400000
+  },
+  {
+   "id": "mui__material-ui-31998",
+   "lang": "typescript",
+   "repo_url": "https://github.com/mui/material-ui.git",
+   "commit": "5b53f5efe691a76630e479245e5be0f91371f691",
+   "checkout_bytes": 81400000
+  },
+  {
+   "id": "mui__material-ui-28813",
+   "lang": "typescript",
+   "repo_url": "https://github.com/mui/material-ui.git",
+   "commit": "182d4dc7726f6d77f0ca3863ca6fcdf9eec23a23",
+   "checkout_bytes": 69100000
+  },
+  {
+   "id": "vuejs__core-9213",
+   "lang": "typescript",
+   "repo_url": "https://github.com/vuejs/core.git",
+   "commit": "dadb3632a0f824f6e6a1c246ed8788bea5cbcad6",
+   "checkout_bytes": 5300000
+  },
+  {
+   "id": "mui__material-ui-39196",
+   "lang": "typescript",
+   "repo_url": "https://github.com/mui/material-ui.git",
+   "commit": "75404f9ff09965be1bd7c9ed27154fd7536edde1",
+   "checkout_bytes": 163800000
+  }
+ ],
+ "queue": {
+  "c": [
+   "ponylang__ponyc-4595",
+   "ponylang__ponyc-2205",
+   "facebook__zstd-2094",
+   "ponylang__ponyc-3962",
+   "facebook__zstd-1105",
+   "jqlang__jq-1793",
+   "ponylang__ponyc-2168",
+   "facebook__zstd-1390",
+   "ponylang__ponyc-1486",
+   "ponylang__ponyc-2532",
+   "facebook__zstd-1733",
+   "ponylang__ponyc-1057",
+   "ponylang__ponyc-2586"
+  ],
+  "cpp": [],
+  "go": [
+   "cli__cli-6706",
+   "cli__cli-8632",
+   "cli__cli-6122",
+   "cli__cli-7645",
+   "cli__cli-5537",
+   "grpc__grpc-go-2996",
+   "zeromicro__go-zero-1969",
+   "instance_flipt-io__flipt-3d5a345f94c2adc8a0eaa102c189c08ad4c0f8e8",
+   "cli__cli-5047",
+   "cli__cli-1387",
+   "cli__cli-2466",
+   "cli__cli-8157",
+   "cli__cli-513",
+   "cli__cli-7180",
+   "instance_future-architect__vuls-b8db2e0b74f60cb7d45f710f255e061f054b6afc",
+   "instance_navidrome__navidrome-d8e794317f788198227e10fb667e10496b3eb99a",
+   "cli__cli-5698",
+   "cli__cli-3982",
+   "cli__cli-3832",
+   "cli__cli-2888",
+   "instance_navidrome__navidrome-31799662706fedddf5bcc1a76b50409d1f91d327",
+   "instance_flipt-io__flipt-c154dd1a3590954dfd3b901555fc6267f646a289",
+   "instance_flipt-io__flipt-756f00f79ba8abf9fe53f3c6c818123b42eb7355",
+   "cli__cli-2785",
+   "cli__cli-2250",
+   "cli__cli-5019",
+   "cli__cli-1457",
+   "cli__cli-5396",
+   "cli__cli-1580",
+   "cli__cli-1567"
+  ],
+  "java": [
+   "alibaba__fastjson2-2559",
+   "fasterxml__jackson-core-1016",
+   "elastic__logstash-14027",
+   "elastic__logstash-14970",
+   "fasterxml__jackson-dataformat-xml-638"
+  ],
+  "javascript": [
+   "sveltejs__svelte-1227",
+   "sveltejs__svelte-3403",
+   "instance_NodeBB__NodeBB-767973717be700f46f06f3e7f4fc550c63509046-vnan",
+   "prettier__prettier-361",
+   "sveltejs__svelte-510",
+   "sveltejs__svelte-5875",
+   "sveltejs__svelte-3314",
+   "sveltejs__svelte-3451",
+   "sveltejs__svelte-12649",
+   "sveltejs__svelte-2185",
+   "sveltejs__svelte-1923",
+   "sveltejs__svelte-6458",
+   "sveltejs__svelte-3305",
+   "iamkun__dayjs-1725",
+   "instance_NodeBB__NodeBB-a5afad27e52fd336163063ba40dcadc80233ae10-vd59a5728dfc977f44533186ace531248c2917516",
+   "prettier__prettier-459",
+   "prettier__prettier-3723",
+   "instance_element-hq__element-web-fe14847bb9bb07cab1b9c6c54335ff22ca5e516a-vnan",
+   "sveltejs__svelte-10608",
+   "prettier__prettier-8046",
+   "serverless__serverless-3457",
+   "sveltejs__svelte-14276",
+   "serverless__serverless-2576",
+   "serverless__serverless-2945",
+   "iamkun__dayjs-882",
+   "prettier__prettier-6604",
+   "axios__axios-5661",
+   "sveltejs__svelte-4288",
+   "sveltejs__svelte-9962",
+   "instance_NodeBB__NodeBB-f48ed3658aab7be0f1165d4c1f89af48d7865189-v0495b863a912fbff5749c67e860612b91825407c",
+   "sveltejs__svelte-728",
+   "sveltejs__svelte-3949",
+   "instance_NodeBB__NodeBB-f2082d7de85eb62a70819f4f3396dd85626a0c0a-vd59a5728dfc977f44533186ace531248c2917516",
+   "prettier__prettier-12930",
+   "serverless__serverless-5775",
+   "iamkun__dayjs-1414",
+   "sveltejs__svelte-11913",
+   "instance_NodeBB__NodeBB-04998908ba6721d64eba79ae3b65a351dcfbc5b5-vnan",
+   "expressjs__express-3870",
+   "instance_element-hq__element-web-aeabf3b18896ac1eb7ae9757e66ce886120f8309-vnan",
+   "prettier__prettier-3515",
+   "sveltejs__svelte-1310",
+   "sveltejs__svelte-14935",
+   "sveltejs__svelte-907",
+   "sveltejs__svelte-3151",
+   "iamkun__dayjs-1611",
+   "serverless__serverless-7374",
+   "instance_element-hq__element-web-5dfde12c1c1c0b6e48f17e3405468593e39d9492-vnan",
+   "sveltejs__svelte-14007",
+   "prettier__prettier-14400"
+  ],
+  "python": [
+   "instance_qutebrowser__qutebrowser-473a15f7908f2bb6d670b0e908ab34a28d8cf7e2-v363c8a7e5ccdf6968fc7ab84a2053ac78036691d",
+   "django__django-11749",
+   "django__django-15814",
+   "sphinx-doc__sphinx-10614",
+   "keras-team__keras-19844",
+   "huggingface__transformers-23223",
+   "instance_internetarchive__openlibrary-910b08570210509f3bcfebf35c093a48243fe754-v0f5aece3601a5b4419f7ccec1dbda2071be28ee4",
+   "matplotlib__matplotlib-14623",
+   "django__django-16263",
+   "django__django-15380",
+   "django__django-11603",
+   "django__django-13023",
+   "instance_ansible__ansible-77658704217d5f166404fc67997203c25381cb6e-v390e508d27db7a51eece36bb6d9698b63a5b638a",
+   "huggingface__transformers-16198",
+   "sphinx-doc__sphinx-11445",
+   "sympy__sympy-17318",
+   "django__django-16429",
+   "sympy__sympy-22714",
+   "sphinx-doc__sphinx-9602",
+   "astropy__astropy-13398",
+   "huggingface__transformers-7078",
+   "django__django-13513",
+   "huggingface__transformers-30556",
+   "instance_qutebrowser__qutebrowser-f8e7fea0becae25ae20606f1422068137189fe9e",
+   "huggingface__transformers-15795",
+   "instance_qutebrowser__qutebrowser-fd6790fe8c02b144ab2464f1fc8ab3d02ce3c476-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+   "matplotlib__matplotlib-20676",
+   "sympy__sympy-13852",
+   "django__django-14792",
+   "django__django-14349",
+   "keras-team__keras-19838",
+   "django__django-15563",
+   "instance_internetarchive__openlibrary-d109cc7e6e161170391f98f9a6fa1d02534c18e4-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+   "matplotlib__matplotlib-23299",
+   "keras-team__keras-19775",
+   "sympy__sympy-16886",
+   "instance_internetarchive__openlibrary-bb152d23c004f3d68986877143bb0f83531fe401-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+   "sympy__sympy-13372",
+   "instance_ansible__ansible-bf98f031f3f5af31a2d78dc2f0a58fe92ebae0bb-v1055803c3a812189a1133297f7f5468579283f86",
+   "instance_ansible__ansible-1a4644ff15355fd696ac5b9d074a566a80fe7ca3-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+   "instance_ansible__ansible-bec27fb4c0a40c5f8bbcf26a475704227d65ee73-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+   "sphinx-doc__sphinx-9461",
+   "sympy__sympy-23413",
+   "matplotlib__matplotlib-22865",
+   "django__django-12125",
+   "sympy__sympy-21930",
+   "scikit-learn__scikit-learn-14983",
+   "matplotlib__matplotlib-26208",
+   "django__django-15022",
+   "yt-dlp__yt-dlp-9862",
+   "huggingface__transformers-26839",
+   "matplotlib__matplotlib-20826",
+   "pallets__flask-5014",
+   "scikit-learn__scikit-learn-25747",
+   "huggingface__transformers-12981",
+   "django__django-17029",
+   "django__django-12663",
+   "huggingface__transformers-29311",
+   "django__django-13449",
+   "keras-team__keras-19973",
+   "sympy__sympy-13877",
+   "django__django-12155",
+   "sphinx-doc__sphinx-10449",
+   "django__django-13516",
+   "huggingface__transformers-21768",
+   "langchain-ai__langchain-4009",
+   "django__django-14500",
+   "huggingface__transformers-23126",
+   "django__django-13028",
+   "instance_ansible__ansible-0fd88717c953b92ed8a50495d55e630eb5d59166-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "sympy__sympy-13647",
+   "instance_internetarchive__openlibrary-60725705782832a2cb22e17c49697948a42a9d03-v298a7a812ceed28c4c18355a091f1b268fe56d86",
+   "django__django-16631",
+   "django__django-13343",
+   "django__django-13925",
+   "django__django-11790",
+   "django__django-15973",
+   "pytest-dev__pytest-7205",
+   "huggingface__transformers-27663",
+   "instance_ansible__ansible-1b70260d5aa2f6c9782fd2b848e8d16566e50d85-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "keras-team__keras-19863",
+   "django__django-15741",
+   "sphinx-doc__sphinx-9698",
+   "django__django-15103",
+   "keras-team__keras-19924",
+   "huggingface__transformers-28535",
+   "langchain-ai__langchain-5609",
+   "pytest-dev__pytest-7324",
+   "django__django-12406",
+   "instance_ansible__ansible-a7d2a4e03209cff1e97e59fd54bb2b05fdbdbec6-v0f01c69f1e2528b935359cfe578530722bca2c59",
+   "instance_ansible__ansible-b2a289dcbb702003377221e25f62c8a3608f0e89-v173091e2e36d38c978002990795f66cfc0af30ad",
+   "huggingface__transformers-20136",
+   "pydata__xarray-2905",
+   "django__django-16527",
+   "sympy__sympy-13615",
+   "instance_ansible__ansible-fb144c44144f8bd3542e71f5db62b6d322c7bd85-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "pydata__xarray-6721",
+   "django__django-13109",
+   "instance_internetarchive__openlibrary-757fcf46c70530739c150c57b37d6375f155dc97-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+   "scikit-learn__scikit-learn-14894",
+   "instance_qutebrowser__qutebrowser-2dd8966fdcf11972062c540b7a787e4d0de8d372-v363c8a7e5ccdf6968fc7ab84a2053ac78036691d",
+   "matplotlib__matplotlib-26342",
+   "sympy__sympy-15976",
+   "matplotlib__matplotlib-23314",
+   "django__django-14351",
+   "scikit-learn__scikit-learn-10844",
+   "sympy__sympy-19954",
+   "django__django-12858",
+   "instance_ansible__ansible-6cc97447aac5816745278f3735af128afb255c81-v0f01c69f1e2528b935359cfe578530722bca2c59",
+   "instance_qutebrowser__qutebrowser-de4a1c1a2839b5b49c3d4ce21d39de48d24e2091-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+   "scikit-learn__scikit-learn-26323",
+   "django__django-14311",
+   "django__django-15695",
+   "sympy__sympy-16597",
+   "sympy__sympy-23824",
+   "huggingface__transformers-28071",
+   "django__django-11433",
+   "django__django-12193",
+   "django__django-11451",
+   "matplotlib__matplotlib-22719",
+   "sympy__sympy-21847",
+   "pydata__xarray-6599",
+   "Significant-Gravitas__AutoGPT-4652",
+   "scikit-learn__scikit-learn-15100",
+   "sympy__sympy-15017",
+   "scikit-learn__scikit-learn-13142",
+   "sympy__sympy-20428",
+   "django__django-12262",
+   "langchain-ai__langchain-5584",
+   "django__django-13809",
+   "instance_qutebrowser__qutebrowser-bedc9f7fadf93f83d8dee95feeecb9922b6f063f-v2ef375ac784985212b1805e1d0431dc8f1b3c171",
+   "django__django-15629",
+   "instance_internetarchive__openlibrary-8a5a63af6e0be406aa6c8c9b6d5f28b2f1b6af5a-v0f5aece3601a5b4419f7ccec1dbda2071be28ee4",
+   "instance_internetarchive__openlibrary-77c16d530b4d5c0f33d68bead2c6b329aee9b996-ve8c8d62a2b60610a3c4631f5f23ed866bada9818",
+   "sphinx-doc__sphinx-8120",
+   "huggingface__transformers-3716",
+   "django__django-15863",
+   "astropy__astropy-13579",
+   "psf__requests-1142",
+   "huggingface__transformers-27463",
+   "django__django-16485",
+   "keras-team__keras-19201",
+   "django__django-14765",
+   "django__django-17087",
+   "instance_ansible__ansible-4c5ce5a1a9e79a845aff4978cfeb72a0d4ecf7d6-v1055803c3a812189a1133297f7f5468579283f86",
+   "django__django-15569",
+   "matplotlib__matplotlib-22871",
+   "pydata__xarray-7233",
+   "sphinx-doc__sphinx-7910",
+   "sympy__sympy-20590",
+   "django__django-11555",
+   "django__django-14404",
+   "instance_internetarchive__openlibrary-e1e502986a3b003899a8347ac8a7ff7b08cbfc39-v08d8e8889ec945ab821fb156c04c7d2e2810debb",
+   "django__django-15930",
+   "pydata__xarray-4695",
+   "django__django-11400",
+   "django__django-14434",
+   "instance_ansible__ansible-cb94c0cc550df9e98f1247bc71d8c2b861c75049-v1055803c3a812189a1133297f7f5468579283f86",
+   "scikit-learn__scikit-learn-25232",
+   "huggingface__transformers-24238",
+   "instance_ansible__ansible-5260527c4a71bfed99d803e687dd19619423b134-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "django__django-16819",
+   "pytest-dev__pytest-7432",
+   "instance_ansible__ansible-f8ef34672b961a95ec7282643679492862c688ec-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "django__django-10880",
+   "matplotlib__matplotlib-25332",
+   "scikit-learn__scikit-learn-14141",
+   "keras-team__keras-18553",
+   "sphinx-doc__sphinx-8638",
+   "sympy__sympy-12096",
+   "pydata__xarray-4075",
+   "matplotlib__matplotlib-25122",
+   "django__django-13158",
+   "django__django-15987",
+   "huggingface__transformers-6098",
+   "huggingface__transformers-28517",
+   "astropy__astropy-14598",
+   "pylint-dev__pylint-8898",
+   "huggingface__transformers-17082",
+   "scikit-learn__scikit-learn-11310",
+   "django__django-11099",
+   "sympy__sympy-14976",
+   "django__django-13195",
+   "django__django-14787",
+   "sympy__sympy-20801",
+   "huggingface__transformers-5122",
+   "sympy__sympy-12419",
+   "matplotlib__matplotlib-26113",
+   "django__django-12419",
+   "sphinx-doc__sphinx-8265",
+   "keras-team__keras-19484",
+   "sympy__sympy-13551",
+   "django__django-16950",
+   "huggingface__transformers-23141",
+   "sympy__sympy-23262",
+   "django__django-14140",
+   "sympy__sympy-21612",
+   "django__django-13012",
+   "huggingface__transformers-23796",
+   "django__django-15467",
+   "django__django-11820",
+   "keras-team__keras-19636",
+   "matplotlib__matplotlib-24570",
+   "huggingface__transformers-15158",
+   "scikit-learn__scikit-learn-9288",
+   "instance_ansible__ansible-b5e0293645570f3f404ad1dbbe5f006956ada0df-v0f01c69f1e2528b935359cfe578530722bca2c59",
+   "django__django-12143",
+   "instance_ansible__ansible-e9e6001263f51103e96e58ad382660df0f3d0e39-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+   "huggingface__transformers-13693",
+   "django__django-14999",
+   "django__django-15104",
+   "instance_ansible__ansible-5640093f1ca63fd6af231cc8a7fb7d40e1907b8c-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "instance_ansible__ansible-7e1a347695c7987ae56ef1b6919156d9254010ad-v390e508d27db7a51eece36bb6d9698b63a5b638a",
+   "huggingface__transformers-29688",
+   "django__django-11163",
+   "langchain-ai__langchain-19331",
+   "keras-team__keras-18871",
+   "django__django-15382",
+   "instance_ansible__ansible-8127abbc298cabf04aaa89a478fc5e5e3432a6fc-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+   "matplotlib__matplotlib-24627",
+   "django__django-14539",
+   "instance_ansible__ansible-622a493ae03bd5e5cf517d336fc426e9d12208c7-v906c969b551b346ef54a2c0b41e04f632b7b73c2",
+   "matplotlib__matplotlib-25311",
+   "pytest-dev__pytest-10356",
+   "instance_ansible__ansible-9142be2f6cabbe6597c9254c5bb9186d17036d55-v0f01c69f1e2528b935359cfe578530722bca2c59",
+   "instance_ansible__ansible-709484969c8a4ffd74b839a673431a8c5caa6457-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "sympy__sympy-22080",
+   "django__django-16454",
+   "sphinx-doc__sphinx-7462",
+   "django__django-11815",
+   "huggingface__transformers-22920",
+   "django__django-7530",
+   "django__django-14089",
+   "django__django-15368",
+   "sympy__sympy-22456",
+   "huggingface__transformers-21969",
+   "huggingface__transformers-29449",
+   "instance_ansible__ansible-942424e10b2095a173dbd78e7128f52f7995849b-v30a923fb5c164d6cd18280c02422f75e611e8fb2",
+   "instance_ansible__ansible-83909bfa22573777e3db5688773bda59721962ad-vba6da65a0f3baefda7a058ebbd0a8dcafb8512f5",
+   "huggingface__transformers-19590",
+   "huggingface__transformers-13865",
+   "astropy__astropy-14995",
+   "pytest-dev__pytest-10081",
+   "matplotlib__matplotlib-25479",
+   "django__django-13417",
+   "django__django-16032",
+   "pydata__xarray-6461",
+   "huggingface__transformers-22458",
+   "huggingface__transformers-8624",
+   "instance_ansible__ansible-d58e69c82d7edd0583dd8e78d76b075c33c3151e-v173091e2e36d38c978002990795f66cfc0af30ad",
+   "sphinx-doc__sphinx-9367",
+   "django__django-15499",
+   "django__django-11179",
+   "instance_ansible__ansible-949c503f2ef4b2c5d668af0492a5c0db1ab86140-v0f01c69f1e2528b935359cfe578530722bca2c59",
+   "django__django-13551",
+   "astropy__astropy-14096"
+  ],
+  "rust": [
+   "clap-rs__clap-2529",
+   "clap-rs__clap-3975",
+   "clap-rs__clap-2895",
+   "clap-rs__clap-2534",
+   "clap-rs__clap-2501",
+   "clap-rs__clap-1869",
+   "BurntSushi__ripgrep-1367",
+   "clap-rs__clap-3421",
+   "clap-rs__clap-3179",
+   "rayon-rs__rayon-986"
+  ],
+  "typescript": [
+   "microsoft__vscode-177084",
+   "mui__material-ui-34437",
+   "mui__material-ui-29898",
+   "mui__material-ui-18257",
+   "mui__material-ui-34229",
+   "mui__material-ui-30374",
+   "mui__material-ui-18683",
+   "mui__material-ui-32626",
+   "mui__material-ui-20252",
+   "vuejs__core-10289",
+   "coder__code-server-4923",
+   "vuejs__core-11517",
+   "mui__material-ui-37855",
+   "mui__material-ui-35086",
+   "mui__material-ui-28186",
+   "mui__material-ui-19849",
+   "mui__material-ui-38188",
+   "mui__material-ui-33692",
+   "mui__material-ui-36659",
+   "vuejs__core-10250",
+   "darkreader__darkreader-7241",
+   "microsoft__vscode-153121",
+   "mui__material-ui-13534",
+   "vuejs__core-9572",
+   "mui__material-ui-19072",
+   "vuejs__core-11899",
+   "microsoft__vscode-110094",
+   "mui__material-ui-25149",
+   "mui__material-ui-26807",
+   "mui__material-ui-18141",
+   "vuejs__core-11338",
+   "mui__material-ui-23884",
+   "vuejs__core-10027",
+   "mui__material-ui-42412",
+   "mui__material-ui-15526",
+   "mui__material-ui-39108",
+   "mui__material-ui-24202",
+   "mui__material-ui-36088",
+   "mui__material-ui-34337",
+   "mui__material-ui-15359",
+   "microsoft__vscode-160342",
+   "mui__material-ui-38100",
+   "vuejs__core-10004",
+   "coder__code-server-6278",
+   "mui__material-ui-12236",
+   "mui__material-ui-19121",
+   "vuejs__core-11201",
+   "mui__material-ui-34610",
+   "mui__material-ui-11451",
+   "mui__material-ui-37850",
+   "mui__material-ui-29023",
+   "mui__material-ui-23229",
+   "mui__material-ui-39775",
+   "mui__material-ui-26061",
+   "mui__material-ui-13778",
+   "microsoft__vscode-109750"
+  ]
+ },
+ "skips": [],
+ "sizes": {
+  "ponylang__ponyc-3973": {
+   "bytes": 4700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "ponylang__ponyc-2261": {
+   "bytes": 5600000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "jqlang__jq-2654": {
+   "bytes": 4099999,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "facebook__zstd-1243": {
+   "bytes": 6200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "facebook__zstd-637": {
+   "bytes": 3700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "facebook__zstd-1532": {
+   "bytes": 6700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "ponylang__ponyc-2201": {
+   "bytes": 5500000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "ponylang__ponyc-1124": {
+   "bytes": 4300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "ponylang__ponyc-2247": {
+   "bytes": 5500000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "jqlang__jq-2919": {
+   "bytes": 4400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "simdjson__simdjson-1695": {
+   "bytes": 6000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "catchorg__Catch2-1608": {
+   "bytes": 3200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fmtlib__fmt-4286": {
+   "bytes": 3000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "nlohmann__json-4512": {
+   "bytes": 14000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "nlohmann__json-2989": {
+   "bytes": 12000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "nlohmann__json-2225": {
+   "bytes": 11400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fmtlib__fmt-2394": {
+   "bytes": 3200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fmtlib__fmt-1663": {
+   "bytes": 3300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "simdjson__simdjson-2016": {
+   "bytes": 6500000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "nlohmann__json-3601": {
+   "bytes": 12800000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-3608": {
+   "bytes": 2000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-4253": {
+   "bytes": 2300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-2351": {
+   "bytes": 1300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-4676": {
+   "bytes": 2500000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-3270": {
+   "bytes": 2000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-5648": {
+   "bytes": 3200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-495": {
+   "bytes": 500000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-7110": {
+   "bytes": 3800000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-10048": {
+   "bytes": 17400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "cli__cli-5973": {
+   "bytes": 3100000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "alibaba__fastjson2-2775": {
+   "bytes": 139300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "google__gson-1391": {
+   "bytes": 3000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "mockito__mockito-3220": {
+   "bytes": 4200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fasterxml__jackson-databind-4469": {
+   "bytes": 10600000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fasterxml__jackson-databind-4015": {
+   "bytes": 10300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fasterxml__jackson-databind-4641": {
+   "bytes": 10700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fasterxml__jackson-core-183": {
+   "bytes": 1500000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fasterxml__jackson-databind-4050": {
+   "bytes": 10400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fasterxml__jackson-databind-3701": {
+   "bytes": 691000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "fasterxml__jackson-core-964": {
+   "bytes": 5000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "prettier__prettier-11000": {
+   "bytes": 13900000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "sveltejs__svelte-3702": {
+   "bytes": 3700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "iamkun__dayjs-938": {
+   "bytes": 700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "sveltejs__svelte-14629": {
+   "bytes": 5300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "iamkun__dayjs-734": {
+   "bytes": 600000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "sveltejs__svelte-13097": {
+   "bytes": 22100000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "sveltejs__svelte-3749": {
+   "bytes": 3700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "sveltejs__svelte-12098": {
+   "bytes": 21900000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "serverless__serverless-5571": {
+   "bytes": 4099999,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "iamkun__dayjs-1319": {
+   "bytes": 900000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "yt-dlp__yt-dlp-5933": {
+   "bytes": 9200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "pylint-dev__pylint-4604": {
+   "bytes": 3200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "pydata__xarray-4966": {
+   "bytes": 5400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "scikit-learn__scikit-learn-25931": {
+   "bytes": 20900000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "django__django-15252": {
+   "bytes": 40200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "psf__requests-6028": {
+   "bytes": 5100000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "astropy__astropy-14539": {
+   "bytes": 33299999,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "sympy__sympy-22914": {
+   "bytes": 35400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "huggingface__transformers-13989": {
+   "bytes": 31700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "sympy__sympy-12489": {
+   "bytes": 18700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "tokio-rs__tracing-2897": {
+   "bytes": 2600000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "tokio-rs__bytes-721": {
+   "bytes": 300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "nushell__nushell-13357": {
+   "bytes": 11200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "clap-rs__clap-3420": {
+   "bytes": 2300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "clap-rs__clap-4474": {
+   "bytes": 2800000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "clap-rs__clap-2758": {
+   "bytes": 2000000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "tokio-rs__tracing-1236": {
+   "bytes": 1900000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "clap-rs__clap-4248": {
+   "bytes": 2700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "clap-rs__clap-3684": {
+   "bytes": 2600000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "tokio-rs__tokio-4519": {
+   "bytes": 3700000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "microsoft__vscode-135197": {
+   "bytes": 75200000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "mui__material-ui-34159": {
+   "bytes": 110800000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "microsoft__vscode-153857": {
+   "bytes": 80800000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "vuejs__core-8538": {
+   "bytes": 4400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "mui__material-ui-11987": {
+   "bytes": 8800000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "mui__material-ui-34401": {
+   "bytes": 104400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "mui__material-ui-31998": {
+   "bytes": 81400000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "mui__material-ui-28813": {
+   "bytes": 69100000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "vuejs__core-9213": {
+   "bytes": 5300000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  },
+  "mui__material-ui-39196": {
+   "bytes": 163800000,
+   "how": "checkout_mb of the 2026-09-28 run (gh not available)"
+  }
+ }
+}

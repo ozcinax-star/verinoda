@@ -1,0 +1,29 @@
+Graph: graphify-out/graph.json (194 nodes) | Traversal: BFS depth=2 | Start: ['GlowConfig', '.load()'] | Context: call (heuristic) | 14 nodes found
+
+NODE GlowConfig [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L15 community=GlowCommands.java]
+NODE .load() [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L26 community=GlowCommands.java]
+NODE .onInitialize() [src=src/main/java/com/example/glowmod/GlowMod.java loc=L19 community=GlowMod.java]
+NODE .parse() [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L44 community=GlowCommands.java]
+NODE .reload() [src=src/main/java/com/example/glowmod/command/GlowCommands.java loc=L44 community=GlowCommands.java]
+NODE .register() [src=src/main/java/com/example/glowmod/command/GlowCommands.java loc=L18 community=GlowMod.java]
+NODE .number() [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L61 community=GlowCommands.java]
+NODE .section() [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L56 community=GlowCommands.java]
+NODE .register() [src=src/main/java/com/example/glowmod/entity/ModEntities.java loc=L20 community=Wisp]
+NODE .etkinlestir() [src=src/main/java/com/example/glowmod/event/LanternEvents.java loc=L18 community=GlowMod.java]
+NODE .initialize() [src=src/main/java/com/example/glowmod/item/ModItems.java loc=L25 community=GlowMod.java]
+NODE .register() [src=src/main/java/com/example/glowmod/network/ServerNetworking.java loc=L15 community=GlowMod.java]
+NODE .register() [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L23 community=Ritual.java]
+NODE .register() [src=src/main/java/com/example/glowmod/world/WispSpawner.java loc=L18 community=WispSpawner.java]
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .load() at=src/main/java/com/example/glowmod/GlowMod.java:L21
+EDGE .reload() --calls [EXTRACTED context=call]--> .load() at=src/main/java/com/example/glowmod/command/GlowCommands.java:L45
+EDGE .load() --calls [EXTRACTED context=call]--> .parse() at=src/main/java/com/example/glowmod/config/GlowConfig.java:L36
+EDGE .parse() --calls [EXTRACTED context=call]--> GlowConfig at=src/main/java/com/example/glowmod/config/GlowConfig.java:L48
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .register() at=src/main/java/com/example/glowmod/GlowMod.java:L24
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .etkinlestir() at=src/main/java/com/example/glowmod/GlowMod.java:L25
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .initialize() at=src/main/java/com/example/glowmod/GlowMod.java:L22
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .register() at=src/main/java/com/example/glowmod/GlowMod.java:L23
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .register() at=src/main/java/com/example/glowmod/GlowMod.java:L26
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .register() at=src/main/java/com/example/glowmod/GlowMod.java:L27
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .register() at=src/main/java/com/example/glowmod/GlowMod.java:L28
+EDGE .parse() --calls [EXTRACTED context=call]--> .number() at=src/main/java/com/example/glowmod/config/GlowConfig.java:L49
+EDGE .parse() --calls [EXTRACTED context=call]--> .section() at=src/main/java/com/example/glowmod/config/GlowConfig.java:L45

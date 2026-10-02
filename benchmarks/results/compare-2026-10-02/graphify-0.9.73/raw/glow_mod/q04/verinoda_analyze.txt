@@ -1,0 +1,91 @@
+analysis ana_c30a5777fc9b, snapshot snp_96a6e3b2d02d (commit 906a99fb8c)
+understood as: Understood (rules): q1 [locate] Which Java code runs the glowmod:ritual/start data pack function?
+plan links: Java -> src/client/java/com/example/glowmod/client/GlowModClient.java:1-1; glowmod -> src/main/java/com/example/glowmod/GlowMod.java:15-31
+q1 [met] locate: Which Java code runs the glowmod:ritual/start data pack function?
+  [statically_verified] `.baslat()` is defined at src/main/java/com/example/glowmod/ritual/Ritual.java:21-31 (uncertain: no symbol in the index is named `ritual/start` (the name occurs at src/main/resources/data/glowmod/function/ritual/start.mcfunction); linked by identifier_parts to glowmod:ritual/start, not by its name)  (clm_5cf02ced280c)
+  [statically_verified] `Datapack` is defined at src/main/java/com/example/glowmod/util/Datapack.java:11-36 (uncertain: no symbol in the index is named `ritual/start` (the name occurs at src/main/resources/data/glowmod/function/ritual/start.mcfunction); linked by identifier_parts to glowmod:ritual/start, not by its name)  (clm_ea1297734e34)
+  [statically_verified] `.execute()` is defined at src/main/java/com/example/glowmod/util/Datapack.java:25-35 (uncertain: no symbol in the index is named `ritual/start` (the name occurs at src/main/resources/data/glowmod/function/ritual/start.mcfunction); linked by identifier_parts to glowmod:ritual/start, not by its name)  (clm_7bdd712b07c9)
+  [statically_verified] src/main/resources/data/glowmod/function/ritual/start.mcfunction:2 contains: scoreboard objectives add glowmod.ritual dummy (uncertain: no symbol in the index is named `ritual/start` (the name occurs at src/main/resources/data/glowmod/function/ritual/start.mcfunction); linked by identifier_parts to glowmod:ritual/start, not by its name)  (clm_32d93b92c94c)
+context (found on the way; not what answers):
+  [strong_inference] `Ritual.baslat()` calls `Datapack.runQualified()` (src/main/java/com/example/glowmod/ritual/Ritual.java:22) (uncertain: which definition the call at src/main/java/com/example/glowmod/ritual/Ritual.java:22 binds to is checked for Python only; no symbol in the index is named `ritual/start` (the name occurs at src/main/resources/data/glowmod/function/ritual/start.mcfunction); linked by identifier_parts to glowmod:ritual/start, not by its name)  (clm_85447eb487bf)
+  [strong_inference] `GlowCommands.ritual()` calls `Ritual.baslat()` (src/main/java/com/example/glowmod/command/GlowCommands.java:40) (uncertain: which definition the call at src/main/java/com/example/glowmod/command/GlowCommands.java:40 binds to is checked for Python only; no symbol in the index is named `ritual/start` (the name occurs at src/main/resources/data/glowmod/function/ritual/start.mcfunction); linked by identifier_parts to glowmod:ritual/start, not by its name)  (clm_90f99d391545)
+  +3 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: data pack->datapack, glowmod->glow
+## src/main/java/com/example/glowmod/ritual/Ritual.java:21-31 Ritual.baslat
+  names: `glowmod:ritual/start` (line 22, id) -> src/main/resources/data/glowmod/function/ritual/start.mcfunction
+  calls: runQualified@22, alaniAc@23, get@24, spawn@29?
+  called by: ritual (src/main/java/com/example/glowmod/command/GlowCommands.java:40)
+21 public static void baslat(ServerWorld world, BlockPos altar) {
+22     Datapack.runQualified(world, Vec3d.ofBottomCenter(altar), "glowmod:ritual/start");
+23     alaniAc(world, altar);
+24     int count = GlowConfig.get().ritualWispCount();
+25     for (int i = 0; i < count; i++) {
+26         double angle = 2 * Math.PI * i / count;
+27         BlockPos at = altar.add((int) Math.round(Math.cos(angle) * RADIUS), 1,
+28                 (int) Math.round(Math.sin(angle) * RADIUS));
+29         Wisp.spawn(world, at);
+30     }
+31 }
+## src/main/resources/data/glowmod/function/ritual/start.mcfunction:1-7 glowmod:ritual/start
+  doc: Lantern ritual, run at the altar. The effects live here; the wisps are called by the mod.
+  names: `glowmod:ritual/tick` (line 7, function) -> src/main/resources/data/glowmod/function/ritual/tick.mcfunction
+  named by: baslat (src/main/java/com/example/glowmod/ritual/Ritual.java:22) as `glowmod:ritual/start`
+1 # Lantern ritual, run at the altar. The effects live here; the wisps are called by the mod.
+2 scoreboard objectives add glowmod.ritual dummy
+3 kill @e[type=minecraft:marker,tag=glowmod.altar,distance=..1]
+4 summon minecraft:marker ~ ~ ~ {Tags:["glowmod.altar"]}
+5 scoreboard players set @e[type=minecraft:marker,tag=glowmod.altar,distance=..1] glowmod.ritual 200
+6 playsound minecraft:block.beacon.activate block @a[distance=..24] ~ ~ ~ 1 0.8
+7 function glowmod:ritual/tick
+## src/main/java/com/example/glowmod/util/Datapack.java:11-36 public final class Datapack
+  src/main/java/com/example/glowmod/util/Datapack.java:10-10
+10 /** Runs .mcfunction files of the mod's data pack from Java. */
+## src/main/java/com/example/glowmod/util/Datapack.java:25-35 Datapack.execute
+25 private static void execute(ServerWorld world, Vec3d pos, Identifier id) {
+26     MinecraftServer server = world.getServer();
+27     ServerCommandSource source = server.getCommandSource()
+28             .withWorld(world)
+29             .withPosition(pos)
+30             .withSilent()
+31             .withLevel(2);
+32     server.getCommandFunctionManager().getFunction(id).ifPresentOrElse(
+33             function -> server.getCommandFunctionManager().execute(function, source),
+34             () -> GlowMod.LOGGER.warn("data pack function {} not found", id));
+35 }
+## README.md:1-26 # Glow Mod (example)
+  README.md:13-23
+14 - `src/main/java/com/example/glowmod/` - common (server + client) code
+15 - `src/client/java/` - client-only code
+16 - `src/gametest/java/` - Fabric game tests
+17 - `src/main/resources/data/glowmod/` - data pack: functions, recipe, loot table
+18 - `src/main/resources/assets/glowmod/` - item models and translations
+19 - `src/main/resources/glowmod.yml` - default settings, copied to `config/` on first start
+20 - `datapack/` - a standalone data pack for map makers (a copy of the wisp death function)
+21 - `reference/original-plugin/` - excerpts of the Paper plugin this mod was ported
+22   from, kept for comparison; it is not built
+## src/main/java/com/example/glowmod/ritual/Ritual.java:15-43 public final class Ritual
+  names: `glowmod:ritual/start` (line 22, id) -> src/main/resources/data/glowmod/function/ritual/start.mcfunction
+  src/main/java/com/example/glowmod/ritual/Ritual.java:14-14
+14 /** The lantern ritual: the data pack plays the effects, the mod clears the circle and calls the wisps. */
+## src/main/java/com/example/glowmod/util/Datapack.java:16-18 Datapack.run
+16 public static void run(ServerWorld world, Vec3d pos, String name) {
+17     execute(world, pos, Identifier.of(GlowMod.MOD_ID, name));
+18 }
+src/main/resources/data/glowmod/function/ritual/tick.mcfunction:1-5 execute as @e[type=minecraft:marker,tag=glowmod.altar] at @s run particle minecraft:end_rod ~ ~1 ~ 1.5 0.5 1.5 0.01 6
+datapack/pack.mcmeta:1-6 {
+src/main/java/com/example/glowmod/util/Datapack.java:21-23 public static void runQualified(ServerWorld world, Vec3d pos, String id)
+src/main/java/com/example/glowmod/util/Datapack.java:12-13 private Datapack()
+src/main/java/com/example/glowmod/ritual/Ritual.java:34-42 private static void alaniAc(ServerWorld world, BlockPos altar)
+src/main/resources/data/glowmod/function/wisp_death.mcfunction:1-5 particle minecraft:soul_fire_flame ~ ~0.5 ~ 0.3 0.3 0.3 0.02 30
+src/main/java/com/example/glowmod/command/GlowCommands.java:38-42 private static int ritual(CommandContext<ServerCommandSource> ctx)
+src/main/java/com/example/glowmod/ritual/Ritual.java:18-19 private Ritual()
+src/main/java/com/example/glowmod/entity/Wisp.java:28-36 public static Wisp spawn(ServerWorld world, BlockPos pos)
+src/main/java/com/example/glowmod/config/GlowConfig.java:21-23 public static GlowConfig get()
+src/main/java/com/example/glowmod/entity/Wisp.java:38-44 @Override public void onDeath(DamageSource damageSource)
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:28-31 public static void kaydet(ServerWorld world, BlockPos pos, BlockState state)
+src/main/resources/data/glowmod/loot_table/entities/wisp.json:1-20 {
+src/main/resources/glowmod.yml:10-14 repair:
+src/main/java/com/example/glowmod/command/GlowCommands.java:14-49 public final class GlowCommands
+… 95 more candidates not shown: src/main/java/com/example/glowmod/world/WispSpawner.java:22-33 private static void onChunkLoad(ServerWorld world, WorldC; src/main/java/com/example/glowmod/repair/RepairScheduler.java:14-48 public final class RepairScheduler; src/main/java/com/example/glowmod/ritual/Ritual.java:1-1 package com.example.glowmod.ritual;; src/main/resources/glowmod.yml:1-2 # Glow Mod s…
+next: verinoda query "…" --max-chars 12000

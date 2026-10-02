@@ -1,0 +1,154 @@
+
+### Overall, CITED, capped (N = 34)
+
+| arm | file R | file P | file F1 | span R | span P | span F1 | line R | symbol R | tokens mean | file R /1k tok | span R /1k tok | empty |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Verinoda query | 0.476 | 0.131 | 0.206 | 0.286 | 0.048 | 0.083 | 0.278 | 0.413 | 1428 | 0.333 | 0.201 | 0 |
+| Verinoda analyze | 0.379 | 0.104 | 0.164 | 0.165 | 0.103 | 0.127 | 0.165 | 0.248 | 1500 | 0.253 | 0.110 | 0 |
+| Graphify query | 0.274 | 0.042 | 0.072 | 0.003 | 0.018 | 0.005 | 0.002 | 0.067 | 1500 | 0.183 | 0.002 | 1 |
+| BM25 baseline | 0.266 | 0.191 | 0.222 | 0.035 | 0.068 | 0.047 | 0.030 | 0.107 | 1490 | 0.179 | 0.024 | 0 |
+
+### Overall, CITED, uncapped (N = 34)
+
+| arm | file R | file P | file F1 | span R | span P | span F1 | line R | symbol R | tokens mean | file R /1k tok | span R /1k tok | empty |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Verinoda query | 0.476 | 0.131 | 0.206 | 0.286 | 0.048 | 0.083 | 0.278 | 0.413 | 1428 | 0.333 | 0.201 | 0 |
+| Verinoda analyze | 0.516 | 0.090 | 0.153 | 0.333 | 0.051 | 0.088 | 0.326 | 0.448 | 2559 | 0.202 | 0.130 | 0 |
+| Graphify query | 0.419 | 0.035 | 0.065 | 0.004 | 0.015 | 0.007 | 0.003 | 0.086 | 2467 | 0.170 | 0.002 | 0 |
+| BM25 baseline | 0.266 | 0.191 | 0.222 | 0.035 | 0.068 | 0.047 | 0.030 | 0.107 | 1490 | 0.179 | 0.024 | 0 |
+
+### Overall, SHOWN, capped (N = 34)
+
+| arm | file R | file P | file F1 | span R | span P | span F1 | line R | symbol R | tokens mean | file R /1k tok | span R /1k tok | empty |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Verinoda query | 0.315 | 0.264 | 0.287 | 0.035 | 0.151 | 0.057 | 0.032 | 0.120 | 1428 | 0.220 | 0.025 | 0 |
+| Verinoda analyze | 0.169 | 0.266 | 0.207 | 0.014 | 0.135 | 0.025 | 0.014 | 0.069 | 1500 | 0.113 | 0.009 | 10 |
+| Graphify query | 0.274 | 0.042 | 0.072 | 0.003 | 0.018 | 0.005 | 0.002 | 0.067 | 1500 | 0.183 | 0.002 | 1 |
+| BM25 baseline | 0.266 | 0.191 | 0.222 | 0.035 | 0.068 | 0.047 | 0.030 | 0.107 | 1490 | 0.179 | 0.024 | 0 |
+
+### Overall, SHOWN, uncapped (N = 34)
+
+| arm | file R | file P | file F1 | span R | span P | span F1 | line R | symbol R | tokens mean | file R /1k tok | span R /1k tok | empty |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Verinoda query | 0.315 | 0.264 | 0.287 | 0.035 | 0.151 | 0.057 | 0.032 | 0.120 | 1428 | 0.220 | 0.025 | 0 |
+| Verinoda analyze | 0.315 | 0.264 | 0.287 | 0.035 | 0.151 | 0.057 | 0.032 | 0.120 | 2559 | 0.123 | 0.014 | 0 |
+| Graphify query | 0.419 | 0.035 | 0.065 | 0.004 | 0.016 | 0.007 | 0.003 | 0.086 | 2467 | 0.170 | 0.002 | 0 |
+| BM25 baseline | 0.266 | 0.191 | 0.222 | 0.035 | 0.068 | 0.047 | 0.030 | 0.107 | 1490 | 0.179 | 0.024 | 0 |
+
+### Per language, CITED file recall (capped, micro)
+
+| language | n | Verinoda query | Verinoda analyze | Graphify query | BM25 baseline |
+|---|---|---|---|---|---|
+| c | 5 | 0.556 | 0.444 | 0.389 | 0.222 |
+| cpp | 6 | 0.556 | 0.444 | 0.296 | 0.259 |
+| go | 1 | 1.000 | 1.000 | 0.500 | 1.000 |
+| java | 6 | 0.300 | 0.250 | 0.250 | 0.250 |
+| javascript | 4 | 0.714 | 0.571 | 0.286 | 0.286 |
+| python | 9 | 0.522 | 0.391 | 0.304 | 0.391 |
+| rust | 1 | 0.211 | 0.158 | 0.105 | 0.053 |
+| typescript | 2 | 0.625 | 0.500 | 0.250 | 0.375 |
+| overall | 34 | 0.476 | 0.379 | 0.274 | 0.266 |
+
+### Per language, CITED file precision (capped, micro)
+
+| language | n | Verinoda query | Verinoda analyze | Graphify query | BM25 baseline |
+|---|---|---|---|---|---|
+| c | 5 | 0.179 | 0.148 | 0.072 | 0.174 |
+| cpp | 6 | 0.155 | 0.124 | 0.068 | 0.241 |
+| go | 1 | 0.143 | 0.286 | 0.018 | 0.286 |
+| java | 6 | 0.082 | 0.068 | 0.038 | 0.167 |
+| javascript | 4 | 0.077 | 0.083 | 0.015 | 0.077 |
+| python | 9 | 0.117 | 0.073 | 0.039 | 0.220 |
+| rust | 1 | 0.571 | 0.158 | 0.095 | 0.200 |
+| typescript | 2 | 0.147 | 0.143 | 0.024 | 0.250 |
+| overall | 34 | 0.131 | 0.104 | 0.042 | 0.191 |
+
+### Per language, CITED span F1 (capped, micro)
+
+| language | n | Verinoda query | Verinoda analyze | Graphify query | BM25 baseline |
+|---|---|---|---|---|---|
+| c | 5 | 0.100 | 0.129 | 0.015 | 0.030 |
+| cpp | 6 | 0.096 | 0.192 | 0.006 | 0.063 |
+| go | 1 | 0.012 | 0.063 | 0.000 | 0.000 |
+| java | 6 | 0.064 | 0.102 | 0.001 | 0.048 |
+| javascript | 4 | 0.171 | 0.237 | 0.006 | 0.038 |
+| python | 9 | 0.064 | 0.095 | 0.005 | 0.057 |
+| rust | 1 | 0.258 | 0.030 | 0.000 | 0.000 |
+| typescript | 2 | 0.053 | 0.074 | 0.000 | 0.044 |
+| overall | 34 | 0.083 | 0.127 | 0.005 | 0.047 |
+
+### Per language, SHOWN file recall (capped, micro)
+
+| language | n | Verinoda query | Verinoda analyze | Graphify query | BM25 baseline |
+|---|---|---|---|---|---|
+| c | 5 | 0.389 | 0.167 | 0.389 | 0.222 |
+| cpp | 6 | 0.259 | 0.259 | 0.296 | 0.259 |
+| go | 1 | 1.000 | 0.000 | 0.500 | 1.000 |
+| java | 6 | 0.250 | 0.250 | 0.250 | 0.250 |
+| javascript | 4 | 0.429 | 0.143 | 0.286 | 0.286 |
+| python | 9 | 0.391 | 0.087 | 0.304 | 0.391 |
+| rust | 1 | 0.105 | 0.000 | 0.105 | 0.053 |
+| typescript | 2 | 0.500 | 0.375 | 0.250 | 0.375 |
+| overall | 34 | 0.315 | 0.169 | 0.274 | 0.266 |
+
+### Per language, SHOWN span recall (capped, micro)
+
+| language | n | Verinoda query | Verinoda analyze | Graphify query | BM25 baseline |
+|---|---|---|---|---|---|
+| c | 5 | 0.043 | 0.015 | 0.010 | 0.023 |
+| cpp | 6 | 0.013 | 0.013 | 0.004 | 0.044 |
+| go | 1 | 0.997 | 0.000 | 0.000 | 0.000 |
+| java | 6 | 0.024 | 0.019 | 0.000 | 0.030 |
+| javascript | 4 | 0.060 | 0.000 | 0.004 | 0.049 |
+| python | 9 | 0.048 | 0.005 | 0.003 | 0.051 |
+| rust | 1 | 0.073 | 0.000 | 0.000 | 0.000 |
+| typescript | 2 | 0.126 | 0.126 | 0.000 | 0.079 |
+| overall | 34 | 0.035 | 0.014 | 0.003 | 0.035 |
+
+### Per language, SHOWN span F1 (capped, micro)
+
+| language | n | Verinoda query | Verinoda analyze | Graphify query | BM25 baseline |
+|---|---|---|---|---|---|
+| c | 5 | 0.068 | 0.027 | 0.015 | 0.030 |
+| cpp | 6 | 0.024 | 0.024 | 0.006 | 0.063 |
+| go | 1 | 0.210 | 0.000 | 0.000 | 0.000 |
+| java | 6 | 0.044 | 0.035 | 0.001 | 0.048 |
+| javascript | 4 | 0.071 | 0.000 | 0.006 | 0.038 |
+| python | 9 | 0.067 | 0.009 | 0.005 | 0.057 |
+| rust | 1 | 0.121 | 0.000 | 0.000 | 0.000 |
+| typescript | 2 | 0.103 | 0.124 | 0.000 | 0.044 |
+| overall | 34 | 0.057 | 0.025 | 0.005 | 0.047 |
+
+### Macro (mean over instances), CITED, capped
+
+| arm | file R | file P (non-empty) | span R | span P (non-empty) | span F1 | empty preds |
+|---|---|---|---|---|---|---|
+| Verinoda query | 0.568 | 0.154 | 0.375 | 0.091 | 0.114 | 0 |
+| Verinoda analyze | 0.470 | 0.110 | 0.253 | 0.107 | 0.122 | 0 |
+| Graphify query | 0.378 | 0.053 | 0.005 | 0.015 | 0.006 | 1 |
+| BM25 baseline | 0.348 | 0.203 | 0.069 | 0.069 | 0.048 | 0 |
+
+### Macro (mean over instances), SHOWN, capped
+
+| arm | file R | file P (non-empty) | span R | span P (non-empty) | span F1 | empty preds |
+|---|---|---|---|---|---|---|
+| Verinoda query | 0.420 | 0.335 | 0.077 | 0.152 | 0.064 | 0 |
+| Verinoda analyze | 0.175 | 0.328 | 0.013 | 0.138 | 0.019 | 10 |
+| Graphify query | 0.378 | 0.053 | 0.005 | 0.015 | 0.006 | 1 |
+| BM25 baseline | 0.348 | 0.203 | 0.069 | 0.069 | 0.048 | 0 |
+
+### Timings (wall seconds, measured with 3 instances in flight on a shared machine)
+
+| step | median | p90 | max | sum |
+|---|---|---|---|---|
+| verinoda_scan | 107.280 | 364.510 | 2175.380 | 7809.540 |
+| graphify_update | 71.520 | 291.370 | 1328.020 | 5433.900 |
+| bm25_index | 14.610 | 47.600 | 92.030 | 722.080 |
+| vq_query | 5.176 | 16.436 | 29.785 | - |
+| va_query | 13.466 | 51.933 | 76.339 | - |
+| gq_query | 3.636 | 12.955 | 17.528 | - |
+| bm25_query | 0.108 | 0.402 | 0.698 | - |
+
+ceiling (gold entry, micro recall): file 0.976, span 1.000, line 0.987, symbol 1.000
+failures: {}
+not ok: {}

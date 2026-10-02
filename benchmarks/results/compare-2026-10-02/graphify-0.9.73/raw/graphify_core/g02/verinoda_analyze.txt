@@ -1,0 +1,130 @@
+analysis ana_963a5ff2ef66, snapshot snp_efed543690f2 (commit e74155e7f1)
+understood as: Understood (rules): q1 [flow] Which functions does the graphify query command call to turn a question into graph context?
+plan links: graphify -> graphify/callflow_html.py:424-448; query -> graphify/_minhash.py:101-107; command -> graphify/cli.py:1064-4842; question -> graphify/analyze.py:443-568; graph -> graphify/affected.py:295-318; context -> graphify/llm.py:2204-2215
+q1 [met] flow: Which functions does the graphify query command call to turn a question into graph context?
+  [statically_verified] Data path main() -> _run_cli() -> dispatch_command() reaches persistence (file-write) at graphify/cli.py:1064 {source_code:graphify/__main__.py:492; source_code:graphify/__main__.py:751; source_code:graphify/cli.py:1157; source_code:graphify/cli.py:1175} (uncertain: entry point and sink detection are heuristics)  (clm_bc527085a370)
+context (found on the way; not what answers):
+  [statically_verified] `dispatch_command()` is defined at graphify/cli.py:1064-4842  (clm_6dd3f5b79f23)
+  [statically_verified] `_query_graph_text()` is defined at graphify/serve.py:1349-1408  (clm_efd630865665)
+  [observed 0.80] `dispatch_command()` calls `_query_graph_text()` (graphify/cli.py:1302) (uncertain: call site graphify/cli.py:1302: `_query_graph_text` is rebound locally at line 1206 before the call)  (clm_b63d88483152)
+  [statically_verified] `_tool_query_graph()` calls `_query_graph_text()` (graphify/serve.py:2030) (uncertain: precise resolution: not resolved (budget))  (clm_2b2401a1bbae)
+  [weak_inference 0.30] `walk_calls()` calls `walk_calls()` (graphify/extractors/bash.py:279) (uncertain: precise resolution: not resolved (budget))  (clm_8f67e47acd6e)
+  [strong_inference] graphify/cli.py:1157 touches storage (file-write): global_path.write_text(_json.dumps(existing, indent=2) + "\n", encoding="utf-8") (uncertain: which storage operation a line is comes from a pattern over the source)  (clm_0f6702e89ee4)
+  +1 more context claim(s) (--json lists them)
+critique clm_b63d88483152: statically_verified -> observed  graphify/cli.py:1302: `_query_graph_text` is rebound locally at line 1206 before the call
+critique clm_8f67e47acd6e: strong_inference -> weak_inference  graphify/extractors/bash.py:279: AST call to `walk_calls` at line 279, but nothing in graphify/extractors/bash.py binds it to graphify/extra
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: command->cmd, command->cmds, context->ctx
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1197-1210
+1197     elif subcmd == "status":
+1198         print(hook_status(Path(".")))
+1199     else:
+1200         print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+1201         sys.exit(1)
+1202 elif cmd == "query":
+1203     if len(sys.argv) < 3:
+1204         print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+1205         sys.exit(1)
+1206     from graphify.serve import _query_graph_text
+1207     from graphify.security import sanitize_label
+1208     from networkx.readwrite import json_graph
+1209     from graphify import querylog
+  graphify/cli.py:1303-1316
+1303     G,
+1304     question,
+1305     mode=_mode,
+1306     depth=2,
+1307     token_budget=budget,
+1308     context_filters=context_filters,
+1309     graph_path=str(gp),
+1310 )
+1311 querylog.log_query(
+1312     kind="query",
+1313     question=question,
+1314     corpus=str(gp),
+1315     result=_result,
+1316     mode=_mode,
+## graphify/serve.py:1349-1408 _query_graph_text
+  calls: _query_terms@1359, _score_query@1366, _pick_seeds@1380, _resolve_context_filters@1383, _filter_graph_by_context@1384, _traversal_view@1384, _bfs@1385, _dfs@1385, _display_graph_path@1399, _subgraph_to_text@1408
+  called by: dispatch_command (graphify/cli.py:1302); _tool_query_graph (graphify/serve.py:2030)
+  const graphify/serve.py:851: _RELATIONAL_INTENT_TERMS: frozenset[str] = frozenset({
+  graphify/serve.py:1349-1361
+1349 def _query_graph_text(
+1350     G: nx.Graph,
+1351     question: str,
+1352     *,
+1353     mode: str = "bfs",
+1354     depth: int = 3,
+1355     token_budget: int = 2000,
+1356     context_filters: list[str] | None = None,
+1357     graph_path: str | None = None,
+1358 ) -> str:
+1359     terms = _query_terms(question)
+1360     # One graph scoring pass produces both the combined ranking (used to drive
+1361     # the gap-based seed selection below) and the per-token singleton winners
+  graphify/serve.py:1378-1391
+1378         t: nid for t, nid in best_seed_by_term.items() if t not in intent
+1379     }
+1380 start_nodes = _pick_seeds(qs.ranked, G=G, best_seed_by_term=best_seed_by_term)
+1381 if not start_nodes:
+1382     return "No matching nodes found."
+1383 resolved_filters, filter_source = _resolve_context_filters(question, context_filters)
+1384 traversal_graph = _filter_graph_by_context(_traversal_view(G), resolved_filters)
+1385 nodes, edges = _dfs(traversal_graph, start_nodes, depth) if mode == "dfs" else _bfs(traversal_graph, start_nodes, depth)
+1386 header_parts = [
+1387     f"Traversal: {mode.upper()} depth={depth}",
+1388     f"Start: {[G.nodes[n].get('label', n) for n in start_nodes]}",
+1389 ]
+1390 # Name the graph this answer came from. `graphify-out/` resolves against the
+1391 # CWD, so running a query from a parent project while thinking about a
+## graphify/serve.py:1823-1831 _load_ctx
+  doc: Return the current default or project graph context as a tool error.
+  called by: _select_graph (graphify/serve.py:1859)
+1823 def _load_ctx(path: str):
+1824     """Return the current default or project graph context as a tool error.
+1826     Unlike ``_load_graph``, this never lets a missing or corrupt client
+1827     graph terminate the MCP process; it raises so other projects remain
+1828     available on the same server.
+1829     """
+1830     resolved_path = str(Path(path).resolve())
+1831     return _ctx_cache.load(resolved_path, pinned=resolved_path == _default_graph_path)
+## graphify/extractors/bash.py:235-279 def walk_calls(body_node, func_nid: str, seen_calls: set) -> None
+  calls: _bash_call_in_command_allowed@244, literal@249, _make_id@254, add_edge@258, walk_calls@279
+  called by: walk_calls (graphify/extractors/bash.py:279)
+  graphify/extractors/bash.py:240-253
+240     # Skip nested function definitions — their bodies are walked
+241     # separately, so we don't attribute their calls to the
+242     # enclosing scope.
+243     continue
+244 if child.type == "command" and _bash_call_in_command_allowed(child):
+245     cmd_name_node = child.child_by_field_name("name")
+246     if cmd_name_node is None and child.children:
+247         cmd_name_node = child.children[0]
+248     if cmd_name_node:
+249         name = literal(cmd_name_node)
+250         # Defined-functions wins. Skip-lists for external commands
+251         # would create false negatives when a user defines a
+252         # function shadowing an external (`install`, `find`, etc.).
+253         if name and name in defined_functions:
+## graphify/serve.py:2021-2049 def _tool_query_graph(arguments: dict) -> str
+  calls: _query_graph_text@2030
+  graphify/serve.py:2032-2045
+2032     question,
+2033     mode=mode,
+2034     depth=depth,
+2035     token_budget=budget,
+2036     context_filters=context_filter,
+2037     graph_path=str(active_graph_path),
+2038 )
+2039 querylog.log_query(
+2040     kind="mcp_query",
+2041     question=question,
+2042     corpus=str(active_graph_path),
+2043     result=result,
+2044     mode=mode,
+2045     depth=depth,
+… 1800 more candidates not shown: graphify/benchmark.py:37-73 def _query_subgraph_tokens(G: nx.Graph, question: str, depth: int = 3) -> int; graphify/install.py:1401-1412 if (input.tool === "bash"); graphify/extractors/bash.py:197-213 def _bash_call_in_command_allowed(cmd_node) -> bool; graphify/cli.py:78-81 '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+next: verinoda query "…" --max-chars 12000

@@ -1,0 +1,68 @@
+expanded: karşılandı->karsilastirma, karşılandı->karsiliklar, karşılandı->karsinda (+7 more)
+## verinoda/search_index.py:1272-1409 def analyze_query(question: str, conn: sqlite3.Connection, *, expansions: dict[str, list[str]] | None = None, repo: Path | None = None) -> QueryTerms
+  doc: Question -> weighted index terms, with every expansion reported.
+  calls: named_identifiers@1275, split_apostrophe@1280, fold_tr@1285, raw_tokens@1295, word_tokens@1298, _vocab_has@1300, has_turkish@1314, is_suffix_chain@1321, _vocab_prefixed@1334, tr_stem@1334, word_stem@1361, _fetch@1379 (+6)
+  called by: rank (verinoda/search_index.py:1664)
+  const verinoda/search_index.py:86: EXPANSION_WEIGHT = 0.5            # abbreviation / prefix / Turkish-stem expansions
+  const verinoda/search_index.py:87: PROVIDED_EXPANSION_WEIGHT = 0.7   # expansions supplied by the caller (question plan, lexicon)
+  verinoda/search_index.py:1364-1377
+1364             cand.setdefault(short, (t, "abbreviation"))
+1365     if len(t) >= 6:
+1366         # Turkish derivational endings only in Turkish questions (oyuncu is not oyun); in English
+1367         # "applic" -> app and "deduplicat" -> dedup are abbreviations
+1368         endings = _DERIVATIONAL + TR_DERIVATIONAL if tr_question else _DERIVATIONAL
+1369         for k in range(max(3, math.ceil(0.4 * len(t))), len(t)):
+1370             if t[:k] not in NOT_ABBREVIATIONS and not t[k:].startswith(endings):
+1371                 prefixes.setdefault(t[:k], t)
+1372 known = _vocab_has(conn, [c for c in cand if c not in weights])
+1373 for c, (src, via) in cand.items():
+1374     if c in known and c not in weights:
+1375         add(src, c, "abbreviation", EXPANSION_WEIGHT)
+1376 # A strict prefix of a long word counts as its abbreviation only when some
+1377 # symbol or constant is named with it (``env`` in ``ENV_ALLOW``), not when
+  verinoda/search_index.py:1400-1409
+1400     # the exact-spelling seed entries are added to its glosses here
+1401     for src, targets in _exact_seed_expansions(repo, words).items():
+1402         for tgt in targets:
+1403             add(src, tgt, "lexicon", PROVIDED_EXPANSION_WEIGHT, indexed=False)
+1404 # "the scan command" / "scan komutu": its handler (cmd_scan) counts as named by the question
+1405 for handler, word in command_handlers(conn, command_words(question)).items():
+1406     if handler not in named:
+1407         named.append(handler)
+1408         exps.append({"from": f"{word} (command)", "to": handler, "via": "command handler", "weight": 1.0})
+1409 return QueryTerms(weights, words, named, exps, dropped)
+## verinoda/search_index.py:1656-1855 rank
+  doc: Rank the index's units for ``question`` (lexical BM25F, then the graph prior).
+  calls: open_for@1661, analyze_query@1664, _vocab_has@1665, _fetch@1671, _proximity@1697, is_test_file@1703, _reference_roots@1724, word_tokens@1751, qualified_owners@1754, _spelled_resource_ids@1787, _canonical@1796, _fold_copies@1797 (+5)
+  called by: retrieve (verinoda/retrieval.py:257); _hints (verinoda/retrieval.py:610)
+  const verinoda/search_index.py:81: PPR_SEEDS = 8
+  const verinoda/search_index.py:97: PROX_BOOST = 0.3                  # code passage factor when two adjacent question words are adjacent in it
+  verinoda/search_index.py:1656-1668
+1656 def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] | None = None,
+1657          expansions: dict[str, list[str]] | None = None, limit: int = 60, handle: Handle | None = None,
+1658          ppr: bool = True) -> Ranking:
+1659     """Rank the index's units for ``question`` (lexical BM25F, then the graph prior)."""
+1660     t0 = time.perf_counter()
+1661     h = handle or open_for(g)
+1662     conn = h.connect()
+1663     try:
+1664         q = analyze_query(question, conn, expansions=expansions, repo=g.root)
+1665         dfs = _vocab_has(conn, list(q.weights))
+1666         n = max(1, h.n_units)
+1667         idf = {t: math.log(1 + (n - d + 0.5) / (d + 0.5)) for t, d in dfs.items()}
+1668         terms = [t for t in q.weights if t in idf]
+  verinoda/search_index.py:1844-1855
+1844         _, qual, own, sig, doc, consts = full[uid]
+1845         ps = [(s, pid, *prng[pid]) for s, pid in per_unit.get(uid, [])[:6] if pid in prng]
+1846         if not ps and p_lo in prng:
+1847             ps = [(0.0, p_lo, *prng[p_lo])]
+1848         best_pid = ps[0][1] if ps else None
+1849         hits.append(Hit(uid, file, nid, kind, name, qual, a, b, own, sig, doc,
+1850                         [tuple(c) for c in json.loads(consts or "[]")], score[uid], lex.get(uid, 0.0),
+1851                         ppr_mass.get(uid, 0.0), ps, sorted(name_tf.get(uid, {})),
+1852                         sorted(acc.get(best_pid, {})) if best_pid is not None else [], reasons.get(uid, [])))
+1853     return Ranking(hits, q, len(score), pushes, time.perf_counter() - t0, list(h.notes))
+1854 finally:
+1855     h.release(conn)
+… 893 more candidates not shown: verinoda/benchmark/runner.py:328-541 def run_benchmark(repo: Path, *, questions=None, out=None, graphify_cmd: str | None; verinoda/analysis.py:2005-2182 def analyze(store: Store, repo: Path, question: str, *, plan=None, budget: Budget | None ; verinoda/benchmark/metrics.py:148-169 def match_fact(fact: dict, text: str, locators: list[Locator] | None = None) -> di; …
+next: verinoda query "…" --max-chars 12000

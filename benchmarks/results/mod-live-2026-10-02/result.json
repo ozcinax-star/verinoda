@@ -1,0 +1,715 @@
+{
+  "benchmark": "mod-live edit-to-fresh",
+  "date": "2026-10-02T07:43:09+00:00",
+  "verinoda_commit": "5999912",
+  "corpus": "<CORPUS>",
+  "steps_spec": [
+    "comment",
+    "body",
+    "batch:5",
+    "add",
+    "del"
+  ],
+  "runs": 3,
+  "platform": {
+    "os": "nt",
+    "python": "3.13.14",
+    "cpus": 16
+  },
+  "setup": {
+    "fast": {
+      "scan_seconds": 3.39,
+      "files": 6
+    },
+    "full": {
+      "scan_seconds": 3.413,
+      "files": 6
+    }
+  },
+  "steps": [
+    {
+      "run": 0,
+      "step": "comment",
+      "files": [
+        "orders/__init__.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 2.313,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 7.072,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.448,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "body",
+      "files": [
+        "orders/__init__.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 3.426,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 2.277,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.272,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "batch:5",
+      "files": [
+        "orders/__init__.py",
+        "orders/api.py",
+        "orders/config.py",
+        "orders/pricing.py",
+        "orders/repository.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 2.355,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.734,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.568,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "add",
+      "files": [
+        "bench_mod_0.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 3.605,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 2.54,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.597,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "del",
+      "files": [
+        "bench_mod_0.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 2.184,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 6.89,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.437,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "comment",
+      "files": [
+        "orders/__init__.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 3.291,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 2.357,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 6.104,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "body",
+      "files": [
+        "orders/__init__.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 2.31,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.293,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.428,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "batch:5",
+      "files": [
+        "orders/__init__.py",
+        "orders/api.py",
+        "orders/config.py",
+        "orders/pricing.py",
+        "orders/repository.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 3.858,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 2.376,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.343,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "add",
+      "files": [
+        "bench_mod_1.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 2.437,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.499,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.526,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "del",
+      "files": [
+        "bench_mod_1.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 3.437,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 2.265,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 6.881,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "step": "comment",
+      "files": [
+        "orders/__init__.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 2.306,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 6.117,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.378,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "step": "body",
+      "files": [
+        "orders/__init__.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 3.475,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 2.238,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.293,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "step": "batch:5",
+      "files": [
+        "orders/__init__.py",
+        "orders/api.py",
+        "orders/config.py",
+        "orders/pricing.py",
+        "orders/repository.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 2.314,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.82,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.666,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "step": "add",
+      "files": [
+        "bench_mod_2.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 2.353,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 2.542,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 6.583,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "step": "del",
+      "files": [
+        "bench_mod_2.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 1.597,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 3.573,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 3.465,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "comment": {
+      "fast": {
+        "n": 3,
+        "median_seconds": 2.313,
+        "max_seconds": 2.357,
+        "median_graph_seconds": 6.117,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "3/3",
+        "graph_fresh": null,
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 3,
+        "median_seconds": 3.378,
+        "max_seconds": 3.448,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "0/3",
+        "graph_fresh": null,
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 1.46
+    },
+    "body": {
+      "fast": {
+        "n": 3,
+        "median_seconds": 2.277,
+        "max_seconds": 2.31,
+        "median_graph_seconds": 6.293,
+        "errors": 0,
+        "text_now": "3/3",
+        "symbol_now": "0/3",
+        "graph_pending": "3/3",
+        "graph_fresh": "3/3",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 3,
+        "median_seconds": 3.428,
+        "max_seconds": 3.475,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": "3/3",
+        "symbol_now": "3/3",
+        "graph_pending": "0/3",
+        "graph_fresh": "3/3",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 1.51
+    },
+    "batch:5": {
+      "fast": {
+        "n": 3,
+        "median_seconds": 2.355,
+        "max_seconds": 2.376,
+        "median_graph_seconds": 6.734,
+        "errors": 0,
+        "text_now": "3/3",
+        "symbol_now": "0/3",
+        "graph_pending": "3/3",
+        "graph_fresh": "3/3",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 3,
+        "median_seconds": 3.666,
+        "max_seconds": 3.858,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": "3/3",
+        "symbol_now": "3/3",
+        "graph_pending": "0/3",
+        "graph_fresh": "3/3",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 1.56
+    },
+    "add": {
+      "fast": {
+        "n": 3,
+        "median_seconds": 2.54,
+        "max_seconds": 2.542,
+        "median_graph_seconds": 6.583,
+        "errors": 0,
+        "text_now": "3/3",
+        "symbol_now": "0/3",
+        "graph_pending": "3/3",
+        "graph_fresh": "3/3",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 3,
+        "median_seconds": 3.526,
+        "max_seconds": 3.605,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": "3/3",
+        "symbol_now": "3/3",
+        "graph_pending": "0/3",
+        "graph_fresh": "3/3",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 1.39
+    },
+    "del": {
+      "fast": {
+        "n": 3,
+        "median_seconds": 2.184,
+        "max_seconds": 2.265,
+        "median_graph_seconds": 6.881,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "3/3",
+        "graph_fresh": null,
+        "gone_absent": "3/3",
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 3,
+        "median_seconds": 3.437,
+        "max_seconds": 3.465,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "0/3",
+        "graph_fresh": null,
+        "gone_absent": "3/3",
+        "leftover_changes": 0
+      },
+      "speedup": 1.57
+    }
+  }
+}

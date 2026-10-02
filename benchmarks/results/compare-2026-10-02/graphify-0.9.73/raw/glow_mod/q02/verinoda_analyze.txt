@@ -1,0 +1,91 @@
+analysis ana_12cf15e9e9ec, snapshot snp_96a6e3b2d02d (commit 906a99fb8c)
+understood as: Understood (rules): q1 [callers] Who calls GlowConfig.load?
+plan links: GlowConfig.load -> src/main/java/com/example/glowmod/config/GlowConfig.java:26-42
+q1 [met_with_inference] callers: Who calls GlowConfig.load?
+  [strong_inference] `GlowCommands.reload()` calls `GlowConfig.load()` (src/main/java/com/example/glowmod/command/GlowCommands.java:45) (uncertain: which definition the call at src/main/java/com/example/glowmod/command/GlowCommands.java:45 binds to is checked for Python only)  (clm_8ffb8c5d084a)
+  [strong_inference] `GlowMod.onInitialize()` calls `GlowConfig.load()` (src/main/java/com/example/glowmod/GlowMod.java:21) (uncertain: which definition the call at src/main/java/com/example/glowmod/GlowMod.java:21 binds to is checked for Python only)  (clm_7b85e27fceb4)
+context (found on the way; not what answers):
+  [statically_verified] `GlowConfig` is defined at src/main/java/com/example/glowmod/config/GlowConfig.java:15-64  (clm_2c0d3fee9b48)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+## src/main/java/com/example/glowmod/config/GlowConfig.java:15-64 public record GlowConfig(int ritualWispCount, double naturalChance, int blocksPerTick, int repairDelayTicks, int maxSummonDistance)
+  called by: parse (src/main/java/com/example/glowmod/config/GlowConfig.java:48)
+  src/main/java/com/example/glowmod/config/GlowConfig.java:14-14
+14 /** Settings from config/glowmod.yml; every missing key falls back to {@link #DEFAULTS}. */
+## src/main/java/com/example/glowmod/config/GlowConfig.java:26-42 GlowConfig.load
+  calls: parse@36
+  called by: onInitialize (src/main/java/com/example/glowmod/GlowMod.java:21); reload (src/main/java/com/example/glowmod/command/GlowCommands.java:45)
+26 public static void load() {
+27     Path file = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
+28     try {
+29         if (Files.notExists(file)) {
+30             try (InputStream in = GlowConfig.class.getResourceAsStream("/" + FILE_NAME)) {
+31                 Files.copy(Objects.requireNonNull(in, "default " + FILE_NAME + " missing from the jar"), file);
+32             }
+33         }
+34         try (Reader reader = Files.newBufferedReader(file)) {
+35             Map<String, Object> root = new Yaml().load(reader);
+36             current = parse(root == null ? Map.of() : root);
+37         }
+38     } catch (IOException | RuntimeException e) {
+39         GlowMod.LOGGER.error("could not read {}, using defaults", file, e);
+40         current = DEFAULTS;
+41     }
+42 }
+## src/main/java/com/example/glowmod/command/GlowCommands.java:44-48 GlowCommands.reload
+  calls: load@45
+  runs: when the command is run (registered at src/main/java/com/example/glowmod/command/GlowCommands.java:24)
+44 private static int reload(CommandContext<ServerCommandSource> ctx) {
+45     GlowConfig.load();
+46     ctx.getSource().sendFeedback(() -> Text.translatable("command.glowmod.reload.done"), true);
+47     return 1;
+48 }
+## src/main/java/com/example/glowmod/config/GlowConfig.java:21-23 GlowConfig.get
+  called by: onSummonWisp (src/main/java/com/example/glowmod/network/ServerNetworking.java:25); kaydet (src/main/java/com/example/glowmod/repair/RepairScheduler.java:29); tick (src/main/java/com/example/glowmod/repair/RepairScheduler.java:34); baslat (src/main/java/com/example/glowmod/ritual/Ritual.java:24); onChunkLoad (src/main/java/com/example/glowmod/world/WispSpawner.java:23)
+21 public static GlowConfig get() {
+22     return current;
+23 }
+## src/main/java/com/example/glowmod/GlowMod.java:19-30 GlowMod.onInitialize
+  calls: load@21, initialize@22, register@23, etkinlestir@25
+19 @Override
+20 public void onInitialize() {
+21     GlowConfig.load();
+22     ModItems.initialize();
+23     ModEntities.register();
+24     GlowCommands.register();
+25     LanternEvents.etkinlestir();
+26     WispSpawner.register();
+27     ServerNetworking.register();
+28     RepairScheduler.register();
+29     LOGGER.info("Glow Mod ready");
+30 }
+## src/main/java/com/example/glowmod/config/GlowConfig.java:56-59 GlowConfig.section
+  called by: parse (src/main/java/com/example/glowmod/config/GlowConfig.java:45)
+56 @SuppressWarnings("unchecked")
+57 private static Map<String, Object> section(Map<String, Object> root, String key) {
+58     return root.get(key) instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+59 }
+## src/main/java/com/example/glowmod/config/GlowConfig.java:61-63 GlowConfig.number
+  called by: parse (src/main/java/com/example/glowmod/config/GlowConfig.java:49)
+61 private static Number number(Map<String, Object> section, String key, Number fallback) {
+62     return section.get(key) instanceof Number n ? n : fallback;
+63 }
+src/main/java/com/example/glowmod/config/GlowConfig.java:44-54 private static GlowConfig parse(Map<String, Object> root)
+src/main/java/com/example/glowmod/world/WispSpawner.java:22-33 private static void onChunkLoad(ServerWorld world, WorldChunk chunk)
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:28-31 public static void kaydet(ServerWorld world, BlockPos pos, BlockState state)
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39 private static void tick(MinecraftServer server)
+src/main/java/com/example/glowmod/world/WispSpawner.java:18-20 public static void register()
+src/main/java/com/example/glowmod/config/GlowConfig.java:1-1 package com.example.glowmod.config;
+reference/original-plugin/config.yml:2-6 wisp:
+src/main/java/com/example/glowmod/ritual/Ritual.java:21-31 public static void baslat(ServerWorld world, BlockPos altar)
+src/main/resources/glowmod.yml:4-8 wisp:
+src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30 private static void onSummonWisp(SummonWispPayload payload, ServerPlayNetworking.Context context)
+src/main/java/com/example/glowmod/command/GlowCommands.java:14-49 public final class GlowCommands
+src/main/java/com/example/glowmod/world/WispSpawner.java:14-34 public final class WispSpawner
+src/main/java/com/example/glowmod/network/SummonWispPayload.java:10-10 /** Client -> server: "call a wisp at this block". */
+src/main/java/com/example/glowmod/command/GlowCommands.java:18-25 public static void register()
+src/main/resources/glowmod.yml:1-2 # Glow Mod settings. Copied to config/glowmod.yml on first start; edit that copy,
+src/main/java/com/example/glowmod/world/WispSpawner.java:13-13 /** Natural wisps: a freshly loaded swamp chunk at night sometimes gets one above its surface. */
+src/main/java/com/example/glowmod/ritual/Ritual.java:14-14 /** The lantern ritual: the data pack plays the effects, the mod clears the circle and calls the wisps. */
+… 63 more candidates not shown: README.md:1-26 # Glow Mod (example); src/main/java/com/example/glowmod/ritual/Ritual.java:15-43 public final class Ritual; src/main/java/com/example/glowmod/item/ModItems.java:25-31 public static void initialize(); reference/original-plugin/config.yml:1-1 # GlowPlugin settings
+next: verinoda query "…" --max-chars 12000

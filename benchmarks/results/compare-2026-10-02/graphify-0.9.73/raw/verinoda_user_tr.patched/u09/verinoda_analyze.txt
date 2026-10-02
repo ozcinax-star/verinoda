@@ -1,0 +1,99 @@
+analysis ana_27e675790951, snapshot snp_146247647180 (commit 91533f3f3b)
+understood as: Anladığım (kurallarla): q1 [gerekçe] update neden bu kadar uzun sürüyor?
+plan links: update -> verinoda/copies.py:161-170
+q1 [unmet] why: update neden bu kadar uzun sürüyor?
+  [primary_source_verified] `.update()` lines 642-644 were changed in 91533f3f3b (2026-10-02): benchmark corpus {git_history:commit 91533f3f3b669b39055a65e01fbf21cdad772e54 verinoda/store.py}  (clm_c4b77274963d)
+  unknown: the question's words 'uzun', 'suruyor' occur nowhere in this repository (code, comments or docs); next: use the names the code uses (see `verinoda map`), or research the external system the question is about
+  unknown: is the recorded rationale still the actual reason?: documents state intent, not current behaviour; next: compare with code via `verinoda challenge <claim>`
+  unknown: the reason was not found: 1 commit line(s) say when the code changed, not why, and no decision record, comment or document found states it; next: read the comments and docs around the code, or ask its author; record the answer with `verinoda decide record`
+context (found on the way; not what answers):
+  [statically_verified] `.update_evidence_meta()` calls `._update()` (verinoda/store.py:506)  (clm_d71c14c25aa6)
+  [statically_verified] `.digest()` calls `.feed()` (verinoda/anchors.py:165)  (clm_8dc535fe8cae)
+  +5 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+## verinoda/store.py:642-644 Store.update
+  calls: tx@643, _update@644
+  called by: resolve (verinoda/feedback.py:1092)?; process (verinoda/feedback.py:981)?
+642 def update(self, table: str, rid: str, fields: dict) -> None:
+643     with self.tx():
+644         self._update(table, "id", rid, fields)
+## verinoda/store.py:611-615 Store.update_claim
+  calls: now@613, tx@614, _update@615
+  called by: challenge (verinoda/critique.py:619)?; _correct (verinoda/feedback.py:253)?
+611 def update_claim(self, cid: str, fields: dict) -> None:
+612     fields = dict(fields)
+613     fields["updated_at"] = now()
+614     with self.tx():
+615         self._update("claims", "id", cid, fields)
+## verinoda/store.py:455-461 Store._update
+  called by: update_evidence_meta (verinoda/store.py:506); update_claim (verinoda/store.py:615); record_transition (verinoda/store.py:626); update (verinoda/store.py:644)
+  const verinoda/store.py:375: _JSON_COLS = {
+455 def _update(self, table: str, key: str, key_val: str, fields: dict) -> None:
+456     sets, vals = [], []
+457     for c, v in fields.items():
+458         sets.append(f"{c} = ?")
+459         vals.append(json.dumps(v, sort_keys=True) if c in _JSON_COLS and not isinstance(v, str) else v)
+460     vals.append(key_val)
+461     self.conn.execute(f"UPDATE {table} SET {', '.join(sets)} WHERE {key} = ?", vals)
+## verinoda/anchors.py:137-159 _PySerializer.feed
+137 def feed(self, h: Any, node: Any, *, root: bool = False) -> None:
+138     if isinstance(node, ast.AST):
+139         if not root and isinstance(node, _DEF_NODES) and id(node) in self.placeholders:
+140             h.update(b"D:" + self.placeholders[id(node)].encode())
+141             return
+142         h.update(b"(" + type(node).__name__.encode())
+143         for name in node._fields:
+144             if name in ("ctx", "type_comment") or (name == "kind" and isinstance(node, ast.Constant)):
+145                 continue
+146             value = getattr(node, name, None)
+147             if value is None or (isinstance(value, list) and not value):
+148                 continue  # optional fields added by newer Pythons stay invisible
+149             h.update(b" " + name.encode() + b"=")
+150             self.feed(h, value)
+151         h.update(b")")
+152     elif isinstance(node, list):
+153         h.update(b"[")
+154         for item in node:
+155             self.feed(h, item)
+156             h.update(b",")
+157         h.update(b"]")
+158     else:
+159         h.update(type(node).__name__.encode() + b":" + repr(node).encode("utf-8", "surrogatepass"))
+## verinoda/mcp/server.py:1634-1635 index_update
+1634 def index_update() -> dict[str, Any]:
+1635     return emit(t.index_update())
+## verinoda/search_index.py:894-986 update
+  verinoda/search_index.py:894-896
+894 def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: Path | None = None) -> dict:
+895     """Bring ``search.db`` in line with the graph and the files; return what was done.
+## verinoda/workflow.py:195-278 update
+  verinoda/workflow.py:195-197
+195 def update(store: Store, repo: Path) -> dict:
+196     """Refresh after edits: rebuild the graph, re-index only the files changed since the last snapshot.
+verinoda/ui/server.py:88-96 def _update(self) -> None
+verinoda/store.py:504-506 def update_evidence_meta(self, eid: str, meta: dict) -> None
+verinoda/anchors.py:161-167 def digest(self, *nodes: Any, tag: str = "") -> str
+verinoda/cli.py:481-489 def cmd_update(args) -> int
+verinoda/copies.py:161-170 def update(repo: Path, g) -> dict
+verinoda/cli.py:278-297 def _r_update(r: dict) -> None
+verinoda/mcp/server.py:1123-1129 def index_update(self) -> dict
+verinoda/benchmark/approaches.py:367-385 def graphify_cli_update(cmd: str, root: Path) -> dict
+verinoda/anchors.py:593-627 def update_facts(store, repo: Path, changed_paths: Iterable[str | Path] | None) -> dict
+verinoda/ui/server.py:69-74 def __init__(self, repo: Path, *, interval: float = 2.0, run_update=None)
+verinoda/anchors.py:108-113 def _hex(parts: Iterable[str]) -> str
+verinoda/store.py:617-632 def record_transition( self, cid: str, *, from_status: str | None, to_status: str, from_conf: float | None, to_conf: fl…
+verinoda/benchmark/runner.py:328-541 def run_benchmark(repo: Path, *, questions=None, out=None, graphify_cmd: str | None = None, llm: str = "none", repeat: …
+verinoda/lexicon.py:331-366 def _extract(repo: Path, rel: str, graph) -> dict
+verinoda/workflow.py:92-136 def _derive(store: Store, repo: Path, *, changed: list[str] | None, all_files: list[str], file_hashes: dict[str, str] |…
+verinoda/search_index.py:1055-1121 def open_for(g, *, sync: bool = True) -> Handle
+verinoda/ui/server.py:98-133 def run(self) -> None
+verinoda/ui/server.py:60-133 class Watcher(threading.Thread)
+verinoda/mcp/server.py:1386-1637 def build_server(repo: Path | str, tools: AtlasTools | None = None)
+verinoda/agents/templates/claude_SKILL.md:135-196 ## Commands (examples; always add --json when you read the result)
+verinoda/agents/templates/codex_SKILL.md:118-179 ## Commands (examples; always add --json when you read the result)
+verinoda/agents/installer.py:671-732 def install(agent: str, scope: str, *, project_dir, home=None, with_mcp: bool = True, dry_run: bool = False) -> dict
+verinoda/agents/installer.py:887-954 def uninstall(agent: str, scope: str, *, project_dir, home=None, dry_run: bool = False) -> dict
+verinoda/research.py:1716-1751 def _research_issue(store: Store, repo: Path, spec: dict, topic: str | None, res: dict, transport) -> str
+verinoda/mcp/server.py:1124-1128 def go()
+… 480 more candidates not shown: verinoda/benchmark/metrics.py:38-49 def token_method() -> str; verinoda/research.py:2260-2264 def _local_graph(store: Store, local: Path) -> tuple; verinoda/runtime/calltrace_plugin.py:306-351 def _start_setprofile() -> None; verinoda/anchors.py:417-432 def leaves(n, h, skip_defs: bool, stop_at=None) -> None
+next: verinoda query "…" --max-chars 12000

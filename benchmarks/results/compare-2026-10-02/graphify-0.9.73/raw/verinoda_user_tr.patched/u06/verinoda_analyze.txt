@@ -1,0 +1,101 @@
+analysis ana_73dc1aedf7dd, snapshot snp_146247647180 (commit 91533f3f3b)
+understood as: Anladığım (kurallarla): q1 [akış] Dışa aktarılan dosyada makinenin yolları nasıl siliniyor? (karşılıklar: Dışa aktarılan=export, yolları=path, siliniyor=delete)
+q1 [unmet] flow: Dışa aktarılan dosyada makinenin yolları nasıl siliniyor?
+  unknown: one subject and no second end: what it calls is an inference about how it works; next: read the passages; for a path name both ends: `verinoda trace A B`
+claims:
+  [statically_verified] `.remove_file()` is defined at verinoda/search_index.py:719-750  (clm_070946f2f591)
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: dosyada->dosya, siliniyor->silinsin, disa aktarilan->export (+5 more)
+## verinoda/ui/static/app.js:146-157 (module level)
+146 impactDepth: "bağlantı geri", impactStop: "şurada durdu:", impactTests: "testlerde", withTests: "testlerle",
+147 pathBtn: "Yol…", pathTo: "Ulaşılacak notu ara…", pathNone: "Aralarında çağrı, import ya da başvuru zinciri yok.",
+148 pathBack: "(ters yönde: hedef bu nota ulaşıyor)", pathTitle: "Yol", close2: "kapat",
+149 noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
+150 theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
+151 searchOffline: "Dosya ya da sembol ara  (/)   ·   komutlar: Ctrl+K",
+152 offlineHome: "Dışa aktarılmış görünüm: graf ve her dosyanın notu, kod olmadan; projede `verinoda ui` her notu koduyla gösterir. Dışa aktarım",
+153 offlineCode: "kod dışa aktarılan dosyada yok; `verinoda ui` gösterir",
+154 offlineMissing: "Bu not dışa aktarılan dosyada yok (graf ve dosya notları var); `verinoda ui` her notu gösterir.",
+155 notes: "not", filesN: "dosya", links: "bağlantı", dataNotes: "veri notu", hubs: "En çok bağlantılı",
+156 welcome: "Projenin her sembolü, dosyası ve veri dosyası bir not. Yukarıdan ara, dosyalara göz at ya da graf görünümünü aç.",
+157 lines: "satır", line: "satır", more: "daha", moreLines: "satır daha var", noResults: "Eşleşen not yok.",
+## verinoda/search_index.py:719-750 _Writer.remove_file
+  calls: _path_tf@748
+  called by: update (verinoda/search_index.py:950)?
+  const verinoda/search_index.py:247: RAW_PREFIX = "="  # names-table rows of unstemmed identifier parts (for abbreviation checks)
+  verinoda/search_index.py:719-731
+719 def remove_file(self, f: str) -> None:
+720     row = self.conn.execute("SELECT uid_lo, uid_hi, pid_lo, pid_hi FROM files WHERE file = ?", (f,)).fetchone()
+721     if row is None:
+722         return
+723     uid_lo, uid_hi, pid_lo, pid_hi = row
+724     if uid_lo is not None:
+725         units = self.conn.execute("SELECT uid, terms, name_len, raw FROM units WHERE uid BETWEEN ? AND ?",
+726                                   (uid_lo, uid_hi)).fetchall()
+727         all_terms: set[str] = set()
+728         raw_terms: set[str] = set()
+729         for _uid, terms, name_len, raw in units:
+730             ts = terms.split()
+731             all_terms.update(ts)
+  verinoda/search_index.py:742-750
+742         self.conn.executemany("DELETE FROM body WHERE term = ? AND pid BETWEEN ? AND ?",
+743                               [(t, pid_lo, pid_hi) for t in sorted(all_terms)])
+744         self.conn.execute("DELETE FROM passages WHERE pid BETWEEN ? AND ?", (pid_lo, pid_hi))
+745     self.conn.executemany("DELETE FROM names WHERE term = ? AND uid BETWEEN ? AND ?",
+746                           [(t, uid_lo, uid_hi) for t in sorted(all_terms | raw_terms)])
+747     self.conn.execute("DELETE FROM units WHERE uid BETWEEN ? AND ?", (uid_lo, uid_hi))
+748 self.conn.executemany("DELETE FROM paths WHERE term = ? AND file = ?", [(t, f) for t in _path_tf(f)])
+749 self.conn.execute("DELETE FROM files WHERE file = ?", (f,))
+750 self.conn.execute("DELETE FROM refs WHERE file = ?", (f,))
+## verinoda/usernotes.py:210-216 delete
+  doc: Remove the note on ``subject`` (whatever became of its code); True when there was one.
+  calls: find@212
+  called by: cmd_notes (verinoda/cli.py:576); save (verinoda/usernotes.py:180)
+210 def delete(repo: Path, subject: str) -> bool:
+211     """Remove the note on ``subject`` (whatever became of its code); True when there was one."""
+212     old = find(repo, subject)
+213     if old is None or old.path is None:
+214         return False
+215     old.path.unlink(missing_ok=True)
+216     return True
+## verinoda/search_index.py:894-986 def update(repo: Path, graph=None, changed=None, *, rebuild: bool = False, db: Path | None = None) -> dict
+  verinoda/search_index.py:951-964
+951     w.add_file(g, f, data, st, gsig)
+952     indexed += 1
+953 live = set(files)
+954 for f in stored:
+955     if f not in live or not (repo / f).exists():
+956         w.remove_file(f)
+957         removed += 1
+958 m = _meta(conn)
+959 if not fresh and m.get("resource_sig") != key_sig:
+960     # the defined ids changed: references in unchanged files may now resolve differently
+961     conn.execute("DELETE FROM refs")
+962     for (f,) in conn.execute("SELECT file FROM files WHERE skipped IS NULL").fetchall():
+963         lines = _read_lines(repo / f)
+964         if lines is not None:
+## verinoda/agents/installer.py:271-297 _drop_manifest
+  verinoda/agents/installer.py:271-283
+271 def _drop_manifest(t: Target, manifest: dict) -> list[str]:
+272     """Delete the manifest and the support dirs/files the install created, if nothing else is there."""
+273     removed = []
+274     t.manifest.unlink()
+275     removed.append(str(t.manifest))
+276     created = manifest.get("created") or {}
+277     owned = {}
+278     for f in created.get("files", []):
+279         p = _abs(t.root, f["path"])
+280         if p.exists() and _sha(p.read_bytes()) == f["sha256"]:
+281             owned[p] = f
+282     for rel in reversed(created.get("dirs", [])):
+283         d = _abs(t.root, rel)
+## verinoda/ui/data.py:200-206 Atlas.delete_user_note
+200 def delete_user_note(self, subject: str) -> dict:
+201     """Remove the note on ``subject``, whatever became of its code (a note whose symbol is gone)."""
+202     from verinoda import usernotes
+204     if not usernotes.delete(self.repo, subject):
+205         raise KeyError(f"no note of your own on {subject!r}")
+206     return {"user_note": None, "deleted": subject}
+… 1381 more candidates not shown: verinoda/benchmark/approaches.py:101-134 def export_commit(source: Path, commit: str, dest: Path, *, include: list[str] ; verinoda/cli.py:559-608 cmd_notes; verinoda/usernotes.py:171-207 save; verinoda/ui/server.py:136-319 make_handler
+next: verinoda query "…" --max-chars 12000

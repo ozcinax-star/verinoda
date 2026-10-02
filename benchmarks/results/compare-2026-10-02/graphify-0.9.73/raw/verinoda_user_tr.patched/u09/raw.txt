@@ -1,0 +1,403 @@
+$ grep -rniE 'update|neden|kadar|uzun|sürüyor' .   # 322 matching lines in 49 files
+verinoda/analysis.py:170: found.update(c["intent"] for c in qp.clause_cues(cl["text"]) if c["lang"] == "tr")
+verinoda/analysis.py:635: cue_words.update(re.findall(r"[a-z]+", tn.fold_tr(c["cue"]).lower()))
+verinoda/analysis.py:641: linked_words.update(qp._surface_words(lk.get("text") or ""))
+verinoda/analysis.py:1401: cue_words = {"why", "neden", "nicin", "niye", "reason", "rationale", "decision", "decided", "gerekce", "karar"}
+verinoda/analysis.py:1973: ctx.store.update_claim(new["id"], {"uncertainties": unc + list(c.get("uncertainties") or [])})
+verinoda/analysis.py:2039: res = workflow.update(store, repo)
+verinoda/analysis.py:2200: With ``refresh`` the index is updated first, so claims whose files changed
+verinoda/analysis.py:2213: res = workflow.update(store, Path(repo).resolve())
+verinoda/question_plan.py:267: "why": [(r"\bneden\b(?!\s+ol)", False), (r"\bnicin\b", False), (r"\bniye\b", False), (r"\bgerekce\w*", False),
+verinoda/question_plan.py:304: TR_INTERROGATIVES = frozenset("ne neyi neler nedir nerede nereye nereden neresi hangi hangisi hangileri nasil neden "
+verinoda/question_plan.py:391: got.update(c["intent"] for c in clause_cues(cl["text"], lexicon))
+verinoda/question_plan.py:415: re.compile(r"\s+ve\s+(?=(?:\w+\s+)?(?:ne|neyi|neler|nerede|nereye|nereden|hangi|hangisi|nasil|neden|nicin|"
+verinoda/question_plan.py:420: re.compile(r",\s+(?=(?:ne|neyi|nerede|nereye|nereden|hangi|nasil|neden|kim)\b)"),
+verinoda/question_plan.py:1400: item.update({"at": best.get("at"), "label": best.get("label"), "score": best.get("score"),
+verinoda/question_plan.py:1533: roles.update(_en_roles(c["text"], c["start"]))
+verinoda/ui/static/app.js:62: refreshed: "The index was updated: the page shows it now.", updating: "Updating the index…",
+verinoda/ui/static/app.js:63: staleNote: "This file changed since the index: the links and lines may be off. `verinoda update` takes it in.",
+verinoda/ui/static/app.js:142: staleNote: "Bu dosya indeksten sonra değişti: bağlantılar ve satırlar kaymış olabilir. `verinoda update` onu alır.",
+verinoda/ui/static/app.js:739: const QUESTION_WORDS = /^(how|what|where|why|which|who|when|does|do|is|are|can|nasıl|ne|neden|nerede|hangi|kim|niçin|niye)\b/i;
+verinoda/ui/static/app.js:1925: // -- the page follows the index: when `verinoda update` (or --watch) rebuilt it, redraw ----------
+verinoda/textnorm.py:41: """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin niye
+verinoda/textnorm.py:44: anlat acikla nedir midir mudur hep her hangi sey seyi sekilde kadar gore ise ama fakat""".split()
+verinoda/textnorm.py:177: """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin
+verinoda/store.py:70: updated_at TEXT NOT NULL
+verinoda/store.py:120: updated_at TEXT NOT NULL
+verinoda/store.py:190: CREATE TRIGGER IF NOT EXISTS no_update_history BEFORE UPDATE ON claim_history
+verinoda/store.py:209: CREATE TRIGGER IF NOT EXISTS no_update_claim_evidence BEFORE UPDATE ON claim_evidence
+verinoda/store.py:245: CREATE TRIGGER IF NOT EXISTS no_update_question_plan_body
+verinoda/store.py:246: BEFORE UPDATE OF plan, plan_hash, check_result, user_message, source, parent_id ON question_plans
+verinoda/store.py:294: CREATE TRIGGER IF NOT EXISTS no_update_evidence_locations BEFORE UPDATE ON evidence_locations
+verinoda/store.py:350: CREATE TRIGGER IF NOT EXISTS no_update_reference_resolutions BEFORE UPDATE ON reference_resolutions
+verinoda/store.py:366: CREATE TRIGGER IF NOT EXISTS no_update_claim_identity
+verinoda/store.py:367: BEFORE UPDATE OF text, created_at ON claims
+verinoda/store.py:455: def _update(self, table: str, key: str, key_val: str, fields: dict) -> None:
+verinoda/store.py:461: self.conn.execute(f"UPDATE {table} SET {', '.join(sets)} WHERE {key} = ?", vals)
+verinoda/store.py:504: def update_evidence_meta(self, eid: str, meta: dict) -> None:
+verinoda/store.py:506: self._update("evidence", "id", eid, {"meta": meta})
+verinoda/store.py:552: """Move recorded fingerprints to a newer snapshot (rows are updated, never removed)."""
+verinoda/store.py:555: "UPDATE claim_deps SET fp = ?, scheme = ? WHERE claim_id = ? AND dep_key = ? AND facet = ?",
+verinoda/store.py:611: def update_claim(self, cid: str, fields: dict) -> None:
+... (282 more matching lines not shown)
+
+==> verinoda/analysis.py:1-359 <==  (truncated at char cap; file has 2283 lines)
+     1	"""Budgeted analysis loop: question -> plan -> claims with evidence -> critique -> answer.
+     2	
+     3	Every analysis runs through a question plan (docs/DESIGN.md D1-D9,
+     4	:mod:`verinoda.question_plan`): the host agent's plan when one is given,
+     5	otherwise one drafted by rules. Order of work (cheapest reliable tool first):
+     6	
+     7	 1. refresh the index when the working tree changed (errors become unknowns)
+     8	 2. plan: draft (or parse) and check it - schema, integrity, grounding,
+     9	    versions, mention links; the plan and its check are stored
+    10	    (``question_plans``) and the analysis references it (``analyses.plan_id``)
+    11	 3. an invalid plan stops here (``status: invalid_plan``); a plan that needs
+    12	    clarification with ``on_ambiguity: ask`` returns the grounded questions
+    13	    (``status: needs_clarification``) and writes no claim
+    14	 4. per sub-question, in dependency order, with a share of the budget:
+    15	    retrieval seeded by the linked mentions (and by the symbols located for
+    16	    ``subject_from``) with lexicon / seed-dictionary expansions; items must
+    17	    pass a relevance test against the question's grounded words, otherwise the
+    18	    sub-question is an ``unknown`` with a next step - never a claim about
+    19	    unrelated code
+    20	 5. location and relation claims for the relevant items, then the handler of
+    21	    the sub-question's intent (and of its secondary intents): flow, dataflow,
+    22	    callers, config, tests (optional test run / runtime observation), why /
+    23	    history, impact, behaviour (a proposition check), reference comparison
+    24	    (the reference is resolved offline; reading it is a next step)
+    25	 6. requested statuses follow the evidence rules: call sites are graded by
+    26	    :func:`verinoda.entail.call_site`; a relation's call site is resolved by
+    27	    :mod:`verinoda.precise` when it is installed (one budget per analysis):
+    28	    a definitive match supports it, a definitive mismatch refutes it, any other
+    29	    answer qualifies it and caps it at ``strong_inference``. With ``observe``
+    30	    the selected tests run under the call tracer (:mod:`verinoda.runtime`):
+    31	    observed calls support relation claims (never through test doubles) and
+    32	    the observed reach set supersedes a static tests claim it contradicts
+    33	 7. critique of each claim (confidence only goes down); a tests claim whose
+    34	    counter-probe refutes a listed test is superseded by a corrected claim
+    35	 8. each sub-question is judged against its ``done_when``: ``met``,
+    36	    ``met_with_inference``, ``unmet``, ``not_supported`` or
+    37	    ``blocked_by_clarification``; :func:`audit` recomputes the verdicts later
+    38	    and marks a sub-question ``stale`` when a claim it relies on went stale
+    39	
+    40	A :class:`Budget` bounds wall time (index refresh and experiments included),
+    41	tool calls and returned context. Every claim, unknown, step and critique entry
+    42	that is returned is charged to the context budget at its serialised size
+    43	(tokens estimated as chars/4). When the budget runs out no further claim is
+    44	produced: every sub-question that was skipped or cut short is reported as an
+    45	``unknown`` naming it, instead of being answered from guesses.
+    46	"""
+    47	
+    48	from __future__ import annotations
+    49	
+    50	import fnmatch
+    51	import inspect
+    52	import json
+    53	import re
+    54	import sys
+    55	import time
+    56	from collections import Counter, defaultdict
+    57	from dataclasses import dataclass, field
+    58	from pathlib import Path
+    59	
+    60	from verinoda import anchors, callsite, entail, index, retrieval
+    61	from verinoda import architecture_map as am
+    62	from verinoda import evidence as evmod
+    63	from verinoda import question_plan as qp
+    64	from verinoda import textnorm as tn
+    65	from verinoda.claims import ORDER, VERIFIED, ClaimRuleError, Claims
+    66	from verinoda.paths import load_config
+    67	from verinoda.snapshot import current_state, git
+    68	from verinoda.store import Store, new_id, now
+    69	
+    70	NEXT_BUDGET = "re-run with a larger --budget-* or a narrower question"
+    71	SUBQUESTIONS = {
+    72	    "location": "where is it defined?",
+    73	    "relations": "how are the retrieved symbols connected (calls/uses/inherits)?",
+    74	    "flow": "which path takes data from an entry point to persistence?",
+    75	    "callers": "which code calls it?",
+    76	    "config": "which configuration affects this?",
+    77	    "tests": "which tests statically reach it?",
+    78	    "why": "why is it built this way (decision records, history)?",
+    79	    "impact": "what does a change here affect?",
+    80	    "behaviour": "does the code behave as the question states?",
+    81	    "compare_reference": "how does it differ from the referenced version?",
+    82	}
+    83	# plan intent -> the legacy name kept in the ``intents`` output field
+    84	LEGACY_INTENT = {"locate": "location", "define": "location"}
+    85	LEGACY_ORDER = ("why", "flow", "dataflow", "config", "tests", "impact", "location", "callers", "behaviour",
+    86	                "history", "compare_reference", "performance", "architecture", "usage")
+    87	RELEVANCE_MIN = 0.25        # share of the grounded question words an item must carry
+    88	JAVA_BOUND = re.compile(r"\((imported|same package|fully qualified|imported with \*)\)$")
+    89	CALLERS_LISTED = 6          # calling functions turned into claims; the rest are named in an unknown
+    90	LOCATION_FIRST = {"locate", "define", "behaviour", "performance", "architecture", "usage"}
+    91	UNGROUNDED_MAJORITY = 0.5   # more than this share of content words absent from the repo -> unknown
+    92	MIN_STATUS_DEFAULT = "strong_inference"
+    93	PERSISTENCE_TARGET = "(persistence)"
+    94	
+    95	
+    96	@dataclass
+    97	class Budget:
+    98	    seconds: float = 60
+    99	    tool_calls: int = 40
+   100	    context_tokens: int = 6000
+   101	    started: float = field(default_factory=time.monotonic)
+   102	    calls: int = 0
+   103	    chars: int = 0
+   104	    exhausted_reason: str | None = None
+   105	
+   106	    def _check(self) -> None:
+   107	        if self.exhausted_reason is not None:
+   108	            return
+   109	        if time.monotonic() - self.started > self.seconds:
+   110	            self.exhausted_reason = f"time budget {self.seconds}s spent"
+   111	        elif self.calls > self.tool_calls:
+   112	            self.exhausted_reason = f"tool-call budget {self.tool_calls} spent"
+   113	        elif self.chars // 4 > self.context_tokens:
+   114	            self.exhausted_reason = f"context budget ~{self.context_tokens} tokens spent"
+   115	
+   116	    def spend(self, calls: int = 1, chars: int = 0) -> bool:
+   117	        self.calls += calls
+   118	        self.chars += chars
+   119	        self._check()
+   120	        return self.exhausted_reason is None
+   121	
+   122	    def fits(self, chars: int) -> bool:
+   123	        """True when ``chars`` more returned context stay within budget (nothing is charged)."""
+   124	        self._check()
+   125	        if self.exhausted_reason is not None:
+   126	            return False
+   127	        if (self.chars + chars) // 4 > self.context_tokens:
+   128	            self.exhausted_reason = f"context budget ~{self.context_tokens} tokens spent"
+   129	            return False
+   130	        return True
+   131	
+   132	    def work_ok(self) -> bool:
+   133	        """Time and one more tool call are still available (context aside)."""
+   134	        return time.monotonic() - self.started <= self.seconds and self.calls + 1 <= self.tool_calls
+   135	
+   136	    def remaining_seconds(self) -> float:
+   137	        return self.seconds - (time.monotonic() - self.started)
+   138	
+   139	    @property
+   140	    def ok(self) -> bool:
+   141	        self._check()
+   142	        return self.exhausted_reason is None
+   143	
+   144	    def usage(self) -> dict:
+   145	        return {"elapsed_s": round(time.monotonic() - self.started, 3), "tool_calls": self.calls,
+   146	                "context_chars": self.chars, "context_tokens_est": self.chars // 4,
+   147	                "token_count_method": "chars/4 estimate", "exhausted": self.exhausted_reason}
+   148	
+   149	
+   150	def _size(obj) -> int:
+   151	    return len(json.dumps(obj, ensure_ascii=False, default=str))
+   152	
+   153	
+   154	# -- intents (legacy entry points, now backed by the plan's cue tables) -----------------------------
+   155	
+   156	def fold_tr(text: str) -> str:
+   157	    """Lower-case, ASCII-folded Turkish (``İ``/``I``/``ı`` -> ``i``, ``ş`` -> ``s`` ...)."""
+   158	    return tn.fold_tr(tn.nfc(text)).replace("̇", "")
+   159	
+   160	
+   161	def _legacy(intents) -> list[str]:
+   162	    names = {LEGACY_INTENT.get(i, i) for i in intents}
+   163	    return [n for n in LEGACY_ORDER if n in names]
+   164	
+   165	
+   166	def turkish_intents(question: str) -> list[str]:
+   167	    """Intents found by the Turkish cue tables alone (legacy names)."""
+   168	    found = set()
+   169	    for cl in qp.segment(question):
+   170	        found.update(c["intent"] for c in qp.clause_cues(cl["text"]) if c["lang"] == "tr")
+   171	    return _legacy(found)
+   172	
+   173	
+   174	def intents_for(question: str, lexicon=None) -> list[str]:
+   175	    """Rule-based intents of a question in the legacy vocabulary (``location`` for locate/define)."""
+   176	    return _legacy(qp.intents_for(question, lexicon)) or ["location"]
+   177	
+   178	
+   179	# -- claims ---------------------------------------------------------------------------------------
+   180	
+   181	class _Recorder:
+   182	    """Creates claims within the context budget and the current sub-question's share of it.
+   183	
+   184	    A claim with the same text in the same snapshot is reused whatever its
+   185	    status (contradicted and stale included) - a repeated question never
+   186	    creates duplicates; reused claims are marked in the output.
+   187	    """
+   188	
+   189	    def __init__(self, store: Store, repo: Path, snapshot: dict, analysis_id: str, budget: Budget,
+   190	                 extra_uncertainties: list[str] | None = None):
+   191	        self.store, self.repo, self.snap, self.aid, self.budget = store, repo, snapshot, analysis_id, budget
+   192	        self.cl = Claims(store, repo)
+   193	        self.extra = list(extra_uncertainties or [])
+   194	        self.ids: list[str] = []
+   195	        self.reused: set[str] = set()
+   196	        self.charged: dict[str, int] = {}
+   197	        self.section = "location"
+   198	        self.skipped: Counter = Counter()
+   199	        self.sq: str | None = None
+   200	        self.by_sq: dict[str, list[str]] = defaultdict(list)
+   201	        self.sq_skipped: Counter = Counter()
+   202	        self.sq_cap: int | None = None
+   203	        self.sq_used = 0
+   204	        self.sq_extra: list[str] = []
+   205	        self.plan_ref: dict | None = None
+   206	        # uncertainties that come from this analysis' reading of the question (shown on reused claims too)
+   207	        self.context_unc: dict[str, list[str]] = defaultdict(list)
+   208	        # precise call-site resolution: one budget per analysis (None: not installed / not wanted)
+   209	        self.precise_budget = None
+   210	        try:  # evidence groups (claims.attach(..., grp=)) exist once the trust engine is installed
+   211	            self.groups_ok = "grp" in inspect.signature(Claims.attach).parameters
+   212	        except (TypeError, ValueError):
+   213	            self.groups_ok = False
+   214	
+   215	    def begin(self, sq_id: str, cap_chars: int | None, plan_ref: dict | None, extra: list[str]) -> None:
+   216	        self.sq, self.sq_cap, self.sq_used, self.plan_ref, self.sq_extra = sq_id, cap_chars, 0, plan_ref, extra
+   217	
+   218	    def _note(self, cid: str) -> None:
+   219	        if self.sq and cid not in self.by_sq[self.sq]:
+   220	            self.by_sq[self.sq].append(cid)
+   221	        for u in self.sq_extra:
+   222	            if u not in self.context_unc[cid]:
+   223	                self.context_unc[cid].append(u)
+   224	
+   225	    def claim(self, text: str, *, kind: str, status: str, evidence: list[tuple],
+   226	              subjects: list[str], spec: dict | None = None, uncertainties: list[str] | None = None,
+   227	              supersedes: str | None = None) -> dict | None:
+   228	        unc = list(uncertainties or [])
+   229	        unc += [u for u in self.extra + self.sq_extra if u not in unc]
+   230	        prev = self.store.one(
+   231	            "SELECT id FROM claims WHERE text = ? AND snapshot_id = ? AND superseded_by IS NULL"
+   232	            " ORDER BY created_at LIMIT 1", (text, self.snap["id"]))
+   233	        if prev and prev["id"] in self.ids:
+   234	            self._note(prev["id"])
+   235	            return self.cl.get(prev["id"])
+   236	        est = _size({"id": "clm_000000000000", "text": text, "status": status, "confidence": 0.99,
+   237	                     "evidence": [f"supports:source_code:{(e[0] if isinstance(e[0], str) else e[0].get('locator'))}"
+   238	                                  for e in evidence if e[0]][:6], "uncertainties": unc, "reused": True})
+   239	        if not self.budget.fits(est) or (self.sq_cap is not None and self.sq_used + est > self.sq_cap):
+   240	            self.skipped[self.section] += 1
+   241	            self.sq_skipped[(self.sq, self.section)] += 1
+   242	            return None
+   243	        if prev:
+   244	            c = self.cl.get(prev["id"])
+   245	            self.reused.add(c["id"])
+   246	        else:
+   247	            if self.plan_ref:
+   248	                spec = {**(spec or {}), "plan": self.plan_ref}
+   249	            # (evidence, relation[, group]): the group is dropped where the claims module has none
+   250	            evs = [tuple(e) if self.groups_ok else tuple(e[:2]) for e in evidence if e[0]]
+   251	            c = self.cl.create(text, project=self.snap["project"], snapshot=self.snap, subjects=subjects,
+   252	                               status=status, evidence=evs, kind=kind, spec=spec,
+   253	                               uncertainties=unc, analysis_id=self.aid, supersedes=supersedes)
+   254	        self.ids.append(c["id"])
+   255	        self._note(c["id"])
+   256	        n = _size(self.record(c["id"]))
+   257	        self.charged[c["id"]] = n
+   258	        self.sq_used += n
+   259	        self.budget.spend(0, n)
+   260	        return c
+   261	
+   262	    def record(self, cid: str, not_challenged: str | None = None) -> dict:
+   263	        c = self.cl.get(cid)
+   264	        unc = list(c["uncertainties"] or [])
+   265	        unc += [u for u in self.extra + self.context_unc.get(cid, []) if u not in unc]
+   266	        return {
+   267	            "id": cid, "text": c["text"], "status": c["status"], "confidence": round(c["confidence"], 2),
+   268	            "evidence": [f"{e['relation']}:{e['source_type']}:{e['locator']}" for e in self.cl.evidence(cid)][:6],
+   269	            "uncertainties": unc,
+   270	            **({"reused": True} if cid in self.reused else {}),
+   271	            **({"challenged": False, "not_challenged_reason": not_challenged} if not_challenged else {}),
+   272	        }
+   273	
+   274	
+   275	def _line_mentions(repo: Path, at: str | None, name: str) -> tuple[bool, str | None]:
+   276	    """Does the cited line name ``name`` (directly or through a Python import alias)?"""
+   277	    ok, matched, _ = callsite.check(repo, at, name)
+   278	    return ok, matched
+   279	
+   280	
+   281	def _src_ev(repo: Path, path: str, a: int, b: int | None, commit: str | None, **meta) -> dict | None:
+   282	    return evmod.source_evidence(repo, path, a, b, commit=commit, meta=meta or None)
+   283	
+   284	
+   285	# entail.call_site codes (Grade.code) that mean the cited line does not show the call at all; a
+   286	# precise "confirms" never overrides them (the claim's caller or module is wrong, not the binding)
+   287	_CALL_FAIL = {"outside_caller", "string_only", "absent", "wrong_module", "unreadable", "blank"}
+   288	
+   289	
+   290	def _caller_arg(label: str | None) -> str | None:
+   291	    """The caller name entail checks the call site against (None for a module/file node)."""
+   292	    s = (label or "").strip()
+   293	    if not s or (re.search(r"\.[A-Za-z]{1,5}$", s) and not s.endswith(")")):
+   294	        return None
+   295	    return s
+   296	
+   297	
+   298	_GRADES: dict[tuple, object] = {}   # call-site grades, keyed by the file's stat: flows share hop lines
+   299	_GRADES_MAX = 4096
+   300	
+   301	
+   302	def _call_site_grade(repo: Path, at: str | None, caller: str | None, target_label: str,
+   303	                     target_path: str | None, relation: str | None) -> entail.Grade | None:
+   304	    """entail's grade of the call site ``path:line`` (the grade the status rules will apply), or None."""
+   305	    if not at or ":" not in at:
+   306	        return None
+   307	    path, _, ln = at.rpartition(":")
+   308	    if not ln.isdigit():
+   309	        return None
+   310	    try:
+   311	        st = (Path(repo) / path).stat()
+   312	    except OSError:
+   313	        return None
+   314	    key = (str(repo), path, st.st_mtime_ns, st.st_size, int(ln), target_label, _caller_arg(caller), target_path,
+   315	           relation)
+   316	    if key in _GRADES:
+   317	        return _GRADES[key]
+   318	    try:
+   319	        grade = entail.call_site(repo, path, int(ln), target_label, caller=_caller_arg(caller),
+   320	                                 target_path=target_path, target_qual=target_label, relation=relation)
+   321	    except (OSError, ValueError, RecursionError):
+   322	        return None
+   323	    if len(_GRADES) >= _GRADES_MAX:
+   324	        _GRADES.clear()
+   325	    _GRADES[key] = grade
+   326	    return grade
+   327	
+   328	
+   329	def _precise_budget(repo: Path):
+   330	    """One :class:`verinoda.precise.Budget` per analysis, or None when no precise resolver is installed."""
+   331	    try:
+   332	        from verinoda import precise
+   333	    except Exception:  # noqa: BLE001 - optional module
+   334	        return None
+   335	    try:
+   336	        ok, _ = precise.available()
+   337	    except Exception:  # noqa: BLE001
+   338	        ok = False
+   339	    if not ok:
+   340	        return None
+   341	    try:
+   342	        budget = precise.Budget.from_config(repo)
+   343	    except Exception:  # noqa: BLE001 - a bad config value falls back to the defaults
+   344	        budget = precise.Budget()
+   345	    # budget.precise_sites = 0 (or precise_seconds = 0) switches it off rather than skipping every site
+   346	    return budget if budget.max_sites > 0 and budget.max_seconds > 0 else None
+   347	
+   348	
+   349	def _precise(rec: _Recorder, at: str, target_label: str, target_path: str | None, target_line: int | None,
+   350	             commit: str | None) -> tuple[dict | None, dict | None, bool]:
+   351	    """``(result, evidence, skipped_for_budget)`` of a precise resolution of the call at ``at``."""
+   352	    pb = rec.precise_budget
+   353	    if pb is None:
+   354	        return None, None, False
+   355	    from verinoda import precise
+   356	
+   357	    path, _, ln = at.rpartition(":")
+   358	    before = pb.skipped
+   359	    try:

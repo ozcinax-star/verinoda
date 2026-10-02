@@ -19,6 +19,8 @@ results/before-fixes/<set>.json             the round-1 measurement (05890a1, be
 results/token-multiplier-2026-09-28/        corpus tokens / tokens per question with the facts found, per set
                                             and approach (benchmarks/token_multiplier.py, from committed files);
                                             corpus.json: the corpus sizes (--measure-corpus, from git objects)
+results/mod-live-<date>/result.json         edit-to-fresh: `update --fast` (the verinoda-live mod's path) vs a
+                                            plain `update` on a twin copy, per edit step (benchmarks/mod_live/)
 ```
 
 Sets (question files in `verinoda/benchmark/questions/`, each with a

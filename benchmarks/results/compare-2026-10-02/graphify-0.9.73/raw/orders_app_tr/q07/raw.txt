@@ -1,0 +1,1 @@
+$ grep -rniE 'indirim|nerede|uygulanıyor|bunu|hangi|eşik|kontrol|ediyor' .   # 0 matching lines in 0 files

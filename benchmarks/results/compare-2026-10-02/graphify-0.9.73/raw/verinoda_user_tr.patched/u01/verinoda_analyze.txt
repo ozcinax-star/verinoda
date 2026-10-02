@@ -1,0 +1,109 @@
+analysis ana_b83dc0fe92ec, snapshot snp_146247647180 (commit 91533f3f3b)
+understood as: Anladığım (kurallarla): q1 [akış] Kopya klasörler nasıl bulunuyor? (karşılıklar: Kopya=copy, klasörler=folder, bulunuyor=find)
+q1 [unmet] flow: Kopya klasörler nasıl bulunuyor?
+  unknown: one subject and no second end: what it calls is an inference about how it works; next: read the passages; for a path name both ends: `verinoda trace A B`
+claims:
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: klasörler->klasor, bulunuyor->bulunamadi, bulunuyor->bulunan (+9 more)
+## verinoda/agents/_jsonedit.py:68-73 _find
+  called by: set_member (verinoda/agents/_jsonedit.py:137); remove_member (verinoda/agents/_jsonedit.py:160)
+68 def _find(ms, key):
+69     hit = None
+70     for idx, m in enumerate(ms):
+71         if m[0] == key:
+72             hit = idx  # json.loads keeps the last duplicate; so do we
+73     return hit
+## verinoda/search_index.py:1891-1904 _fold_copies
+  doc: Drop data units of non-canonical copies from ``scores``, carrying their score to the matching unit of the canonical copy (same content, same spans). Code units…
+  calls: _by_file@1895, is_test_file@1899
+  called by: rank (verinoda/search_index.py:1797)
+1891 def _fold_copies(h: Handle, scores: dict[int, float], canon: dict[str, str], include_tests: bool) -> None:
+1892     """Drop data units of non-canonical copies from ``scores``, carrying their score to the
+1893     matching unit of the canonical copy (same content, same spans). Code units are never dropped:
+1894     two identical code files are two places in the graph."""
+1895     by_file = _by_file(h)
+1896     for uid in [u for u in scores if canon.get(h.units[u][0], h.units[u][0]) != h.units[u][0]]:
+1897         f, _nid, kind, _name, a, b = h.units[uid][:6]
+1898         k = canon[f]
+1899         if kind not in ("data", "prose") or (not include_tests and is_test_file(k)):
+1900             continue
+1901         s = scores.pop(uid)
+1902         ku = next((u for _s, ka, kb, u in by_file.get(k, []) if (ka, kb) == (a, b)), None)
+1903         if ku is not None and s > scores.get(ku, 0.0):
+1904             scores[ku] = s
+## verinoda/lexicon.py:618-638 seed_lookup
+  doc: Seed entries found in a list of folded words: ``(start, n_words, key, english)``.
+  calls: seed_entries@624, seed_key_matches@632
+  called by: seed (verinoda/lexicon.py:710)
+618 def seed_lookup(words: list[str]) -> list[tuple[int, int, str, tuple[str, ...]]]:
+619     """Seed entries found in a list of folded words: ``(start, n_words, key, english)``.
+621     Multi-word keys are matched on adjacent words; per start position the key
+622     covering the most words wins, then the longest key.
+623     """
+624     entries = seed_entries()
+625     found = []
+626     for i in range(len(words)):
+627         best = None
+628         for key, targets in entries.items():
+629             kw = key.split()
+630             if i + len(kw) > len(words):
+631                 continue
+632             if all(seed_key_matches(k, words[i + j]) for j, k in enumerate(kw)):
+633                 cand = (len(kw), len(key), key, targets)
+634                 if best is None or cand[:2] > best[:2]:
+635                     best = cand
+636         if best:
+637             found.append((i, best[0], best[2], best[3]))
+638     return found
+## verinoda/anchors.py:731-739 _find_def
+731 def _find_def(tree: ast.AST, qual: str, facts: dict) -> ast.AST | None:
+732     """The def node for ``qual`` (duplicates resolved through the facts' line numbers)."""
+733     s = facts.get("symbols", {}).get(qual)
+734     if s is None:
+735         return None
+736     for node in ast.walk(tree):
+737         if isinstance(node, _DEF_NODES) and node.lineno == s["def"]:
+738             return node
+739     return None
+## verinoda/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass", timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto", commit: str | N…
+  verinoda/experiments.py:419-432
+420 out_dir = runs_dir(repo) / eid
+421 out_dir.mkdir(parents=True, exist_ok=True)
+422 work = Path(tempfile.mkdtemp(prefix="verinoda-exp-"))
+423 home = work / "_home"
+424 home.mkdir()
+425 copy = work / "repo"
+426 copied = _copy_repo(repo, copy)
+427 env = _scrubbed_env(home)
+428 artifacts_dir = work / "_artifacts"
+429 artifacts_dir.mkdir()
+430 plugins_dir = work / "_plugins"
+431 if plugins:
+432     plugins_dir.mkdir()
+## verinoda/research.py:519-553 def _research_local_dir(store: Store, repo: Path, spec: dict, ref: str | None, res: dict) -> dict
+  verinoda/research.py:539-552
+539             shutil.copy2(src / rel, out)
+540         except OSError:
+541             continue
+542     tmp.mkdir(parents=True, exist_ok=True)
+543     # A VCS boundary so ignore rules of the enclosing project do not apply to the copy.
+544     _git(tmp, "init", "--quiet")
+545     tmp.rename(dst)
+546 res["checkout"] = str(dst)
+547 res["content_hash"] = "sha256:" + th
+548 res["ref_kind"] = "content hash"
+549 res["pin"] = f"plain directory (no git): pinned by content hash sha256:{th[:16]} ({len(files)} files) at {now()}"
+550 res["warnings"].append("not a git repository: no commit, no history; 'why' material is limited to tests and docs")
+551 res["_root"] = dst
+552 res["_version"] = "tree:" + th
+## verinoda/references/local.py:219-240 def _package_lock(c: _Collector, p: Path) -> None
+verinoda/research.py:22-24 ``local_dir`` (a plain directory, not a git repository)
+verinoda/references/local.py:57-62 def _find_line(lines: list[str], rx: str, start: int = 0) -> int
+verinoda/agents/templates/claude_SKILL.md:56-65 ## Setup (once per session)
+verinoda/lexicon.py:578-589 def seed_exact_lookup(originals: list[str]) -> list[tuple[int, str, tuple[str, ...]]]
+verinoda/question_plan.py:516-553 class _Index
+verinoda/paths.py:75-92 def find_repo_root(start: Path | None = None) -> Path
+verinoda/setup.py:217-313 def setup_project(path: Path | str = ".", *, agents: str | list[str] = "auto", scope: str = "project", with_mcp: bool =…
+… 863 more candidates not shown: verinoda/question_plan.py:1133-1140 TEMPLATES =; verinoda/copies.py:7-7 A folder is taken for a copy when; verinoda/agents/installer.py:621-630 def _check_args(res: dict, agent: str, scope: str, project_dir: Path, home: Path) -; verinoda/copies.py:1-1 """Folders that are a copy of the project's own code.
+next: verinoda query "…" --max-chars 12000

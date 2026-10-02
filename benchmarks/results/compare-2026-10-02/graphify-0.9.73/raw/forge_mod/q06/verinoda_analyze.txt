@@ -1,0 +1,112 @@
+analysis ana_cf09f356590a, snapshot snp_f67fe74d1a63 (commit 0bb6af3963)
+understood as: Understood (rules): q1 [locate] Where is max_heat declared | q2 [define] what is its default | q3 [locate] which code reads it?
+q1 [met] locate: Where is max_heat declared
+  [statically_verified] `.getMaxHeat()` is defined at src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:74-76 (uncertain: no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_4c68dbea1fc1)
+  [statically_verified] config/emberforge-common.toml:13 contains: max_heat = 200 (uncertain: no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_85702f624704)
+q2 [met] define: what is its default
+  [statically_verified] `EmberConfig` is defined at src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41 (uncertain: no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_47b4d3adcd2c)
+  [statically_verified] `.addHeat()` is defined at src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21-22 (uncertain: no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_16cdebbbbb28)
+  (also answers this: clm_4c68dbea1fc1)
+  (also answers this: clm_85702f624704)
+  [statically_verified] config/emberforge-common.toml:1 contains: # Default common config, as NeoForge writes it to config/emberforge-common.toml on first start.  (clm_aa0acc1cb937)
+q3 [met] locate: which code reads it?
+  (also answers this: clm_47b4d3adcd2c)
+  (also answers this: clm_16cdebbbbb28)
+  (also answers this: clm_4c68dbea1fc1)
+context (found on the way; not what answers):
+  [weak_inference 0.30] `.addHeat()` calls `.addHeat()` (src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22) (uncertain: no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_eb217b5dd99a)
+  [strong_inference] `EmberForgeBlockEntity.serverTick()` calls `.addHeat()` (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82) (uncertain: which definition the call at src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82 binds to is checked for Python only; no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_b32aa28b985f)
+  [strong_inference] `EmberForgeBlockEntity.serverTick()` calls `.progressPerTick()` (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:97) (uncertain: which definition the call at src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:97 binds to is checked for Python only; no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_1516c49380ea)
+  [strong_inference] `EmberForgeBlockEntity.serverTick()` calls `.heatForFuel()` (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79) (uncertain: which definition the call at src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79 binds to is checked for Python only; no symbol in the index is named `max_heat` (the name occurs at config/emberforge-common.toml:13); linked by identifier_parts to .getMaxHeat(), not by its name)  (clm_deb76b660ccf)
+  [statically_verified] src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:8 contains: /** Runs the mod's data-pack functions from code. */  (clm_3ca1c10029ed)
+  [statically_verified] src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9 contains: /** Client to server: the player pressed Stoke in the forge screen at {@code pos}. */  (clm_d308f9b57697)
+critique clm_eb217b5dd99a: weak_inference -> weak_inference  src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22: line 22 names `addHeat` but has no call to it
+passages (what `verinoda query` gives for the question; search results, not claims):
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:30-32
+30 /**
+31  * Inventory (input, fuel, output), heat and forging progress of one Ember Forge.
+32  */
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:47-59
+48 private final ContainerData data = new ContainerData() {
+49     @Override
+50     public int get(int index) {
+51         return switch (index) {
+52             case 0 -> heat;
+53             case 1 -> EmberConfig.MAX_HEAT.get();
+54             case 2 -> progress;
+55             case 3 -> forgeTime;
+56             default -> 0;
+57         };
+58     }
+## src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21-22 HeatMath.addHeat
+  calls: addHeat@22
+  called by: stoke (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141); serverTick (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82); addHeat (src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22); heatStaysBetweenZeroAndTheMaximum (src/test/java/net/ashvale/emberforge/HeatMathTest.java:23)
+21 @JvmStatic
+22 fun addHeat(current: Int, amount: Int): Int = addHeat(current, amount, EmberConfig.MAX_HEAT.get())
+## config/emberforge-common.toml:5-23 emberforge-common.toml
+ 5 [forge]
+ 6 	#Heat added by one fuel item (blaze rods count double)
+ 7 	# Default: 40
+ 8 	# Range: 1 ~ 400
+ 9 	heat_per_fuel = 40
+10 	#Upper limit of a forge's heat
+11 	# Default: 200
+12 	# Range: 50 ~ 1000
+13 	max_heat = 200
+14 	#Heat added by the Stoke button or a Forge Hammer hit
+15 	# Default: 15
+16 	# Range: 0 ~ 100
+17 	stoke_heat = 15
+18 	#Ticks between two losses of 1 heat
+19 	# Default: 20
+20 	# Range: 1 ~ 1200
+21 	decay_interval_ticks = 20
+23 #Debug helpers
+## src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41 public final class EmberConfig
+  src/main/java/net/ashvale/emberforge/config/EmberConfig.java:19-30
+20 b.comment("Ember Forge heat settings").push("forge");
+21 HEAT_PER_FUEL = b.comment("Heat added by one fuel item (blaze rods count double)")
+22         .defineInRange("heat_per_fuel", 40, 1, 400);
+23 MAX_HEAT = b.comment("Upper limit of a forge's heat")
+24         .defineInRange("max_heat", 200, 50, 1000);
+25 STOKE_HEAT = b.comment("Heat added by the Stoke button or a Forge Hammer hit")
+26         .defineInRange("stoke_heat", 15, 0, 100);
+27 DECAY_INTERVAL = b.comment("Ticks between two losses of 1 heat")
+28         .defineInRange("decay_interval_ticks", 20, 1, 1200);
+29 b.pop();
+## src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:74-76 EmberForgeMenu.getMaxHeat
+74 public int getMaxHeat() {
+75     return data.get(1);
+76 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge)
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:77-85
+78 ItemStack fuel = forge.items.getStackInSlot(SLOT_FUEL);
+79 int fuelHeat = HeatMath.heatForFuel(fuel);
+80 if (fuelHeat > 0 && forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()) {
+81     forge.items.extractItem(SLOT_FUEL, 1, false);
+82     forge.heat = HeatMath.addHeat(forge.heat, fuelHeat);
+83     changed = true;
+84 }
+## src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:9-36 object HeatMath
+  src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:23-26
+24 @JvmStatic
+25 fun addHeat(current: Int, amount: Int, maxHeat: Int): Int = (current + amount).coerceIn(0, maxHeat)
+README.md:1-22 # Emberforge (example mod)
+src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:31-35 @JvmStatic fun progressPerTick(heat: Int, minHeat: Int): Int
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144 public void stoke(Player player)
+src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14-19 @JvmStatic fun heatForFuel(stack: ItemStack): Int
+src/test/java/net/ashvale/emberforge/HeatMathTest.java:21-25 @Test void heatStaysBetweenZeroAndTheMaximum()
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:123-125 public static int cooled(int heat, long gameTime, int decayInterval)
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:8-8 /** Runs the mod's data-pack functions from code. */
+src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:29-34 override fun renderBg(graphics: GuiGraphics, partialTick: Float, mouseX: Int, mouseY: Int)
+src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9-9 /** Client to server: the player pressed Stoke in the forge screen at {@code pos}. */
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:27-29 public EmberForgeMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buf)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:166-168 public int getHeat()
+src/test/java/net/ashvale/emberforge/HeatMathTest.java:9-13 @Test void noProgressBelowTheRecipesMinimumHeat()
+src/test/java/net/ashvale/emberforge/HeatMathTest.java:15-19 @Test void progressGrowsWithHeatButIsCapped()
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:79-82 public int progressWidth(int width)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:127-131 private boolean canOutput(ItemStack result)
+src/test/java/net/ashvale/emberforge/HeatMathTest.java:8-26 class HeatMathTest
+… 82 more candidates not shown: src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:70-72 public int getHeat(); src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41 static void handleStoke(StokeForgePayload payload, ; src/main/java/net/ashvale/emberforge/config/EmberConfig.java:39-40 private EmberConfig(); src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:9-2…
+next: verinoda query "…" --max-chars 12000

@@ -1,0 +1,441 @@
+$ grep -rniE 'emberforge|forge_fuels|tag|defined|contain|code|checks' .   # 316 matching lines in 51 files
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:1: package net.ashvale.emberforge.menu;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:3: import net.ashvale.emberforge.block.EmberForgeBlockEntity;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:4: import net.ashvale.emberforge.registry.ModBlocks;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:5: import net.ashvale.emberforge.registry.ModMenus;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:6: import net.ashvale.emberforge.registry.ModTags;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:11: import net.minecraft.world.inventory.AbstractContainerMenu;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:12: import net.minecraft.world.inventory.ContainerData;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:13: import net.minecraft.world.inventory.ContainerLevelAccess;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:14: import net.minecraft.world.inventory.SimpleContainerData;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:21: public class EmberForgeMenu extends AbstractContainerMenu {
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:22: private final ContainerLevelAccess access;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:23: private final ContainerData data;
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:27: public EmberForgeMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buf) {
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:28: this(containerId, inventory, buf.readBlockPos(), new ItemStackHandler(3), new SimpleContainerData(4));
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:31: /** Server side, from EmberForgeBlockEntity.createMenu. */
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:32: public EmberForgeMenu(int containerId, Inventory inventory, EmberForgeBlockEntity forge, ContainerData data) {
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:33: this(containerId, inventory, forge.getBlockPos(), forge.getItems(), data);
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:36: private EmberForgeMenu(int containerId, Inventory inventory, BlockPos pos, IItemHandler items, ContainerData data) {
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:37: super(ModMenus.EMBER_FORGE.get(), containerId);
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:40: this.access = ContainerLevelAccess.create(inventory.player.level(), pos);
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:42: addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_INPUT, 56, 17));
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:43: addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_FUEL, 56, 53) {
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:46: return stack.is(ModTags.FORGE_FUELS);
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:49: addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_OUTPUT, 116, 35) {
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:78: /** How many of {@code width} pixels of the progress arrow are filled. */
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1: package net.ashvale.emberforge.block;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:5: import net.ashvale.emberforge.EmberForge;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:6: import net.ashvale.emberforge.config.EmberConfig;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:7: import net.ashvale.emberforge.heat.HeatMath;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:8: import net.ashvale.emberforge.menu.EmberForgeMenu;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:9: import net.ashvale.emberforge.recipe.ForgingRecipe;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:10: import net.ashvale.emberforge.registry.ModBlocks;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:11: import net.ashvale.emberforge.registry.ModRecipes;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:12: import net.ashvale.emberforge.registry.ModTags;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:15: import net.minecraft.nbt.CompoundTag;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:20: import net.minecraft.world.inventory.AbstractContainerMenu;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:21: import net.minecraft.world.inventory.ContainerData;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33: public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:48: private final ContainerData data = new ContainerData() {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:71: public EmberForgeBlockEntity(BlockPos pos, BlockState state) {
+... (276 more matching lines not shown)
+
+==> src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:1-93 <==
+     1	package net.ashvale.emberforge.menu;
+     2	
+     3	import net.ashvale.emberforge.block.EmberForgeBlockEntity;
+     4	import net.ashvale.emberforge.registry.ModBlocks;
+     5	import net.ashvale.emberforge.registry.ModMenus;
+     6	import net.ashvale.emberforge.registry.ModTags;
+     7	import net.minecraft.core.BlockPos;
+     8	import net.minecraft.network.RegistryFriendlyByteBuf;
+     9	import net.minecraft.world.entity.player.Inventory;
+    10	import net.minecraft.world.entity.player.Player;
+    11	import net.minecraft.world.inventory.AbstractContainerMenu;
+    12	import net.minecraft.world.inventory.ContainerData;
+    13	import net.minecraft.world.inventory.ContainerLevelAccess;
+    14	import net.minecraft.world.inventory.SimpleContainerData;
+    15	import net.minecraft.world.inventory.Slot;
+    16	import net.minecraft.world.item.ItemStack;
+    17	import net.neoforged.neoforge.items.IItemHandler;
+    18	import net.neoforged.neoforge.items.ItemStackHandler;
+    19	import net.neoforged.neoforge.items.SlotItemHandler;
+    20	
+    21	public class EmberForgeMenu extends AbstractContainerMenu {
+    22	    private final ContainerLevelAccess access;
+    23	    private final ContainerData data;
+    24	    private final BlockPos pos;
+    25	
+    26	    /** Client side, from the open-menu packet (the server writes the forge position into it). */
+    27	    public EmberForgeMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buf) {
+    28	        this(containerId, inventory, buf.readBlockPos(), new ItemStackHandler(3), new SimpleContainerData(4));
+    29	    }
+    30	
+    31	    /** Server side, from EmberForgeBlockEntity.createMenu. */
+    32	    public EmberForgeMenu(int containerId, Inventory inventory, EmberForgeBlockEntity forge, ContainerData data) {
+    33	        this(containerId, inventory, forge.getBlockPos(), forge.getItems(), data);
+    34	    }
+    35	
+    36	    private EmberForgeMenu(int containerId, Inventory inventory, BlockPos pos, IItemHandler items, ContainerData data) {
+    37	        super(ModMenus.EMBER_FORGE.get(), containerId);
+    38	        this.pos = pos;
+    39	        this.data = data;
+    40	        this.access = ContainerLevelAccess.create(inventory.player.level(), pos);
+    41	
+    42	        addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_INPUT, 56, 17));
+    43	        addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_FUEL, 56, 53) {
+    44	            @Override
+    45	            public boolean mayPlace(ItemStack stack) {
+    46	                return stack.is(ModTags.FORGE_FUELS);
+    47	            }
+    48	        });
+    49	        addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_OUTPUT, 116, 35) {
+    50	            @Override
+    51	            public boolean mayPlace(ItemStack stack) {
+    52	                return false;
+    53	            }
+    54	        });
+    55	        for (int row = 0; row < 3; row++) {
+    56	            for (int col = 0; col < 9; col++) {
+    57	                addSlot(new Slot(inventory, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
+    58	            }
+    59	        }
+    60	        for (int col = 0; col < 9; col++) {
+    61	            addSlot(new Slot(inventory, col, 8 + col * 18, 142));
+    62	        }
+    63	        addDataSlots(data);
+    64	    }
+    65	
+    66	    public BlockPos getPos() {
+    67	        return pos;
+    68	    }
+    69	
+    70	    public int getHeat() {
+    71	        return data.get(0);
+    72	    }
+    73	
+    74	    public int getMaxHeat() {
+    75	        return data.get(1);
+    76	    }
+    77	
+    78	    /** How many of {@code width} pixels of the progress arrow are filled. */
+    79	    public int progressWidth(int width) {
+    80	        int time = data.get(3);
+    81	        return time == 0 ? 0 : data.get(2) * width / time;
+    82	    }
+    83	
+    84	    @Override
+    85	    public ItemStack quickMoveStack(Player player, int index) {
+    86	        return ItemStack.EMPTY; // shift-click is not supported yet
+    87	    }
+    88	
+    89	    @Override
+    90	    public boolean stillValid(Player player) {
+    91	        return stillValid(access, player, ModBlocks.EMBER_FORGE.get());
+    92	    }
+    93	}
+
+==> src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179 <==
+     1	package net.ashvale.emberforge.block;
+     2	
+     3	import java.util.Optional;
+     4	
+     5	import net.ashvale.emberforge.EmberForge;
+     6	import net.ashvale.emberforge.config.EmberConfig;
+     7	import net.ashvale.emberforge.heat.HeatMath;
+     8	import net.ashvale.emberforge.menu.EmberForgeMenu;
+     9	import net.ashvale.emberforge.recipe.ForgingRecipe;
+    10	import net.ashvale.emberforge.registry.ModBlocks;
+    11	import net.ashvale.emberforge.registry.ModRecipes;
+    12	import net.ashvale.emberforge.registry.ModTags;
+    13	import net.minecraft.core.BlockPos;
+    14	import net.minecraft.core.HolderLookup;
+    15	import net.minecraft.nbt.CompoundTag;
+    16	import net.minecraft.network.chat.Component;
+    17	import net.minecraft.world.MenuProvider;
+    18	import net.minecraft.world.entity.player.Inventory;
+    19	import net.minecraft.world.entity.player.Player;
+    20	import net.minecraft.world.inventory.AbstractContainerMenu;
+    21	import net.minecraft.world.inventory.ContainerData;
+    22	import net.minecraft.world.item.ItemStack;
+    23	import net.minecraft.world.item.crafting.RecipeHolder;
+    24	import net.minecraft.world.item.crafting.SingleRecipeInput;
+    25	import net.minecraft.world.level.Level;
+    26	import net.minecraft.world.level.block.entity.BlockEntity;
+    27	import net.minecraft.world.level.block.state.BlockState;
+    28	import net.neoforged.neoforge.items.ItemStackHandler;
+    29	
+    30	/**
+    31	 * Inventory (input, fuel, output), heat and forging progress of one Ember Forge.
+    32	 */
+    33	public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider {
+    34	    public static final int SLOT_INPUT = 0;
+    35	    public static final int SLOT_FUEL = 1;
+    36	    public static final int SLOT_OUTPUT = 2;
+    37	
+    38	    private final ItemStackHandler items = new ItemStackHandler(3) {
+    39	        @Override
+    40	        protected void onContentsChanged(int slot) {
+    41	            setChanged();
+    42	        }
+    43	    };
+    44	    private int heat;
+    45	    private int progress;
+    46	    private int forgeTime;
+    47	
+    48	    private final ContainerData data = new ContainerData() {
+    49	        @Override
+    50	        public int get(int index) {
+    51	            return switch (index) {
+    52	                case 0 -> heat;
+    53	                case 1 -> EmberConfig.MAX_HEAT.get();
+    54	                case 2 -> progress;
+    55	                case 3 -> forgeTime;
+    56	                default -> 0;
+    57	            };
+    58	        }
+    59	
+    60	        @Override
+    61	        public void set(int index, int value) {
+    62	            // the server owns these values; the client menu keeps its own copy
+    63	        }
+    64	
+    65	        @Override
+    66	        public int getCount() {
+    67	            return 4;
+    68	        }
+    69	    };
+    70	
+    71	    public EmberForgeBlockEntity(BlockPos pos, BlockState state) {
+    72	        super(ModBlocks.EMBER_FORGE_ENTITY.get(), pos, state);
+    73	    }
+    74	
+    75	    public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge) {
+    76	        boolean changed = false;
+    77	
+    78	        ItemStack fuel = forge.items.getStackInSlot(SLOT_FUEL);
+    79	        int fuelHeat = HeatMath.heatForFuel(fuel);
+    80	        if (fuelHeat > 0 && forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()) {
+    81	            forge.items.extractItem(SLOT_FUEL, 1, false);
+    82	            forge.heat = HeatMath.addHeat(forge.heat, fuelHeat);
+    83	            changed = true;
+    84	        }
+    85	
+    86	        if (level.getGameTime() % 40 == 0 && level.getBlockState(pos.below()).is(ModTags.FORGE_HEAT_SOURCES)) {
+    87	            forge.heat = HeatMath.addHeat(forge.heat, 2);
+    88	            changed = true;
+    89	        }
+    90	
+    91	        ItemStack input = forge.items.getStackInSlot(SLOT_INPUT);
+    92	        Optional<RecipeHolder<ForgingRecipe>> match = level.getRecipeManager()
+    93	                .getRecipeFor(ModRecipes.FORGING_TYPE.get(), new SingleRecipeInput(input), level);
+    94	        if (match.isPresent() && forge.canOutput(match.get().value().result())) {
+    95	            ForgingRecipe recipe = match.get().value();
+    96	            forge.forgeTime = recipe.forgeTime();
+    97	            forge.progress += HeatMath.progressPerTick(forge.heat, recipe.minHeat());
+    98	            if (forge.progress >= recipe.forgeTime()) {
+    99	                forge.finish(recipe);
+   100	            }
+   101	            changed = true;
+   102	        } else if (forge.progress != 0) {
+   103	            forge.progress = 0;
+   104	            changed = true;
+   105	        }
+   106	
+   107	        int cooled = cooled(forge.heat, level.getGameTime(), EmberConfig.DECAY_INTERVAL.get());
+   108	        if (cooled != forge.heat) {
+   109	            forge.heat = cooled;
+   110	            changed = true;
+   111	        }
+   112	
+   113	        boolean lit = forge.heat > 0;
+   114	        if (state.getValue(EmberForgeBlock.LIT) != lit) {
+   115	            level.setBlock(pos, state.setValue(EmberForgeBlock.LIT, lit), 3);
+   116	        }
+   117	        if (changed) {
+   118	            setChanged(level, pos, state);
+   119	        }
+   120	    }
+   121	
+   122	    /** Heat after cooling: one less on every decayInterval-th game tick, never below 0. */
+   123	    public static int cooled(int heat, long gameTime, int decayInterval) {
+   124	        return heat > 0 && gameTime % decayInterval == 0 ? heat - 1 : heat;
+   125	    }
+   126	
+   127	    private boolean canOutput(ItemStack result) {
+   128	        ItemStack out = items.getStackInSlot(SLOT_OUTPUT);
+   129	        return out.isEmpty() || (ItemStack.isSameItemSameComponents(out, result)
+   130	                && out.getCount() + result.getCount() <= out.getMaxStackSize());
+   131	    }
+   132	
+   133	    private void finish(ForgingRecipe recipe) {
+   134	        items.extractItem(SLOT_INPUT, 1, false);
+   135	        items.insertItem(SLOT_OUTPUT, recipe.result().copy(), false);
+   136	        progress = 0;
+   137	        EmberForge.LOGGER.debug("Ember Forge at {} forged {}", worldPosition, recipe.result());
+   138	    }
+   139	
+   140	    public void stoke(Player player) {
+   141	        heat = HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get());
+   142	        setChanged();
+   143	        player.displayClientMessage(Component.translatable("message.emberforge.stoked", heat), true);
+   144	    }
+   145	
+   146	    @Override
+   147	    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+   148	        super.loadAdditional(tag, registries);
+   149	        items.deserializeNBT(registries, tag.getCompound("Items"));
+   150	        heat = tag.getInt("Heat");
+   151	        progress = tag.getInt("Progress");
+   152	    }
+   153	
+   154	    @Override
+   155	    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+   156	        super.saveAdditional(tag, registries);
+   157	        tag.put("Items", items.serializeNBT(registries));
+   158	        tag.putInt("Heat", heat);
+   159	        tag.putInt("Progress", progress);
+   160	    }
+   161	
+   162	    public ItemStackHandler getItems() {
+   163	        return items;
+   164	    }
+   165	
+   166	    public int getHeat() {
+   167	        return heat;
+   168	    }
+   169	
+   170	    @Override
+   171	    public Component getDisplayName() {
+   172	        return Component.translatable("container.emberforge.ember_forge");
+   173	    }
+   174	
+   175	    @Override
+   176	    public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
+   177	        return new EmberForgeMenu(containerId, inventory, this, data);
+   178	    }
+   179	}
+
+==> src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:1-115 <==
+     1	package net.ashvale.emberforge.block;
+     2	
+     3	import com.mojang.serialization.MapCodec;
+     4	import net.ashvale.emberforge.registry.ModBlocks;
+     5	import net.ashvale.emberforge.registry.ModItems;
+     6	import net.minecraft.core.BlockPos;
+     7	import net.minecraft.core.Direction;
+     8	import net.minecraft.core.particles.ParticleTypes;
+     9	import net.minecraft.server.level.ServerPlayer;
+    10	import net.minecraft.util.RandomSource;
+    11	import net.minecraft.world.Containers;
+    12	import net.minecraft.world.InteractionHand;
+    13	import net.minecraft.world.InteractionResult;
+    14	import net.minecraft.world.ItemInteractionResult;
+    15	import net.minecraft.world.entity.LivingEntity;
+    16	import net.minecraft.world.entity.player.Player;
+    17	import net.minecraft.world.item.ItemStack;
+    18	import net.minecraft.world.item.context.BlockPlaceContext;
+    19	import net.minecraft.world.level.Level;
+    20	import net.minecraft.world.level.block.BaseEntityBlock;
+    21	import net.minecraft.world.level.block.Block;
+    22	import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+    23	import net.minecraft.world.level.block.RenderShape;
+    24	import net.minecraft.world.level.block.entity.BlockEntity;
+    25	import net.minecraft.world.level.block.entity.BlockEntityTicker;
+    26	import net.minecraft.world.level.block.entity.BlockEntityType;
+    27	import net.minecraft.world.level.block.state.BlockState;
+    28	import net.minecraft.world.level.block.state.StateDefinition;
+    29	import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+    30	import net.minecraft.world.level.block.state.properties.BooleanProperty;
+    31	import net.minecraft.world.level.block.state.properties.DirectionProperty;
+    32	import net.minecraft.world.phys.BlockHitResult;
+    33	
+    34	public class EmberForgeBlock extends BaseEntityBlock {
+    35	    public static final MapCodec<EmberForgeBlock> CODEC = simpleCodec(EmberForgeBlock::new);
+    36	    public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
+    37	    public static final BooleanProperty LIT = BlockStateProperties.LIT;
+    38	
+    39	    public EmberForgeBlock(Properties properties) {
+    40	        super(properties);
+    41	        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(LIT, false));
+    42	    }
+    43	
+    44	    @Override
+    45	    protected MapCodec<? extends BaseEntityBlock> codec() {
+    46	        return CODEC;
+    47	    }
+    48	
+    49	    @Override
+    50	    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+    51	        builder.add(FACING, LIT);
+    52	    }
+    53	
+    54	    @Override
+    55	    public BlockState getStateForPlacement(BlockPlaceContext context) {
+    56	        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+    57	    }
+    58	
+    59	    @Override
+    60	    protected RenderShape getRenderShape(BlockState state) {
+    61	        return RenderShape.MODEL;
+    62	    }
+    63	
+    64	    @Override
+    65	    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+    66	        return new EmberForgeBlockEntity(pos, state);
+    67	    }
+    68	
+    69	    @Override
+    70	    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+    71	        return level.isClientSide ? null
+    72	                : createTickerHelper(type, ModBlocks.EMBER_FORGE_ENTITY.get(), EmberForgeBlockEntity::serverTick);
+    73	    }
+    74	
+    75	    /** A Forge Hammer stokes the forge; anything else falls through to useWithoutItem. */
+    76	    @Override
+    77	    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+    78	                                              Player player, InteractionHand hand, BlockHitResult hit) {
+    79	        if (!stack.is(ModItems.FORGE_HAMMER.get())) {
+    80	            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+    81	        }
+    82	        if (!level.isClientSide && level.getBlockEntity(pos) instanceof EmberForgeBlockEntity forge) {
+    83	            forge.stoke(player);
+    84	            stack.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
+    85	        }
+    86	        return ItemInteractionResult.sidedSuccess(level.isClientSide);
+    87	    }
+    88	
+    89	    @Override
+    90	    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
+    91	                                               BlockHitResult hit) {
+    92	        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer
+    93	                && level.getBlockEntity(pos) instanceof EmberForgeBlockEntity forge) {
+    94	            serverPlayer.openMenu(forge, pos);
+    95	        }
+    96	        return InteractionResult.sidedSuccess(level.isClientSide);
+    97	    }
+    98	
+    99	    @Override
+   100	    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moved) {
+   101	        if (!state.is(newState.getBlock()) && level.getBlockEntity(pos) instanceof EmberForgeBlockEntity forge) {
+   102	            for (int slot = 0; slot < forge.getItems().getSlots(); slot++) {
+   103	                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), forge.getItems().getStackInSlot(slot));
+   104	            }
+   105	        }
+   106	        super.onRemove(state, level, pos, newState, moved);
+   107	    }
+   108	
+   109	    @Override
+   110	    public void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
+   111	        if (state.getValue(LIT) && random.nextInt(4) == 0) {
+   112	            level.addParticle(ParticleTypes.LAVA, pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, 0.0, 0.0, 0.0);
+   113	        }
+   114	    }
+   115	}
+
+==> src/main/java/net/ashvale/emberforge/registry/ModTags.java:1-4 <==  (truncated at char cap; file has 26 lines)
+     1	package net.ashvale.emberforge.registry;
+     2	
+     3	import net.ashvale.emberforge.EmberForge;
+     4	import net.minecraft.core.registries.Registries;

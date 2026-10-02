@@ -1,0 +1,457 @@
+$ grep -rniE 'graphify|update|rebuild|code|graph|llm' .   # 11889 matching lines in 222 files
+graphify/cli.py:1: """graphify command dispatch — every non-install subcommand.
+graphify/cli.py:5: module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+graphify/cli.py:14: from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+graphify/cli.py:22: 'MANDATORY: graphify-out/graph.json exists. You MUST run '
+graphify/cli.py:23: '`graphify query "<question>"` before grepping raw files. Only grep '
+graphify/cli.py:24: 'after graphify has oriented you, or to modify/debug specific lines.'
+graphify/cli.py:32: 'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+graphify/cli.py:33: 'before reading source files. Use: `graphify query "<question>"` '
+graphify/cli.py:34: '(scoped subgraph), `graphify explain "<concept>"`, or '
+graphify/cli.py:35: '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+graphify/cli.py:37: 'subagents too — include it in every subagent prompt involving code '
+graphify/cli.py:46: 'graphify-out/graph.json exists but may be STALE for this file (the file '
+graphify/cli.py:47: 'changed after the last build). Prefer `graphify query "<question>"` for '
+graphify/cli.py:48: 'orientation, and run `graphify update` to refresh the graph. Reading the '
+graphify/cli.py:53: # Strict-mode block (opt-in). Claude Code PreToolUse honors
+graphify/cli.py:62: 'graphify strict mode: this project has a fresh knowledge graph that covers '
+graphify/cli.py:63: 'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+graphify/cli.py:64: '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+graphify/cli.py:67: 'same rule in any subagent prompt that explores code.'
+graphify/cli.py:77: 'graphify: knowledge graph at graphify-out/. For focused questions, run '
+graphify/cli.py:78: '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+graphify/cli.py:79: 'GRAPH_REPORT.md) instead of grepping raw files. Read GRAPH_REPORT.md only '
+graphify/cli.py:84: def _default_graph_path() -> str:
+graphify/cli.py:85: return str(Path(_GRAPHIFY_OUT) / "graph.json")
+graphify/cli.py:117: Mirrors the #1890 path normalization in graphify.llm.
+graphify/cli.py:126: ``failed_ast_sources`` (#2543): code files whose AST extractor errored
+graphify/cli.py:143: # the manifest. An edge-only result has no entity representation in the graph
+graphify/cli.py:184: from — ``merged`` vs ``G.graph``). Always prints the actionable notice.
+graphify/cli.py:213: f"[graphify extract] semantic extraction is incomplete: unverified semantic "
+graphify/cli.py:215: "pass --allow-partial to overwrite a larger existing graph anyway.",
+graphify/cli.py:221: def _stale_graph_sources(
+graphify/cli.py:222: graph_path: Path,
+graphify/cli.py:227: """Source files graph.json still references but the current scan no longer
+graphify/cli.py:232: (.graphifyignore/.gitignore/--exclude changed) without being listed in the
+graphify/cli.py:233: manifest kept its stale nodes in graph.json forever. Derive prune
+graphify/cli.py:234: candidates from the graph's own node ``source_file``s instead: anything
+graphify/cli.py:235: the graph references that the post-exclude detect corpus no longer
+graphify/cli.py:242: graph's own output root; only anchors that land inside the scan root
+graphify/cli.py:245: for graphs written by <=0.9.16, which stored them relative to the OUT root
+graphify/cli.py:252: filenames while graph ``source_file`` entries are typically NFC, and a
+... (11849 more matching lines not shown)
+
+==> graphify/cli.py:1-413 <==  (truncated at char cap; file has 4842 lines)
+     1	"""graphify command dispatch — every non-install subcommand.
+     2	
+     3	Extracted verbatim from __main__.main(); __main__ now calls dispatch_command(cmd)
+     4	after the install/platform dispatch. Kept out of __main__ to shrink the CLI entry
+     5	module. The path-redirect (`graphify <path>` -> extract) re-enters via a lazy
+     6	import of main to avoid a cli<->__main__ import cycle.
+     7	"""
+     8	from __future__ import annotations
+     9	import json
+    10	import os
+    11	import re
+    12	import sys
+    13	import time
+    14	from graphify.paths import GRAPHIFY_OUT as _GRAPHIFY_OUT
+    15	from pathlib import Path, PurePosixPath, PureWindowsPath
+    16	
+    17	
+    18	_SEARCH_NUDGE = json.dumps({
+    19	    "hookSpecificOutput": {
+    20	        "hookEventName": "PreToolUse",
+    21	        "additionalContext": (
+    22	            'MANDATORY: graphify-out/graph.json exists. You MUST run '
+    23	            '`graphify query "<question>"` before grepping raw files. Only grep '
+    24	            'after graphify has oriented you, or to modify/debug specific lines.'
+    25	        ),
+    26	    }
+    27	}, ensure_ascii=False, separators=(",", ":")) + "\n"
+    28	_READ_NUDGE = json.dumps({
+    29	    "hookSpecificOutput": {
+    30	        "hookEventName": "PreToolUse",
+    31	        "additionalContext": (
+    32	            'MANDATORY: graphify-out/graph.json exists. You MUST run graphify '
+    33	            'before reading source files. Use: `graphify query "<question>"` '
+    34	            '(scoped subgraph), `graphify explain "<concept>"`, or '
+    35	            '`graphify path "<A>" "<B>"`. Only read raw files after graphify has '
+    36	            'oriented you, or to modify/debug specific lines. This rule applies to '
+    37	            'subagents too — include it in every subagent prompt involving code '
+    38	            'exploration.'
+    39	        ),
+    40	    }
+    41	}, ensure_ascii=False, separators=(",", ":")) + "\n"
+    42	_READ_NUDGE_STALE = json.dumps({
+    43	    "hookSpecificOutput": {
+    44	        "hookEventName": "PreToolUse",
+    45	        "additionalContext": (
+    46	            'graphify-out/graph.json exists but may be STALE for this file (the file '
+    47	            'changed after the last build). Prefer `graphify query "<question>"` for '
+    48	            'orientation, and run `graphify update` to refresh the graph. Reading the '
+    49	            'file directly is fine.'
+    50	        ),
+    51	    }
+    52	}, ensure_ascii=False, separators=(",", ":")) + "\n"
+    53	# Strict-mode block (opt-in). Claude Code PreToolUse honors
+    54	# hookSpecificOutput.permissionDecision == "deny" and shows permissionDecisionReason
+    55	# to the model. Fires at most once per session (see _mark_session_denied) so it can
+    56	# never strand an agent: the very next read proceeds with the soft nudge.
+    57	_READ_DENY = json.dumps({
+    58	    "hookSpecificOutput": {
+    59	        "hookEventName": "PreToolUse",
+    60	        "permissionDecision": "deny",
+    61	        "permissionDecisionReason": (
+    62	            'graphify strict mode: this project has a fresh knowledge graph that covers '
+    63	            'this file. Run `graphify query "<your question>"` (or `graphify explain` / '
+    64	            '`graphify path`) FIRST to orient yourself, then re-issue this Read — it '
+    65	            'will be allowed. This block fires at most once per session; reading raw '
+    66	            'files to modify or debug specific lines is fine after one query. Apply the '
+    67	            'same rule in any subagent prompt that explores code.'
+    68	        ),
+    69	    }
+    70	}, ensure_ascii=False, separators=(",", ":")) + "\n"
+    71	_HOOK_SOURCE_EXTS = (
+    72	    '.py', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.astro', '.vue', '.svelte', '.go',
+    73	    '.rs', '.java', '.rb', '.c', '.h', '.cpp', '.hpp', '.cc', '.cs', '.kt',
+    74	    '.swift', '.php', '.scala', '.lua', '.sh', '.md', '.rst', '.txt', '.mdx',
+    75	)
+    76	_GEMINI_NUDGE_TEXT = (
+    77	    'graphify: knowledge graph at graphify-out/. For focused questions, run '
+    78	    '`graphify query "<question>"` (scoped subgraph, usually much smaller than '
+    79	    'GRAPH_REPORT.md) instead of grepping raw files. Read GRAPH_REPORT.md only '
+    80	    'for broad architecture context.'
+    81	)
+    82	
+    83	
+    84	def _default_graph_path() -> str:
+    85	    return str(Path(_GRAPHIFY_OUT) / "graph.json")
+    86	
+    87	
+    88	def _stamped_manifest_files(
+    89	    files_by_type: dict[str, list[str]],
+    90	    sem_result: dict,
+    91	    root: Path,
+    92	    partial_source_files: "set[str] | None" = None,
+    93	    failed_ast_sources: "set[str] | list[str] | None" = None,
+    94	    unverified_semantic_sources: "set[str] | list[str] | None" = None,
+    95	) -> dict[str, list[str]]:
+    96	    """Manifest-safe files dict: only stamp semantic files that actually
+    97	    produced output (cache hit or fresh extraction). Files whose chunk failed
+    98	    have no source_file entry in sem_result — leaving their semantic_hash
+    99	    empty so detect_incremental re-queues them (#933).
+   100	
+   101	    A file in ``partial_source_files`` DID produce output this run, but only a
+   102	    truncated fragment of it, so it is excluded from stamping too — otherwise
+   103	    detect_incremental would see it "done" and never re-dispatch it, leaving the
+   104	    incomplete node set live forever on the warm-incremental path. Same #933
+   105	    mechanism: leave it unstamped and it is re-queued next run.
+   106	
+   107	    ``unverified_semantic_sources`` (#3203): files whose semantic extraction
+   108	    under-produced compared to their prior representation (e.g. 3 -> 1 nodes).
+   109	    They are excluded from stamping unless --allow-partial is set, so the next
+   110	    incremental run retries them.
+   111	
+   112	    Both sides of the membership test are resolved against the scan ``root``
+   113	    before comparing (#1897): node/edge/hyperedge ``source_file`` values are
+   114	    root-relative on a fresh extraction while ``files_by_type`` entries are
+   115	    absolute (from detect()), so a raw string comparison never matched and
+   116	    every freshly-extracted semantic doc was dropped from the manifest.
+   117	    Mirrors the #1890 path normalization in graphify.llm.
+   118	
+   119	    Hyperedges are counted as output (#1920): a chunk whose only result for a
+   120	    document is a hyperedge (3+ nodes sharing a concept) is valid output that
+   121	    the semantic cache persists per-``source_file`` — omitting it here left the
+   122	    doc unstamped, so detect_incremental re-queued it on every run. The stamping
+   123	    condition mirrors the cache-write keying (a hyperedge carries its own
+   124	    ``source_file``); do not derive it from member nodes.
+   125	
+   126	    ``failed_ast_sources`` (#2543): code files whose AST extractor errored
+   127	    (missing optional extra, etc.) or returned zero nodes. They must not be
+   128	    stamped as up-to-date or a later install of the extra will never re-run.
+   129	    """
+   130	    root = Path(root)
+   131	
+   132	    def _resolve(value: str) -> Path:
+   133	        p = Path(value)
+   134	        if not p.is_absolute():
+   135	            p = root / p
+   136	        try:
+   137	            return p.resolve()
+   138	        except (OSError, RuntimeError):
+   139	            return p
+   140	
+   141	    sem_extracted: set[Path] = set()
+   142	    # #2927: only nodes and hyperedges count as valid semantic output that stamps
+   143	    # the manifest. An edge-only result has no entity representation in the graph
+   144	    # and must be left unstamped so detect_incremental re-queues it (#933/#1666).
+   145	    for coll in ("nodes", "hyperedges"):
+   146	        for item in sem_result.get(coll, []):
+   147	            sf = item.get("source_file", "")
+   148	            if sf:
+   149	                sem_extracted.add(_resolve(sf))
+   150	    partial_resolved = {_resolve(p) for p in (partial_source_files or set())}
+   151	    unverified_resolved = {_resolve(p) for p in (unverified_semantic_sources or set())}
+   152	    failed_ast_resolved = {_resolve(p) for p in (failed_ast_sources or [])}
+   153	    sem_types = {"document", "paper", "image"}
+   154	    return {
+   155	        ftype: [
+   156	            f for f in flist
+   157	            if _resolve(f) not in failed_ast_resolved
+   158	            and (
+   159	                ftype not in sem_types
+   160	                or (
+   161	                    _resolve(f) in sem_extracted
+   162	                    and _resolve(f) not in partial_resolved
+   163	                    and _resolve(f) not in unverified_resolved
+   164	                )
+   165	            )
+   166	        ]
+   167	        for ftype, flist in files_by_type.items()
+   168	    }
+   169	
+   170	
+   171	def _handle_unverified_semantic_shrink(
+   172	    unverified_shrink,
+   173	    *,
+   174	    cli_allow_partial: bool,
+   175	    files_by_type,
+   176	    sem_result,
+   177	    target,
+   178	    partial_semantic_files,
+   179	    failed_ast_sources,
+   180	    semantic_files,
+   181	):
+   182	    """Shared handling for the #3203 unverified-semantic-shrink guard on both the
+   183	    raw and clustered write paths (they differ only in where the flag is read
+   184	    from — ``merged`` vs ``G.graph``). Always prints the actionable notice.
+   185	
+   186	    Returns None when there is no shrink, else ``(incomplete, manifest_files,
+   187	    cleared_semantic)`` — the latter two are None unless the guard armed
+   188	    (``not cli_allow_partial``), so the caller mirrors the original inline logic.
+   189	    """
+   190	    if not unverified_shrink:
+   191	        return None
+   192	    incomplete = False
+   193	    manifest_files = None
+   194	    cleared_semantic = None
+   195	    if not cli_allow_partial:
+   196	        incomplete = True
+   197	        unverified_sources = set(unverified_shrink.keys())
+   198	        manifest_files = _stamped_manifest_files(
+   199	            files_by_type,
+   200	            sem_result,
+   201	            target,
+   202	            partial_source_files=partial_semantic_files,
+   203	            failed_ast_sources=failed_ast_sources,
+   204	            unverified_semantic_sources=unverified_sources,
+   205	        )
+   206	        stamped = {f for _flist in manifest_files.values() for f in _flist}
+   207	        cleared_semantic = {str(p) for p in semantic_files} - stamped
+   208	    details = ", ".join(
+   209	        f"'{sf}' ({prior} -> {fresh} nodes)"
+   210	        for sf, (prior, fresh) in sorted(unverified_shrink.items())
+   211	    )
+   212	    print(
+   213	        f"[graphify extract] semantic extraction is incomplete: unverified semantic "
+   214	        f"shrink detected for {details}. The shrink guard stays armed for this write; "
+   215	        "pass --allow-partial to overwrite a larger existing graph anyway.",
+   216	        file=sys.stderr,
+   217	    )
+   218	    return incomplete, manifest_files, cleared_semantic
+   219	
+   220	
+   221	def _stale_graph_sources(
+   222	    graph_path: Path,
+   223	    scan_root: Path,
+   224	    seen_files: set[str],
+   225	    detection: dict | None = None,
+   226	) -> list[str]:
+   227	    """Source files graph.json still references but the current scan no longer
+   228	    contains (#1909).
+   229	
+   230	    Incremental extract's prune set was historically derived from the manifest
+   231	    alone (``manifest - corpus``), so a file that became EXCLUDED
+   232	    (.graphifyignore/.gitignore/--exclude changed) without being listed in the
+   233	    manifest kept its stale nodes in graph.json forever. Derive prune
+   234	    candidates from the graph's own node ``source_file``s instead: anything
+   235	    the graph references that the post-exclude detect corpus no longer
+   236	    contains is stale, whether the file was deleted or newly excluded.
+   237	
+   238	    Only IN-ROOT paths are candidates: out-of-root/absolute entries
+   239	    (--include sources, symlinked external corpora) are never walked by
+   240	    detect, so their absence from the corpus is not staleness evidence.
+   241	    Relative entries are re-anchored against both the scan root and the
+   242	    graph's own output root; only anchors that land inside the scan root
+   243	    count. Since #1941 extracts always store source_file relative to the SCAN
+   244	    root, so the scan-root anchor is the live one; the out-root anchor stays
+   245	    for graphs written by <=0.9.16, which stored them relative to the OUT root
+   246	    (e.g. ``../project/x.py``, #555/#1899).
+   247	    ``seen_files`` must be the FULL detect output including unclassified
+   248	    files, so nodes from walked-but-unsupported sources (e.g. introspected
+   249	    Cargo.toml manifests) are not misread as stale.
+   250	
+   251	    Paths are compared NFC-normalized on both sides: macOS reports NFD
+   252	    filenames while graph ``source_file`` entries are typically NFC, and a
+   253	    raw-string membership test misread every accented live file as stale
+   254	    (#2210; same class as the manifest-layer #2221/#2224).
+   255	
+   256	    Fail-closed liveness guard (#2210, mirrors watch.py's excluded-vs-deleted
+   257	    distinction): a source missing from the scan corpus is only pruned when
+   258	    the file is gone from disk, or when its exclusion is PROVABLE from the
+   259	    same scan that produced ``seen_files`` — ``detection``'s ``ignored`` /
+   260	    ``pruned_noise_dirs`` / ``skipped_sensitive`` output, or detect's
+   261	    sensitivity predicate. An alive file that merely failed the membership
+   262	    test (path-spelling drift the normalization didn't cover, walk errors,
+   263	    …) is KEPT and reported, never mass-evicted.
+   264	    """
+   265	    from graphify.paths import nfc
+   266	    try:
+   267	        data = json.loads(graph_path.read_text(encoding="utf-8"))
+   268	    except Exception:
+   269	        return []
+   270	    if not isinstance(data, dict):
+   271	        return []
+   272	    try:
+   273	        root_res = scan_root.resolve()
+   274	    except (OSError, RuntimeError):
+   275	        root_res = scan_root
+   276	    # <out>/graphify-out/graph.json — relative source_files may be anchored here.
+   277	    out_base = graph_path.parent.parent
+   278	    try:
+   279	        out_base = out_base.resolve()
+   280	    except (OSError, RuntimeError):
+   281	        pass
+   282	
+   283	    def _within_root(p: Path) -> bool:
+   284	        try:
+   285	            p.relative_to(root_res)
+   286	            return True
+   287	        except ValueError:
+   288	            pass
+   289	        try:
+   290	            p.resolve().relative_to(root_res)
+   291	            return True
+   292	        except (ValueError, OSError, RuntimeError):
+   293	            return False
+   294	
+   295	    seen_nfc = {nfc(s) for s in seen_files}
+   296	    seen_basenames = {nfc(os.path.basename(s)) for s in seen_files}
+   297	
+   298	    def _in_seen(p: Path) -> bool:
+   299	        if nfc(str(p)) in seen_nfc:
+   300	            return True
+   301	        try:
+   302	            return nfc(str(p.resolve())) in seen_nfc
+   303	        except (OSError, RuntimeError):
+   304	            return False
+   305	
+   306	    # Provable-exclusion evidence from the scan that produced seen_files:
+   307	    # individually ignored files are exact entries; ignored/noise-pruned
+   308	    # directories are recorded once with a trailing separator and cover
+   309	    # their whole subtree. skipped_sensitive entries may carry a
+   310	    # " [reason]" suffix.
+   311	    excluded_exact: set[str] = set()
+   312	    excluded_prefixes: list[str] = []
+   313	    if detection:
+   314	        for entry in list(detection.get("ignored", [])) + list(
+   315	            detection.get("pruned_noise_dirs", [])
+   316	        ):
+   317	            e = nfc(str(entry))
+   318	            if e.endswith(os.sep) or e.endswith("/"):
+   319	                excluded_prefixes.append(e)
+   320	            else:
+   321	                excluded_exact.add(e)
+   322	        for entry in detection.get("skipped_sensitive", []):
+   323	            excluded_exact.add(nfc(str(entry).split(" [", 1)[0]))
+   324	
+   325	    def _provably_excluded(c: Path) -> bool:
+   326	        spellings = [nfc(str(c))]
+   327	        try:
+   328	            spellings.append(nfc(str(c.resolve())))
+   329	        except (OSError, RuntimeError):
+   330	            pass
+   331	        for s in spellings:
+   332	            if s in excluded_exact:
+   333	                return True
+   334	            if any(s.startswith(pref) for pref in excluded_prefixes):
+   335	                return True
+   336	        try:
+   337	            from graphify.detect import _is_sensitive as _det_sensitive
+   338	            if _det_sensitive(c):
+   339	                return True
+   340	        except Exception:
+   341	            pass
+   342	        return False
+   343	
+   344	    stale: list[str] = []
+   345	    kept_alive: list[str] = []
+   346	    checked: set[str] = set()
+   347	    for n in data.get("nodes", []):
+   348	        if not isinstance(n, dict):
+   349	            continue
+   350	        sf = n.get("source_file")
+   351	        if not sf or not isinstance(sf, str) or sf in checked:
+   352	            continue
+   353	        checked.add(sf)
+   354	        if "://" in sf:
+   355	            continue  # remote/virtual source (e.g. Google Workspace), not a scanned path
+   356	        p = Path(sf)
+   357	        if p.is_absolute():
+   358	            candidates = [p]
+   359	        else:
+   360	            rel = sf.replace("\\", "/")
+   361	            bases = [root_res]
+   362	            if out_base != root_res:
+   363	                bases.append(out_base)
+   364	            candidates = [
+   365	                Path(os.path.normpath(str(base / rel))) for base in bases
+   366	            ]
+   367	        in_root = [c for c in candidates if _within_root(c)]
+   368	        if not in_root:
+   369	            continue  # out-of-root under every anchor: never prune
+   370	        if any(_in_seen(c) for c in in_root):
+   371	            continue  # still part of the scan corpus
+   372	        # Fail-closed liveness guard (#2210): absence from the corpus is
+   373	        # only deletion evidence when the file is actually gone from disk.
+   374	        alive = []
+   375	        for c in in_root:
+   376	            try:
+   377	                if c.exists():
+   378	                    alive.append(c)
+   379	            except OSError:
+   380	                pass
+   381	        if alive:
+   382	            if all(_provably_excluded(c) for c in alive):
+   383	                stale.append(sf)  # alive but excluded under current rules (#1909)
+   384	            else:
+   385	                kept_alive.append(sf)
+   386	            continue
+   387	        # No anchored candidate exists, but a legacy bare-basename spelling
+   388	        # can't be anchored reliably — a live corpus file with the same name
+   389	        # means deletion is unproven; keep.
+   390	        rel_sf = sf.replace("\\", "/")
+   391	        if "/" not in rel_sf and nfc(rel_sf) in seen_basenames:
+   392	            kept_alive.append(sf)
+   393	            continue
+   394	        stale.append(sf)
+   395	    if kept_alive:
+   396	        print(
+   397	            f"[graphify] fail-closed: kept node(s) from {len(kept_alive)} "
+   398	            "source file(s) that left the scan corpus but still exist on disk "
+   399	            "(ignore rules or filters changed?). Run a full re-extraction to "
+   400	            "purge them if the exclusion is intentional.",
+   401	            file=sys.stderr,
+   402	        )
+   403	    return stale
+   404	
+   405	
+   406	def _zero_node_stamped_code_sources(
+   407	    graph_path: Path,
+   408	    scan_root: Path,
+   409	    unchanged_code: list[str],
+   410	) -> list[str]:
+   411	    """Manifest-stamped code files with a registered extractor but ZERO nodes
+   412	    in the existing graph.json (#2543 heal).
+   413	

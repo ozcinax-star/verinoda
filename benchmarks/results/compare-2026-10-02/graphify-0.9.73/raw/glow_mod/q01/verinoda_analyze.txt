@@ -1,0 +1,97 @@
+analysis ana_36be76857a7e, snapshot snp_96a6e3b2d02d (commit 906a99fb8c)
+understood as: Anladığım (kurallarla): q1 [çağıranlar] Wisp.spawn kimler tarafından çağrılıyor? (karşılıklar: çağrılıyor=call)
+plan links: Wisp.spawn -> src/main/java/com/example/glowmod/entity/Wisp.java:28-36
+q1 [met_with_inference] callers: Wisp.spawn kimler tarafından çağrılıyor?
+  [strong_inference] `GlowCommands.wisp()` calls `Wisp.spawn()` (src/main/java/com/example/glowmod/command/GlowCommands.java:29) (uncertain: which definition the call at src/main/java/com/example/glowmod/command/GlowCommands.java:29 binds to is checked for Python only)  (clm_488e6e31a5e2)
+  [strong_inference] `WispSpawner.onChunkLoad()` calls `Wisp.spawn()` (src/main/java/com/example/glowmod/world/WispSpawner.java:31) (uncertain: which definition the call at src/main/java/com/example/glowmod/world/WispSpawner.java:31 binds to is checked for Python only)  (clm_977dc6f877f5)
+  [strong_inference] `LanternEvents.etkinlestir()` calls `Wisp.spawn()` (src/main/java/com/example/glowmod/event/LanternEvents.java:30) (uncertain: which definition the call at src/main/java/com/example/glowmod/event/LanternEvents.java:30 binds to is checked for Python only)  (clm_5fa3d84bc5d6)
+  [strong_inference] `ServerNetworking.onSummonWisp()` calls `Wisp.spawn()` (src/main/java/com/example/glowmod/network/ServerNetworking.java:29) (uncertain: which definition the call at src/main/java/com/example/glowmod/network/ServerNetworking.java:29 binds to is checked for Python only)  (clm_89dba837a0e1)
+  [strong_inference] `Ritual.baslat()` calls `Wisp.spawn()` (src/main/java/com/example/glowmod/ritual/Ritual.java:29) (uncertain: which definition the call at src/main/java/com/example/glowmod/ritual/Ritual.java:29 binds to is checked for Python only)  (clm_32b215b556dc)
+  [strong_inference] `WispTests.wispAppearsWhereAsked()` calls `Wisp.spawn()` (src/gametest/java/com/example/glowmod/test/WispTests.java:16) (uncertain: which definition the call at src/gametest/java/com/example/glowmod/test/WispTests.java:16 binds to is checked for Python only)  (clm_75947a43aa41)
+context (found on the way; not what answers):
+  [statically_verified] `.register()` is defined at src/main/java/com/example/glowmod/world/WispSpawner.java:18-20  (clm_88cc52d7f575)
+  [strong_inference] `onDeath` names `wisp_death` (src/main/resources/data/glowmod/function/wisp_death.mcfunction); src/main/java/com/example/glowmod/entity/Wisp.java:42 contains: Datapack.run(serverWorld, getPos(), "wisp_death"); (uncertain: `wisp_death` is a bare name: it was matched to src/main/resources/data/glowmod/function/wisp_death.mcfunction by file name, the namespace is not written on the line)  (clm_919af973f6bc)
+  [strong_inference] `Wisp.onDeath()` calls `Datapack.run()` (src/main/java/com/example/glowmod/entity/Wisp.java:42) (uncertain: which definition the call at src/main/java/com/example/glowmod/entity/Wisp.java:42 binds to is checked for Python only)  (clm_f140416156af)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: wisp->summon_wisp, wisp->summon, wisp->wisp_heart (+2 more)
+## src/main/java/com/example/glowmod/entity/Wisp.java:28-36 Wisp.spawn
+  called by: wisp (src/main/java/com/example/glowmod/command/GlowCommands.java:29)?; etkinlestir (src/main/java/com/example/glowmod/event/LanternEvents.java:30)?; onSummonWisp (src/main/java/com/example/glowmod/network/ServerNetworking.java:29)?; baslat (src/main/java/com/example/glowmod/ritual/Ritual.java:29)?; onChunkLoad (src/main/java/com/example/glowmod/world/WispSpawner.java:31)?; wispAppearsWhereAsked (src/gametest/java/com/example/glowmod/test/WispTests.java:16)?
+  runs: when a player right-clicks a block (registered at src/main/java/com/example/glowmod/event/LanternEvents.java:19)
+28 public static Wisp spawn(ServerWorld world, BlockPos pos) {
+29     Wisp wisp = ModEntities.WISP.create(world);
+30     if (wisp == null) {
+31         return null;
+32     }
+33     wisp.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0.0F, 0.0F);
+34     world.spawnEntity(wisp);
+35     return wisp;
+36 }
+## src/main/java/com/example/glowmod/entity/Wisp.java:14-45 Wisp
+  names: `wisp_death` (line 42, bare name, inferred) -> src/main/resources/data/glowmod/function/wisp_death.mcfunction
+  src/main/java/com/example/glowmod/entity/Wisp.java:14-15
+14 public class Wisp extends PathAwareEntity {
+15     public Wisp(EntityType<? extends Wisp> type, World world) {
+## src/main/java/com/example/glowmod/entity/Wisp.java:15-18 Wisp.Wisp
+15 public Wisp(EntityType<? extends Wisp> type, World world) {
+16     super(type, world);
+17     setNoGravity(true);
+18 }
+## src/main/java/com/example/glowmod/command/GlowCommands.java:27-36 GlowCommands.wisp
+27 private static int wisp(CommandContext<ServerCommandSource> ctx) {
+28     ServerCommandSource source = ctx.getSource();
+29     Wisp wisp = Wisp.spawn(source.getWorld(), BlockPos.ofFloored(source.getPosition()));
+30     if (wisp == null) {
+31         source.sendError(Text.translatable("command.glowmod.wisp.failed"));
+32         return 0;
+33     }
+34     source.sendFeedback(() -> Text.translatable("command.glowmod.wisp.spawned"), false);
+35     return 1;
+36 }
+## src/main/resources/assets/glowmod/lang/en_us.json:1-11 glowmod:en_us
+  names: `glowmod:lantern_staff` (line 2, lang) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `glowmod:ember_shard` (line 3, lang) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+ 1 {
+ 2   "item.glowmod.lantern_staff": "Lantern Staff",
+ 3   "item.glowmod.ember_shard": "Ember Shard",
+ 4   "item.glowmod.wisp_heart": "Wisp Heart",
+ 5   "entity.glowmod.wisp": "Wisp",
+ 6   "key.glowmod.summon_wisp": "Call a Wisp",
+ 7   "category.glowmod": "Glow Mod",
+ 8   "command.glowmod.wisp.spawned": "A wisp appears.",
+ 9   "command.glowmod.wisp.failed": "The wisp would not come.",
+10   "command.glowmod.reload.done": "Glow Mod settings reloaded."
+11 }
+## src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 glowmod:tr_tr
+  names: `glowmod:lantern_staff` (line 2, lang) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `glowmod:ember_shard` (line 3, lang) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+ 1 {
+ 2   "item.glowmod.lantern_staff": "Fener Asası",
+ 3   "item.glowmod.ember_shard": "Kor Kırığı",
+ 4   "item.glowmod.wisp_heart": "Wisp Kalbi",
+ 5   "entity.glowmod.wisp": "Wisp",
+ 6   "key.glowmod.summon_wisp": "Wisp Çağır",
+ 7   "category.glowmod": "Glow Mod",
+ 8   "command.glowmod.wisp.spawned": "Bir wisp belirdi.",
+ 9   "command.glowmod.wisp.failed": "Wisp gelmedi.",
+10   "command.glowmod.reload.done": "Glow Mod ayarları yeniden yüklendi."
+11 }
+## src/main/resources/assets/glowmod/models/item/wisp_heart.json:1-6 glowmod:item/wisp_heart
+  named by: ModItems (src/main/java/com/example/glowmod/item/ModItems.java:15) as `wisp_heart` (bare name, inferred); glowmod:en_us (src/main/resources/assets/glowmod/lang/en_us.json:4) as `glowmod:wisp_heart`; glowmod:tr_tr (src/main/resources/assets/glowmod/lang/tr_tr.json:4) as `glowmod:wisp_heart` (+1 more)
+1 {
+2   "parent": "minecraft:item/generated",
+3   "textures": {
+4     "layer0": "glowmod:item/wisp_heart"
+5   }
+6 }
+src/gametest/java/com/example/glowmod/test/WispTests.java:22-28 @GameTest(templateName = EMPTY_STRUCTURE) public void deadWispLeavesItsHeart(TestContext context)
+src/main/resources/data/glowmod/function/wisp_death.mcfunction:1-5 particle minecraft:soul_fire_flame ~ ~0.5 ~ 0.3 0.3 0.3 0.02 30
+src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30 private static void onSummonWisp(SummonWispPayload payload, ServerPlayNetworking.Context context)
+src/main/java/com/example/glowmod/world/WispSpawner.java:22-33 private static void onChunkLoad(ServerWorld world, WorldChunk chunk)
+src/main/java/com/example/glowmod/world/WispSpawner.java:14-34 public final class WispSpawner
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:15-35 public final class Wisp
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:16-17 private Wisp()
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24 public static Allay spawn(Plugin plugin, Location location)
+src/main/java/com/example/glowmod/world/WispSpawner.java:15-16 private WispSpawner()
+src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-21 public record SummonWispPayload(BlockPos pos) implements CustomPayload
+src/main/java/com/example/glowmod/world/WispSpawner.java:18-20 public static void register()
+… 73 more candidates not shown: src/gametest/java/com/example/glowmod/test/WispTests.java:14-20 @GameTest(templateName = EMPTY_STRUCTURE) public void wi; src/main/java/com/example/glowmod/item/ModItems.java:12-32 public final class ModItems; src/main/java/com/example/glowmod/entity/ModEntities.java:11-23 public final class ModEntities; src/main/java/com/example/glowmod/ritual/Ritual.java:21-31 Ri…
+next: verinoda query "…" --max-chars 12000

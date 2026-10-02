@@ -1,0 +1,16 @@
+$ grep -rniE 'oyuncu|fener|asasıyla|bir|ruh|fenerine|sağ|tıklayınca|oluyor' .   # 2 matching lines in 1 files
+src/main/resources/assets/glowmod/lang/tr_tr.json:2: "item.glowmod.lantern_staff": "Fener Asası",
+src/main/resources/assets/glowmod/lang/tr_tr.json:8: "command.glowmod.wisp.spawned": "Bir wisp belirdi.",
+
+==> src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 <==
+     1	{
+     2	  "item.glowmod.lantern_staff": "Fener Asası",
+     3	  "item.glowmod.ember_shard": "Kor Kırığı",
+     4	  "item.glowmod.wisp_heart": "Wisp Kalbi",
+     5	  "entity.glowmod.wisp": "Wisp",
+     6	  "key.glowmod.summon_wisp": "Wisp Çağır",
+     7	  "category.glowmod": "Glow Mod",
+     8	  "command.glowmod.wisp.spawned": "Bir wisp belirdi.",
+     9	  "command.glowmod.wisp.failed": "Wisp gelmedi.",
+    10	  "command.glowmod.reload.done": "Glow Mod ayarları yeniden yüklendi."
+    11	}

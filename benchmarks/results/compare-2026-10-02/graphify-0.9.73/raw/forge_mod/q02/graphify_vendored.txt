@@ -1,0 +1,28 @@
+Graph: .verinoda/index/graph.json (248 nodes) | Traversal: BFS depth=3 | Start: ['HeatMath', '.addHeat()'] | Context: call (heuristic) | 14 nodes found
+
+NODE HeatMath [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L9 community=.serverTick]
+NODE .addHeat() [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L22 community=.serverTick]
+NODE .serverTick() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L75 community=.serverTick]
+NODE .stoke() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L140 community=EmberForgeBlockEntity.java]
+NODE .heatStaysBetweenZeroAndTheMaximum() [src=src/test/java/net/ashvale/emberforge/HeatMathTest.java loc=L22 community=.serverTick]
+NODE .cooled() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L123 community=.serverTick]
+NODE .progressPerTick() [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L32 community=.serverTick]
+NODE .canOutput() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L127 community=.serverTick]
+NODE .finish() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L133 community=.serverTick]
+NODE .heatForFuel() [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L15 community=.serverTick]
+NODE .coldForgeStaysCold() [src=src/test/java/net/ashvale/emberforge/ForgeTickTest.java loc=L17 community=.serverTick]
+NODE .forgeCoolsOnlyOnDecayTicks() [src=src/test/java/net/ashvale/emberforge/ForgeTickTest.java loc=L11 community=.serverTick]
+NODE .noProgressBelowTheRecipesMinimumHeat() [src=src/test/java/net/ashvale/emberforge/HeatMathTest.java loc=L10 community=.serverTick]
+NODE .progressGrowsWithHeatButIsCapped() [src=src/test/java/net/ashvale/emberforge/HeatMathTest.java loc=L16 community=.serverTick]
+EDGE .stoke() --calls [EXTRACTED context=call]--> .addHeat() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L141
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .addHeat() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L82
+EDGE .heatStaysBetweenZeroAndTheMaximum() --calls [EXTRACTED context=call]--> .addHeat() at=src/test/java/net/ashvale/emberforge/HeatMathTest.java:L23
+EDGE .serverTick() --calls [INFERRED context=call]--> .canOutput() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L94
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .cooled() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L107
+EDGE .serverTick() --calls [INFERRED context=call]--> .finish() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L99
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .heatForFuel() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L79
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .progressPerTick() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L97
+EDGE .noProgressBelowTheRecipesMinimumHeat() --calls [EXTRACTED context=call]--> .progressPerTick() at=src/test/java/net/ashvale/emberforge/HeatMathTest.java:L11
+EDGE .progressGrowsWithHeatButIsCapped() --calls [EXTRACTED context=call]--> .progressPerTick() at=src/test/java/net/ashvale/emberforge/HeatMathTest.java:L17
+EDGE .coldForgeStaysCold() --calls [EXTRACTED context=call]--> .cooled() at=src/test/java/net/ashvale/emberforge/ForgeTickTest.java:L18
+EDGE .forgeCoolsOnlyOnDecayTicks() --calls [EXTRACTED context=call]--> .cooled() at=src/test/java/net/ashvale/emberforge/ForgeTickTest.java:L12

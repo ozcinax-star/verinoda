@@ -1,0 +1,90 @@
+expanded: komutu->command, komutu->cmd, komutu->cli (+11 more)
+## graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+  calls: _custom_providers_path@1069, provider_base_url_ok@1140, cmd_prs@1184, install@1194, uninstall@1196, status@1198, _default_graph_path@1214, _enforce_graph_size_cap_or_exit@1251, graph_has_legacy_ids@1287, _query_graph_text@1302, log_query@1311, _touch_query_stamp@1321 (+107)
+  called by: _run_cli (graphify/__main__.py:751)
+  graphify/cli.py:1197-1210
+1197     elif subcmd == "status":
+1198         print(hook_status(Path(".")))
+1199     else:
+1200         print("Usage: graphify hook [install|uninstall|status]", file=sys.stderr)
+1201         sys.exit(1)
+1202 elif cmd == "query":
+1203     if len(sys.argv) < 3:
+1204         print("Usage: graphify query \"<question>\" [--dfs] [--context C] [--budget N] [--graph path]", file=sys.stderr)
+1205         sys.exit(1)
+1206     from graphify.serve import _query_graph_text
+1207     from graphify.security import sanitize_label
+1208     from networkx.readwrite import json_graph
+1209     from graphify import querylog
+  graphify/cli.py:1481-1494
+1482     out = _sqr(
+1483         question=opts.question,
+1484         answer=opts.answer,
+1485         memory_dir=Path(opts.memory_dir),
+1486         query_type=opts.query_type,
+1487         source_nodes=opts.nodes or None,
+1488         outcome=opts.outcome,
+1489         correction=opts.correction,
+1490     )
+1491     print(f"Saved to {out}")
+1492 elif cmd == "reflect":
+1493     import argparse as _ap
+## graphify/skill-agents.md:49-59 What You Must Do When Invoked
+  same content: graphify/skill-amp.md
+49 ## What You Must Do When Invoked
+51 If the user invoked `/graphify --help` or `/graphify -h` (with no other arguments), print the contents of the `## Usage` section above verbatim and stop. Do no…
+53 **Fast path — existing graph:** Before doing anything else, check whether `graphify-out/graph.json` exists. The expected location is `graphify-out/graph.json` …
+55 If no path was given, use `.` (current directory). Do not ask the user for a path.
+57 If the path argument starts with `https://github.com/` or `http://github.com/`, treat it as a GitHub URL - run Step 0 before anything else, then continue with …
+59 Follow these steps in order. Do not skip steps.
+## graphify/skill-claw.md:49-59 What You Must Do When Invoked
+  same content: graphify/skill-copilot.md, graphify/skill-kiro.md ...
+49 ## What You Must Do When Invoked
+51 If the user invoked `/graphify --help` or `/graphify -h` (with no other arguments), print the contents of the `## Usage` section above verbatim and stop. Do no…
+53 **Fast path — existing graph:** Before doing anything else, check whether `graphify-out/graph.json` exists. The expected location is `graphify-out/graph.json` …
+55 If no path was given, use `.` (current directory). Do not ask the user for a path.
+57 If the path argument starts with `https://github.com/` or `http://github.com/`, treat it as a GitHub URL - run Step 0 before anything else, then continue with …
+59 Follow these steps in order. Do not skip steps.
+## graphify/cli.py:752-811 _bash_invokes_search
+  called by: _run_hook_guard (graphify/cli.py:868)
+  graphify/cli.py:752-754
+752 def _bash_invokes_search(cmd_str: str) -> bool:
+753     """Whether a Bash command actually RUNS a search tool (#3121).
+## graphify/extractors/bash.py:235-279 def walk_calls(body_node, func_nid: str, seen_calls: set) -> None
+  calls: _bash_call_in_command_allowed@244, literal@249, _make_id@254, add_edge@258, walk_calls@279
+  called by: walk_calls (graphify/extractors/bash.py:279)
+  graphify/extractors/bash.py:246-259
+246 if cmd_name_node is None and child.children:
+247     cmd_name_node = child.children[0]
+248 if cmd_name_node:
+249     name = literal(cmd_name_node)
+250     # Defined-functions wins. Skip-lists for external commands
+251     # would create false negatives when a user defines a
+252     # function shadowing an external (`install`, `find`, etc.).
+253     if name and name in defined_functions:
+254         tgt = _make_id(stem, name)
+255         key = (func_nid, tgt)
+256         if tgt and key not in seen_calls:
+257             seen_calls.add(key)
+258             add_edge(func_nid, tgt, "calls",
+259                      child.start_point[0] + 1,
+## graphify/cli.py:814-942 def _run_hook_guard(kind: str, strict: bool = False) -> None
+  calls: out_path@840, _bash_invokes_search@868, _is_cwd_relative@898, _hook_strict_enabled@934, _query_stamp_fresh@935, _target_is_indexed@936, _mark_session_denied@937
+  called by: dispatch_command (graphify/cli.py:2475)
+  graphify/cli.py:859-872
+859     # the Bash tool carries `command`, while Claude Code's dedicated
+860     # Grep tool carries `pattern` (plus optional path/glob) and no
+861     # command — a Grep call IS a content search by definition, so it
+862     # nudges whenever a graph exists. For Bash, decide on the
+863     # command's EXECUTED tokens (#3121): the old whole-string
+864     # substring scan fired on quoted prose ('add flag support'
+865     # contains "ag ") and on heredoc bodies that merely mention
+866     # grep. Nudge-only, even in strict mode — see the docstring.
+867     is_grep_tool = not cmd_str and bool(t.get("pattern"))
+868     is_bash_search = bool(cmd_str) and _bash_invokes_search(cmd_str)
+869     if (is_grep_tool or is_bash_search) and out_path("graph.json").is_file():
+870         sys.stdout.write(_SEARCH_NUDGE)
+871 elif kind == "read":
+872     vals = [str(t.get("file_path") or ""), str(t.get("pattern") or ""), str(t.get("path") or "")]
+… 1782 more candidates not shown: graphify/extractors/bash.py:197-213 def _bash_call_in_command_allowed(cmd_node) -> bool; graphify/__main__.py:509-751 def _run_cli() -> None; graphify/install.py:2100-2375 def dispatch_install_cli(cmd: str) -> bool; graphify/extractors/bash.py:281-532 def walk(node, parent_nid: str) -> None
+next: verinoda query "…" --max-chars 12000

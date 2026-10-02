@@ -1,0 +1,255 @@
+$ grep -rniE 'dışa|aktarılan|dosyada|makinenin|yolları|nasıl|siliniyor' .   # 17 matching lines in 4 files
+verinoda/ui/static/app.js:152: offlineHome: "Dışa aktarılmış görünüm: graf ve her dosyanın notu, kod olmadan; projede `verinoda ui` her notu koduyla gösterir. Dışa aktarım",
+verinoda/ui/static/app.js:153: offlineCode: "kod dışa aktarılan dosyada yok; `verinoda ui` gösterir",
+verinoda/ui/static/app.js:154: offlineMissing: "Bu not dışa aktarılan dosyada yok (graf ve dosya notları var); `verinoda ui` her notu gösterir.",
+verinoda/ui/static/app.js:175: keysTitle: "Klavye kısayolları",
+verinoda/ui/static/app.js:178: hint3d: "3D: sürükleyerek döndür, tekerlekle yakınlaş, bir dosyaya tıkla ve ona uç. Ctrl+K komutları, ? bütün kısayolları gösterir.",
+verinoda/ui/static/app.js:195: impact: "{name} değişirse {files} dosyada {n} not etkilenebilir (en çok üç bağlantı geri).",
+verinoda/ui/static/app.js:202: path: "iki not nasıl bağlı: yol A ile B", open: "bir notu oku", ask: "koddan cevaplanan bir soru" },
+verinoda/ui/static/app.js:739: const QUESTION_WORDS = /^(how|what|where|why|which|who|when|does|do|is|are|can|nasıl|ne|neden|nerede|hangi|kim|niçin|niye)\b/i;
+verinoda/question_plan.py:253: TR_WEAK: dict[str, list[str]] = {"flow": [r"\bnasil\b"]}
+verinoda/question_plan.py:291: "usage": [(r"\bnasil kullan\w*", False), (r"\bornek\w*", False), (r"\bkullanim\w*", False)],
+verinoda/question_plan.py:304: TR_INTERROGATIVES = frozenset("ne neyi neler nedir nerede nereye nereden neresi hangi hangisi hangileri nasil neden "
+verinoda/question_plan.py:415: re.compile(r"\s+ve\s+(?=(?:\w+\s+)?(?:ne|neyi|neler|nerede|nereye|nereden|hangi|hangisi|nasil|neden|nicin|"
+verinoda/question_plan.py:420: re.compile(r",\s+(?=(?:ne|neyi|nerede|nereye|nereden|hangi|nasil|neden|kim)\b)"),
+verinoda/question_plan.py:1449: "kodda", "kodun", "yeri", "yerde", "sey", "sekil", "hangi", "nasil")
+verinoda/textnorm.py:41: """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin niye
+verinoda/textnorm.py:177: """nasil nerede nereye nereden neresi hangi hangisi hangileri ne neyi neler nedir neden nicin
+verinoda/retrieval.py:76: r"cagir\w*|akis\w*|nasil calis\w*|hangi fonksiyon\w*)\b", re.I)
+
+==> verinoda/ui/static/app.js:1-235 <==  (truncated at char cap; file has 2028 lines)
+     1	/* Verinoda notes and graph: a note per symbol, file and data file; local and global graphs.
+     2	   No libraries and no network beyond this server (Content-Security-Policy: 'self'). */
+     3	"use strict";
+     4	(() => {
+     5	  // -- small helpers -------------------------------------------------------------------------
+     6	  const $ = (sel, root = document) => root.querySelector(sel);
+     7	  function el(tag, attrs, ...kids) {
+     8	    const e = document.createElement(tag);
+     9	    for (const [k, v] of Object.entries(attrs || {})) {
+    10	      if (v === null || v === undefined || v === false) continue;
+    11	      if (k === "class") e.className = v;
+    12	      else if (k === "text") e.textContent = v;
+    13	      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    14	      else e.setAttribute(k, v === true ? "" : String(v));
+    15	    }
+    16	    for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false)
+    17	      e.append(k instanceof Node ? k : document.createTextNode(String(k)));
+    18	    return e;
+    19	  }
+    20	  const store = {
+    21	    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (_) { return d; } },
+    22	    set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode: not remembered */ } },
+    23	  };
+    24	  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    25	  // an exported file (`verinoda ui --export`) carries its data and answers the API itself
+    26	  const OFFLINE = (() => {
+    27	    const e = document.getElementById("verinoda-data");
+    28	    if (!e) return null;
+    29	    try { const d = JSON.parse(e.textContent); return d && d.format === "verinoda-export" ? d : null; } catch (_) { return null; }
+    30	  })();
+    31	  async function api(path) {
+    32	    if (OFFLINE) return offlineApi(path);
+    33	    const r = await fetch(path, { headers: { Accept: "application/json" } });
+    34	    let j = {};
+    35	    try { j = await r.json(); } catch (_) { /* not JSON */ }
+    36	    if (!r.ok) { const e = new Error(j.message || r.statusText); e.code = j.error; e.status = r.status; throw e; }
+    37	    return j;
+    38	  }
+    39	  const noteHref = (id) => "#/n/" + encodeURIComponent(id);
+    40	  const TOKEN = OFFLINE ? "" : (($("meta[name=verinoda-token]") || {}).content || "");
+    41	  async function apiPost(path, body) {
+    42	    const r = await fetch(path, { method: "POST", body: JSON.stringify(body),
+    43	      headers: { "Content-Type": "application/json", "X-Verinoda-Token": TOKEN, Accept: "application/json" } });
+    44	    let j = {};
+    45	    try { j = await r.json(); } catch (_) { /* not JSON */ }
+    46	    if (!r.ok) { const e = new Error(j.message || r.statusText); e.code = j.error; e.status = r.status; throw e; }
+    47	    return j;
+    48	  }
+    49	
+    50	  // -- language ------------------------------------------------------------------------------
+    51	  const I18N = {
+    52	    en: {
+    53	      search: "Search notes, or ask a question  (/)   ·   commands: Ctrl+K", files: "Files", localGraph: "Local graph", depth: "Depth",
+    54	      tests: "Tests", dataFiles: "Data files", external: "External", outline: "Outline", graphView: "Graph view",
+    55	      highlight: "Highlight notes…", labels: "Labels", fit: "Fit", close: "Close", back: "Back", forward: "Forward",
+    56	      colorBy: "Colour by", byFolder: "folder", byCommunity: "community",
+    57	      editor: "Editor", openIn: "Open in", noEditor: "no editor",
+    58	      myNote: "My note", myNotes: "My notes", addNote: "+ Note", edit: "Edit", save: "Save", cancel: "Cancel",
+    59	      del: "Delete", sure: "Delete it?", keep: "Read it: still right", noteHint: "Markdown: **bold**, `code`, - lists, [[Name]] links a note. Ctrl+Enter saves.",
+    60	      nst: { fresh: "up to date", changed: "code changed", gone: "code gone" },
+    61	      changedSince: "Changed", changedInfo: "changed since the index", affectedInfo: "use them",
+    62	      refreshed: "The index was updated: the page shows it now.", updating: "Updating the index…",
+    63	      staleNote: "This file changed since the index: the links and lines may be off. `verinoda update` takes it in.",
+    64	      ask: "Answer the question", answerFor: "Answer", answerMore: "Also relevant", answerNone: "Nothing in the project answers it.",
+    65	      answerStale: "changed since the index (the lines may be off):", answerExp: "also searched",
+    66	      impact: "Impact", impactTitle: "What may be affected", impactNone: "Nothing in the project uses it.",
+    67	      impactDepth: "links back", impactStop: "stopped at", impactTests: "in tests", withTests: "with tests",
+    68	      pathBtn: "Path…", pathTo: "Search the note to reach…", pathNone: "No chain of calls, imports or references links them.",
+    69	      pathBack: "(the other way round: the target reaches this note)", pathTitle: "Path", close2: "close",
+    70	      noteOn: "on", noNotes: "No notes of your own yet: open a note and press + Note.",
+    71	      theme: "Light / dark", toggleFiles: "Show or hide files", toggleGraph: "Show or hide the local graph",
+    72	      searchOffline: "Search files and symbols  (/)   ·   commands: Ctrl+K",
+    73	      offlineHome: "Exported view: the graph and a note per file, without the code; `verinoda ui` in the project shows every note with its code. Exported",
+    74	      offlineCode: "the code is not in the exported file; `verinoda ui` shows it",
+    75	      offlineMissing: "This note is not in the exported file (it holds the graph and the file notes); `verinoda ui` shows every note.",
+    76	      notes: "notes", filesN: "files", links: "links", dataNotes: "data notes", hubs: "Most connected",
+    77	      welcome: "Every symbol, file and data file of the project is a note. Search above, browse the files, or open the graph view.",
+    78	      lines: "lines", line: "line", more: "more", moreLines: "more lines in the file", noResults: "No notes match.",
+    79	      inferred: "inferred: the link is not stated in the code, the tool derived it", loading: "Loading…",
+    80	      noIndex: "This project has no index yet: run `verinoda scan .` in it, then reload.",
+    81	      shown: "shown", hidden: "hidden (least connected)", test: "test", defined: "defined at",
+    82	      sec: {
+    83	        defined_in: "Defined in", members: "Members", calls: "Calls", called_by: "Called by",
+    84	        extends: "Extends / implements", extended_by: "Subclasses / implementations", imports: "Imports",
+    85	        imported_by: "Imported by", references: "References", referenced_by: "Referenced by",
+    86	        names_data: "Names (resource ids)", named_by: "Named by", other_out: "Other links", other_in: "Other backlinks",
+    87	        claims: "Claims", outline: "Outline", hubs: "Most connected", myNotes: "My notes", answerMore: "Also relevant",
+    88	      },
+    89	      kind: {
+    90	        class: "class", method: "method", function: "function", file: "file", doc: "document", section: "section",
+    91	        data: "data file", symbol: "symbol", external: "external", claim: "claim",
+    92	      },
+    93	      why: { name: "name", "name starts with": "name starts with", "name contains": "in the name", path: "in the path", question: "for the question" },
+    94	      legendTitle: "click: hide or show · double-click: fly to this region", mode3dTitle: "Show the graph in three dimensions (V)", tour: "Tour", tourTitle: "A guided tour of the project's regions (T)",
+    95	      keysTitle: "Keyboard shortcuts",
+    96	      palHint: "focus X · region X · impact X · path A to B · tour · or ask a question",
+    97	      palFoot: "↑↓ choose · ↵ run · Tab complete · Esc close",
+    98	      hint3d: "3D: drag to turn, wheel to zoom, click a file to fly to it. Ctrl+K gives commands, ? shows every shortcut.",
+    99	      hudOpen: "Open", hudFollow: "Follow", hudUnfollow: "Stop following", hudWalk: "Next linked", hudWalkMore: "N walks through them all",
+   100	      hudLinked: "Linked files", hudRegionTitle: "Fly to this region", hudInOut: "links in · links out", following: "following",
+   101	      walkAt: "{i} of {n} linked to {name} (N / Shift+N)", hudTop: "Most connected here", hudAll: "Everything",
+   102	      prevRegion: "Previous", nextRegion: "Next", tourResume: "Resume", tourPause: "Pause", tourAt: "Tour: region {i} of {n}",
+   103	      tourDone: "That was the tour: the whole project again.",
+   104	      say: {
+   105	        data: "A data file: code names it by its resource id.",
+   106	        docOut: "{name} mentions {outs} files of the project.", docIn: "{name} is mentioned by {ins} files.",
+   107	        docBoth: "{name} mentions {outs} files of the project and is mentioned by {ins}.",
+   108	        both: "{name} is used by {ins} files and uses {outs}.",
+   109	        used: "{name} is used by {ins} files and uses none of the project's files: something the rest stands on.",
+   110	        uses: "{name} uses {outs} files and nothing uses it: an entry point, a script or a test.",
+   111	        alone: "{name} has no links to other files.",
+   112	        region: "{name}: {n} files, {links} links among them.",
+   113	        talks: "It works most with {list}.",
+   114	        island: "It has no links to other regions.",
+   115	        impact: "Changing {name} may affect {n} notes in {files} files (up to three links back).",
+   116	      },
+   117	      verb: { focus: "Fly to", open: "Open" },
+   118	      cmd: { graph: "Open the graph view", to3d: "Show the graph in 3D", to2d: "Show the graph flat (2D)", tour: "Take the tour of the project's regions",
+   119	        changes: "Show what changed since the index", fit: "Show everything", home: "Start page", lang: "Türkçe" },
+   120	      pal: { commands: "Commands", ask: "Question", notes: "Notes", regions: "Regions", try: "Try" },
+   121	      ex: { focus: "fly to a note in 3D", region: "frame a part of the project", impact: "what a change may affect",
+   122	        path: "how two notes are linked: path A to B", open: "read a note", ask: "a question, answered from the code" },
+   123	      palNoMatch: "No note matches one of the two names.", step1: "direct", stepN: "{n} steps away", spaceK: "Space",
+   124	      keys: { general: "Everywhere", palette: "Command bar", search: "Search box", graph: "Graph view", esc: "Close, clear, go back", help: "This list",
+   125	        graphH: "Graph view", view: "2D / 3D", dragK: "drag", drag: "Turn (3D) or move (2D)", rdragK: "right-drag", rdrag: "Move sideways",
+   126	        wheelK: "wheel", wheel: "Zoom", orbit: "Turn", zoom: "Zoom", clickK: "click", click: "Fly to a file", dblK: "double-click", open: "Open its note",
+   127	        num: "Fly to a numbered file in the panel", walk: "Walk the selected file's links", back: "Back along your trail", follow: "Follow the selected file",
+   128	        spin: "Turn slowly / stop (pause the tour)", regions: "Previous / next region", tour: "Tour of the regions", impact: "Impact of the selected file",
+   129	        changes: "What changed since the index", labels: "Labels", reset: "Show everything" },
+   130	    },
+   131	    tr: {
+   132	      search: "Not ara ya da soru sor  (/)   ·   komutlar: Ctrl+K", files: "Dosyalar", localGraph: "Yerel graf", depth: "Derinlik",
+   133	      tests: "Testler", dataFiles: "Veri dosyaları", external: "Dış", outline: "Ana hat", graphView: "Graf görünümü",
+   134	      highlight: "Notları vurgula…", labels: "Etiketler", fit: "Sığdır", close: "Kapat", back: "Geri", forward: "İleri",
+   135	      colorBy: "Renk", byFolder: "klasör", byCommunity: "topluluk",
+   136	      editor: "Editör", openIn: "Aç:", noEditor: "editör yok",
+   137	      myNote: "Notum", myNotes: "Notlarım", addNote: "+ Not", edit: "Düzenle", save: "Kaydet", cancel: "Vazgeç",
+   138	      del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder.",
+   139	      nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
+   140	      changedSince: "Değişenler", changedInfo: "indeksten sonra değişti", affectedInfo: "bunları kullanıyor",
+   141	      refreshed: "İndeks güncellendi: sayfa artık onu gösteriyor.", updating: "İndeks güncelleniyor…",
+   142	      staleNote: "Bu dosya indeksten sonra değişti: bağlantılar ve satırlar kaymış olabilir. `verinoda update` onu alır.",
+   143	      ask: "Soruyu cevapla", answerFor: "Cevap", answerMore: "Ayrıca ilgili", answerNone: "Projede bunu cevaplayan bir şey yok.",
+   144	      answerStale: "indeksten sonra değişti (satırlar kaymış olabilir):", answerExp: "ayrıca arandı",
+   145	      impact: "Etki", impactTitle: "Etkilenebilecekler", impactNone: "Projede bunu kullanan yok.",
+   146	      impactDepth: "bağlantı geri", impactStop: "şurada durdu:", impactTests: "testlerde", withTests: "testlerle",
+   147	      pathBtn: "Yol…", pathTo: "Ulaşılacak notu ara…", pathNone: "Aralarında çağrı, import ya da başvuru zinciri yok.",
+   148	      pathBack: "(ters yönde: hedef bu nota ulaşıyor)", pathTitle: "Yol", close2: "kapat",
+   149	      noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
+   150	      theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
+   151	      searchOffline: "Dosya ya da sembol ara  (/)   ·   komutlar: Ctrl+K",
+   152	      offlineHome: "Dışa aktarılmış görünüm: graf ve her dosyanın notu, kod olmadan; projede `verinoda ui` her notu koduyla gösterir. Dışa aktarım",
+   153	      offlineCode: "kod dışa aktarılan dosyada yok; `verinoda ui` gösterir",
+   154	      offlineMissing: "Bu not dışa aktarılan dosyada yok (graf ve dosya notları var); `verinoda ui` her notu gösterir.",
+   155	      notes: "not", filesN: "dosya", links: "bağlantı", dataNotes: "veri notu", hubs: "En çok bağlantılı",
+   156	      welcome: "Projenin her sembolü, dosyası ve veri dosyası bir not. Yukarıdan ara, dosyalara göz at ya da graf görünümünü aç.",
+   157	      lines: "satır", line: "satır", more: "daha", moreLines: "satır daha var", noResults: "Eşleşen not yok.",
+   158	      inferred: "çıkarım: bağlantı kodda açıkça yazmıyor, araç türetti", loading: "Yükleniyor…",
+   159	      noIndex: "Bu projenin henüz indeksi yok: içinde `verinoda scan .` çalıştırıp sayfayı yenileyin.",
+   160	      shown: "gösterilen", hidden: "gizli (en az bağlantılı)", test: "test", defined: "tanımı",
+   161	      sec: {
+   162	        defined_in: "Tanımlandığı yer", members: "Üyeler", calls: "Çağırdıkları", called_by: "Çağıranlar",
+   163	        extends: "Genişlettiği / uyguladığı", extended_by: "Alt sınıflar / uygulamalar", imports: "İçe aktardıkları",
+   164	        imported_by: "İçe aktaranlar", references: "Başvurdukları", referenced_by: "Başvuranlar",
+   165	        names_data: "Adlandırdığı kaynaklar", named_by: "Adlandıranlar", other_out: "Diğer bağlantılar",
+   166	        other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
+   167	        myNotes: "Notlarım", answerMore: "Ayrıca ilgili",
+   168	      },
+   169	      kind: {
+   170	        class: "sınıf", method: "metot", function: "fonksiyon", file: "dosya", doc: "belge", section: "bölüm",
+   171	        data: "veri dosyası", symbol: "sembol", external: "dış", claim: "iddia",
+   172	      },
+   173	      why: { name: "ad", "name starts with": "ad böyle başlıyor", "name contains": "adında geçiyor", path: "yolunda geçiyor", question: "soruya göre" },
+   174	      legendTitle: "tıkla: gizle ya da göster · çift tıkla: bu bölgeye uç", mode3dTitle: "Grafı üç boyutlu göster (V)", tour: "Tur", tourTitle: "Projenin bölgelerinde rehberli tur (T)",
+   175	      keysTitle: "Klavye kısayolları",
+   176	      palHint: "odak X · bölge X · etki X · yol A ile B · tur · ya da bir soru sor",
+   177	      palFoot: "↑↓ seç · ↵ çalıştır · Tab tamamla · Esc kapat",
+   178	      hint3d: "3D: sürükleyerek döndür, tekerlekle yakınlaş, bir dosyaya tıkla ve ona uç. Ctrl+K komutları, ? bütün kısayolları gösterir.",
+   179	      hudOpen: "Aç", hudFollow: "İzle", hudUnfollow: "İzlemeyi bırak", hudWalk: "Sıradaki bağlantı", hudWalkMore: "N hepsini tek tek gezer",
+   180	      hudLinked: "Bağlı dosyalar", hudRegionTitle: "Bu bölgeye uç", hudInOut: "gelen · giden bağlantı", following: "izleniyor",
+   181	      walkAt: "{name} ile bağlantılı {n} dosyanın {i}. (N / Shift+N)", hudTop: "Burada en çok bağlantılı", hudAll: "Hepsi",
+   182	      prevRegion: "Önceki", nextRegion: "Sonraki", tourResume: "Sürdür", tourPause: "Duraklat", tourAt: "Tur: {n} bölgenin {i}.",
+   183	      tourDone: "Tur bitti: projenin tamamı yeniden karşında.",
+   184	      say: {
+   185	        data: "Bir veri dosyası: kod onu kaynak kimliğiyle anıyor.",
+   186	        docOut: "{name} projenin {outs} dosyasından söz ediyor.", docIn: "{ins} dosya {name} belgesinden söz ediyor.",
+   187	        docBoth: "{name} projenin {outs} dosyasından söz ediyor, {ins} dosya da ondan söz ediyor.",
+   188	        both: "{name}: {ins} dosya onu kullanıyor, o {outs} dosyayı kullanıyor.",
+   189	        used: "{name}: {ins} dosya onu kullanıyor, kendisi projenin hiçbir dosyasını kullanmıyor: geri kalanın dayandığı bir parça.",
+   190	        uses: "{name}: {outs} dosyayı kullanıyor, onu kullanan yok: bir giriş noktası, betik ya da test.",
+   191	        alone: "{name} başka dosyalara bağlı değil.",
+   192	        region: "{name}: {n} dosya, aralarında {links} bağlantı.",
+   193	        talks: "En çok birlikte çalıştığı: {list}.",
+   194	        island: "Başka bölgelerle bağlantısı yok.",
+   195	        impact: "{name} değişirse {files} dosyada {n} not etkilenebilir (en çok üç bağlantı geri).",
+   196	      },
+   197	      verb: { focus: "Uç", open: "Aç" },
+   198	      cmd: { graph: "Graf görünümünü aç", to3d: "Grafı 3D göster", to2d: "Grafı düz (2D) göster", tour: "Projenin bölgelerinde tur at",
+   199	        changes: "İndeksten sonra değişenleri göster", fit: "Hepsini göster", home: "Başlangıç sayfası", lang: "English" },
+   200	      pal: { commands: "Komutlar", ask: "Soru", notes: "Notlar", regions: "Bölgeler", try: "Dene" },
+   201	      ex: { focus: "3D'de bir nota uç", region: "projenin bir bölümüne odaklan", impact: "bir değişiklik neyi etkileyebilir",
+   202	        path: "iki not nasıl bağlı: yol A ile B", open: "bir notu oku", ask: "koddan cevaplanan bir soru" },
+   203	      palNoMatch: "İki addan biriyle eşleşen not yok.", step1: "doğrudan", stepN: "{n} adım öte", spaceK: "Boşluk",
+   204	      keys: { general: "Her yerde", palette: "Komut çubuğu", search: "Arama kutusu", graph: "Graf görünümü", esc: "Kapat, temizle, geri dön", help: "Bu liste",
+   205	        graphH: "Graf görünümü", view: "2D / 3D", dragK: "sürükle", drag: "Döndür (3D) ya da kaydır (2D)", rdragK: "sağ sürükle", rdrag: "Yana kaydır",
+   206	        wheelK: "tekerlek", wheel: "Yakınlaş", orbit: "Döndür", zoom: "Yakınlaş", clickK: "tıkla", click: "Dosyaya uç", dblK: "çift tık", open: "Notunu aç",
+   207	        num: "Paneldeki numaralı dosyaya uç", walk: "Seçili dosyanın bağlantılarını gez", back: "İzinden geri dön", follow: "Seçili dosyayı izle",
+   208	        spin: "Yavaşça döndür / durdur (turu duraklat)", regions: "Önceki / sonraki bölge", tour: "Bölgelerde tur", impact: "Seçili dosyanın etkisi",
+   209	        changes: "İndeksten sonra değişenler", labels: "Etiketler", reset: "Hepsini göster" },
+   210	    },
+   211	  };
+   212	  let lang = store.get("vn.lang", (navigator.language || "").toLowerCase().startsWith("tr") ? "tr" : "en");
+   213	  const t = (key) => key.split(".").reduce((o, k) => (o && o[k] !== undefined ? o[k] : null), I18N[lang]) ?? key;
+   214	  function applyI18n() {
+   215	    document.documentElement.lang = lang;
+   216	    for (const e of document.querySelectorAll("[data-i18n]")) e.textContent = t(e.dataset.i18n);
+   217	    for (const e of document.querySelectorAll("[data-i18n-placeholder]")) e.placeholder = t(e.dataset.i18nPlaceholder);
+   218	    for (const e of document.querySelectorAll("[data-i18n-title]")) e.title = t(e.dataset.i18nTitle);
+   219	    $("#btn-lang").textContent = lang === "tr" ? "EN" : "TR";
+   220	  }
+   221	
+   222	  // -- theme ---------------------------------------------------------------------------------
+   223	  let theme = store.get("vn.theme", window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+   224	  const colors = {};
+   225	  function applyTheme() {
+   226	    document.documentElement.dataset.theme = theme;
+   227	    const cs = getComputedStyle(document.documentElement);
+   228	    for (const k of ["bg", "text", "muted", "faint", "accent", "data", "border"]) colors[k] = cs.getPropertyValue("--" + k).trim();
+   229	    for (const g of graphs) g.dirty = true, g.kick();
+   230	    if (G3) { G3.dirty = true; G3.kick(); }
+   231	  }
+   232	
+   233	  // -- code highlighting (a light tokenizer: comments, strings, numbers, keywords, calls) --------
+   234	  const KEYWORDS = {
+   235	    python: "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield self",

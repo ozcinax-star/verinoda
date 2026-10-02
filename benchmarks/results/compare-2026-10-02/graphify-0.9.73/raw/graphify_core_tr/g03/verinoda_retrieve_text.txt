@@ -1,0 +1,92 @@
+expanded: query log->querylog, ortam degiskenleri->env, ortam degiskenleri->environ (+5 more)
+## graphify/querylog.py:43-80 log_query
+  doc: Append one JSONL record to the query log. Never raises.
+  calls: _log_path@55, nodes_from_result@59, _log_responses@74
+  called by: dispatch_command (graphify/cli.py:1311); test_responses_not_logged_by_default (tests/test_querylog.py:100); test_responses_optin (tests/test_querylog.py:112); test_log_never_raises (tests/test_querylog.py:130); test_log_creates_parent_dirs (tests/test_querylog.py:138); test_nodes_returned_inferred_from_result (tests/test_querylog.py:152); test_explicit_nodes_returned_takes_precedence (tests/test_querylog.py:164); test_kind_mcp_query (tests/test_querylog.py:175) (+5)
+  graphify/querylog.py:43-55
+43 def log_query(
+44     *,
+45     kind: str,
+46     question: str,
+47     corpus: str,
+48     result: str | None = None,
+49     nodes_returned: int | None = None,
+50     duration_ms: float | None = None,
+51     **extra: Any,
+52 ) -> None:
+53     """Append one JSONL record to the query log. Never raises."""
+54     try:
+55         path = _log_path()
+  graphify/querylog.py:72-80
+72         if v is not None:
+73             rec[k] = v
+74     if result is not None and _log_responses():
+75         rec["response"] = result
+76     path.parent.mkdir(parents=True, exist_ok=True)
+77     with path.open("a", encoding="utf-8") as fh:
+78         fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+79 except Exception:
+80     pass
+## graphify/querylog.py:15-31 _log_path
+  called by: log_query (graphify/querylog.py:55); test_query_log_off_by_default (tests/test_querylog.py:193); test_query_log_enabled_by_explicit_flag (tests/test_querylog.py:200); test_query_log_enabled_by_explicit_path (tests/test_querylog.py:207); test_query_log_disable_wins (tests/test_querylog.py:215)
+15 def _log_path() -> Path | None:
+16     # Opt-in only (#1797). The log records every query/path/explain question and
+17     # corpus path (and full responses if GRAPHIFY_QUERY_LOG_RESPONSES) in a
+18     # plaintext file under ~/.cache — outside any repo's .gitignore/retention. A
+19     # default-on record of proprietary queries contradicts graphify's on-device,
+20     # no-telemetry posture, so it is OFF unless explicitly enabled:
+21     #   GRAPHIFY_QUERY_LOG=<path>   log to that path, or
+22     #   GRAPHIFY_QUERY_LOG_ENABLE=1 log to ~/.cache/graphify-queries.log.
+23     # GRAPHIFY_QUERY_LOG_DISABLE=1 still forces it off (back-compat, wins).
+24     if os.environ.get("GRAPHIFY_QUERY_LOG_DISABLE", "").lower() in ("1", "true", "yes"):
+25         return None
+26     override = os.environ.get("GRAPHIFY_QUERY_LOG", "").strip()
+27     if override:
+28         return Path(override).expanduser()
+29     if os.environ.get("GRAPHIFY_QUERY_LOG_ENABLE", "").lower() in ("1", "true", "yes"):
+30         return Path.home() / ".cache" / "graphify-queries.log"
+31     return None
+## tests/test_querylog.py:190-193 test_query_log_off_by_default
+  calls: _clear_log_env@192, _log_path@193
+190 def test_query_log_off_by_default(monkeypatch):
+191     from graphify.querylog import _log_path
+192     _clear_log_env(monkeypatch)
+193     assert _log_path() is None
+## tests/test_querylog.py:196-200 test_query_log_enabled_by_explicit_flag
+196 def test_query_log_enabled_by_explicit_flag(monkeypatch):
+197     from graphify.querylog import _log_path
+198     _clear_log_env(monkeypatch)
+199     monkeypatch.setenv("GRAPHIFY_QUERY_LOG_ENABLE", "1")
+200     assert str(_log_path()).endswith("graphify-queries.log")
+## tests/test_querylog.py:210-215 test_query_log_disable_wins
+210 def test_query_log_disable_wins(monkeypatch):
+211     from graphify.querylog import _log_path
+212     _clear_log_env(monkeypatch)
+213     monkeypatch.setenv("GRAPHIFY_QUERY_LOG_ENABLE", "1")
+214     monkeypatch.setenv("GRAPHIFY_QUERY_LOG_DISABLE", "1")
+215     assert _log_path() is None
+## tests/test_querylog.py:203-207 test_query_log_enabled_by_explicit_path
+203 def test_query_log_enabled_by_explicit_path(monkeypatch, tmp_path):
+204     from graphify.querylog import _log_path
+205     _clear_log_env(monkeypatch)
+206     monkeypatch.setenv("GRAPHIFY_QUERY_LOG", str(tmp_path / "q.log"))
+207     assert _log_path() == tmp_path / "q.log"
+## tests/test_querylog.py:185-187 _clear_log_env
+185 def _clear_log_env(monkeypatch):
+186     for k in ("GRAPHIFY_QUERY_LOG", "GRAPHIFY_QUERY_LOG_ENABLE", "GRAPHIFY_QUERY_LOG_DISABLE"):
+187         monkeypatch.delenv(k, raising=False)
+graphify/querylog.py:34-35 def _log_responses() -> bool
+tests/test_querylog.py:74-81 def test_disable_env(tmp_path, monkeypatch)
+tests/test_querylog.py:218-223 def test_log_query_writes_nothing_by_default(monkeypatch, tmp_path)
+tests/test_querylog.py:84-91 def test_disable_env_true(tmp_path, monkeypatch)
+graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+tests/test_querylog.py:56-67 def test_log_query_appends(tmp_path, monkeypatch)
+tests/test_querylog.py:35-53 def test_log_query_writes_jsonl(tmp_path, monkeypatch)
+tests/test_querylog.py:170-178 def test_kind_mcp_query(tmp_path, monkeypatch)
+tests/test_querylog.py:133-140 def test_log_creates_parent_dirs(tmp_path, monkeypatch)
+tests/test_querylog.py:122-130 def test_log_never_raises(tmp_path, monkeypatch)
+graphify/serve.py:2021-2049 def _tool_query_graph(arguments: dict) -> str
+tests/test_querylog.py:106-115 def test_responses_optin(tmp_path, monkeypatch)
+tests/test_querylog.py:94-103 def test_responses_not_logged_by_default(tmp_path, monkeypatch)
+… 1174 more candidates not shown: tests/test_querylog.py:147-156 def test_nodes_returned_inferred_from_result(tmp_path, monkeypatch); tests/test_querylog.py:159-167 def test_explicit_nodes_returned_takes_precedence(tmp_path, monkeypatch); tests/test_querylog.py:31-33 # ---------------------------------------------------------------------------; tests/test_querylog.py:181-183 # -------------------…
+next: verinoda query "…" --max-chars 12000

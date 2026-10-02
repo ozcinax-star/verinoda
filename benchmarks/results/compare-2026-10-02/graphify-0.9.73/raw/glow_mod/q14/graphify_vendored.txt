@@ -1,0 +1,4 @@
+Graph: .verinoda/index/graph.json (198 nodes) | Traversal: BFS depth=3 | Start: ['Wisp', 'glowplugin/Wisp.java'] | Context: call (heuristic) | 2 nodes found
+
+NODE Wisp [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L15 community=glowplugin/Wisp.java]
+NODE glowplugin/Wisp.java [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L1 community=glowplugin/Wisp.java]

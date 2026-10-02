@@ -1,0 +1,91 @@
+analysis ana_f7708f7eaf03, snapshot snp_3b19f61a31fd (commit d9ab50ea14)
+understood as: Understood (rules): q1 [impact] What needs retesting if OrderRepository.save changes?
+plan links: OrderRepository.save -> orders/repository.py:15-20
+q1 [met_with_inference] impact: What needs retesting if OrderRepository.save changes?
+  [strong_inference] A change to `OrderRepository.save` reaches the code that calls it: `place_order` (orders/service.py:22) (uncertain: callers come from the call graph: reflective, dynamic and external callers are not in it)  (clm_84e83a92607f)
+  [weak_inference 0.20] Changing orders/repository.py possibly affects orders/api.py, orders/service.py, tests/test_service.py, docs/adr/0001-sqlite-persistence.md; tests to run: tests/test_service.py {graph_edge:orders_service_place_order -[uses]-> orders_repository_orderrepository; graph_edge:orders_service_place_order -[calls]-> orders_repository_orderrepository_save; graph_edge:tests_test_service_test_empty_order_rejected -[calls]-> orders_repository_orderrepository} (uncertain: dynamic/reflective dependents are missed; a dependent is 'possibly affected', not proven broken)  (clm_954fc4c60fc1)
+context (found on the way; not what answers):
+  [strong_inference] `place_order()` calls `.save()` (orders/service.py:22) {qualifies:static_resolution:orders/service.py:22 dynamic} (uncertain: method call `.save()` at line 22; the receiver's type is not resolved statically; edge derived by verinoda.receiver (type-annotation resolution))  (clm_0b6228cc7edb)
+  [strong_inference] `place_order()` uses `OrderRepository` (orders/service.py:19) (uncertain: orders/service.py:19 names 'OrderRepository', but resolving it to orders/repository.py is INFERRED)  (clm_9257dca25660)
+  [strong_inference] `fetch_order()` uses `OrderRepository` (orders/service.py:25) (uncertain: orders/service.py:25 names 'OrderRepository', but resolving it to orders/repository.py is INFERRED)  (clm_e4d0bfbca673)  [not challenged: claim_limit]
+  [weak_inference 0.30] Test code statically reaches `.save()` from: test_empty_order_rejected(), test_place_and_fetch_roundtrip() {source_code:tests/test_service.py:7; source_code:tests/test_service.py:13; qualifies:source_code:orders/service.py:14} (uncertain: static call reachability, not runtime coverage: a test may stop (raise, return, mock) before it runs this code; tests_early_exit: test_empty_order_rejected expects ValidationError (pytest.raises at tests/test_service.py:14); place_order calls validate_items at orders/service.py:20, which raises ValidationError at orders/service.py:14, before the call toward save at orders/service.py:22 - 'test_empty_order_rej)  (clm_765268482be6)
+  [strong_inference] Data path create_order_handler() -> place_order() -> .save() reaches persistence (orm-write, sql-write) at orders/repository.py:15 {source_code:orders/api.py:18; source_code:orders/service.py:22; source_code:orders/repository.py:17; source_code:orders/repository.py:19} (uncertain: entry point and sink detection are heuristics; at least one hop is INFERRED)  (clm_04553fd519dc)
+  [strong_inference] orders/repository.py:17 touches storage (orm-write, sql-write): "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total) (uncertain: which storage operation a line is comes from a pattern over the source)  (clm_7572914f0e3e)
+  +1 more context claim(s) (--json lists them)
+  +5 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_954fc4c60fc1: strong_inference -> weak_inference  support is only non-verifying evidence: graph_edge; support is only graph edges (EXTRACTED, INFERRED); a graph edge is an extraction, not a 
+critique clm_765268482be6: strong_inference -> weak_inference  test_empty_order_rejected expects ValidationError (pytest.raises at tests/test_service.py:14); place_order calls validate_items at orders/se
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: repositori->repo
+## orders/repository.py:15-20 OrderRepository.save
+  called by: place_order (orders/service.py:22)? <- create_order_handler (orders/api.py:18), test_empty_order_rejected (tests/test_service.py:15), test_place_and_fetch_roundtrip (tests/test_service.py:9)
+15 def save(self, customer: str, total: float) -> int:
+16     cur = self.conn.execute(
+17         "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+18     )
+19     self.conn.commit()
+20     return cur.lastrowid
+## orders/service.py:19-22 place_order
+  calls: validate_items@20, compute_total@21, save@22?
+  called by: create_order_handler (orders/api.py:18); test_empty_order_rejected (tests/test_service.py:15); test_place_and_fetch_roundtrip (tests/test_service.py:9)
+19 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+20     validate_items(items)
+21     total = compute_total(items)
+22     return repo.save(customer, total)
+## orders/repository.py:8-26 OrderRepository
+  called by: get_repo (orders/api.py:12) <- create_order_handler (orders/api.py:18), get_order_handler (orders/api.py:25); test_empty_order_rejected (tests/test_service.py:15); test_place_and_fetch_roundtrip (tests/test_service.py:8)
+ 8 class OrderRepository:
+ 9     def __init__(self, url: str = DATABASE_URL):
+10         self.conn = sqlite3.connect(url)
+11         self.conn.execute(
+12             "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+13         )
+15     def save(self, customer: str, total: float) -> int:
+16         cur = self.conn.execute(
+17             "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+18         )
+19         self.conn.commit()
+20         return cur.lastrowid
+22     def get(self, order_id: int):
+23         row = self.conn.execute(
+24             "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+25         ).fetchone()
+26         return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+## orders/api.py:9-13 get_repo
+  called by: create_order_handler (orders/api.py:18); get_order_handler (orders/api.py:25)
+ 9 def get_repo() -> OrderRepository:
+10     global _repo
+11     if _repo is None:
+12         _repo = OrderRepository()
+13     return _repo
+## orders/service.py:25-26 fetch_order
+  called by: get_order_handler (orders/api.py:25); test_place_and_fetch_roundtrip (tests/test_service.py:10)
+25 def fetch_order(repo: OrderRepository, order_id: int):
+26     return repo.get(order_id)
+## tests/test_service.py:7-10 test_place_and_fetch_roundtrip
+ 7 def test_place_and_fetch_roundtrip():
+ 8     repo = OrderRepository(":memory:")
+ 9     oid = place_order(repo, "ada", [{"price": 5.0, "qty": 1}])
+10     assert fetch_order(repo, oid)["total"] == 5.0
+## tests/test_service.py:13-15 test_empty_order_rejected
+13 def test_empty_order_rejected():
+14     with pytest.raises(ValidationError):
+15         place_order(OrderRepository(":memory:"), "ada", [])
+orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+docs/adr/0001-sqlite-persistence.md:1-7 # ADR 0001: SQLite for order persistence
+orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+orders/service.py:8-9 class ValidationError(ValueError)
+orders/api.py:6-6 _repo = None
+orders/pricing.py:11-15 def apply_discount(subtotal: float) -> float
+orders/service.py:1-1 """Business logic between the HTTP layer and the repository."""
+README.md:1-5 # orders_app
+tests/test_pricing.py:12-13 def test_compute_total()
+tests/test_pricing.py:4-5 def test_discount_applies_above_threshold()
+tests/test_pricing.py:8-9 def test_no_discount_below_threshold()
+pyproject.toml:1-8 [project] name = "orders-app" version = "0.1.0" requires-python = ">=3.10" [tool.pytest.ini_options] testpaths = ["test…
+orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+orders/__init__.py:1-1 """Tiny order service used as the Verinoda end-to-end example."""
+orders/config.py:10-15 def load_settings() -> dict
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)

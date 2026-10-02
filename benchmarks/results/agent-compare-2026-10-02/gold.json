@@ -1,0 +1,3978 @@
+{
+ "glow_mod/q01": [
+  {
+   "id": "q01.command",
+   "fact": "GlowCommands.wisp (/glow wisp) calls Wisp.spawn at the command source's position (src/main/java/com/example/glowmod/command/GlowCommands.java:29)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:29",
+    "contains": "Wisp.spawn(source.getWorld()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/command/GlowCommands.java:27-36"
+    },
+    {
+     "text": "Wisp.spawn(source.getWorld()"
+    }
+   ]
+  },
+  {
+   "id": "q01.lantern",
+   "fact": "the UseBlockCallback registered by LanternEvents.etkinlestir calls Wisp.spawn above a soul lantern (src/main/java/com/example/glowmod/event/LanternEvents.java:30)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:30",
+    "contains": "Wisp.spawn((ServerWorld) world, pos.up())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:18-34"
+    },
+    {
+     "text": "Wisp.spawn((ServerWorld) world, pos.up())"
+    }
+   ]
+  },
+  {
+   "id": "q01.ritual",
+   "fact": "Ritual.baslat calls Wisp.spawn once per ritual wisp around the altar (src/main/java/com/example/glowmod/ritual/Ritual.java:29)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:29",
+    "contains": "Wisp.spawn(world, at)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/ritual/Ritual.java:21-31"
+    },
+    {
+     "text": "Wisp.spawn(world, at)"
+    }
+   ]
+  },
+  {
+   "id": "q01.chunk",
+   "fact": "WispSpawner.onChunkLoad (ServerChunkEvents.CHUNK_LOAD hook) calls Wisp.spawn on a swamp surface (src/main/java/com/example/glowmod/world/WispSpawner.java:31)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/world/WispSpawner.java:31",
+    "contains": "Wisp.spawn(world, top.up())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/world/WispSpawner.java:22-33"
+    },
+    {
+     "text": "Wisp.spawn(world, top.up())"
+    }
+   ]
+  },
+  {
+   "id": "q01.network",
+   "fact": "ServerNetworking.onSummonWisp (server handler of SummonWispPayload) calls Wisp.spawn (src/main/java/com/example/glowmod/network/ServerNetworking.java:29)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29",
+    "contains": "Wisp.spawn(player.getServerWorld()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30"
+    },
+    {
+     "text": "Wisp.spawn(player.getServerWorld()"
+    }
+   ]
+  },
+  {
+   "id": "q01.gametest",
+   "fact": "the game test WispTests.wispAppearsWhereAsked calls Wisp.spawn (src/gametest/java/com/example/glowmod/test/WispTests.java:16)",
+   "source": {
+    "at": "src/gametest/java/com/example/glowmod/test/WispTests.java:16",
+    "contains": "Wisp.spawn(context.getWorld()"
+   },
+   "match_any": [
+    {
+     "loc": "src/gametest/java/com/example/glowmod/test/WispTests.java:15-20"
+    },
+    {
+     "text": "wispAppearsWhereAsked"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q02": [
+  {
+   "id": "q02.init",
+   "fact": "GlowMod.onInitialize calls GlowConfig.load first, at mod start (src/main/java/com/example/glowmod/GlowMod.java:21)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/GlowMod.java:21",
+    "contains": "GlowConfig.load();"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/GlowMod.java:20-30"
+    }
+   ]
+  },
+  {
+   "id": "q02.reload",
+   "fact": "GlowCommands.reload (/glow reload) calls GlowConfig.load again (src/main/java/com/example/glowmod/command/GlowCommands.java:45)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:45",
+    "contains": "GlowConfig.load();"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/command/GlowCommands.java:44-48"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q03": [
+  {
+   "id": "q03.ondeath",
+   "fact": "Wisp.onDeath runs the data-pack function by its bare name: Datapack.run(serverWorld, getPos(), \"wisp_death\") (src/main/java/com/example/glowmod/entity/Wisp.java:42)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/entity/Wisp.java:42",
+    "contains": "Datapack.run(serverWorld, getPos(), \"wisp_death\")"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/entity/Wisp.java:38-44"
+    },
+    {
+     "text": "Datapack.run(serverWorld, getPos(), \"wisp_death\")"
+    }
+   ]
+  },
+  {
+   "id": "q03.namespace",
+   "fact": "Datapack.run prepends the mod namespace, so \"wisp_death\" is glowmod:wisp_death = data/glowmod/function/wisp_death.mcfunction (src/main/java/com/example/glowmod/util/Datapack.java:16-18)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/util/Datapack.java:17",
+    "contains": "Identifier.of(GlowMod.MOD_ID, name)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/util/Datapack.java:16-18"
+    },
+    {
+     "text": "execute(world, pos, Identifier.of(GlowMod.MOD_ID, name))"
+    }
+   ]
+  },
+  {
+   "id": "q03.heart",
+   "fact": "wisp_death.mcfunction summons a glowmod:wisp_heart item named \"Wisp Heart\" at the death spot (src/main/resources/data/glowmod/function/wisp_death.mcfunction:4; identical copy datapack/data/glowmod/function/wisp_death.mcfunction:4)",
+   "source": {
+    "at": "src/main/resources/data/glowmod/function/wisp_death.mcfunction:4",
+    "contains": "id:\"glowmod:wisp_heart\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/glowmod/function/wisp_death.mcfunction:1-5"
+    },
+    {
+     "loc": "datapack/data/glowmod/function/wisp_death.mcfunction:1-5"
+    }
+   ]
+  },
+  {
+   "id": "q03.loot",
+   "fact": "the wisp's entity loot table drops 0-2 glowmod:ember_shard (src/main/resources/data/glowmod/loot_table/entities/wisp.json:9-13)",
+   "source": {
+    "at": "src/main/resources/data/glowmod/loot_table/entities/wisp.json:9",
+    "contains": "\"glowmod:ember_shard\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/glowmod/loot_table/entities/wisp.json:1-20"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q04": [
+  {
+   "id": "q04.baslat",
+   "fact": "Ritual.baslat runs it by its full id: Datapack.runQualified(..., \"glowmod:ritual/start\") (src/main/java/com/example/glowmod/ritual/Ritual.java:22)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:22",
+    "contains": "\"glowmod:ritual/start\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/ritual/Ritual.java:22"
+    },
+    {
+     "text": "runQualified(world, Vec3d.ofBottomCenter(altar)"
+    }
+   ]
+  },
+  {
+   "id": "q04.helper",
+   "fact": "Datapack.runQualified parses the full id with Identifier.of(id) (src/main/java/com/example/glowmod/util/Datapack.java:21-23)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/util/Datapack.java:22",
+    "contains": "execute(world, pos, Identifier.of(id))"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/util/Datapack.java:21-23"
+    },
+    {
+     "text": "execute(world, pos, Identifier.of(id))"
+    }
+   ]
+  },
+  {
+   "id": "q04.execute",
+   "fact": "Datapack.execute looks the function up and runs it through the server's command function manager at the altar position (src/main/java/com/example/glowmod/util/Datapack.java:25-35)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/util/Datapack.java:33",
+    "contains": "getCommandFunctionManager().execute(function, source)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/util/Datapack.java:25-35"
+    },
+    {
+     "text": "getCommandFunctionManager().execute(function, source)"
+    }
+   ]
+  },
+  {
+   "id": "q04.command",
+   "fact": "the /glow ritual command reaches it: GlowCommands.ritual calls Ritual.baslat (src/main/java/com/example/glowmod/command/GlowCommands.java:40)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/command/GlowCommands.java:40",
+    "contains": "Ritual.baslat("
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/command/GlowCommands.java:38-42"
+    },
+    {
+     "text": "Ritual.baslat(source.getWorld()"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q05": [
+  {
+   "id": "q05.start",
+   "fact": "ritual/start.mcfunction calls it once with `function glowmod:ritual/tick` (src/main/resources/data/glowmod/function/ritual/start.mcfunction:7)",
+   "source": {
+    "at": "src/main/resources/data/glowmod/function/ritual/start.mcfunction:7",
+    "contains": "function glowmod:ritual/tick"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/glowmod/function/ritual/start.mcfunction:7"
+    }
+   ]
+  },
+  {
+   "id": "q05.self",
+   "fact": "ritual/tick.mcfunction reschedules itself every tick while an altar marker exists (src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5)",
+   "source": {
+    "at": "src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5",
+    "contains": "schedule function glowmod:ritual/tick 1t"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/glowmod/function/ritual/tick.mcfunction:5"
+    },
+    {
+     "text": "schedule function glowmod:ritual/tick 1t"
+    }
+   ]
+  },
+  {
+   "id": "q05.java",
+   "fact": "indirectly from Java: Ritual.baslat runs glowmod:ritual/start (src/main/java/com/example/glowmod/ritual/Ritual.java:22)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/ritual/Ritual.java:22",
+    "contains": "\"glowmod:ritual/start\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/ritual/Ritual.java:22"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q06": [
+  {
+   "id": "q06.load",
+   "fact": "GlowConfig.load reads glowmod.yml from the Fabric config directory (src/main/java/com/example/glowmod/config/GlowConfig.java:26-42)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:27",
+    "contains": "getConfigDir().resolve(FILE_NAME)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:26-42"
+    },
+    {
+     "text": "getConfigDir().resolve(FILE_NAME)"
+    }
+   ]
+  },
+  {
+   "id": "q06.copy",
+   "fact": "when the file does not exist yet, the default is copied out of the mod jar (src/main/java/com/example/glowmod/config/GlowConfig.java:29-33)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:30",
+    "contains": "getResourceAsStream(\"/\" + FILE_NAME)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:29-33"
+    },
+    {
+     "text": "getResourceAsStream(\"/\" + FILE_NAME)"
+    }
+   ]
+  },
+  {
+   "id": "q06.default_file",
+   "fact": "the bundled default file is src/main/resources/glowmod.yml (src/main/resources/glowmod.yml:1-18)",
+   "source": {
+    "at": "src/main/resources/glowmod.yml:1",
+    "contains": "Copied to config/glowmod.yml on first start"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/glowmod.yml:1-18"
+    }
+   ]
+  },
+  {
+   "id": "q06.fallback",
+   "fact": "missing keys and an unreadable file fall back to DEFAULTS = new GlowConfig(4, 0.02, 8, 40, 8) (src/main/java/com/example/glowmod/config/GlowConfig.java:18)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:18",
+    "contains": "new GlowConfig(4, 0.02, 8, 40, 8)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:18"
+    },
+    {
+     "text": "new GlowConfig(4, 0.02, 8, 40, 8)"
+    }
+   ]
+  },
+  {
+   "id": "q06.caller",
+   "fact": "it is loaded at mod start by GlowMod.onInitialize (src/main/java/com/example/glowmod/GlowMod.java:21)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/GlowMod.java:21",
+    "contains": "GlowConfig.load();"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/GlowMod.java:21"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q07": [
+  {
+   "id": "q07.yml",
+   "fact": "repair.blocks_per_tick: 8 in the default config (src/main/resources/glowmod.yml:11-12)",
+   "source": {
+    "at": "src/main/resources/glowmod.yml:12",
+    "contains": "blocks_per_tick: 8"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/glowmod.yml:11-12"
+    },
+    {
+     "text": "blocks_per_tick: 8"
+    }
+   ]
+  },
+  {
+   "id": "q07.parse",
+   "fact": "GlowConfig.parse reads repair.blocks_per_tick, default 8 (src/main/java/com/example/glowmod/config/GlowConfig.java:51)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/config/GlowConfig.java:51",
+    "contains": "\"blocks_per_tick\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/config/GlowConfig.java:51"
+    },
+    {
+     "text": "number(repair, \"blocks_per_tick\""
+    }
+   ]
+  },
+  {
+   "id": "q07.use",
+   "fact": "RepairScheduler.tick uses it as the per-tick repair budget (src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:34",
+    "contains": "GlowConfig.get().blocksPerTick()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39"
+    },
+    {
+     "text": "GlowConfig.get().blocksPerTick()"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q08": [
+  {
+   "id": "q08.file",
+   "fact": "a shaped crafting recipe in src/main/resources/data/glowmod/recipe/lantern_staff.json whose result is glowmod:lantern_staff (src/main/resources/data/glowmod/recipe/lantern_staff.json:14-17)",
+   "source": {
+    "at": "src/main/resources/data/glowmod/recipe/lantern_staff.json:15",
+    "contains": "\"id\": \"glowmod:lantern_staff\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/glowmod/recipe/lantern_staff.json:1-18"
+    }
+   ]
+  },
+  {
+   "id": "q08.keys",
+   "fact": "ingredients: E = glowmod:ember_shard, L = minecraft:soul_lantern, S = minecraft:stick (src/main/resources/data/glowmod/recipe/lantern_staff.json:9-13)",
+   "source": {
+    "at": "src/main/resources/data/glowmod/recipe/lantern_staff.json:10",
+    "contains": "glowmod:ember_shard"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/glowmod/recipe/lantern_staff.json:9-13"
+    },
+    {
+     "all": [
+      "glowmod:ember_shard",
+      "minecraft:soul_lantern",
+      "minecraft:stick"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "q08.pattern",
+   "fact": "pattern \" EL\" / \" SE\" / \"S  \": two ember shards, one soul lantern, two sticks (src/main/resources/data/glowmod/recipe/lantern_staff.json:4-8)",
+   "source": {
+    "at": "src/main/resources/data/glowmod/recipe/lantern_staff.json:5",
+    "contains": "\" EL\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/glowmod/recipe/lantern_staff.json:4-8"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q09": [
+  {
+   "id": "q09.model",
+   "fact": "item model src/main/resources/assets/glowmod/models/item/lantern_staff.json (parent minecraft:item/handheld, texture glowmod:item/lantern_staff)",
+   "source": {
+    "at": "src/main/resources/assets/glowmod/models/item/lantern_staff.json:2",
+    "contains": "minecraft:item/handheld"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/glowmod/models/item/lantern_staff.json:1-6"
+    }
+   ]
+  },
+  {
+   "id": "q09.en",
+   "fact": "English name: \"item.glowmod.lantern_staff\": \"Lantern Staff\" (src/main/resources/assets/glowmod/lang/en_us.json:2)",
+   "source": {
+    "at": "src/main/resources/assets/glowmod/lang/en_us.json:2",
+    "contains": "\"item.glowmod.lantern_staff\": \"Lantern Staff\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/glowmod/lang/en_us.json:2"
+    },
+    {
+     "text": "Lantern Staff"
+    }
+   ]
+  },
+  {
+   "id": "q09.tr",
+   "fact": "Turkish name: \"item.glowmod.lantern_staff\": \"Fener Asası\" (src/main/resources/assets/glowmod/lang/tr_tr.json:2)",
+   "source": {
+    "at": "src/main/resources/assets/glowmod/lang/tr_tr.json:2",
+    "contains": "\"item.glowmod.lantern_staff\": \"Fener Asası\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/glowmod/lang/tr_tr.json:2"
+    },
+    {
+     "text": "Fener Asası"
+    }
+   ]
+  },
+  {
+   "id": "q09.item",
+   "fact": "the item itself is registered as glowmod:lantern_staff in ModItems (src/main/java/com/example/glowmod/item/ModItems.java:13)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/item/ModItems.java:13",
+    "contains": "register(\"lantern_staff\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/item/ModItems.java:13"
+    },
+    {
+     "text": "register(\"lantern_staff\""
+    }
+   ]
+  }
+ ],
+ "glow_mod/q10": [
+  {
+   "id": "q10.key",
+   "fact": "GlowModClient registers the key binding key.glowmod.summon_wisp (G) (src/client/java/com/example/glowmod/client/GlowModClient.java:19-23)",
+   "source": {
+    "at": "src/client/java/com/example/glowmod/client/GlowModClient.java:21",
+    "contains": "\"key.glowmod.summon_wisp\""
+   },
+   "match_any": [
+    {
+     "loc": "src/client/java/com/example/glowmod/client/GlowModClient.java:19-23"
+    }
+   ]
+  },
+  {
+   "id": "q10.send",
+   "fact": "on a key press while looking at a block, onEndTick sends SummonWispPayload(hit.getBlockPos()) (src/client/java/com/example/glowmod/client/GlowModClient.java:28)",
+   "source": {
+    "at": "src/client/java/com/example/glowmod/client/GlowModClient.java:28",
+    "contains": "ClientPlayNetworking.send(new SummonWispPayload("
+   },
+   "match_any": [
+    {
+     "loc": "src/client/java/com/example/glowmod/client/GlowModClient.java:25-31"
+    },
+    {
+     "text": "ClientPlayNetworking.send(new SummonWispPayload(hit.getBlockPos()))"
+    }
+   ]
+  },
+  {
+   "id": "q10.payload",
+   "fact": "SummonWispPayload is a record with id glowmod:summon_wisp carrying a BlockPos (src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-15)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/network/SummonWispPayload.java:13",
+    "contains": "\"summon_wisp\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-15"
+    }
+   ]
+  },
+  {
+   "id": "q10.register",
+   "fact": "ServerNetworking.register registers the C2S payload type and onSummonWisp as its receiver (src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:17",
+    "contains": "registerGlobalReceiver(SummonWispPayload.ID, ServerNetworking::onSummonWisp)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18"
+    },
+    {
+     "text": "ServerNetworking::onSummonWisp"
+    }
+   ]
+  },
+  {
+   "id": "q10.handler",
+   "fact": "onSummonWisp requires the lantern staff in the main hand and a distance within max_summon_distance, then calls Wisp.spawn above the block (src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/network/ServerNetworking.java:29",
+    "contains": "Wisp.spawn(player.getServerWorld(), payload.pos().up())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30"
+    },
+    {
+     "text": "Wisp.spawn(player.getServerWorld()"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q11": [
+  {
+   "id": "q11.hook",
+   "fact": "RepairScheduler.register hooks temizle to ServerLifecycleEvents.SERVER_STOPPING (src/main/java/com/example/glowmod/repair/RepairScheduler.java:25)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:25",
+    "contains": "SERVER_STOPPING.register(RepairScheduler::temizle)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-26"
+    },
+    {
+     "text": "SERVER_STOPPING.register(RepairScheduler::temizle)"
+    }
+   ]
+  },
+  {
+   "id": "q11.restore",
+   "fact": "temizle puts every pending block back at once, without the per-tick budget or the delay (src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-45)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:44",
+    "contains": "p.world().setBlockState(p.pos(), p.state())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:42-45"
+    }
+   ]
+  },
+  {
+   "id": "q11.clear",
+   "fact": "then the queue is emptied (src/main/java/com/example/glowmod/repair/RepairScheduler.java:46)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:46",
+    "contains": "QUEUE.clear()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/repair/RepairScheduler.java:46"
+    },
+    {
+     "text": "QUEUE.clear()"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q12": [
+  {
+   "id": "q12.helper",
+   "fact": "ModItems.register puts each item into Registries.ITEM under glowmod:<name> (src/main/java/com/example/glowmod/item/ModItems.java:20-22)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/item/ModItems.java:21",
+    "contains": "Registry.register(Registries.ITEM, Identifier.of(GlowMod.MOD_ID, name), item)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/item/ModItems.java:20-22"
+    },
+    {
+     "text": "Registries.ITEM"
+    }
+   ]
+  },
+  {
+   "id": "q12.fields",
+   "fact": "the items are the fields LANTERN_STAFF, EMBER_SHARD and WISP_HEART (src/main/java/com/example/glowmod/item/ModItems.java:13-15)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/item/ModItems.java:13",
+    "contains": "LANTERN_STAFF = register(\"lantern_staff\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/item/ModItems.java:13-15"
+    },
+    {
+     "all": [
+      "LANTERN_STAFF",
+      "EMBER_SHARD",
+      "WISP_HEART"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "q12.init",
+   "fact": "GlowMod.onInitialize calls ModItems.initialize, which loads the class and adds the items to creative tabs (src/main/java/com/example/glowmod/GlowMod.java:22)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/GlowMod.java:22",
+    "contains": "ModItems.initialize();"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/GlowMod.java:22"
+    },
+    {
+     "text": "ModItems.initialize()"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q13": [
+  {
+   "id": "q13.check",
+   "fact": "the UseBlockCallback from LanternEvents.etkinlestir reacts only server-side, to the lantern staff in hand on a soul lantern (src/main/java/com/example/glowmod/event/LanternEvents.java:19-26)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:24",
+    "contains": "Blocks.SOUL_LANTERN"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:19-26"
+    }
+   ]
+  },
+  {
+   "id": "q13.spawn",
+   "fact": "a wisp is spawned in the block above the lantern (src/main/java/com/example/glowmod/event/LanternEvents.java:30)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:30",
+    "contains": "Wisp.spawn((ServerWorld) world, pos.up())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:30"
+    },
+    {
+     "text": "Wisp.spawn((ServerWorld) world, pos.up())"
+    }
+   ]
+  },
+  {
+   "id": "q13.cooldown",
+   "fact": "the staff then gets a 100-tick cooldown; during it the click fails (src/main/java/com/example/glowmod/event/LanternEvents.java:12, 27-31)",
+   "source": {
+    "at": "src/main/java/com/example/glowmod/event/LanternEvents.java:31",
+    "contains": "set(ModItems.LANTERN_STAFF, STAFF_COOLDOWN_TICKS)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:27-31"
+    },
+    {
+     "loc": "src/main/java/com/example/glowmod/event/LanternEvents.java:12"
+    },
+    {
+     "text": "STAFF_COOLDOWN_TICKS"
+    }
+   ]
+  }
+ ],
+ "glow_mod/q14": [
+  {
+   "id": "q14.spawn",
+   "fact": "the plugin's Wisp.spawn spawns an Allay named \"Wisp\" and tags it with a persistent wisp key (reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24)",
+   "source": {
+    "at": "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:20",
+    "contains": "EntityType.ALLAY"
+   },
+   "match_any": [
+    {
+     "loc": "reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24"
+    }
+   ]
+  },
+  {
+   "id": "q14.listener",
+   "fact": "WispListener.onInteract calls it when a soul lantern is right-clicked with a blaze rod (reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:19-27)",
+   "source": {
+    "at": "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25",
+    "contains": "Wisp.spawn(plugin, block.getLocation()"
+   },
+   "match_any": [
+    {
+     "loc": "reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:19-27"
+    },
+    {
+     "text": "Wisp.spawn(plugin"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q01": [
+  {
+   "id": "q01.network",
+   "fact": "EmberNetwork.handleStoke, the server handler of StokeForgePayload, calls forge.stoke(player) once the player has that forge's menu open and is within 8 blocks (src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
+    "contains": "forge.stoke(player);"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41"
+    }
+   ]
+  },
+  {
+   "id": "q01.hammer",
+   "fact": "EmberForgeBlock.useItemOn calls forge.stoke(player) when the block is right-clicked with a Forge Hammer, then damages the hammer (src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83",
+    "contains": "forge.stoke(player);"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:77-87"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q02": [
+  {
+   "id": "q02.fuel",
+   "fact": "EmberForgeBlockEntity.serverTick adds a burnt fuel item's heat: HeatMath.addHeat(forge.heat, fuelHeat) (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:82",
+    "contains": "HeatMath.addHeat(forge.heat, fuelHeat)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:78-84"
+    },
+    {
+     "text": "HeatMath.addHeat(forge.heat, fuelHeat)"
+    }
+   ]
+  },
+  {
+   "id": "q02.source",
+   "fact": "serverTick adds 2 heat every 40 game ticks while the block below is in #emberforge:forge_heat_sources (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:86-87)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:87",
+    "contains": "HeatMath.addHeat(forge.heat, 2)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:86-89"
+    },
+    {
+     "text": "HeatMath.addHeat(forge.heat, 2)"
+    }
+   ]
+  },
+  {
+   "id": "q02.stoke",
+   "fact": "EmberForgeBlockEntity.stoke adds stoke_heat: HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get()) (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141",
+    "contains": "HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144"
+    },
+    {
+     "text": "HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get())"
+    }
+   ]
+  },
+  {
+   "id": "q02.overload",
+   "fact": "inside the Kotlin object, the two-argument addHeat calls the three-argument overload with max_heat (src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22)",
+   "source": {
+    "at": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+    "contains": "addHeat(current, amount, EmberConfig.MAX_HEAT.get())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21-22"
+    },
+    {
+     "text": "addHeat(current, amount, EmberConfig.MAX_HEAT.get())"
+    }
+   ]
+  },
+  {
+   "id": "q02.test",
+   "fact": "the JUnit test HeatMathTest.heatStaysBetweenZeroAndTheMaximum calls the three-argument addHeat (src/test/java/net/ashvale/emberforge/HeatMathTest.java:21-25)",
+   "source": {
+    "at": "src/test/java/net/ashvale/emberforge/HeatMathTest.java:23",
+    "contains": "HeatMath.addHeat(190, 40, 200)"
+   },
+   "match_any": [
+    {
+     "loc": "src/test/java/net/ashvale/emberforge/HeatMathTest.java:21-25"
+    },
+    {
+     "text": "heatStaysBetweenZeroAndTheMaximum"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q03": [
+  {
+   "id": "q03.type",
+   "fact": "ModRecipes registers the recipe type \"forging\" in the emberforge RECIPE_TYPES register (src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:18-19)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:19",
+    "contains": "RECIPE_TYPES.register(\"forging\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:18-19"
+    },
+    {
+     "text": "RECIPE_TYPES.register(\"forging\""
+    }
+   ]
+  },
+  {
+   "id": "q03.serializer",
+   "fact": "ModRecipes registers ForgingRecipe.Serializer as the \"forging\" recipe serializer (src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:20-21)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:21",
+    "contains": "RECIPE_SERIALIZERS.register(\"forging\", ForgingRecipe.Serializer::new)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:20-21"
+    },
+    {
+     "text": "RECIPE_SERIALIZERS.register(\"forging\", ForgingRecipe.Serializer::new)"
+    }
+   ]
+  },
+  {
+   "id": "q03.codec",
+   "fact": "ForgingRecipe.Serializer's CODEC reads the JSON fields ingredient, result, forge_time (default 200) and min_heat (default 0) (src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:63-68)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:66",
+    "contains": "optionalFieldOf(\"forge_time\", 200)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:63-68"
+    },
+    {
+     "text": "optionalFieldOf(\"forge_time\", 200)"
+    }
+   ]
+  },
+  {
+   "id": "q03.lookup",
+   "fact": "EmberForgeBlockEntity.serverTick looks the input up with getRecipeFor(ModRecipes.FORGING_TYPE.get(), new SingleRecipeInput(input), level) and forges with the match (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:91-101)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:93",
+    "contains": "getRecipeFor(ModRecipes.FORGING_TYPE.get()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:91-101"
+    },
+    {
+     "text": "getRecipeFor(ModRecipes.FORGING_TYPE.get()"
+    }
+   ]
+  },
+  {
+   "id": "q03.ingots",
+   "fact": "data recipe cinder_ingots_from_forging.json is of this type: #emberforge:cinder_ores -> 2 emberforge:cinder_ingot, forge_time 160, min_heat 40 (src/main/resources/data/emberforge/recipe/cinder_ingots_from_forging.json:1-12)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/recipe/cinder_ingots_from_forging.json:2",
+    "contains": "\"type\": \"emberforge:forging\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/recipe/cinder_ingots_from_forging.json:1-12"
+    }
+   ]
+  },
+  {
+   "id": "q03.hammer",
+   "fact": "data recipe forge_hammer.json is of this type: emberforge:cinder_ingot -> emberforge:forge_hammer, forge_time 400, min_heat 120 (src/main/resources/data/emberforge/recipe/forge_hammer.json:1-12)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/recipe/forge_hammer.json:2",
+    "contains": "\"type\": \"emberforge:forging\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/recipe/forge_hammer.json:1-12"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q04": [
+  {
+   "id": "q04.file",
+   "fact": "the item tag file src/main/resources/data/emberforge/tags/item/forge_fuels.json lists minecraft:coal, minecraft:charcoal and minecraft:blaze_rod (src/main/resources/data/emberforge/tags/item/forge_fuels.json:3-7)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/tags/item/forge_fuels.json:5",
+    "contains": "minecraft:charcoal"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/tags/item/forge_fuels.json:1-8"
+    },
+    {
+     "all": [
+      "minecraft:coal",
+      "minecraft:charcoal",
+      "minecraft:blaze_rod"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "q04.key",
+   "fact": "the Java TagKey is ModTags.FORGE_FUELS = itemTag(\"forge_fuels\"), built with ResourceLocation.fromNamespaceAndPath(EmberForge.MOD_ID, name) (src/main/java/net/ashvale/emberforge/registry/ModTags.java:12, 16-18)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModTags.java:12",
+    "contains": "itemTag(\"forge_fuels\")"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModTags.java:11-18"
+    },
+    {
+     "text": "itemTag(\"forge_fuels\")"
+    }
+   ]
+  },
+  {
+   "id": "q04.heat",
+   "fact": "Kotlin HeatMath.heatForFuel returns 0 unless the stack is in ModTags.FORGE_FUELS, otherwise heat_per_fuel (double for a blaze rod) (src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:15-19)",
+   "source": {
+    "at": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:16",
+    "contains": "ModTags.FORGE_FUELS"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:13-19"
+    },
+    {
+     "text": "stack.`is`(ModTags.FORGE_FUELS)"
+    }
+   ]
+  },
+  {
+   "id": "q04.slot",
+   "fact": "EmberForgeMenu's fuel slot only accepts stacks in ModTags.FORGE_FUELS (src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:43-48)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:46",
+    "contains": "stack.is(ModTags.FORGE_FUELS)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:43-48"
+    },
+    {
+     "text": "return stack.is(ModTags.FORGE_FUELS)"
+    }
+   ]
+  },
+  {
+   "id": "q04.tick",
+   "fact": "through HeatMath.heatForFuel, EmberForgeBlockEntity.serverTick burns the fuel slot only when the item is in the tag (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:78-84)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:79",
+    "contains": "HeatMath.heatForFuel(fuel)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:78-84"
+    },
+    {
+     "text": "HeatMath.heatForFuel(fuel)"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q05": [
+  {
+   "id": "q05.modifier",
+   "fact": "the NeoForge biome modifier neoforge/biome_modifier/add_cinder_ore.json (neoforge:add_features) adds the placed feature emberforge:ore_cinder to the biomes in #emberforge:has_cinder_ore at step underground_ores (src/main/resources/data/emberforge/neoforge/biome_modifier/add_cinder_ore.json:2-5)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/neoforge/biome_modifier/add_cinder_ore.json:3",
+    "contains": "\"#emberforge:has_cinder_ore\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/neoforge/biome_modifier/add_cinder_ore.json:1-6"
+    }
+   ]
+  },
+  {
+   "id": "q05.biomes",
+   "fact": "the biome tag has_cinder_ore lists #minecraft:is_badlands, minecraft:stony_peaks and minecraft:windswept_gravelly_hills (src/main/resources/data/emberforge/tags/worldgen/biome/has_cinder_ore.json:3-7)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/tags/worldgen/biome/has_cinder_ore.json:5",
+    "contains": "minecraft:stony_peaks"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/tags/worldgen/biome/has_cinder_ore.json:1-8"
+    },
+    {
+     "all": [
+      "#minecraft:is_badlands",
+      "minecraft:stony_peaks",
+      "minecraft:windswept_gravelly_hills"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "q05.placed",
+   "fact": "the placed feature emberforge:ore_cinder tries 6 times per chunk (count 6, in_square), at heights 0 to 64 (trapezoid), filtered by biome (src/main/resources/data/emberforge/worldgen/placed_feature/ore_cinder.json:2-26)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/worldgen/placed_feature/ore_cinder.json:6",
+    "contains": "\"count\": 6"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/worldgen/placed_feature/ore_cinder.json:1-27"
+    }
+   ]
+  },
+  {
+   "id": "q05.configured",
+   "fact": "it places the configured feature emberforge:ore_cinder: a minecraft:ore vein of size 7 of emberforge:cinder_ore replacing #minecraft:stone_ore_replaceables, 25% discarded on air exposure (src/main/resources/data/emberforge/worldgen/configured_feature/ore_cinder.json:2-16)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/worldgen/configured_feature/ore_cinder.json:9",
+    "contains": "\"Name\": \"emberforge:cinder_ore\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/worldgen/configured_feature/ore_cinder.json:1-18"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q06": [
+  {
+   "id": "q06.declare",
+   "fact": "EmberConfig declares MAX_HEAT = defineInRange(\"max_heat\", 200, 50, 1000) in the [forge] section of the common spec (src/main/java/net/ashvale/emberforge/config/EmberConfig.java:23-24)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:24",
+    "contains": "defineInRange(\"max_heat\", 200, 50, 1000)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:23-24"
+    },
+    {
+     "text": "defineInRange(\"max_heat\", 200, 50, 1000)"
+    }
+   ]
+  },
+  {
+   "id": "q06.toml",
+   "fact": "the documented default config has max_heat = 200 under [forge] (config/emberforge-common.toml:10-13)",
+   "source": {
+    "at": "config/emberforge-common.toml:13",
+    "contains": "max_heat = 200"
+   },
+   "match_any": [
+    {
+     "loc": "config/emberforge-common.toml:10-13"
+    },
+    {
+     "text": "max_heat = 200"
+    }
+   ]
+  },
+  {
+   "id": "q06.heatmath",
+   "fact": "Kotlin HeatMath.addHeat(current, amount) caps heat at EmberConfig.MAX_HEAT.get() (src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22)",
+   "source": {
+    "at": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:22",
+    "contains": "EmberConfig.MAX_HEAT.get()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21-22"
+    },
+    {
+     "text": "addHeat(current, amount, EmberConfig.MAX_HEAT.get())"
+    }
+   ]
+  },
+  {
+   "id": "q06.fuel",
+   "fact": "EmberForgeBlockEntity.serverTick burns fuel only while heat + the fuel's heat stays within MAX_HEAT (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:80)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:80",
+    "contains": "forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:78-84"
+    },
+    {
+     "text": "forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()"
+    }
+   ]
+  },
+  {
+   "id": "q06.sync",
+   "fact": "the block entity's ContainerData slot 1 returns MAX_HEAT; the menu exposes it as getMaxHeat and the Kotlin screen scales the heat bar with menu.maxHeat (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:53; src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:32)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:53",
+    "contains": "case 1 -> EmberConfig.MAX_HEAT.get();"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:48-58"
+    },
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:32"
+    },
+    {
+     "text": "case 1 -> EmberConfig.MAX_HEAT.get()"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q07": [
+  {
+   "id": "q07.declare",
+   "fact": "EmberConfig.ALLOW_RESET_COMMAND = define(\"allow_reset_command\", true) in the [debug] section (src/main/java/net/ashvale/emberforge/config/EmberConfig.java:31-33)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:33",
+    "contains": "define(\"allow_reset_command\", true)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/config/EmberConfig.java:31-33"
+    },
+    {
+     "text": "define(\"allow_reset_command\", true)"
+    }
+   ]
+  },
+  {
+   "id": "q07.toml",
+   "fact": "the documented default config has allow_reset_command = true under [debug] (config/emberforge-common.toml:23-26)",
+   "source": {
+    "at": "config/emberforge-common.toml:26",
+    "contains": "allow_reset_command = true"
+   },
+   "match_any": [
+    {
+     "loc": "config/emberforge-common.toml:23-26"
+    },
+    {
+     "text": "allow_reset_command = true"
+    }
+   ]
+  },
+  {
+   "id": "q07.check",
+   "fact": "the Kotlin ForgeCommands.register only offers the reset literal when the source has permission level 2 and EmberConfig.ALLOW_RESET_COMMAND.get() is true (src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:20-22)",
+   "source": {
+    "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:21",
+    "contains": "EmberConfig.ALLOW_RESET_COMMAND.get()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:19-23"
+    },
+    {
+     "text": "it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get()"
+    }
+   ]
+  },
+  {
+   "id": "q07.registered",
+   "fact": "ForgeCommands.register is called by the Java event handler ModEvents.onRegisterCommands (RegisterCommandsEvent) (src/main/java/net/ashvale/emberforge/event/ModEvents.java:20-23)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/event/ModEvents.java:22",
+    "contains": "ForgeCommands.register(event.getDispatcher())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/event/ModEvents.java:20-23"
+    },
+    {
+     "text": "ForgeCommands.register(event.getDispatcher())"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q08": [
+  {
+   "id": "q08.unlit",
+   "fact": "blockstates/ember_forge.json maps lit=false (four facings, rotated with y) to emberforge:block/ember_forge (src/main/resources/assets/emberforge/blockstates/ember_forge.json:3-6)",
+   "source": {
+    "at": "src/main/resources/assets/emberforge/blockstates/ember_forge.json:3",
+    "contains": "\"facing=north,lit=false\": { \"model\": \"emberforge:block/ember_forge\" }"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/emberforge/blockstates/ember_forge.json:3-6"
+    }
+   ]
+  },
+  {
+   "id": "q08.lit",
+   "fact": "lit=true maps to emberforge:block/ember_forge_lit (src/main/resources/assets/emberforge/blockstates/ember_forge.json:7-10)",
+   "source": {
+    "at": "src/main/resources/assets/emberforge/blockstates/ember_forge.json:7",
+    "contains": "emberforge:block/ember_forge_lit"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/emberforge/blockstates/ember_forge.json:7-10"
+    }
+   ]
+  },
+  {
+   "id": "q08.model",
+   "fact": "models/block/ember_forge.json uses parent minecraft:block/orientable with textures emberforge:block/ember_forge_top, _front and _side (src/main/resources/assets/emberforge/models/block/ember_forge.json:2-7)",
+   "source": {
+    "at": "src/main/resources/assets/emberforge/models/block/ember_forge.json:5",
+    "contains": "\"front\": \"emberforge:block/ember_forge_front\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/emberforge/models/block/ember_forge.json:1-8"
+    },
+    {
+     "all": [
+      "emberforge:block/ember_forge_top",
+      "emberforge:block/ember_forge_side"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "q08.lit_model",
+   "fact": "models/block/ember_forge_lit.json inherits emberforge:block/ember_forge and only swaps the front texture to emberforge:block/ember_forge_front_lit (src/main/resources/assets/emberforge/models/block/ember_forge_lit.json:2-5)",
+   "source": {
+    "at": "src/main/resources/assets/emberforge/models/block/ember_forge_lit.json:4",
+    "contains": "emberforge:block/ember_forge_front_lit"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/emberforge/models/block/ember_forge_lit.json:1-6"
+    },
+    {
+     "text": "emberforge:block/ember_forge_front_lit"
+    }
+   ]
+  },
+  {
+   "id": "q08.item",
+   "fact": "the item model models/item/ember_forge.json only points at the block model (src/main/resources/assets/emberforge/models/item/ember_forge.json:2)",
+   "source": {
+    "at": "src/main/resources/assets/emberforge/models/item/ember_forge.json:2",
+    "contains": "\"parent\": \"emberforge:block/ember_forge\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/emberforge/models/item/ember_forge.json:1-3"
+    }
+   ]
+  },
+  {
+   "id": "q08.lit_state",
+   "fact": "the lit property is switched by EmberForgeBlockEntity.serverTick: LIT = heat > 0 (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:113-116)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:115",
+    "contains": "state.setValue(EmberForgeBlock.LIT, lit)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:113-116"
+    },
+    {
+     "text": "state.setValue(EmberForgeBlock.LIT, lit)"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q09": [
+  {
+   "id": "q09.tr",
+   "fact": "Turkish: \"block.emberforge.ember_forge\": \"Kor Ocağı\" (src/main/resources/assets/emberforge/lang/tr_tr.json:2)",
+   "source": {
+    "at": "src/main/resources/assets/emberforge/lang/tr_tr.json:2",
+    "contains": "\"block.emberforge.ember_forge\": \"Kor Ocağı\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/emberforge/lang/tr_tr.json:2"
+    }
+   ]
+  },
+  {
+   "id": "q09.en",
+   "fact": "English: \"block.emberforge.ember_forge\": \"Ember Forge\" (src/main/resources/assets/emberforge/lang/en_us.json:2)",
+   "source": {
+    "at": "src/main/resources/assets/emberforge/lang/en_us.json:2",
+    "contains": "\"block.emberforge.ember_forge\": \"Ember Forge\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/assets/emberforge/lang/en_us.json:2"
+    }
+   ]
+  },
+  {
+   "id": "q09.block",
+   "fact": "ModBlocks registers the block as \"ember_forge\" (emberforge:ember_forge) (src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:23-28)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:23",
+    "contains": "BLOCKS.register(\"ember_forge\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:23-28"
+    },
+    {
+     "text": "BLOCKS.register(\"ember_forge\""
+    }
+   ]
+  },
+  {
+   "id": "q09.item",
+   "fact": "ModItems registers its block item with registerSimpleBlockItem(ModBlocks.EMBER_FORGE) (src/main/java/net/ashvale/emberforge/registry/ModItems.java:20)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModItems.java:20",
+    "contains": "registerSimpleBlockItem(ModBlocks.EMBER_FORGE)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModItems.java:20"
+    },
+    {
+     "text": "registerSimpleBlockItem(ModBlocks.EMBER_FORGE)"
+    }
+   ]
+  },
+  {
+   "id": "q09.container",
+   "fact": "the menu title uses a second key, container.emberforge.ember_forge (also \"Kor Ocağı\" / \"Ember Forge\"), returned by EmberForgeBlockEntity.getDisplayName (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:172; src/main/resources/assets/emberforge/lang/tr_tr.json:7)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:172",
+    "contains": "\"container.emberforge.ember_forge\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:170-173"
+    },
+    {
+     "loc": "src/main/resources/assets/emberforge/lang/tr_tr.json:7"
+    },
+    {
+     "loc": "src/main/resources/assets/emberforge/lang/en_us.json:7"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q10": [
+  {
+   "id": "q10.button",
+   "fact": "the Kotlin EmberForgeScreen.init adds a gui.emberforge.stoke button whose action is requestStoke() (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:16-23)",
+   "source": {
+    "at": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19",
+    "contains": "{ requestStoke() }"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:16-23"
+    },
+    {
+     "text": "Component.translatable(\"gui.emberforge.stoke\")"
+    }
+   ]
+  },
+  {
+   "id": "q10.send",
+   "fact": "requestStoke sends StokeForgePayload(menu.pos) with PacketDistributor.sendToServer (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25-27)",
+   "source": {
+    "at": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:26",
+    "contains": "PacketDistributor.sendToServer(StokeForgePayload(menu.pos))"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25-27"
+    },
+    {
+     "text": "PacketDistributor.sendToServer(StokeForgePayload(menu.pos))"
+    }
+   ]
+  },
+  {
+   "id": "q10.payload",
+   "fact": "StokeForgePayload is a Java record carrying the forge's BlockPos, type id emberforge:stoke_forge (src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:10-13)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:11",
+    "contains": "EmberForge.id(\"stoke_forge\")"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9-13"
+    },
+    {
+     "text": "EmberForge.id(\"stoke_forge\")"
+    }
+   ]
+  },
+  {
+   "id": "q10.register",
+   "fact": "EmberNetwork.register (RegisterPayloadHandlersEvent on the mod bus) registers it play-to-server with EmberNetwork::handleStoke as handler (src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:21-25)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24",
+    "contains": "EmberNetwork::handleStoke"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:21-25"
+    },
+    {
+     "text": "EmberNetwork::handleStoke"
+    }
+   ]
+  },
+  {
+   "id": "q10.handler",
+   "fact": "handleStoke drops the packet unless the sender has that forge's menu open and is within 8 blocks, then calls forge.stoke(player) (src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39",
+    "contains": "forge.stoke(player);"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41"
+    }
+   ]
+  },
+  {
+   "id": "q10.stoke",
+   "fact": "EmberForgeBlockEntity.stoke adds stoke_heat through HeatMath.addHeat (capped at max_heat) and shows message.emberforge.stoked (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:141",
+    "contains": "EmberConfig.STOKE_HEAT.get()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144"
+    },
+    {
+     "text": "HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get())"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q11": [
+  {
+   "id": "q11.ticker",
+   "fact": "EmberForgeBlock.getTicker installs EmberForgeBlockEntity::serverTick, on the server side only (src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:70-73)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72",
+    "contains": "EmberForgeBlockEntity::serverTick"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:69-73"
+    },
+    {
+     "text": "EmberForgeBlockEntity::serverTick"
+    }
+   ]
+  },
+  {
+   "id": "q11.fuel",
+   "fact": "it burns one item from the fuel slot when HeatMath.heatForFuel gives heat and the total stays within max_heat (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:78-84)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:81",
+    "contains": "forge.items.extractItem(SLOT_FUEL, 1, false)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:78-84"
+    },
+    {
+     "text": "forge.items.extractItem(SLOT_FUEL, 1, false)"
+    }
+   ]
+  },
+  {
+   "id": "q11.source",
+   "fact": "every 40 game ticks it adds 2 heat if the block below is in #emberforge:forge_heat_sources (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:86-89)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:86",
+    "contains": "ModTags.FORGE_HEAT_SOURCES"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:86-89"
+    },
+    {
+     "text": "HeatMath.addHeat(forge.heat, 2)"
+    }
+   ]
+  },
+  {
+   "id": "q11.forge",
+   "fact": "it looks up an emberforge:forging recipe for the input slot; if the output fits it adds HeatMath.progressPerTick(heat, minHeat) to progress and finishes (one input -> result) at forge_time, otherwise progress drops to 0 (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:91-105)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:97",
+    "contains": "HeatMath.progressPerTick(forge.heat, recipe.minHeat())"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:91-105"
+    },
+    {
+     "text": "HeatMath.progressPerTick(forge.heat, recipe.minHeat())"
+    }
+   ]
+  },
+  {
+   "id": "q11.cool",
+   "fact": "it cools by 1 heat every decay_interval_ticks game ticks via cooled() (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:107-111, 123-125)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:107",
+    "contains": "EmberConfig.DECAY_INTERVAL.get()"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:107-111"
+    },
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:122-125"
+    },
+    {
+     "text": "cooled(forge.heat, level.getGameTime(), EmberConfig.DECAY_INTERVAL.get())"
+    }
+   ]
+  },
+  {
+   "id": "q11.lit",
+   "fact": "it sets the block's LIT property to heat > 0 (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:113-116)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:115",
+    "contains": "state.setValue(EmberForgeBlock.LIT, lit)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:113-116"
+    },
+    {
+     "text": "state.setValue(EmberForgeBlock.LIT, lit)"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q12": [
+  {
+   "id": "q12.command",
+   "fact": "the Kotlin command tree in ForgeCommands.register runs ForgeFunctions.resetForges(ctx.source) for the reset literal (src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:20-22)",
+   "source": {
+    "at": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22",
+    "contains": "ForgeFunctions.resetForges(ctx.source)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:19-23"
+    },
+    {
+     "text": "ForgeFunctions.resetForges(ctx.source)"
+    }
+   ]
+  },
+  {
+   "id": "q12.run",
+   "fact": "Java ForgeFunctions.resetForges checks that the function exists and runs it with server.getCommands().performPrefixedCommand(source, \"function \" + RESET_FORGES) (src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16-25)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:23",
+    "contains": "performPrefixedCommand(source, \"function \" + RESET_FORGES)"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16-25"
+    },
+    {
+     "text": "performPrefixedCommand(source, \"function \" + RESET_FORGES)"
+    }
+   ]
+  },
+  {
+   "id": "q12.id",
+   "fact": "RESET_FORGES is \"emberforge:debug/reset_forges\", i.e. src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction (src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10",
+    "contains": "\"emberforge:debug/reset_forges\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10"
+    },
+    {
+     "text": "\"emberforge:debug/reset_forges\""
+    }
+   ]
+  },
+  {
+   "id": "q12.fill",
+   "fact": "the function replaces every emberforge:ember_forge within 16 blocks with an unlit one carrying {Heat:0,Progress:0} (src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1-2)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:2",
+    "contains": "{Heat:0,Progress:0}"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1-2"
+    },
+    {
+     "text": "{Heat:0,Progress:0}"
+    }
+   ]
+  },
+  {
+   "id": "q12.nbt",
+   "fact": "those NBT keys are what EmberForgeBlockEntity.loadAdditional reads back (Heat, Progress; the absent Items tag leaves the inventory empty) (src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:146-152)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:150",
+    "contains": "heat = tag.getInt(\"Heat\");"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:146-152"
+    },
+    {
+     "text": "tag.getInt(\"Heat\")"
+    }
+   ]
+  },
+  {
+   "id": "q12.messages",
+   "fact": "it then warns when a #emberforge:forge_heat_sources block is under the executor and prints message.emberforge.reset.done (src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:3-4)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:3",
+    "contains": "#emberforge:forge_heat_sources"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:3-4"
+    },
+    {
+     "text": "#emberforge:forge_heat_sources"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q13": [
+  {
+   "id": "q13.advancement",
+   "fact": "only from the advancement advancement/first_cinder.json, as its reward: \"rewards\": {\"function\": \"emberforge:rewards/first_cinder\"} (src/main/resources/data/emberforge/advancement/first_cinder.json:27-29)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/advancement/first_cinder.json:28",
+    "contains": "\"function\": \"emberforge:rewards/first_cinder\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/advancement/first_cinder.json:27-29"
+    }
+   ]
+  },
+  {
+   "id": "q13.trigger",
+   "fact": "that advancement is granted by minecraft:inventory_changed once the player holds an item from #emberforge:cinder_ores (src/main/resources/data/emberforge/advancement/first_cinder.json:15-26)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/advancement/first_cinder.json:21",
+    "contains": "\"items\": \"#emberforge:cinder_ores\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/advancement/first_cinder.json:15-26"
+    },
+    {
+     "text": "#emberforge:cinder_ores"
+    }
+   ]
+  },
+  {
+   "id": "q13.tag",
+   "fact": "the item tag #emberforge:cinder_ores contains emberforge:cinder_ore (src/main/resources/data/emberforge/tags/item/cinder_ores.json:3-5)",
+   "source": {
+    "at": "src/main/resources/data/emberforge/tags/item/cinder_ores.json:4",
+    "contains": "\"emberforge:cinder_ore\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/resources/data/emberforge/tags/item/cinder_ores.json:1-6"
+    }
+   ]
+  }
+ ],
+ "forge_mod/q14": [
+  {
+   "id": "q14.be",
+   "fact": "ModBlocks.EMBER_FORGE_ENTITY: BLOCK_ENTITIES.register(\"ember_forge\", ...) with BlockEntityType.Builder.of(EmberForgeBlockEntity::new, EMBER_FORGE.get()) (src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:34-36)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:35",
+    "contains": "BLOCK_ENTITIES.register(\"ember_forge\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:34-36"
+    },
+    {
+     "text": "BLOCK_ENTITIES.register(\"ember_forge\""
+    }
+   ]
+  },
+  {
+   "id": "q14.menu",
+   "fact": "ModMenus.EMBER_FORGE: MENUS.register(\"ember_forge\", () -> IMenuTypeExtension.create(EmberForgeMenu::new)) (src/main/java/net/ashvale/emberforge/registry/ModMenus.java:15-16)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModMenus.java:16",
+    "contains": "MENUS.register(\"ember_forge\""
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModMenus.java:15-16"
+    },
+    {
+     "text": "IMenuTypeExtension.create(EmberForgeMenu::new)"
+    }
+   ]
+  },
+  {
+   "id": "q14.serializer",
+   "fact": "ModRecipes.FORGING_SERIALIZER: RECIPE_SERIALIZERS.register(\"forging\", ForgingRecipe.Serializer::new) (src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:20-21)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:21",
+    "contains": "ForgingRecipe.Serializer::new"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:20-21"
+    },
+    {
+     "text": "RECIPE_SERIALIZERS.register(\"forging\", ForgingRecipe.Serializer::new)"
+    }
+   ]
+  },
+  {
+   "id": "q14.bus",
+   "fact": "the @Mod constructor EmberForge(IEventBus modBus, ModContainer) registers every DeferredRegister on the mod bus, e.g. ModBlocks.BLOCK_ENTITIES.register(modBus), ModMenus.MENUS.register(modBus), ModRecipes.RECIPE_SERIALIZERS.register(modBus) (src/main/java/net/ashvale/emberforge/EmberForge.java:21-28)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/EmberForge.java:23",
+    "contains": "ModBlocks.BLOCK_ENTITIES.register(modBus);"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/EmberForge.java:21-28"
+    },
+    {
+     "all": [
+      "ModBlocks.BLOCK_ENTITIES.register(modBus)",
+      "ModMenus.MENUS.register(modBus)",
+      "ModRecipes.RECIPE_SERIALIZERS.register(modBus)"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "q14.screen",
+   "fact": "on the client, ClientSetup.registerScreens binds the menu type to the Kotlin EmberForgeScreen (src/main/java/net/ashvale/emberforge/client/ClientSetup.java:15-18)",
+   "source": {
+    "at": "src/main/java/net/ashvale/emberforge/client/ClientSetup.java:17",
+    "contains": "EmberForgeScreen::new"
+   },
+   "match_any": [
+    {
+     "loc": "src/main/java/net/ashvale/emberforge/client/ClientSetup.java:15-18"
+    },
+    {
+     "text": "EmberForgeScreen::new"
+    }
+   ]
+  }
+ ],
+ "heldout_repoatlas/h01": [
+  {
+   "id": "h01.kill",
+   "fact": "_kill_tree uses taskkill /T /F on Windows and killpg on POSIX",
+   "source": {
+    "at": "repoatlas/experiments.py:322",
+    "contains": "taskkill"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:318-326"
+    },
+    {
+     "text": "taskkill"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:211",
+     "contains": "taskkill",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:207-214"
+      },
+      {
+       "text": "taskkill"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h01.call",
+   "fact": "run() calls _kill_tree on TimeoutExpired",
+   "source": {
+    "at": "repoatlas/experiments.py:488",
+    "contains": "_kill_tree(proc)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:484-488"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:313",
+     "contains": "_kill_tree(proc)",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:309-313"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h01.container",
+   "fact": "a container is stopped with `<runtime> kill` via _kill_container",
+   "source": {
+    "at": "repoatlas/experiments.py:291",
+    "contains": "kill"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:288-293"
+    },
+    {
+     "loc": "repoatlas/experiments.py:487"
+    },
+    {
+     "text": "_kill_container"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:180",
+     "contains": "kill",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:177-182"
+      },
+      {
+       "loc": "repoatlas/experiments.py:312"
+      },
+      {
+       "text": "_kill_container"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h01.drain",
+   "fact": "output is drained for KILL_DRAIN_TIMEOUT = 15 s after the kill",
+   "source": {
+    "at": "repoatlas/experiments.py:87",
+    "contains": "KILL_DRAIN_TIMEOUT = 15"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:87"
+    },
+    {
+     "loc": "repoatlas/experiments.py:490"
+    },
+    {
+     "text": "KILL_DRAIN_TIMEOUT"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:68",
+     "contains": "KILL_DRAIN_TIMEOUT = 15",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:68"
+      },
+      {
+       "loc": "repoatlas/experiments.py:315"
+      },
+      {
+       "text": "KILL_DRAIN_TIMEOUT"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "heldout_repoatlas/h02": [
+  {
+   "id": "h02.allow",
+   "fact": "ENV_ALLOW lists the inherited variables",
+   "source": {
+    "at": "repoatlas/experiments.py:80",
+    "contains": "ENV_ALLOW = {"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:80-81"
+    },
+    {
+     "text": "ENV_ALLOW"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:61",
+     "contains": "ENV_ALLOW = {",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:61-62"
+      },
+      {
+       "text": "ENV_ALLOW"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h02.scrub",
+   "fact": "_scrubbed_env keeps only ENV_ALLOW keys from os.environ",
+   "source": {
+    "at": "repoatlas/experiments.py:254",
+    "contains": "ENV_ALLOW"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:253-255"
+    },
+    {
+     "text": "_scrubbed_env"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:143",
+     "contains": "ENV_ALLOW",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:142-144"
+      },
+      {
+       "text": "_scrubbed_env"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h02.set",
+   "fact": "HOME/USERPROFILE/TMP/TEMP point at the throw-away home; PYTHONDONTWRITEBYTECODE, CI, REPOATLAS_EXPERIMENT are set",
+   "source": {
+    "at": "repoatlas/experiments.py:257",
+    "contains": "REPOATLAS_EXPERIMENT"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:255-257"
+    },
+    {
+     "text": "REPOATLAS_EXPERIMENT"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:146",
+     "contains": "REPOATLAS_EXPERIMENT",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:144-146"
+      },
+      {
+       "text": "REPOATLAS_EXPERIMENT"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h02.path",
+   "fact": "PATH is prefixed with the running interpreter's directory",
+   "source": {
+    "at": "repoatlas/experiments.py:259",
+    "contains": "env[\"PATH\"]"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:259"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:148",
+     "contains": "env[\"PATH\"]",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:148"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "heldout_repoatlas/h03": [
+  {
+   "id": "h03.cli",
+   "fact": "cmd_scan calls workflow.scan",
+   "source": {
+    "at": "repoatlas/cli.py:174",
+    "contains": "workflow.scan("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/cli.py:174"
+    },
+    {
+     "text": "cmd_scan"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/cli.py:173",
+     "contains": "workflow.scan(",
+     "match_any": [
+      {
+       "loc": "repoatlas/cli.py:173"
+      },
+      {
+       "text": "cmd_scan"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h03.build",
+   "fact": "scan calls index.build",
+   "source": {
+    "at": "repoatlas/workflow.py:138",
+    "contains": "index.build("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/workflow.py:138"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/workflow.py:59",
+     "contains": "index.build(",
+     "match_any": [
+      {
+       "loc": "repoatlas/workflow.py:59"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h03.rebuild",
+   "fact": "index.build runs the vendored watch._rebuild_code",
+   "source": {
+    "at": "repoatlas/index.py:72",
+    "contains": "_rebuild_code("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/index.py:72"
+    },
+    {
+     "text": "_rebuild_code"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/index.py:39",
+     "contains": "_rebuild_code(",
+     "match_any": [
+      {
+       "loc": "repoatlas/index.py:39"
+      },
+      {
+       "text": "_rebuild_code"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h03.snapshot",
+   "fact": "scan records a snapshot with take_snapshot",
+   "source": {
+    "at": "repoatlas/workflow.py:143",
+    "contains": "take_snapshot("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/workflow.py:143"
+    },
+    {
+     "text": "take_snapshot"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/workflow.py:63",
+     "contains": "take_snapshot(",
+     "match_any": [
+      {
+       "loc": "repoatlas/workflow.py:63"
+      },
+      {
+       "text": "take_snapshot"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h03.stale",
+   "fact": "scan calls invalidate_stale",
+   "source": {
+    "at": "repoatlas/workflow.py:144",
+    "contains": "invalidate_stale("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/workflow.py:144"
+    },
+    {
+     "text": "invalidate_stale"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/workflow.py:64",
+     "contains": "invalidate_stale(",
+     "match_any": [
+      {
+       "loc": "repoatlas/workflow.py:64"
+      },
+      {
+       "text": "invalidate_stale"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "heldout_repoatlas/h04": [
+  {
+   "id": "h04.source",
+   "fact": "source_evidence stores content_hash of the cited lines",
+   "source": {
+    "at": "repoatlas/evidence.py:175",
+    "contains": "content_hash(text)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/evidence.py:175"
+    },
+    {
+     "text": "source_evidence"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/evidence.py:100",
+     "contains": "content_hash(text)",
+     "match_any": [
+      {
+       "loc": "repoatlas/evidence.py:100"
+      },
+      {
+       "text": "source_evidence"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h04.check",
+   "fact": "check_source re-hashes the cited lines and, for unanchored evidence, searches for the moved block by hash (_legacy_search)",
+   "source": {
+    "at": "repoatlas/evidence.py:215",
+    "contains": "content_hash(cur_text)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/evidence.py:213-238"
+    },
+    {
+     "loc": "repoatlas/evidence.py:181-191"
+    },
+    {
+     "text": "check_source"
+    }
+   ],
+   "fact_original": "check_source re-hashes cited lines and searches for moved blocks",
+   "review": {
+    "status": "restated",
+    "note": "restated: at 7371990 the moved-block search moved out of check_source into _legacy_search (evidence.py:181-191, called at 235); both locations are accepted",
+    "original": {
+     "at": "repoatlas/evidence.py:116",
+     "contains": "content_hash(text)",
+     "match_any": [
+      {
+       "loc": "repoatlas/evidence.py:116-126"
+      },
+      {
+       "text": "check_source"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h04.url",
+   "fact": "url_evidence hashes fetched documents",
+   "source": {
+    "at": "repoatlas/evidence.py:301",
+    "contains": "content_hash(text)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/evidence.py:301"
+    },
+    {
+     "text": "url_evidence"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/evidence.py:159",
+     "contains": "content_hash(text)",
+     "match_any": [
+      {
+       "loc": "repoatlas/evidence.py:159"
+      },
+      {
+       "text": "url_evidence"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h04.feedback",
+   "fact": "feedback.add hashes user feedback text",
+   "source": {
+    "at": "repoatlas/feedback.py:635",
+    "contains": "content_hash(text)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/feedback.py:635"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/feedback.py:466",
+     "contains": "content_hash(text)",
+     "match_any": [
+      {
+       "loc": "repoatlas/feedback.py:466"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h04.research",
+   "fact": "research._research_document hashes documents",
+   "source": {
+    "at": "repoatlas/research.py:794",
+    "contains": "content_hash(text)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/research.py:794"
+    },
+    {
+     "text": "_research_document"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/research.py:809",
+     "contains": "content_hash(text)",
+     "match_any": [
+      {
+       "loc": "repoatlas/research.py:809"
+      },
+      {
+       "text": "_research_document"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "heldout_repoatlas/h05": [
+  {
+   "id": "h05.inv",
+   "fact": "invalidate_stale sets status 'stale' for claims with touched files",
+   "source": {
+    "at": "repoatlas/claims.py:1063",
+    "contains": "cl.set_status("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/claims.py:1059-1064"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/claims.py:421",
+     "contains": "cl.set_status(",
+     "match_any": [
+      {
+       "loc": "repoatlas/claims.py:419-423"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h05.changed",
+   "fact": "invalidate_stale calls assess_change, which compares the claim's files between the snapshot file maps (changed_claim_files, the file rule for claims without recorded dependencies)",
+   "source": {
+    "at": "repoatlas/claims.py:975",
+    "contains": "for f in sorted(claim_files(store, claim)):"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/claims.py:975-977"
+    },
+    {
+     "loc": "repoatlas/claims.py:996-1001"
+    },
+    {
+     "text": "changed_claim_files"
+    }
+   ],
+   "fact_original": "changed_claim_files compares the claim's files between snapshot file maps",
+   "review": {
+    "status": "restated",
+    "note": "restated: at 7371990 invalidate_stale calls assess_change (claims.py:1056), which uses changed_claim_files for claims without recorded dependencies and facet dependencies otherwise; the assess_change lines that compute the changed files are accepted too",
+    "original": {
+     "at": "repoatlas/claims.py:384",
+     "contains": "for f in sorted(claim_files(store, claim)):",
+     "match_any": [
+      {
+       "loc": "repoatlas/claims.py:384-386"
+      },
+      {
+       "text": "changed_claim_files"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h05.files",
+   "fact": "claim_files = evidence paths + file subjects",
+   "source": {
+    "at": "repoatlas/claims.py:948",
+    "contains": "def claim_files("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/claims.py:948-957"
+    },
+    {
+     "text": "claim_files"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/claims.py:358",
+     "contains": "def claim_files(",
+     "match_any": [
+      {
+       "loc": "repoatlas/claims.py:358-367"
+      },
+      {
+       "text": "claim_files"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h05.caller",
+   "fact": "scan/update call invalidate_stale after a snapshot",
+   "source": {
+    "at": "repoatlas/workflow.py:144",
+    "contains": "invalidate_stale(store, snap)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/workflow.py:144"
+    },
+    {
+     "loc": "repoatlas/workflow.py:210"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/workflow.py:64",
+     "contains": "invalidate_stale(store, snap)",
+     "match_any": [
+      {
+       "loc": "repoatlas/workflow.py:64"
+      },
+      {
+       "loc": "repoatlas/workflow.py:111"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "heldout_repoatlas/h06": [
+  {
+   "id": "h06.trigger",
+   "fact": "trigger no_delete_claims aborts DELETE on claims",
+   "source": {
+    "at": "repoatlas/store.py:192",
+    "contains": "no_delete_claims"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/store.py:192-193"
+    },
+    {
+     "text": "no_delete_claims"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/store.py:190",
+     "contains": "no_delete_claims",
+     "match_any": [
+      {
+       "loc": "repoatlas/store.py:190-191"
+      },
+      {
+       "text": "no_delete_claims"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h06.rule",
+   "fact": "design rule: nothing is deleted; claims change status",
+   "source": {
+    "at": "repoatlas/store.py:5",
+    "contains": "Nothing is deleted"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/store.py:5"
+    },
+    {
+     "text": "Nothing is deleted"
+    }
+   ],
+   "review": {
+    "status": "unchanged",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/store.py:5",
+     "contains": "Nothing is deleted",
+     "match_any": [
+      {
+       "loc": "repoatlas/store.py:5"
+      },
+      {
+       "text": "Nothing is deleted"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "heldout_repoatlas/h07": [
+  {
+   "id": "h07.level",
+   "fact": "run() picks isolation level process/container/None",
+   "source": {
+    "at": "repoatlas/experiments.py:397",
+    "contains": "level = \"process\""
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:394-401"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:252",
+     "contains": "level = \"process\"",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:249-256"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h07.classify",
+   "fact": "policy() (wrapped by classify()) returns allowlisted, or risky with the reason",
+   "source": {
+    "at": "repoatlas/experiments.py:215",
+    "contains": "def policy("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:215-245"
+    },
+    {
+     "loc": "repoatlas/experiments.py:248-250"
+    },
+    {
+     "text": "classify"
+    }
+   ],
+   "fact_original": "classify() returns allowlisted or risky",
+   "review": {
+    "status": "restated",
+    "note": "restated: at 7371990 the allowlist decision lives in policy() (experiments.py:215-245), which run() calls at 392; classify() (248-250) is a wrapper returning policy()[0]",
+    "original": {
+     "at": "repoatlas/experiments.py:128",
+     "contains": "def classify(",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:128-139"
+      },
+      {
+       "text": "classify"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h07.runtime",
+   "fact": "container_runtime() probes docker/podman info",
+   "source": {
+    "at": "repoatlas/experiments.py:153",
+    "contains": "def container_runtime("
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:153-162"
+    },
+    {
+     "text": "container_runtime"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:116",
+     "contains": "def container_runtime(",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:116-125"
+      },
+      {
+       "text": "container_runtime"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h07.refuse",
+   "fact": "without a level the command is refused (ExperimentRefused)",
+   "source": {
+    "at": "repoatlas/experiments.py:418",
+    "contains": "raise ExperimentRefused(reason)"
+   },
+   "match_any": [
+    {
+     "loc": "repoatlas/experiments.py:407-418"
+    }
+   ],
+   "review": {
+    "status": "reanchored",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "repoatlas/experiments.py:267",
+     "contains": "raise ExperimentRefused(reason)",
+     "match_any": [
+      {
+       "loc": "repoatlas/experiments.py:262-267"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "heldout_repoatlas/h08": [
+  {
+   "id": "h08.modify",
+   "fact": "test_modifying_a_cited_file_marks_exactly_its_claims_stale",
+   "source": {
+    "at": "tests/test_snapshot_stale.py:140",
+    "contains": "def test_modifying_a_cited_file_marks_exactly_its_claims_stale"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_snapshot_stale.py:140"
+    },
+    {
+     "text": "test_modifying_a_cited_file_marks_exactly_its_claims_stale"
+    }
+   ],
+   "review": {
+    "status": "unchanged",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "tests/test_snapshot_stale.py:140",
+     "contains": "def test_modifying_a_cited_file_marks_exactly_its_claims_stale",
+     "match_any": [
+      {
+       "loc": "tests/test_snapshot_stale.py:140"
+      },
+      {
+       "text": "test_modifying_a_cited_file_marks_exactly_its_claims_stale"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h08.commit",
+   "fact": "test_a_new_commit_that_changes_a_file_marks_its_claims_stale",
+   "source": {
+    "at": "tests/test_snapshot_stale.py:164",
+    "contains": "def test_a_new_commit_that_changes_a_file_marks_its_claims_stale"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_snapshot_stale.py:164"
+    },
+    {
+     "text": "test_a_new_commit_that_changes_a_file_marks_its_claims_stale"
+    }
+   ],
+   "review": {
+    "status": "unchanged",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "tests/test_snapshot_stale.py:164",
+     "contains": "def test_a_new_commit_that_changes_a_file_marks_its_claims_stale",
+     "match_any": [
+      {
+       "loc": "tests/test_snapshot_stale.py:164"
+      },
+      {
+       "text": "test_a_new_commit_that_changes_a_file_marks_its_claims_stale"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h08.delete",
+   "fact": "test_deleting_a_cited_file_marks_its_claims_stale",
+   "source": {
+    "at": "tests/test_snapshot_stale.py:181",
+    "contains": "def test_deleting_a_cited_file_marks_its_claims_stale"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_snapshot_stale.py:181"
+    },
+    {
+     "text": "test_deleting_a_cited_file_marks_its_claims_stale"
+    }
+   ],
+   "review": {
+    "status": "unchanged",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "tests/test_snapshot_stale.py:181",
+     "contains": "def test_deleting_a_cited_file_marks_its_claims_stale",
+     "match_any": [
+      {
+       "loc": "tests/test_snapshot_stale.py:181"
+      },
+      {
+       "text": "test_deleting_a_cited_file_marks_its_claims_stale"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h08.watch",
+   "fact": "test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed",
+   "source": {
+    "at": "tests/test_snapshot_stale.py:305",
+    "contains": "def test_watch_tests_claims_go_stale"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_snapshot_stale.py:305"
+    },
+    {
+     "text": "test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed"
+    }
+   ],
+   "review": {
+    "status": "unchanged",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "tests/test_snapshot_stale.py:305",
+     "contains": "def test_watch_tests_claims_go_stale",
+     "match_any": [
+      {
+       "loc": "tests/test_snapshot_stale.py:305"
+      },
+      {
+       "text": "test_watch_tests_claims_go_stale_when_a_test_file_is_added_changed_or_removed"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "h08.cli",
+   "fact": "test_update_after_edit_marks_claim_stale_via_cli",
+   "source": {
+    "at": "tests/test_cli.py:250",
+    "contains": "def test_update_after_edit_marks_claim_stale_via_cli"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_cli.py:250"
+    },
+    {
+     "text": "test_update_after_edit_marks_claim_stale_via_cli"
+    }
+   ],
+   "review": {
+    "status": "unchanged",
+    "note": "reviewed against the source at 7371990: statement holds; locators re-pointed to the same code",
+    "original": {
+     "at": "tests/test_cli.py:250",
+     "contains": "def test_update_after_edit_marks_claim_stale_via_cli",
+     "match_any": [
+      {
+       "loc": "tests/test_cli.py:250"
+      },
+      {
+       "text": "test_update_after_edit_marks_claim_stale_via_cli"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "graphify_core/g01": [
+  {
+   "id": "g01.func",
+   "fact": "_subgraph_to_text renders and cuts the subgraph (graphify/serve.py:1075)",
+   "source": {
+    "at": "graphify/serve.py:1075",
+    "contains": "def _subgraph_to_text("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1075-1081"
+    },
+    {
+     "text": "_subgraph_to_text"
+    }
+   ]
+  },
+  {
+   "id": "g01.ratio",
+   "fact": "the token budget becomes a char budget at 3 chars/token (graphify/serve.py:1081)",
+   "source": {
+    "at": "graphify/serve.py:1081",
+    "contains": "char_budget = token_budget * 3"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1081"
+    },
+    {
+     "text": "token_budget * 3"
+    }
+   ]
+  },
+  {
+   "id": "g01.cut",
+   "fact": "output longer than the char budget is cut at the last newline (graphify/serve.py:1200-1202)",
+   "source": {
+    "at": "graphify/serve.py:1200",
+    "contains": "if len(output) > char_budget:"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1200-1202"
+    }
+   ]
+  },
+  {
+   "id": "g01.caller",
+   "fact": "_query_graph_text calls it with the seeds (graphify/serve.py:1408)",
+   "source": {
+    "at": "graphify/serve.py:1408",
+    "contains": "_subgraph_to_text(traversal_graph"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1408"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g02": [
+  {
+   "id": "g02.entry",
+   "fact": "the CLI query branch calls _query_graph_text (graphify/cli.py:1302)",
+   "source": {
+    "at": "graphify/cli.py:1302",
+    "contains": "_query_graph_text("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/cli.py:1302"
+    }
+   ]
+  },
+  {
+   "id": "g02.terms",
+   "fact": "_query_terms splits the question (graphify/serve.py:1359)",
+   "source": {
+    "at": "graphify/serve.py:1359",
+    "contains": "_query_terms(question)"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1359"
+    },
+    {
+     "text": "_query_terms"
+    }
+   ]
+  },
+  {
+   "id": "g02.score",
+   "fact": "_score_query ranks nodes (graphify/serve.py:1366)",
+   "source": {
+    "at": "graphify/serve.py:1366",
+    "contains": "_score_query(G, terms"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1366"
+    },
+    {
+     "text": "_score_query"
+    }
+   ]
+  },
+  {
+   "id": "g02.seeds",
+   "fact": "_pick_seeds chooses start nodes (graphify/serve.py:1380)",
+   "source": {
+    "at": "graphify/serve.py:1380",
+    "contains": "_pick_seeds(qs.ranked"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1380"
+    },
+    {
+     "text": "_pick_seeds"
+    }
+   ]
+  },
+  {
+   "id": "g02.traverse",
+   "fact": "_bfs/_dfs traverse from the seeds (graphify/serve.py:1385)",
+   "source": {
+    "at": "graphify/serve.py:1385",
+    "contains": "_bfs(traversal_graph"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1385"
+    },
+    {
+     "text": "_bfs"
+    }
+   ]
+  },
+  {
+   "id": "g02.render",
+   "fact": "_subgraph_to_text renders the result (graphify/serve.py:1408)",
+   "source": {
+    "at": "graphify/serve.py:1408",
+    "contains": "_subgraph_to_text("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1408"
+    },
+    {
+     "text": "_subgraph_to_text"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g03": [
+  {
+   "id": "g03.disable",
+   "fact": "GRAPHIFY_QUERY_LOG_DISABLE forces logging off (graphify/querylog.py:24)",
+   "source": {
+    "at": "graphify/querylog.py:24",
+    "contains": "GRAPHIFY_QUERY_LOG_DISABLE"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/querylog.py:24"
+    },
+    {
+     "text": "GRAPHIFY_QUERY_LOG_DISABLE"
+    }
+   ]
+  },
+  {
+   "id": "g03.path",
+   "fact": "GRAPHIFY_QUERY_LOG sets the log path (graphify/querylog.py:26)",
+   "source": {
+    "at": "graphify/querylog.py:26",
+    "contains": "\"GRAPHIFY_QUERY_LOG\""
+   },
+   "match_any": [
+    {
+     "loc": "graphify/querylog.py:26"
+    },
+    {
+     "text": "GRAPHIFY_QUERY_LOG"
+    }
+   ]
+  },
+  {
+   "id": "g03.enable",
+   "fact": "GRAPHIFY_QUERY_LOG_ENABLE turns on the default log file (graphify/querylog.py:29)",
+   "source": {
+    "at": "graphify/querylog.py:29",
+    "contains": "GRAPHIFY_QUERY_LOG_ENABLE"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/querylog.py:29"
+    },
+    {
+     "text": "GRAPHIFY_QUERY_LOG_ENABLE"
+    }
+   ]
+  },
+  {
+   "id": "g03.responses",
+   "fact": "GRAPHIFY_QUERY_LOG_RESPONSES also logs responses (graphify/querylog.py:35)",
+   "source": {
+    "at": "graphify/querylog.py:35",
+    "contains": "GRAPHIFY_QUERY_LOG_RESPONSES"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/querylog.py:35"
+    },
+    {
+     "text": "GRAPHIFY_QUERY_LOG_RESPONSES"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g04": [
+  {
+   "id": "g04.dir",
+   "fact": "cache_dir puts AST entries in graphify-out/cache/ast/v{version}-s{schema} (graphify/cache.py:957)",
+   "source": {
+    "at": "graphify/cache.py:957",
+    "contains": "_AST_CACHE_SCHEMA"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/cache.py:933-962"
+    }
+   ]
+  },
+  {
+   "id": "g04.key",
+   "fact": "file_hash = SHA256 of file contents + path relative to root (graphify/cache.py:429-430)",
+   "source": {
+    "at": "graphify/cache.py:430",
+    "contains": "SHA256 of file contents + path relative to root"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/cache.py:429-430"
+    },
+    {
+     "text": "SHA256 of file contents + path relative to root"
+    }
+   ]
+  },
+  {
+   "id": "g04.load",
+   "fact": "load_cached reads an entry (graphify/cache.py:965)",
+   "source": {
+    "at": "graphify/cache.py:965",
+    "contains": "def load_cached("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/cache.py:965"
+    },
+    {
+     "text": "load_cached"
+    }
+   ]
+  },
+  {
+   "id": "g04.save",
+   "fact": "save_cached writes an entry (graphify/cache.py:1071)",
+   "source": {
+    "at": "graphify/cache.py:1071",
+    "contains": "def save_cached("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/cache.py:1071"
+    },
+    {
+     "text": "save_cached"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g05": [
+  {
+   "id": "g05.env",
+   "fact": "GRAPHIFY_MAX_GRAPH_BYTES is read in _max_graph_file_bytes (graphify/security.py:49)",
+   "source": {
+    "at": "graphify/security.py:49",
+    "contains": "GRAPHIFY_MAX_GRAPH_BYTES"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/security.py:49"
+    },
+    {
+     "text": "GRAPHIFY_MAX_GRAPH_BYTES"
+    }
+   ]
+  },
+  {
+   "id": "g05.default",
+   "fact": "the default cap is 512 MiB (graphify/security.py:32)",
+   "source": {
+    "at": "graphify/security.py:32",
+    "contains": "512 * 1024 * 1024"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/security.py:32"
+    },
+    {
+     "text": "512 * 1024 * 1024"
+    }
+   ]
+  },
+  {
+   "id": "g05.check",
+   "fact": "check_graph_file_size_cap enforces it (graphify/security.py:357)",
+   "source": {
+    "at": "graphify/security.py:357",
+    "contains": "def check_graph_file_size_cap("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/security.py:357-385"
+    },
+    {
+     "text": "check_graph_file_size_cap"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g06": [
+  {
+   "id": "g06.reason",
+   "fact": "so that content words drive seeding (docstring, graphify/serve.py:282-286)",
+   "source": {
+    "at": "graphify/serve.py:284",
+    "contains": "so content words drive seeding"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:282-286"
+    },
+    {
+     "text": "content words drive seeding"
+    }
+   ]
+  },
+  {
+   "id": "g06.fallback",
+   "fact": "an all-stopword question falls back to the unfiltered terms (graphify/serve.py:300)",
+   "source": {
+    "at": "graphify/serve.py:300",
+    "contains": "return content or terms"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:300"
+    },
+    {
+     "text": "content or terms"
+    }
+   ]
+  },
+  {
+   "id": "g06.list",
+   "fact": "the stopword list is _QUERY_STOPWORDS (graphify/serve.py:249)",
+   "source": {
+    "at": "graphify/serve.py:249",
+    "contains": "_QUERY_STOPWORDS = frozenset"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:249"
+    },
+    {
+     "text": "_QUERY_STOPWORDS"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g07": [
+  {
+   "id": "g07.query",
+   "fact": "_query_graph_text calls it (graphify/serve.py:1359)",
+   "source": {
+    "at": "graphify/serve.py:1359",
+    "contains": "_query_terms(question)"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:1359"
+    }
+   ]
+  },
+  {
+   "id": "g07.bench",
+   "fact": "benchmark._query_subgraph_tokens calls it (graphify/benchmark.py:39)",
+   "source": {
+    "at": "graphify/benchmark.py:39",
+    "contains": "_query_terms(question)"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/benchmark.py:37-39"
+    },
+    {
+     "text": "_query_subgraph_tokens"
+    }
+   ]
+  },
+  {
+   "id": "g07.cli",
+   "fact": "the CLI query command reaches it through _query_graph_text (graphify/cli.py:1302)",
+   "source": {
+    "at": "graphify/cli.py:1302",
+    "contains": "_query_graph_text("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/cli.py:1302"
+    }
+   ]
+  },
+  {
+   "id": "g07.mcp",
+   "fact": "the MCP query_graph tool reaches it through _query_graph_text (graphify/serve.py:2021-2030)",
+   "source": {
+    "at": "graphify/serve.py:2030",
+    "contains": "_query_graph_text("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/serve.py:2021-2030"
+    },
+    {
+     "text": "_tool_query_graph"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g08": [
+  {
+   "id": "g08.entry",
+   "fact": "the update command calls watch._rebuild_code (graphify/cli.py:2445)",
+   "source": {
+    "at": "graphify/cli.py:2445",
+    "contains": "_rebuild_code(watch_path"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/cli.py:2445"
+    }
+   ]
+  },
+  {
+   "id": "g08.detect",
+   "fact": "detect() collects the files (graphify/watch.py:1465)",
+   "source": {
+    "at": "graphify/watch.py:1465",
+    "contains": "detected = detect("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/watch.py:1465"
+    }
+   ]
+  },
+  {
+   "id": "g08.extract",
+   "fact": "extract() runs the AST extraction (graphify/watch.py:1780)",
+   "source": {
+    "at": "graphify/watch.py:1780",
+    "contains": "result = extract("
+   },
+   "match_any": [
+    {
+     "loc": "graphify/watch.py:1780"
+    }
+   ]
+  },
+  {
+   "id": "g08.build",
+   "fact": "build_from_json builds the graph (graphify/watch.py:1995)",
+   "source": {
+    "at": "graphify/watch.py:1995",
+    "contains": "build_from_json(result"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/watch.py:1995"
+    }
+   ]
+  },
+  {
+   "id": "g08.cluster",
+   "fact": "cluster() computes communities (graphify/watch.py:2033)",
+   "source": {
+    "at": "graphify/watch.py:2033",
+    "contains": "communities = cluster(G)"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/watch.py:2033"
+    }
+   ]
+  },
+  {
+   "id": "g08.write",
+   "fact": "to_json writes graph.json (graphify/watch.py:2105)",
+   "source": {
+    "at": "graphify/watch.py:2105",
+    "contains": "to_json(G, communities"
+   },
+   "match_any": [
+    {
+     "loc": "graphify/watch.py:2105"
+    }
+   ]
+  }
+ ],
+ "graphify_core/g09": [
+  {
+   "id": "g09.default",
+   "fact": "test_graph_size_cap_default_is_512_mib (tests/test_security.py:233)",
+   "source": {
+    "at": "tests/test_security.py:233",
+    "contains": "def test_graph_size_cap_default_is_512_mib"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_security.py:233-234"
+    },
+    {
+     "text": "test_graph_size_cap_default_is_512_mib"
+    }
+   ]
+  },
+  {
+   "id": "g09.env",
+   "fact": "test_max_graph_bytes_default_when_unset and the other GRAPHIFY_MAX_GRAPH_BYTES parsing tests (tests/test_security.py:241-285)",
+   "source": {
+    "at": "tests/test_security.py:241",
+    "contains": "def test_max_graph_bytes_default_when_unset"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_security.py:241-285"
+    },
+    {
+     "text": "test_max_graph_bytes_default_when_unset"
+    }
+   ]
+  },
+  {
+   "id": "g09.over",
+   "fact": "test_graph_size_cap_over_limit_raises (tests/test_security.py:294)",
+   "source": {
+    "at": "tests/test_security.py:294",
+    "contains": "def test_graph_size_cap_over_limit_raises"
+   },
+   "match_any": [
+    {
+     "loc": "tests/test_security.py:294-299"
+    },
+    {
+     "text": "test_graph_size_cap_over_limit_raises"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u01": [
+  {
+   "id": "u01.detect",
+   "fact": "copies.detect finds folders that copy the project's own code (verinoda/copies.py:72)",
+   "source": {
+    "at": "verinoda/copies.py:72",
+    "contains": "def detect("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/copies.py:72-74"
+    },
+    {
+     "text": "copies.detect"
+    }
+   ]
+  },
+  {
+   "id": "u01.share",
+   "fact": "a folder counts as a copy when enough of its files are copies (verinoda/copies.py:33)",
+   "source": {
+    "at": "verinoda/copies.py:33",
+    "contains": "MIN_COPY_SHARE ="
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/copies.py:33"
+    },
+    {
+     "text": "MIN_COPY_SHARE"
+    }
+   ]
+  },
+  {
+   "id": "u01.names",
+   "fact": "twin files must share most of the names they define (verinoda/copies.py:37)",
+   "source": {
+    "at": "verinoda/copies.py:37",
+    "contains": "MIN_SIMILARITY ="
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/copies.py:37"
+    },
+    {
+     "text": "MIN_SIMILARITY"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u02": [
+  {
+   "id": "u02.graph",
+   "fact": "`verinoda ui --graph` opens straight on the graph view (verinoda/cli.py:1497)",
+   "source": {
+    "at": "verinoda/cli.py:1497",
+    "contains": "sp.add_argument(\"--graph\""
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/cli.py:1497"
+    }
+   ]
+  },
+  {
+   "id": "u02.export",
+   "fact": "`verinoda ui --export` writes the graph as one HTML file (verinoda/cli.py:1498)",
+   "source": {
+    "at": "verinoda/cli.py:1498",
+    "contains": "sp.add_argument(\"--export\""
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/cli.py:1498"
+    }
+   ]
+  },
+  {
+   "id": "u02.write",
+   "fact": "export.write builds and writes that file (verinoda/ui/export.py:273)",
+   "source": {
+    "at": "verinoda/ui/export.py:273",
+    "contains": "def write("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/export.py:273-275"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u03": [
+  {
+   "id": "u03.version",
+   "fact": "Atlas.version is the index's key (graph.json and search.db stats) (verinoda/ui/data.py:189)",
+   "source": {
+    "at": "verinoda/ui/data.py:189",
+    "contains": "    def version(self) -> str:"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/data.py:189-191"
+    }
+   ]
+  },
+  {
+   "id": "u03.route",
+   "fact": "the server answers /api/version with it (verinoda/ui/server.py:288)",
+   "source": {
+    "at": "verinoda/ui/server.py:288",
+    "contains": "route == \"version\""
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/server.py:288-289"
+    }
+   ]
+  },
+  {
+   "id": "u03.poll",
+   "fact": "the page polls it and redraws on a change (followIndex) (verinoda/ui/static/app.js:1934)",
+   "source": {
+    "at": "verinoda/ui/static/app.js:1934",
+    "contains": "async function followIndex("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/static/app.js:1934-1936"
+    },
+    {
+     "text": "followIndex"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u04": [
+  {
+   "id": "u04.dir",
+   "fact": "usernotes.notes_dir: .verinoda/notes, or the notes.dir setting (verinoda/usernotes.py:60)",
+   "source": {
+    "at": "verinoda/usernotes.py:60",
+    "contains": "def notes_dir("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/usernotes.py:60-62"
+    },
+    {
+     "text": "notes_dir"
+    }
+   ]
+  },
+  {
+   "id": "u04.save",
+   "fact": "usernotes.save writes a note as a Markdown file (verinoda/usernotes.py:171)",
+   "source": {
+    "at": "verinoda/usernotes.py:171",
+    "contains": "def save("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/usernotes.py:171-173"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u05": [
+  {
+   "id": "u05.rels",
+   "fact": "impact follows the use links: calls, imports, references, inheritance (verinoda/ui/data.py:71)",
+   "source": {
+    "at": "verinoda/ui/data.py:71",
+    "contains": "USE_RELATIONS ="
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/data.py:71"
+    },
+    {
+     "text": "USE_RELATIONS"
+    }
+   ]
+  },
+  {
+   "id": "u05.impact",
+   "fact": "Snapshot.impact walks them backwards from a note (verinoda/ui/data.py:180)",
+   "source": {
+    "at": "verinoda/ui/data.py:180",
+    "contains": "    def impact(self, nid: str, depth: int = 3"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/data.py:180-182"
+    }
+   ]
+  },
+  {
+   "id": "u05.cap",
+   "fact": "it stops after MAX_IMPACT notes (verinoda/ui/data.py:72)",
+   "source": {
+    "at": "verinoda/ui/data.py:72",
+    "contains": "MAX_IMPACT ="
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/data.py:72"
+    },
+    {
+     "text": "MAX_IMPACT"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u06": [
+  {
+   "id": "u06.scrubber",
+   "fact": "export._scrubber builds the replacement for the project root and the home folder (verinoda/ui/export.py:185)",
+   "source": {
+    "at": "verinoda/ui/export.py:185",
+    "contains": "def _scrubber("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/export.py:185-187"
+    },
+    {
+     "text": "_scrubber"
+    }
+   ]
+  },
+  {
+   "id": "u06.scrub",
+   "fact": "export._scrub applies it to every string of the data (verinoda/ui/export.py:212)",
+   "source": {
+    "at": "verinoda/ui/export.py:212",
+    "contains": "def _scrub("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/export.py:212-214"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u07": [
+  {
+   "id": "u07.switch",
+   "fact": "index builds run with _without_upstream_html (verinoda/index.py:98)",
+   "source": {
+    "at": "verinoda/index.py:98",
+    "contains": "class _without_upstream_html"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/index.py:98-100"
+    },
+    {
+     "text": "_without_upstream_html"
+    }
+   ]
+  },
+  {
+   "id": "u07.var",
+   "fact": "it sets the upstream switch GRAPHIFY_VIZ_NODE_LIMIT to 0 unless the user set it (verinoda/index.py:108)",
+   "source": {
+    "at": "verinoda/index.py:108",
+    "contains": "VAR = \"GRAPHIFY_VIZ_NODE_LIMIT\""
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/index.py:108"
+    },
+    {
+     "text": "GRAPHIFY_VIZ_NODE_LIMIT"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u08": [
+  {
+   "id": "u08.judge",
+   "fact": "analysis.judge gives each sub-question its verdict (verinoda/analysis.py:1866)",
+   "source": {
+    "at": "verinoda/analysis.py:1866",
+    "contains": "def judge("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/analysis.py:1866-1868"
+    }
+   ]
+  },
+  {
+   "id": "u08.met",
+   "fact": "met: the strongest relevant claim is verified at the required level (verinoda/analysis.py:1895)",
+   "source": {
+    "at": "verinoda/analysis.py:1895",
+    "contains": "        return \"met\""
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/analysis.py:1895"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u09": [
+  {
+   "id": "u09.update",
+   "fact": "workflow.update refreshes the index after edits (verinoda/workflow.py:195)",
+   "source": {
+    "at": "verinoda/workflow.py:195",
+    "contains": "def update(store: Store, repo: Path)"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/workflow.py:195-197"
+    }
+   ]
+  },
+  {
+   "id": "u09.full",
+   "fact": "it rebuilds the code graph over the whole corpus (index.build) (verinoda/workflow.py:241)",
+   "source": {
+    "at": "verinoda/workflow.py:241",
+    "contains": "        stats = index.build(repo)"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/workflow.py:241"
+    }
+   ]
+  },
+  {
+   "id": "u09.affected",
+   "fact": "whenever a file of the graph changed (_graph_affected) (verinoda/workflow.py:173)",
+   "source": {
+    "at": "verinoda/workflow.py:173",
+    "contains": "def _graph_affected("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/workflow.py:173-175"
+    },
+    {
+     "text": "_graph_affected"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u10": [
+  {
+   "id": "u10.csp",
+   "fact": "a strict Content-Security-Policy on every page (verinoda/ui/server.py:36)",
+   "source": {
+    "at": "verinoda/ui/server.py:36",
+    "contains": "CSP = ("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/server.py:36-37"
+    }
+   ]
+  },
+  {
+   "id": "u10.reject",
+   "fact": "_reject turns away a write without the token, JSON or this origin (verinoda/ui/server.py:177)",
+   "source": {
+    "at": "verinoda/ui/server.py:177",
+    "contains": "def _reject("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/server.py:177-179"
+    },
+    {
+     "text": "_reject"
+    }
+   ]
+  },
+  {
+   "id": "u10.token",
+   "fact": "the page's per-run token travels in X-Verinoda-Token (verinoda/ui/server.py:138)",
+   "source": {
+    "at": "verinoda/ui/server.py:138",
+    "contains": "X-Verinoda-Token"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/server.py:138"
+    },
+    {
+     "text": "X-Verinoda-Token"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u11": [
+  {
+   "id": "u11.strip",
+   "fact": "strip_root_from_ids takes the scan root out of ids minted from an absolute path (verinoda/portable_ids.py:28)",
+   "source": {
+    "at": "verinoda/portable_ids.py:28",
+    "contains": "def strip_root_from_ids("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/portable_ids.py:28-30"
+    },
+    {
+     "text": "strip_root_from_ids"
+    }
+   ]
+  },
+  {
+   "id": "u11.file",
+   "fact": "make_graph_portable rewrites graph.json after each build (verinoda/portable_ids.py:94)",
+   "source": {
+    "at": "verinoda/portable_ids.py:94",
+    "contains": "def make_graph_portable("
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/portable_ids.py:94-96"
+    },
+    {
+     "text": "make_graph_portable"
+    }
+   ]
+  }
+ ],
+ "verinoda_user_tr/u12": [
+  {
+   "id": "u12.sig",
+   "fact": "Watcher.signature: size and time of every listed file (verinoda/ui/server.py:76)",
+   "source": {
+    "at": "verinoda/ui/server.py:76",
+    "contains": "    def signature(self) -> tuple:"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/server.py:76-78"
+    }
+   ]
+  },
+  {
+   "id": "u12.burst",
+   "fact": "it updates only once the signature stops changing (verinoda/ui/server.py:117)",
+   "source": {
+    "at": "verinoda/ui/server.py:117",
+    "contains": "if now != pending:"
+   },
+   "match_any": [
+    {
+     "loc": "verinoda/ui/server.py:117"
+    }
+   ]
+  }
+ ]
+}

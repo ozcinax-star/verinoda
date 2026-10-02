@@ -1,0 +1,86 @@
+analysis ana_cff310b4f58f, snapshot snp_96a6e3b2d02d (commit 906a99fb8c)
+understood as: Anladığım (kurallarla): q1 [yapılandırma] Her tick'te kaç bloğun onarılacağı nerede ayarlanıyor? (karşılıklar: bloğun=block, ayarlanıyor=setting)
+plan links: tick'te -> src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39
+q1 [met_with_inference] config: Her tick'te kaç bloğun onarılacağı nerede ayarlanıyor?
+  [strong_inference] `blocksPerTick` reads setting `repair.blocks-per-tick` (default 4) (reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java:14); `repair.blocks-per-tick` is set in reference/original-plugin/config.yml:9 (uncertain: a string-keyed read found by a pattern: which setting object answers it is not traced)  (clm_214c12dc87ac)
+  unknown: the claims that answer it cite only reference/: a reference tree, a copy of the project or a vendored folder, not the project's own code; next: name that tree in the question if it is what you mean, or ask about the project's own code by name
+context (found on the way; not what answers):
+  [statically_verified] `GlowConfig` is defined at src/main/java/com/example/glowmod/config/GlowConfig.java:15-64  (clm_2c0d3fee9b48)
+  [weak_inference 0.30] `.parse()` calls `GlowConfig` (src/main/java/com/example/glowmod/config/GlowConfig.java:48) (uncertain: )  (clm_518ecebb571f)
+  [weak_inference 0.30] `RepairScheduler.kaydet()` calls `Pending` (src/main/java/com/example/glowmod/repair/RepairScheduler.java:30) (uncertain: )  (clm_a0d5d5b9407b)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_518ecebb571f: weak_inference -> weak_inference  src/main/java/com/example/glowmod/config/GlowConfig.java:48: line 48 names `GlowConfig` but has no call to it
+critique clm_a0d5d5b9407b: strong_inference -> weak_inference  src/main/java/com/example/glowmod/repair/RepairScheduler.java:30: line 30 names `Pending` but has no call to it
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: ayarlanıyor->ayarlari, blogun->block, ayarlaniyor->sett (+2 more)
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:33-39 RepairScheduler.tick
+  calls: get@34
+  runs: at the end of every server tick (registered at src/main/java/com/example/glowmod/repair/RepairScheduler.java:24)
+33 private static void tick(MinecraftServer server) {
+34     int budget = GlowConfig.get().blocksPerTick();
+35     while (budget-- > 0 && !QUEUE.isEmpty() && QUEUE.peekFirst().dueTick() <= server.getTicks()) {
+36         Pending p = QUEUE.pollFirst();
+37         p.world().setBlockState(p.pos(), p.state());
+38     }
+39 }
+## src/main/java/com/example/glowmod/config/GlowConfig.java:15-64 public record GlowConfig(int ritualWispCount, double naturalChance, int blocksPerTick, int repairDelayTicks, int maxSummonDistance)
+  called by: parse (src/main/java/com/example/glowmod/config/GlowConfig.java:48)
+  src/main/java/com/example/glowmod/config/GlowConfig.java:14-14
+14 /** Settings from config/glowmod.yml; every missing key falls back to {@link #DEFAULTS}. */
+## src/client/java/com/example/glowmod/client/GlowModClient.java:25-31 GlowModClient.onEndTick
+  calls: SummonWispPayload@28
+  runs: at the end of every client tick (registered at src/client/java/com/example/glowmod/client/GlowModClient.java:22)
+25 private static void onEndTick(MinecraftClient client) {
+26     while (summonKey.wasPressed()) {
+27         if (client.crosshairTarget instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) {
+28             ClientPlayNetworking.send(new SummonWispPayload(hit.getBlockPos()));
+29         }
+30     }
+31 }
+## src/main/java/com/example/glowmod/config/GlowConfig.java:44-54 parse
+44 private static GlowConfig parse(Map<String, Object> root) {
+45     Map<String, Object> wisp = section(root, "wisp");
+46     Map<String, Object> repair = section(root, "repair");
+47     Map<String, Object> network = section(root, "network");
+48     return new GlowConfig(
+49             number(wisp, "ritual_count", DEFAULTS.ritualWispCount()).intValue(),
+50             number(wisp, "natural_chance", DEFAULTS.naturalChance()).doubleValue(),
+51             number(repair, "blocks_per_tick", DEFAULTS.blocksPerTick()).intValue(),
+52             number(repair, "delay_ticks", DEFAULTS.repairDelayTicks()).intValue(),
+53             number(network, "max_summon_distance", DEFAULTS.maxSummonDistance()).intValue());
+54 }
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:28-31 RepairScheduler.kaydet
+28 public static void kaydet(ServerWorld world, BlockPos pos, BlockState state) {
+29     long due = world.getServer().getTicks() + GlowConfig.get().repairDelayTicks();
+30     QUEUE.addLast(new Pending(world, pos, state, due));
+31 }
+## reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java:13-15 GlowPlugin.blocksPerTick [reference]
+13 public int blocksPerTick() {
+14     return getConfig().getInt("repair.blocks-per-tick", 4);
+15 }
+## src/main/java/com/example/glowmod/repair/RepairScheduler.java:15-16 Pending
+15 private record Pending(ServerWorld world, BlockPos pos, BlockState state, long dueTick) {
+16 }
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:14-48 public final class RepairScheduler
+src/main/resources/glowmod.yml:10-14 repair:
+reference/original-plugin/config.yml:7-9 repair:
+src/main/java/com/example/glowmod/config/GlowConfig.java:21-23 public static GlowConfig get()
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:13-13 /** Puts back blocks the ritual removed, a few per tick, after a short delay. */
+build.gradle:62-64 tasks.withType(JavaCompile).configureEach
+src/main/java/com/example/glowmod/config/GlowConfig.java:56-59 @SuppressWarnings("unchecked") private static Map<String, Object> section(Map<String, Object> root, String key)
+src/main/java/com/example/glowmod/config/GlowConfig.java:61-63 private static Number number(Map<String, Object> section, String key, Number fallback)
+src/main/java/com/example/glowmod/config/GlowConfig.java:26-42 public static void load()
+src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-26 public static void register()
+src/main/resources/data/glowmod/function/ritual/tick.mcfunction:1-5 execute as @e[type=minecraft:marker,tag=glowmod.altar] at @s run particle minecraft:end_rod ~ ~1 ~ 1.5 0.5 1.5 0.01 6
+src/main/resources/glowmod.yml:1-2 # Glow Mod settings. Copied to config/glowmod.yml on first start; edit that copy,
+src/client/java/com/example/glowmod/client/GlowModClient.java:18-23 @Override public void onInitializeClient()
+reference/original-plugin/config.yml:1-1 # GlowPlugin settings
+src/main/resources/data/glowmod/function/ritual/start.mcfunction:1-7 scoreboard objectives add glowmod.ritual dummy
+src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-21 public record SummonWispPayload(BlockPos pos) implements CustomPayload
+src/main/java/com/example/glowmod/ritual/Ritual.java:21-31 public static void baslat(ServerWorld world, BlockPos altar)
+src/main/java/com/example/glowmod/event/LanternEvents.java:18-34 public static void etkinlestir()
+src/main/java/com/example/glowmod/ritual/Ritual.java:34-42 private static void alaniAc(ServerWorld world, BlockPos altar)
+src/main/java/com/example/glowmod/event/LanternEvents.java:11-35 public final class LanternEvents
+src/main/java/com/example/glowmod/world/WispSpawner.java:22-33 private static void onChunkLoad(ServerWorld world, WorldChunk chunk)
+… 62 more candidates not shown: src/main/java/com/example/glowmod/item/ModItems.java:12-32 public final class ModItems; src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30 private static void onSummonWisp(SummonWispPayload; src/main/java/com/example/glowmod/config/GlowConfig.java:1-1 package com.example.glowmod.config;; README.md:1-26 # Glow Mod (example)
+next: verinoda query "…" --max-chars 12000

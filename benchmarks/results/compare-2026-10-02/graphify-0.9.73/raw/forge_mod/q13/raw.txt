@@ -1,0 +1,298 @@
+$ grep -rniE 'emberforge|rewards|first_cinder|fonksiyonu|nereden|çalıştırılıyor' .   # 244 matching lines in 51 files
+src/main/resources/data/emberforge/advancement/first_cinder.json:5: "id": "emberforge:cinder_ore"
+src/main/resources/data/emberforge/advancement/first_cinder.json:8: "translate": "advancement.emberforge.first_cinder.title"
+src/main/resources/data/emberforge/advancement/first_cinder.json:11: "translate": "advancement.emberforge.first_cinder.description"
+src/main/resources/data/emberforge/advancement/first_cinder.json:21: "items": "#emberforge:cinder_ores"
+src/main/resources/data/emberforge/advancement/first_cinder.json:27: "rewards": {
+src/main/resources/data/emberforge/advancement/first_cinder.json:28: "function": "emberforge:rewards/first_cinder"
+src/main/resources/assets/emberforge/lang/en_us.json:2: "block.emberforge.ember_forge": "Ember Forge",
+src/main/resources/assets/emberforge/lang/en_us.json:3: "block.emberforge.cinder_ore": "Cinder Ore",
+src/main/resources/assets/emberforge/lang/en_us.json:4: "item.emberforge.cinder_ingot": "Cinder Ingot",
+src/main/resources/assets/emberforge/lang/en_us.json:5: "item.emberforge.forge_hammer": "Forge Hammer",
+src/main/resources/assets/emberforge/lang/en_us.json:6: "itemGroup.emberforge": "Emberforge",
+src/main/resources/assets/emberforge/lang/en_us.json:7: "container.emberforge.ember_forge": "Ember Forge",
+src/main/resources/assets/emberforge/lang/en_us.json:8: "gui.emberforge.stoke": "Stoke",
+src/main/resources/assets/emberforge/lang/en_us.json:9: "message.emberforge.stoked": "The forge glows hotter (heat %s)",
+src/main/resources/assets/emberforge/lang/en_us.json:10: "message.emberforge.first_cinder": "Warm stone! Here is some coal to light a forge.",
+src/main/resources/assets/emberforge/lang/en_us.json:11: "message.emberforge.reset.heat_source": "There is still a heat source under you.",
+src/main/resources/assets/emberforge/lang/en_us.json:12: "message.emberforge.reset.done": "Nearby Ember Forges were reset.",
+src/main/resources/assets/emberforge/lang/en_us.json:13: "command.emberforge.heat": "Forge heat: %s",
+src/main/resources/assets/emberforge/lang/en_us.json:14: "command.emberforge.heat.not_a_forge": "That block is not an Ember Forge.",
+src/main/resources/assets/emberforge/lang/en_us.json:15: "advancement.emberforge.first_cinder.title": "Smouldering Stone",
+src/main/resources/assets/emberforge/lang/en_us.json:16: "advancement.emberforge.first_cinder.description": "Find some Cinder Ore"
+src/main/resources/assets/emberforge/lang/tr_tr.json:2: "block.emberforge.ember_forge": "Kor Ocağı",
+src/main/resources/assets/emberforge/lang/tr_tr.json:3: "block.emberforge.cinder_ore": "Cüruf Cevheri",
+src/main/resources/assets/emberforge/lang/tr_tr.json:4: "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+src/main/resources/assets/emberforge/lang/tr_tr.json:5: "item.emberforge.forge_hammer": "Demirci Çekici",
+src/main/resources/assets/emberforge/lang/tr_tr.json:6: "itemGroup.emberforge": "Emberforge",
+src/main/resources/assets/emberforge/lang/tr_tr.json:7: "container.emberforge.ember_forge": "Kor Ocağı",
+src/main/resources/assets/emberforge/lang/tr_tr.json:8: "gui.emberforge.stoke": "Körükle",
+src/main/resources/assets/emberforge/lang/tr_tr.json:9: "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+src/main/resources/assets/emberforge/lang/tr_tr.json:10: "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:11: "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:12: "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:13: "command.emberforge.heat": "Ocak ısısı: %s",
+src/main/resources/assets/emberforge/lang/tr_tr.json:14: "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:15: "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+src/main/resources/assets/emberforge/lang/tr_tr.json:16: "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+src/main/resources/data/emberforge/function/rewards/first_cinder.mcfunction:2: tellraw @s {"translate":"message.emberforge.first_cinder","color":"gold"}
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1: package net.ashvale.emberforge.block;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:5: import net.ashvale.emberforge.EmberForge;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:6: import net.ashvale.emberforge.config.EmberConfig;
+... (204 more matching lines not shown)
+
+==> src/main/resources/data/emberforge/advancement/first_cinder.json:1-30 <==
+     1	{
+     2	  "parent": "minecraft:story/mine_stone",
+     3	  "display": {
+     4	    "icon": {
+     5	      "id": "emberforge:cinder_ore"
+     6	    },
+     7	    "title": {
+     8	      "translate": "advancement.emberforge.first_cinder.title"
+     9	    },
+    10	    "description": {
+    11	      "translate": "advancement.emberforge.first_cinder.description"
+    12	    },
+    13	    "frame": "task"
+    14	  },
+    15	  "criteria": {
+    16	    "has_cinder_ore": {
+    17	      "trigger": "minecraft:inventory_changed",
+    18	      "conditions": {
+    19	        "items": [
+    20	          {
+    21	            "items": "#emberforge:cinder_ores"
+    22	          }
+    23	        ]
+    24	      }
+    25	    }
+    26	  },
+    27	  "rewards": {
+    28	    "function": "emberforge:rewards/first_cinder"
+    29	  }
+    30	}
+
+==> src/main/resources/assets/emberforge/lang/en_us.json:1-17 <==
+     1	{
+     2	  "block.emberforge.ember_forge": "Ember Forge",
+     3	  "block.emberforge.cinder_ore": "Cinder Ore",
+     4	  "item.emberforge.cinder_ingot": "Cinder Ingot",
+     5	  "item.emberforge.forge_hammer": "Forge Hammer",
+     6	  "itemGroup.emberforge": "Emberforge",
+     7	  "container.emberforge.ember_forge": "Ember Forge",
+     8	  "gui.emberforge.stoke": "Stoke",
+     9	  "message.emberforge.stoked": "The forge glows hotter (heat %s)",
+    10	  "message.emberforge.first_cinder": "Warm stone! Here is some coal to light a forge.",
+    11	  "message.emberforge.reset.heat_source": "There is still a heat source under you.",
+    12	  "message.emberforge.reset.done": "Nearby Ember Forges were reset.",
+    13	  "command.emberforge.heat": "Forge heat: %s",
+    14	  "command.emberforge.heat.not_a_forge": "That block is not an Ember Forge.",
+    15	  "advancement.emberforge.first_cinder.title": "Smouldering Stone",
+    16	  "advancement.emberforge.first_cinder.description": "Find some Cinder Ore"
+    17	}
+
+==> src/main/resources/assets/emberforge/lang/tr_tr.json:1-17 <==
+     1	{
+     2	  "block.emberforge.ember_forge": "Kor Ocağı",
+     3	  "block.emberforge.cinder_ore": "Cüruf Cevheri",
+     4	  "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+     5	  "item.emberforge.forge_hammer": "Demirci Çekici",
+     6	  "itemGroup.emberforge": "Emberforge",
+     7	  "container.emberforge.ember_forge": "Kor Ocağı",
+     8	  "gui.emberforge.stoke": "Körükle",
+     9	  "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+    10	  "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+    11	  "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+    12	  "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+    13	  "command.emberforge.heat": "Ocak ısısı: %s",
+    14	  "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+    15	  "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+    16	  "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+    17	}
+
+==> src/main/resources/data/emberforge/function/rewards/first_cinder.mcfunction:1-3 <==
+     1	# Reward for the first cinder ore; runs as the player who earned the advancement.
+     2	tellraw @s {"translate":"message.emberforge.first_cinder","color":"gold"}
+     3	give @s minecraft:coal 4
+
+==> src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179 <==
+     1	package net.ashvale.emberforge.block;
+     2	
+     3	import java.util.Optional;
+     4	
+     5	import net.ashvale.emberforge.EmberForge;
+     6	import net.ashvale.emberforge.config.EmberConfig;
+     7	import net.ashvale.emberforge.heat.HeatMath;
+     8	import net.ashvale.emberforge.menu.EmberForgeMenu;
+     9	import net.ashvale.emberforge.recipe.ForgingRecipe;
+    10	import net.ashvale.emberforge.registry.ModBlocks;
+    11	import net.ashvale.emberforge.registry.ModRecipes;
+    12	import net.ashvale.emberforge.registry.ModTags;
+    13	import net.minecraft.core.BlockPos;
+    14	import net.minecraft.core.HolderLookup;
+    15	import net.minecraft.nbt.CompoundTag;
+    16	import net.minecraft.network.chat.Component;
+    17	import net.minecraft.world.MenuProvider;
+    18	import net.minecraft.world.entity.player.Inventory;
+    19	import net.minecraft.world.entity.player.Player;
+    20	import net.minecraft.world.inventory.AbstractContainerMenu;
+    21	import net.minecraft.world.inventory.ContainerData;
+    22	import net.minecraft.world.item.ItemStack;
+    23	import net.minecraft.world.item.crafting.RecipeHolder;
+    24	import net.minecraft.world.item.crafting.SingleRecipeInput;
+    25	import net.minecraft.world.level.Level;
+    26	import net.minecraft.world.level.block.entity.BlockEntity;
+    27	import net.minecraft.world.level.block.state.BlockState;
+    28	import net.neoforged.neoforge.items.ItemStackHandler;
+    29	
+    30	/**
+    31	 * Inventory (input, fuel, output), heat and forging progress of one Ember Forge.
+    32	 */
+    33	public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider {
+    34	    public static final int SLOT_INPUT = 0;
+    35	    public static final int SLOT_FUEL = 1;
+    36	    public static final int SLOT_OUTPUT = 2;
+    37	
+    38	    private final ItemStackHandler items = new ItemStackHandler(3) {
+    39	        @Override
+    40	        protected void onContentsChanged(int slot) {
+    41	            setChanged();
+    42	        }
+    43	    };
+    44	    private int heat;
+    45	    private int progress;
+    46	    private int forgeTime;
+    47	
+    48	    private final ContainerData data = new ContainerData() {
+    49	        @Override
+    50	        public int get(int index) {
+    51	            return switch (index) {
+    52	                case 0 -> heat;
+    53	                case 1 -> EmberConfig.MAX_HEAT.get();
+    54	                case 2 -> progress;
+    55	                case 3 -> forgeTime;
+    56	                default -> 0;
+    57	            };
+    58	        }
+    59	
+    60	        @Override
+    61	        public void set(int index, int value) {
+    62	            // the server owns these values; the client menu keeps its own copy
+    63	        }
+    64	
+    65	        @Override
+    66	        public int getCount() {
+    67	            return 4;
+    68	        }
+    69	    };
+    70	
+    71	    public EmberForgeBlockEntity(BlockPos pos, BlockState state) {
+    72	        super(ModBlocks.EMBER_FORGE_ENTITY.get(), pos, state);
+    73	    }
+    74	
+    75	    public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge) {
+    76	        boolean changed = false;
+    77	
+    78	        ItemStack fuel = forge.items.getStackInSlot(SLOT_FUEL);
+    79	        int fuelHeat = HeatMath.heatForFuel(fuel);
+    80	        if (fuelHeat > 0 && forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()) {
+    81	            forge.items.extractItem(SLOT_FUEL, 1, false);
+    82	            forge.heat = HeatMath.addHeat(forge.heat, fuelHeat);
+    83	            changed = true;
+    84	        }
+    85	
+    86	        if (level.getGameTime() % 40 == 0 && level.getBlockState(pos.below()).is(ModTags.FORGE_HEAT_SOURCES)) {
+    87	            forge.heat = HeatMath.addHeat(forge.heat, 2);
+    88	            changed = true;
+    89	        }
+    90	
+    91	        ItemStack input = forge.items.getStackInSlot(SLOT_INPUT);
+    92	        Optional<RecipeHolder<ForgingRecipe>> match = level.getRecipeManager()
+    93	                .getRecipeFor(ModRecipes.FORGING_TYPE.get(), new SingleRecipeInput(input), level);
+    94	        if (match.isPresent() && forge.canOutput(match.get().value().result())) {
+    95	            ForgingRecipe recipe = match.get().value();
+    96	            forge.forgeTime = recipe.forgeTime();
+    97	            forge.progress += HeatMath.progressPerTick(forge.heat, recipe.minHeat());
+    98	            if (forge.progress >= recipe.forgeTime()) {
+    99	                forge.finish(recipe);
+   100	            }
+   101	            changed = true;
+   102	        } else if (forge.progress != 0) {
+   103	            forge.progress = 0;
+   104	            changed = true;
+   105	        }
+   106	
+   107	        int cooled = cooled(forge.heat, level.getGameTime(), EmberConfig.DECAY_INTERVAL.get());
+   108	        if (cooled != forge.heat) {
+   109	            forge.heat = cooled;
+   110	            changed = true;
+   111	        }
+   112	
+   113	        boolean lit = forge.heat > 0;
+   114	        if (state.getValue(EmberForgeBlock.LIT) != lit) {
+   115	            level.setBlock(pos, state.setValue(EmberForgeBlock.LIT, lit), 3);
+   116	        }
+   117	        if (changed) {
+   118	            setChanged(level, pos, state);
+   119	        }
+   120	    }
+   121	
+   122	    /** Heat after cooling: one less on every decayInterval-th game tick, never below 0. */
+   123	    public static int cooled(int heat, long gameTime, int decayInterval) {
+   124	        return heat > 0 && gameTime % decayInterval == 0 ? heat - 1 : heat;
+   125	    }
+   126	
+   127	    private boolean canOutput(ItemStack result) {
+   128	        ItemStack out = items.getStackInSlot(SLOT_OUTPUT);
+   129	        return out.isEmpty() || (ItemStack.isSameItemSameComponents(out, result)
+   130	                && out.getCount() + result.getCount() <= out.getMaxStackSize());
+   131	    }
+   132	
+   133	    private void finish(ForgingRecipe recipe) {
+   134	        items.extractItem(SLOT_INPUT, 1, false);
+   135	        items.insertItem(SLOT_OUTPUT, recipe.result().copy(), false);
+   136	        progress = 0;
+   137	        EmberForge.LOGGER.debug("Ember Forge at {} forged {}", worldPosition, recipe.result());
+   138	    }
+   139	
+   140	    public void stoke(Player player) {
+   141	        heat = HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get());
+   142	        setChanged();
+   143	        player.displayClientMessage(Component.translatable("message.emberforge.stoked", heat), true);
+   144	    }
+   145	
+   146	    @Override
+   147	    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+   148	        super.loadAdditional(tag, registries);
+   149	        items.deserializeNBT(registries, tag.getCompound("Items"));
+   150	        heat = tag.getInt("Heat");
+   151	        progress = tag.getInt("Progress");
+   152	    }
+   153	
+   154	    @Override
+   155	    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+   156	        super.saveAdditional(tag, registries);
+   157	        tag.put("Items", items.serializeNBT(registries));
+   158	        tag.putInt("Heat", heat);
+   159	        tag.putInt("Progress", progress);
+   160	    }
+   161	
+   162	    public ItemStackHandler getItems() {
+   163	        return items;
+   164	    }
+   165	
+   166	    public int getHeat() {
+   167	        return heat;
+   168	    }
+   169	
+   170	    @Override
+   171	    public Component getDisplayName() {
+   172	        return Component.translatable("container.emberforge.ember_forge");
+   173	    }
+   174	
+   175	    @Override
+   176	    public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
+   177	        return new EmberForgeMenu(containerId, inventory, this, data);
+   178	    }
+   179	}

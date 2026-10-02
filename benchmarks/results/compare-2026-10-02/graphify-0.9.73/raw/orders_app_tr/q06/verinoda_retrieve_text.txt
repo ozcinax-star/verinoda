@@ -1,0 +1,71 @@
+expanded: repositori->repo
+## orders/repository.py:15-20 OrderRepository.save
+  called by: place_order (orders/service.py:22)?
+15 def save(self, customer: str, total: float) -> int:
+16     cur = self.conn.execute(
+17         "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+18     )
+19     self.conn.commit()
+20     return cur.lastrowid
+## tests/test_service.py:7-10 test_place_and_fetch_roundtrip
+  calls: OrderRepository@8, place_order@9, fetch_order@10
+ 7 def test_place_and_fetch_roundtrip():
+ 8     repo = OrderRepository(":memory:")
+ 9     oid = place_order(repo, "ada", [{"price": 5.0, "qty": 1}])
+10     assert fetch_order(repo, oid)["total"] == 5.0
+## orders/service.py:19-22 place_order
+  calls: validate_items@20, compute_total@21, save@22?
+  called by: create_order_handler (orders/api.py:18); test_empty_order_rejected (tests/test_service.py:15); test_place_and_fetch_roundtrip (tests/test_service.py:9)
+19 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+20     validate_items(items)
+21     total = compute_total(items)
+22     return repo.save(customer, total)
+## tests/test_service.py:13-15 test_empty_order_rejected
+13 def test_empty_order_rejected():
+14     with pytest.raises(ValidationError):
+15         place_order(OrderRepository(":memory:"), "ada", [])
+## orders/repository.py:8-26 OrderRepository
+ 8 class OrderRepository:
+ 9     def __init__(self, url: str = DATABASE_URL):
+10         self.conn = sqlite3.connect(url)
+11         self.conn.execute(
+12             "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+13         )
+15     def save(self, customer: str, total: float) -> int:
+16         cur = self.conn.execute(
+17             "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+18         )
+19         self.conn.commit()
+20         return cur.lastrowid
+22     def get(self, order_id: int):
+23         row = self.conn.execute(
+24             "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+25         ).fetchone()
+26         return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+## orders/api.py:9-13 get_repo
+ 9 def get_repo() -> OrderRepository:
+10     global _repo
+11     if _repo is None:
+12         _repo = OrderRepository()
+13     return _repo
+## orders/service.py:25-26 fetch_order
+25 def fetch_order(repo: OrderRepository, order_id: int):
+26     return repo.get(order_id)
+tests/test_pricing.py:12-13 def test_compute_total()
+tests/test_pricing.py:4-5 def test_discount_applies_above_threshold()
+tests/test_pricing.py:8-9 def test_no_discount_below_threshold()
+orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+docs/adr/0001-sqlite-persistence.md:1-7 # ADR 0001: SQLite for order persistence
+orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+pyproject.toml:1-8 [project] name = "orders-app" version = "0.1.0" requires-python = ">=3.10" [tool.pytest.ini_options] testpaths = ["test…
+orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+orders/service.py:8-9 class ValidationError(ValueError)
+orders/api.py:6-6 _repo = None
+orders/pricing.py:11-15 def apply_discount(subtotal: float) -> float
+orders/service.py:1-1 """Business logic between the HTTP layer and the repository."""
+README.md:1-5 # orders_app
+orders/config.py:5-7 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+orders/__init__.py:1-1 """Tiny order service used as the Verinoda end-to-end example."""
+orders/config.py:10-15 def load_settings() -> dict
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)

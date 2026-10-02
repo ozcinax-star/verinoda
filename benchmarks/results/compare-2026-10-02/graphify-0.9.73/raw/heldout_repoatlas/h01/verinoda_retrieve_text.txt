@@ -1,0 +1,89 @@
+## repoatlas/experiments.py:288-293 _kill_container
+  doc: Stop a timed-out container by name; killing the docker/podman client does not.
+  called by: run (repoatlas/experiments.py:487); test_no_child_inherits_stdin (tests/test_experiments.py:450)
+288 def _kill_container(runtime: str, name: str) -> None:
+289     """Stop a timed-out container by name; killing the docker/podman client does not."""
+290     try:
+291         subprocess.run([runtime, "kill", name], capture_output=True, timeout=30, stdin=subprocess.DEVNULL)
+292     except (OSError, subprocess.TimeoutExpired):
+293         pass
+## repoatlas/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass", timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto", commit: str | N…
+  doc: Run one experiment and record it (and its evidence) in the store.
+  calls: load_config@380, _strip_quotes@384, policy@392, container_runtime@393, new_id@402, now@405, ExperimentRefused@418, runs_dir@420, _copy_repo@426, _scrubbed_env@427, _container_argv@457, _posix_limits@473 (+8)
+  called by: _run_tests (repoatlas/analysis.py:1674); cmd_experiment (repoatlas/cli.py:402); observe (repoatlas/runtime/trace.py:559); verify (repoatlas/workflow.py:283); test_allowlisted_pytest_passes_in_a_copy_with_process_isolation (tests/test_experiments.py:143); test_parent_secrets_are_not_visible_to_the_child (tests/test_experiments.py:177); test_timeout_kills_the_process_tree_and_is_recorded (tests/test_experiments.py:200); test_non_allowlisted_command_is_refused_without_container (tests/test_experiments.py:222) (+10)
+  const repoatlas/experiments.py:87: KILL_DRAIN_TIMEOUT = 15  # seconds to collect output after killing a timed-out tree
+  const repoatlas/experiments.py:89: MAX_LOG_BYTES = 5 * 1024 * 1024
+  repoatlas/experiments.py:425-438
+425 copy = work / "repo"
+426 copied = _copy_repo(repo, copy)
+427 env = _scrubbed_env(home)
+428 artifacts_dir = work / "_artifacts"
+429 artifacts_dir.mkdir()
+430 plugins_dir = work / "_plugins"
+431 if plugins:
+432     plugins_dir.mkdir()
+433     for name, data in plugins.items():
+434         (plugins_dir / name).write_bytes(data)
+435 guarantees = {
+436     "separate_process": True, "timeout_kills_tree": True, "cwd_is_copy": True,
+437     "env_allowlisted": True, "resource_limits": os.name != "nt" or level == "container",
+438     "network_isolated": level == "container", "fs_reads_confined": level == "container",
+  repoatlas/experiments.py:485-498
+485     timed_out = True
+486     if level == "container":
+487         _kill_container(runtime, container_name)
+488     _kill_tree(proc)
+489     try:
+490         so, se = proc.communicate(timeout=KILL_DRAIN_TIMEOUT)
+491     except subprocess.TimeoutExpired:
+492         # A descendant escaped the tree kill and still holds the pipes;
+493         # do not let it turn the timeout into a hang.
+494         so, se = b"", b"[repoatlas] output unavailable: a descendant process kept the pipes open after kill"
+495 duration = time.monotonic() - t0
+496 stdout = so[:MAX_LOG_BYTES].decode("utf-8", "replace")
+497 stderr = se[:MAX_LOG_BYTES].decode("utf-8", "replace")
+498 # Bytes, not write_text: on Windows the child's "\r\n" would become "\r\r\n".
+## tests/test_experiments.py:190-214 def test_timeout_kills_the_process_tree_and_is_recorded(proj, tmp_path)
+  calls: _probe@193, run@200, _alive@212
+  const tests/test_experiments.py:33: PYTEST = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+  tests/test_experiments.py:195-208
+195     "def test_hangs():\n"
+196     "    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+197     f"    Path(r'{pidfile}').write_text(str(child.pid))\n"
+198     "    time.sleep(300)\n"))
+199 t0 = time.monotonic()
+200 res = experiments.run(st, repo, [*PYTEST, probe], hypothesis="it finishes", timeout=10)
+201 elapsed = time.monotonic() - t0
+202 assert res["outcome"] == "timeout" and res["matches_expectation"] is False
+203 assert res["summary"]["timed_out"] is True and res["summary"]["exit_code"] is None
+204 assert elapsed < 60
+205 row = st.get("experiments", res["id"])
+206 assert row["status"] == "timeout" and row["timed_out"] == 1 and row["exit_code"] is None
+207 ev = st.evidence(res["evidence_id"])
+208 assert ev["meta"]["raw_outcome"] == "timeout" and ev["meta"]["outcome"] == "fail"
+## repoatlas/experiments.py:318-332 _kill_tree
+318 def _kill_tree(proc: subprocess.Popen) -> None:
+319     if proc.poll() is not None:
+320         return
+321     if os.name == "nt":
+322         subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True,
+323                        stdin=subprocess.DEVNULL)
+324     else:  # pragma: no cover
+325         try:
+326             os.killpg(proc.pid, signal.SIGKILL)
+327         except ProcessLookupError:
+328             pass
+329     try:
+330         proc.wait(timeout=10)
+331     except subprocess.TimeoutExpired:
+332         proc.kill()
+## tests/test_experiments.py:134-162 def test_allowlisted_pytest_passes_in_a_copy_with_process_isolation(proj)
+## tests/test_experiments.py:3-7 (module level)
+3 Every test runs a real child process (no mocks of experiments.run): allowlisted
+4 pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+5 whole process tree, refusal of non-allowlisted commands, logs on disk with only
+6 a summary returned.
+7 """
+## repoatlas/experiments.py:5-16 ``process`` (always available)
+… 800 more candidates not shown: tests/test_experiments.py:64-82 def _alive(pid: int) -> bool; repoatlas/experiments.py:87-98 KILL_DRAIN_TIMEOUT = 15 # seconds to collect output after killing a timed-out tree; tests/test_experiments.py:54-61 def _tree_digest(repo: Path) -> dict[str, str]; repoatlas/experiments.py:355-362 def _summarize(stdout: str, stderr: str, exit_code: int | None, timed_out: b…
+next: verinoda query "…" --max-chars 12000

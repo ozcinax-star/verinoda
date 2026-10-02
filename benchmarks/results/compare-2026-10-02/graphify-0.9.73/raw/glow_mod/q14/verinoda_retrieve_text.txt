@@ -1,0 +1,88 @@
+## reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19-24 Wisp.spawn
+  called by: onInteract (reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25)?
+19 public static Allay spawn(Plugin plugin, Location location) {
+20     Allay allay = (Allay) location.getWorld().spawnEntity(location, EntityType.ALLAY);
+21     allay.customName(Component.text("Wisp", NamedTextColor.AQUA));
+22     allay.getPersistentDataContainer().set(new NamespacedKey(plugin, "wisp"), PersistentDataType.BYTE, (byte) 1);
+23     return allay;
+24 }
+## reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:15-35 Wisp
+15 public final class Wisp {
+16     private Wisp() {
+17     }
+19     public static Allay spawn(Plugin plugin, Location location) {
+20         Allay allay = (Allay) location.getWorld().spawnEntity(location, EntityType.ALLAY);
+21         allay.customName(Component.text("Wisp", NamedTextColor.AQUA));
+22         allay.getPersistentDataContainer().set(new NamespacedKey(plugin, "wisp"), PersistentDataType.BYTE, (byte) 1);
+23         return allay;
+24     }
+26     public static boolean isWisp(Plugin plugin, org.bukkit.entity.Entity entity) {
+27         return entity.getPersistentDataContainer().has(new NamespacedKey(plugin, "wisp"), PersistentDataType.BYTE);
+28     }
+30     public static ItemStack heart() {
+31         ItemStack stack = new ItemStack(Material.GLOWSTONE_DUST);
+32         stack.editMeta(meta -> meta.displayName(Component.text("Wisp Heart", NamedTextColor.AQUA)));
+33         return stack;
+34     }
+35 }
+## src/main/java/com/example/glowmod/entity/Wisp.java:28-36 Wisp.spawn
+  called by: wisp (src/main/java/com/example/glowmod/command/GlowCommands.java:29)?; etkinlestir (src/main/java/com/example/glowmod/event/LanternEvents.java:30)?; onSummonWisp (src/main/java/com/example/glowmod/network/ServerNetworking.java:29)?; baslat (src/main/java/com/example/glowmod/ritual/Ritual.java:29)?; onChunkLoad (src/main/java/com/example/glowmod/world/WispSpawner.java:31)?; wispAppearsWhereAsked (src/gametest/java/com/example/glowmod/test/WispTests.java:16)?
+  runs: when a player right-clicks a block (registered at src/main/java/com/example/glowmod/event/LanternEvents.java:19)
+28 public static Wisp spawn(ServerWorld world, BlockPos pos) {
+29     Wisp wisp = ModEntities.WISP.create(world);
+30     if (wisp == null) {
+31         return null;
+32     }
+33     wisp.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0.0F, 0.0F);
+34     world.spawnEntity(wisp);
+35     return wisp;
+36 }
+## src/main/java/com/example/glowmod/world/WispSpawner.java:14-34 WispSpawner
+14 public final class WispSpawner {
+15     private WispSpawner() {
+16     }
+18     public static void register() {
+19         ServerChunkEvents.CHUNK_LOAD.register(WispSpawner::onChunkLoad);
+20     }
+22     private static void onChunkLoad(ServerWorld world, WorldChunk chunk) {
+23         if (world.isDay() || world.random.nextDouble() >= GlowConfig.get().naturalChance()) {
+24             return;
+25         }
+26         ChunkPos chunkPos = chunk.getPos();
+27         int x = chunkPos.getStartX() + world.random.nextInt(16);
+28         int z = chunkPos.getStartZ() + world.random.nextInt(16);
+29         BlockPos top = world.getTopPosition(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, 0, z));
+30         if (world.getBiome(top).isIn(BiomeTags.ALLOWS_SURFACE_SLIME_SPAWNS)) {
+31             Wisp.spawn(world, top.up());
+32         }
+33     }
+34 }
+## reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:18-27 WispListener.onInteract
+  calls: spawn@25?
+18 @EventHandler
+19 public void onInteract(PlayerInteractEvent event) {
+20     Block block = event.getClickedBlock();
+21     if (event.getAction() != Action.RIGHT_CLICK_BLOCK || block == null || block.getType() != Material.SOUL_LANTERN) {
+22         return;
+23     }
+24     if (event.getItem() != null && event.getItem().getType() == Material.BLAZE_ROD) {
+25         Wisp.spawn(plugin, block.getLocation().add(0.5, 1, 0.5));
+26     }
+27 }
+## reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:14-14 (module level)
+14 /** Paper has no custom entities, so a wisp is a named Allay with a marker key. */
+## reference/original-plugin/plugin.yml:5-5 plugin.yml
+5 description: Wisps and a lantern staff for Paper servers
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:29-35 @EventHandler public void onDeath(EntityDeathEvent event)
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:11-36 public final class WispListener implements Listener
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:14-16 public WispListener(GlowPlugin plugin)
+reference/original-plugin/config.yml:2-6 wisp:
+reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java:5-16 public final class GlowPlugin extends JavaPlugin
+src/main/resources/assets/glowmod/lang/en_us.json:1-11 {
+src/main/java/com/example/glowmod/command/GlowCommands.java:27-36 private static int wisp(CommandContext<ServerCommandSource> ctx)
+reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java:6-11 @Override public void onEnable()
+src/main/java/com/example/glowmod/network/SummonWispPayload.java:10-10 /** Client -> server: "call a wisp at this block". */
+reference/original-plugin/plugin.yml:6-9 commands:
+src/main/java/com/example/glowmod/GlowMod.java:19-30 @Override public void onInitialize()
+… 74 more candidates not shown: src/gametest/java/com/example/glowmod/test/WispTests.java:14-20 @GameTest(templateName = EMPTY_STRUCTURE) public void wi; README.md:1-26 # Glow Mod (example); src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30 private static void onSummonWisp(SummonWispPayload; reference/original-plugin/plugin.yml:1-1 name: GlowPlugin
+next: verinoda query "…" --max-chars 12000

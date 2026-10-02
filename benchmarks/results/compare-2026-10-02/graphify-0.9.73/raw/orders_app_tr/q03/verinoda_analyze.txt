@@ -1,0 +1,85 @@
+analysis ana_8eb455b42327, snapshot snp_b028577064a0 (commit 6dea3523c4)
+understood as: Anladığım (kurallarla): q1 [yapılandırma] Sipariş servisini hangi ortam değişkenleri yapılandırıyor | q2 [konum] bunlar nerede okunuyor? (karşılıklar: Sipariş=order, servisini=service, ortam değişkenleri=environ, yapılandırıyor=config, okunuyor=read)
+q1 [met] config: Sipariş servisini hangi ortam değişkenleri yapılandırıyor
+  [statically_verified] `(module)` in orders/config.py reads environment variable ORDERS_DATABASE_URL (orders/config.py:5)  (clm_ac156b6accda)
+  [statically_verified] `(module)` in orders/config.py reads environment variable ORDERS_DISCOUNT_THRESHOLD (orders/config.py:7)  (clm_adc4dca02174)
+  [statically_verified] `(module)` in orders/config.py reads environment variable ORDERS_MAX_ITEMS (orders/config.py:6)  (clm_2676bd07fa61)
+q2 [met] locate: bunlar nerede okunuyor?
+  [statically_verified] `load_settings()` is defined at orders/config.py:10-15  (clm_2aa7d1a37c23)
+  [primary_source_verified] `ADR 0001: SQLite for order persistence` is defined at docs/adr/0001-sqlite-persistence.md:1-7  (clm_6e9ea43f7e24)
+context (found on the way; not what answers):
+  [strong_inference] `fetch_order()` uses `OrderRepository` (orders/service.py:25) (uncertain: orders/service.py:25 names 'OrderRepository', but resolving it to orders/repository.py is INFERRED)  (clm_cfdf61ad9edc)
+  [strong_inference] `place_order()` uses `OrderRepository` (orders/service.py:19) (uncertain: orders/service.py:19 names 'OrderRepository', but resolving it to orders/repository.py is INFERRED)  (clm_c062372b7e1f)
+  [statically_verified] `OrderRepository` is defined at orders/repository.py:8-26  (clm_8748f34700f9)
+  [statically_verified] `get_repo()` calls `OrderRepository` (orders/api.py:12)  (clm_d1bd0482ad5d)
+  [statically_verified] `test_place_and_fetch_roundtrip()` calls `OrderRepository` (tests/test_service.py:8)  (clm_9364604b68bf)
+  [statically_verified] `test_empty_order_rejected()` calls `OrderRepository` (tests/test_service.py:15)  (clm_166c0e8b091a)  [not challenged: claim_limit]
+  +1 more context claim(s) (--json lists them)
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: servisini->serv, servisini->servic, siparis->order (+6 more)
+## orders/config.py:10-15 load_settings
+  const orders/config.py:5: DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+  const orders/config.py:6: MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+10 def load_settings() -> dict:
+11     return {
+12         "database_url": DATABASE_URL,
+13         "max_items": MAX_ITEMS_PER_ORDER,
+14         "discount_threshold": DISCOUNT_THRESHOLD,
+15     }
+## orders/config.py:1-1 (module level)
+1 """Runtime configuration read from the environment."""
+## orders/config.py:5-7 DATABASE_URL MAX_ITEMS_PER_ORDER DISCOUNT_THRESHOLD
+5 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+6 MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+7 DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+## docs/adr/0001-sqlite-persistence.md:1-7 ADR 0001: SQLite for order persistence
+1 # ADR 0001: SQLite for order persistence
+3 Status: accepted
+5 We persist orders in SQLite through `OrderRepository` only. No other module
+6 may open a database connection. Chosen for zero-ops local development; a
+7 server database can replace it behind the same repository interface.
+## orders/pricing.py:11-15 apply_discount
+11 def apply_discount(subtotal: float) -> float:
+12     # 10% off above the configured threshold.
+13     if subtotal > DISCOUNT_THRESHOLD:
+14         return round(subtotal * 0.9, 2)
+15     return subtotal
+## README.md:1-5 orders_app
+1 # orders_app
+3 Example service for Verinoda. `orders/api.py` handlers call `orders/service.py`,
+4 which prices orders via `orders/pricing.py` and persists them through
+5 `orders/repository.py` (SQLite, see docs/adr/0001-sqlite-persistence.md).
+## orders/repository.py:8-26 OrderRepository
+ 8 class OrderRepository:
+ 9     def __init__(self, url: str = DATABASE_URL):
+10         self.conn = sqlite3.connect(url)
+11         self.conn.execute(
+12             "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+13         )
+15     def save(self, customer: str, total: float) -> int:
+16         cur = self.conn.execute(
+17             "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+18         )
+19         self.conn.commit()
+20         return cur.lastrowid
+22     def get(self, order_id: int):
+23         row = self.conn.execute(
+24             "SELECT id, customer, total FROM orders WHERE id = ?", (order_id,)
+25         ).fetchone()
+26         return None if row is None else {"id": row[0], "customer": row[1], "total": row[2]}
+orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int)
+orders/service.py:19-22 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int
+orders/__init__.py:1-1 """Tiny order service used as the Verinoda end-to-end example."""
+orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+tests/test_service.py:7-10 def test_place_and_fetch_roundtrip()
+tests/test_service.py:13-15 def test_empty_order_rejected()
+orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+orders/api.py:9-13 def get_repo() -> OrderRepository
+tests/test_pricing.py:4-5 def test_discount_applies_above_threshold()
+tests/test_pricing.py:8-9 def test_no_discount_below_threshold()
+orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+orders/api.py:16-21 def create_order_handler(payload: dict) -> tuple[int, dict]
+pyproject.toml:1-8 [project] name = "orders-app" version = "0.1.0" requires-python = ">=3.10" [tool.pytest.ini_options] testpaths = ["test…
+tests/test_pricing.py:12-13 def test_compute_total()
+orders/service.py:8-9 class ValidationError(ValueError)

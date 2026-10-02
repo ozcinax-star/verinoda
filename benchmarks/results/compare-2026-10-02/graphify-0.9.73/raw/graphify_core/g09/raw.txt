@@ -1,0 +1,441 @@
+$ grep -rniE 'tests|cover|graph|file|size|cap|environment|override' .   # 18049 matching lines in 225 files
+graphify/llm.py:2: # Used by `graphify extract . --backend gemini` and the benchmark scripts.
+graphify/llm.py:3: # The default graphify pipeline uses Claude Code subagents via skill.md;
+graphify/llm.py:4: # this module provides a direct API path for non-Claude-Code environments.
+graphify/llm.py:20: from graphify.file_slice import (
+graphify/llm.py:21: FileSlice,
+graphify/llm.py:23: expand_oversized_files,
+graphify/llm.py:28: # `_read_files` truncates each file at this many characters before joining into
+graphify/llm.py:29: # the user message. Token estimates use the same cap so packing matches reality.
+graphify/llm.py:30: _FILE_CHAR_CAP = 20_000
+graphify/llm.py:31: # `_read_files` wraps each file in an `<untrusted_source path=... sha256=...>`
+graphify/llm.py:32: # delimiter block (see issue #1210); this is roughly the per-file overhead in
+graphify/llm.py:34: _PER_FILE_OVERHEAD_CHARS = 160
+graphify/llm.py:104: # server (LiteLLM proxy, gateways, ...); ANTHROPIC_MODEL overrides the
+graphify/llm.py:142: "model_env_key": "GRAPHIFY_GEMINI_MODEL",
+graphify/llm.py:151: # (llama.cpp, vLLM, LM Studio, ...); OPENAI_MODEL overrides the default
+graphify/llm.py:152: # model. GRAPHIFY_OPENAI_MODEL still wins over OPENAI_MODEL when both
+graphify/llm.py:157: "model_env_key": "GRAPHIFY_OPENAI_MODEL",
+graphify/llm.py:162: # automatically by _resolve_temperature; GRAPHIFY_LLM_TEMPERATURE
+graphify/llm.py:163: # overrides either way (#1191).
+graphify/llm.py:174: "model_env_key": "GRAPHIFY_DEEPSEEK_MODEL",
+graphify/llm.py:182: # GRAPHIFY_DISABLE_THINKING=1 to turn it off (tradeoff documented on the flag).
+graphify/llm.py:191: #           AZURE_OPENAI_DEPLOYMENT or GRAPHIFY_AZURE_MODEL (deployment name).
+graphify/llm.py:194: "default_model": os.environ.get("AZURE_OPENAI_DEPLOYMENT", os.environ.get("GRAPHIFY_AZURE_MODEL", "gpt-4o")),
+graphify/llm.py:196: "model_env_key": "GRAPHIFY_AZURE_MODEL",
+graphify/llm.py:203: "model_env_key": "GRAPHIFY_BEDROCK_MODEL",
+graphify/llm.py:227: return Path.home() / ".graphify" / "providers.json"
+graphify/llm.py:228: return Path(".graphify") / "providers.json"
+graphify/llm.py:240: config is the GRAPHIFY_ALLOW_LOCAL_PROVIDERS gate on project-local files.
+graphify/llm.py:247: print(f"[graphify] WARNING: provider {name!r} has an unparseable base_url; ignoring.", file=sys.stderr)
+graphify/llm.py:252: f"[graphify] WARNING: provider {name!r} base_url scheme {parsed.scheme!r} is not "
+graphify/llm.py:254: file=sys.stderr,
+graphify/llm.py:261: f"[graphify] WARNING: provider {name!r} sends your corpus to {host!r} over plaintext "
+graphify/llm.py:263: file=sys.stderr,
+graphify/llm.py:269: # A project-local ./.graphify/providers.json travels with a cloned or shared
+graphify/llm.py:272: # the user's own global ~/.graphify/providers.json stays trusted.
+graphify/llm.py:275: allow_local = os.environ.get("GRAPHIFY_ALLOW_LOCAL_PROVIDERS", "").strip().lower() in ("1", "true", "yes")
+graphify/llm.py:276: if local_path.is_file() and not allow_local:
+graphify/llm.py:278: f"[graphify] WARNING: ignoring project-local {local_path} (custom providers control "
+graphify/llm.py:279: "where your corpus and API key are sent). Set GRAPHIFY_ALLOW_LOCAL_PROVIDERS=1 to load it.",
+graphify/llm.py:280: file=sys.stderr,
+... (18009 more matching lines not shown)
+
+==> graphify/llm.py:1-397 <==  (truncated at char cap; file has 3544 lines)
+     1	# Gemini, and OpenAI.
+     2	# Used by `graphify extract . --backend gemini` and the benchmark scripts.
+     3	# The default graphify pipeline uses Claude Code subagents via skill.md;
+     4	# this module provides a direct API path for non-Claude-Code environments.
+     5	from __future__ import annotations
+     6	
+     7	import base64
+     8	import hashlib
+     9	import json
+    10	import os
+    11	import re
+    12	import subprocess
+    13	import sys
+    14	import time
+    15	from collections.abc import Callable, Iterator
+    16	from concurrent.futures import ThreadPoolExecutor, as_completed
+    17	from dataclasses import dataclass, replace
+    18	from pathlib import Path
+    19	
+    20	from graphify.file_slice import (
+    21	    FileSlice,
+    22	    bisect_slice,
+    23	    expand_oversized_files,
+    24	    read_slice_text,
+    25	    unit_path,
+    26	)
+    27	
+    28	# `_read_files` truncates each file at this many characters before joining into
+    29	# the user message. Token estimates use the same cap so packing matches reality.
+    30	_FILE_CHAR_CAP = 20_000
+    31	# `_read_files` wraps each file in an `<untrusted_source path=... sha256=...>`
+    32	# delimiter block (see issue #1210); this is roughly the per-file overhead in
+    33	# characters that wrapper adds (open tag + 64-char sha + close tag + newlines).
+    34	_PER_FILE_OVERHEAD_CHARS = 160
+    35	# Coarse fallback used only when `tiktoken` is not installed. 1 token ≈ 4 chars
+    36	# is the standard heuristic for English/code on BPE tokenizers.
+    37	_CHARS_PER_TOKEN = 4
+    38	
+    39	
+    40	def _get_tokenizer():
+    41	    """Return a tiktoken encoder for accurate token counts, or None if tiktoken
+    42	    is not installed. We use `cl100k_base` (GPT-4 / GPT-3.5-turbo) as a proxy:
+    43	    Kimi-K2 ships a tiktoken-based tokenizer with very similar BPE behaviour,
+    44	    and Claude's tokenizer has a comparable token-to-char ratio for prose/code.
+    45	    Estimates only need to be within ~5%, not exact.
+    46	    """
+    47	    try:
+    48	        import tiktoken
+    49	    except ImportError:
+    50	        return None
+    51	    try:
+    52	        return tiktoken.get_encoding("cl100k_base")
+    53	    except Exception:  # network failure on first-use download, etc.
+    54	        return None
+    55	
+    56	
+    57	# Cached at import time. None if tiktoken is unavailable; consumers must handle.
+    58	_TOKENIZER = _get_tokenizer()
+    59	
+    60	
+    61	def _resolve_ollama_base_url(default: str) -> str:
+    62	    """Resolve the Ollama base URL. Honors an explicit OLLAMA_BASE_URL first
+    63	    (verbatim), else falls back to Ollama's own OLLAMA_HOST (#1940), else the
+    64	    default. OLLAMA_HOST may be a bare host, host:port, ``:port`` or bare port —
+    65	    normalized the way the ollama client does: add ``http://`` when the scheme is
+    66	    missing, default the port to 11434 when absent, and append the OpenAI-compat
+    67	    ``/v1`` suffix."""
+    68	    ollama_base_url = os.environ.get("OLLAMA_BASE_URL")
+    69	    if ollama_base_url is not None:
+    70	        return ollama_base_url
+    71	    ollama_host = os.environ.get("OLLAMA_HOST")
+    72	    if ollama_host is None:
+    73	        return default
+    74	    host = ollama_host.strip()
+    75	    if not host:
+    76	        return default
+    77	    # Bare port ("11434") or ":port" (":11434") -> localhost on that port.
+    78	    if host.isdigit():
+    79	        host = f"localhost:{host}"
+    80	    elif host.startswith(":") and host[1:].isdigit():
+    81	        host = f"localhost{host}"
+    82	    if not host.startswith(("http://", "https://")):
+    83	        host = f"http://{host}"
+    84	    # Default the port to Ollama's 11434 when the host omits it (bare hostname
+    85	    # would otherwise resolve to port 80 and silently fail to connect).
+    86	    from urllib.parse import urlsplit, urlunsplit
+    87	    try:
+    88	        parts = urlsplit(host)
+    89	        if parts.hostname and parts.port is None:
+    90	            hostname = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    91	            userinfo = parts.netloc.rsplit("@", 1)[0] + "@" if "@" in parts.netloc else ""
+    92	            host = urlunsplit(parts._replace(netloc=f"{userinfo}{hostname}:11434"))
+    93	    except (ValueError, TypeError):
+    94	        pass
+    95	    host = host.rstrip("/")
+    96	    if not host.endswith("/v1"):
+    97	        host = f"{host}/v1"
+    98	    return host
+    99	
+   100	
+   101	BACKENDS: dict[str, dict] = {
+   102	    "claude": {
+   103	        # ANTHROPIC_BASE_URL points the backend at any Anthropic-compatible
+   104	        # server (LiteLLM proxy, gateways, ...); ANTHROPIC_MODEL overrides the
+   105	        # default model. Mirrors the OPENAI_BASE_URL / OPENAI_MODEL pattern.
+   106	        "base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+   107	        "default_model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+   108	        "env_key": "ANTHROPIC_API_KEY",
+   109	        "pricing": {"input": 3.0, "output": 15.0},  # USD per 1M tokens
+   110	        "temperature": 0,
+   111	        "max_tokens": 16384,
+   112	        "vision": True,
+   113	    },
+   114	    "kimi": {
+   115	        # KIMI_BASE_URL points the backend at any OpenAI-compatible server for
+   116	        # Moonshot's Kimi models (LiteLLM, self-hosted proxy, ...).
+   117	        "base_url": os.environ.get("KIMI_BASE_URL", "https://api.moonshot.ai/v1"),
+   118	        "default_model": "kimi-k2.6",
+   119	        "env_key": "MOONSHOT_API_KEY",
+   120	        # kimi-k2.6 is natively multimodal (MoonViT) and accepts the same
+   121	        # OpenAI image_url data-URI block via Moonshot's compat endpoint.
+   122	        "vision": True,
+   123	        "pricing": {"input": 0.74, "output": 4.66},  # USD per 1M tokens
+   124	        "temperature": None,  # kimi-k2.6 enforces its own fixed temperature; sending any value raises 400
+   125	        "max_tokens": 16384,
+   126	    },
+   127	    "ollama": {
+   128	        "base_url": _resolve_ollama_base_url("http://localhost:11434/v1"),
+   129	        "default_model": os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:7b"),
+   130	        "env_key": "OLLAMA_API_KEY",
+   131	        "pricing": {"input": 0.0, "output": 0.0},
+   132	        "temperature": 0,
+   133	        "max_tokens": 16384,
+   134	    },
+   135	    "gemini": {
+   136	        # GEMINI_BASE_URL points the backend at any OpenAI-compatible server for
+   137	        # Gemini models (LiteLLM, self-hosted proxy, ...). Falls back to Google's
+   138	        # official OpenAI-compatible endpoint.
+   139	        "base_url": os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+   140	        "default_model": "gemini-3-flash-preview",
+   141	        "env_keys": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+   142	        "model_env_key": "GRAPHIFY_GEMINI_MODEL",
+   143	        "pricing": {"input": 0.50, "output": 3.00},  # USD per 1M tokens
+   144	        "temperature": 0,
+   145	        "reasoning_effort": "low",
+   146	        "max_completion_tokens": 16384,
+   147	        "vision": True,
+   148	    },
+   149	    "openai": {
+   150	        # OPENAI_BASE_URL points the backend at any OpenAI-compatible server
+   151	        # (llama.cpp, vLLM, LM Studio, ...); OPENAI_MODEL overrides the default
+   152	        # model. GRAPHIFY_OPENAI_MODEL still wins over OPENAI_MODEL when both
+   153	        # are set (via model_env_key).
+   154	        "base_url": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+   155	        "default_model": os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
+   156	        "env_key": "OPENAI_API_KEY",
+   157	        "model_env_key": "GRAPHIFY_OPENAI_MODEL",
+   158	        "max_tokens": 16384,
+   159	        "pricing": {"input": 0.40, "output": 1.60},  # USD per 1M tokens
+   160	        # Default (gpt-4.1-mini) accepts temperature=0. Reasoning models
+   161	        # (o1/o3/o4/gpt-5) reject any explicit temperature and have it omitted
+   162	        # automatically by _resolve_temperature; GRAPHIFY_LLM_TEMPERATURE
+   163	        # overrides either way (#1191).
+   164	        "temperature": 0,
+   165	        "vision": True,
+   166	    },
+   167	    "deepseek": {
+   168	        # DEEPSEEK_BASE_URL points the backend at any OpenAI-compatible server for
+   169	        # DeepSeek models (LiteLLM, self-hosted proxy, ...). Falls back to DeepSeek's
+   170	        # official API endpoint.
+   171	        "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+   172	        "default_model": "deepseek-v4-flash",
+   173	        "env_key": "DEEPSEEK_API_KEY",
+   174	        "model_env_key": "GRAPHIFY_DEEPSEEK_MODEL",
+   175	        "pricing": {"input": 0.44, "output": 1.32},  # USD per 1M tokens (v4-flash,
+   176	        # peak, cache miss). Peak is 01:00-04:00 and 06:00-10:00 UTC Mon-Fri;
+   177	        # all other hours are off-peak at half these rates. A cache hit is
+   178	        # $0.014/1M in. Source: api-docs.deepseek.com/quick_start/pricing
+   179	        # deepseek-reasoner silently ignores temperature; deepseek-chat / v4-flash
+   180	        # accept 0-2, so sending 0 is safe. Note: deepseek-v4-flash (and v4-pro) have
+   181	        # thinking ENABLED by default (verified against the live API, #1621) — set
+   182	        # GRAPHIFY_DISABLE_THINKING=1 to turn it off (tradeoff documented on the flag).
+   183	        "temperature": 0,
+   184	        "max_tokens": 16384,
+   185	    },
+   186	    "azure": {
+   187	        # Azure OpenAI Service — uses AzureOpenAI SDK client, not the standard
+   188	        # OpenAI client, so it has its own call path (_call_azure).
+   189	        # Required env vars: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT.
+   190	        # Optional: AZURE_OPENAI_API_VERSION (defaults to 2024-12-01-preview),
+   191	        #           AZURE_OPENAI_DEPLOYMENT or GRAPHIFY_AZURE_MODEL (deployment name).
+   192	        # base_url is intentionally absent — prevents accidental routing through
+   193	        # _call_openai_compat, which requires it and uses the wrong SDK client class.
+   194	        "default_model": os.environ.get("AZURE_OPENAI_DEPLOYMENT", os.environ.get("GRAPHIFY_AZURE_MODEL", "gpt-4o")),
+   195	        "env_key": "AZURE_OPENAI_API_KEY",
+   196	        "model_env_key": "GRAPHIFY_AZURE_MODEL",
+   197	        "pricing": {"input": 2.50, "output": 10.00},  # USD per 1M tokens (gpt-4o; may mis-estimate other deployments)
+   198	        "temperature": 0,
+   199	        "max_tokens": 16384,
+   200	    },
+   201	    "bedrock": {
+   202	        "default_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+   203	        "model_env_key": "GRAPHIFY_BEDROCK_MODEL",
+   204	        "pricing": {"input": 3.0, "output": 15.0},  # USD per 1M tokens
+   205	        "temperature": 0,
+   206	        "max_tokens": 16384,
+   207	        "vision": True,
+   208	    },
+   209	    "claude-cli": {
+   210	        # Routes through the locally-installed `claude` CLI (Claude Code) using
+   211	        # `-p --output-format json`. Authenticates via the user's existing
+   212	        # Pro/Max subscription instead of a separate ANTHROPIC_API_KEY — costs
+   213	        # are billed to the plan, not pay-as-you-go API credit.
+   214	        "default_model": "claude-code-plan",
+   215	        "pricing": {"input": 0.0, "output": 0.0},
+   216	        "temperature": 0,
+   217	        "max_tokens": 16384,
+   218	        # Claude Code is multimodal; images are passed by path and read with the
+   219	        # CLI's Read tool rather than as inline base64 (see `_call_claude_cli`).
+   220	        "vision": True,
+   221	    },
+   222	}
+   223	
+   224	
+   225	def _custom_providers_path(global_: bool = True) -> Path:
+   226	    if global_:
+   227	        return Path.home() / ".graphify" / "providers.json"
+   228	    return Path(".graphify") / "providers.json"
+   229	
+   230	
+   231	def provider_base_url_ok(base_url: str, name: str, *, warn: bool = True) -> bool:
+   232	    """Structural safety check for a custom-provider base_url.
+   233	
+   234	    A custom provider receives the full corpus plus the user's API key, so its
+   235	    base_url is an exfiltration channel. We deliberately do NOT run the ingest
+   236	    SSRF guard here: that blocks private/internal IPs, which would wrongly reject
+   237	    legitimate on-prem corporate LLM gateways. Instead we reject non-http(s)
+   238	    schemes outright and warn loudly when the corpus would leave over plaintext
+   239	    http to a non-loopback host. The primary control against trusting injected
+   240	    config is the GRAPHIFY_ALLOW_LOCAL_PROVIDERS gate on project-local files.
+   241	    """
+   242	    from urllib.parse import urlparse
+   243	    try:
+   244	        parsed = urlparse(base_url)
+   245	    except Exception:
+   246	        if warn:
+   247	            print(f"[graphify] WARNING: provider {name!r} has an unparseable base_url; ignoring.", file=sys.stderr)
+   248	        return False
+   249	    if parsed.scheme not in ("http", "https"):
+   250	        if warn:
+   251	            print(
+   252	                f"[graphify] WARNING: provider {name!r} base_url scheme {parsed.scheme!r} is not "
+   253	                "http/https; ignoring.",
+   254	                file=sys.stderr,
+   255	            )
+   256	        return False
+   257	    host = (parsed.hostname or "").lower()
+   258	    is_loopback = host in ("localhost", "127.0.0.1", "::1") or host.startswith("127.")
+   259	    if warn and parsed.scheme == "http" and not is_loopback:
+   260	        print(
+   261	            f"[graphify] WARNING: provider {name!r} sends your corpus to {host!r} over plaintext "
+   262	            "http. Use https unless this is a trusted local endpoint.",
+   263	            file=sys.stderr,
+   264	        )
+   265	    return True
+   266	
+   267	
+   268	def _load_custom_providers() -> dict[str, dict]:
+   269	    # A project-local ./.graphify/providers.json travels with a cloned or shared
+   270	    # repo and defines where the corpus + API key are sent, so loading it
+   271	    # silently is a corpus/key exfiltration vector. Require an explicit opt-in;
+   272	    # the user's own global ~/.graphify/providers.json stays trusted.
+   273	    local_path = _custom_providers_path(global_=False)
+   274	    global_path = _custom_providers_path(global_=True)
+   275	    allow_local = os.environ.get("GRAPHIFY_ALLOW_LOCAL_PROVIDERS", "").strip().lower() in ("1", "true", "yes")
+   276	    if local_path.is_file() and not allow_local:
+   277	        print(
+   278	            f"[graphify] WARNING: ignoring project-local {local_path} (custom providers control "
+   279	            "where your corpus and API key are sent). Set GRAPHIFY_ALLOW_LOCAL_PROVIDERS=1 to load it.",
+   280	            file=sys.stderr,
+   281	        )
+   282	
+   283	    providers: dict[str, dict] = {}
+   284	    paths = [local_path, global_path] if allow_local else [global_path]
+   285	    for path in paths:
+   286	        if path.is_file():
+   287	            try:
+   288	                data = json.loads(path.read_text(encoding="utf-8"))
+   289	                if isinstance(data, dict):
+   290	                    for name, cfg in data.items():
+   291	                        if not (isinstance(name, str) and isinstance(cfg, dict)):
+   292	                            continue
+   293	                        if name in BACKENDS or name in providers:
+   294	                            continue
+   295	                        if not provider_base_url_ok(str(cfg.get("base_url", "")), name):
+   296	                            continue
+   297	                        if "pricing" not in cfg:
+   298	                            cfg = dict(cfg, pricing={"input": 0.0, "output": 0.0})
+   299	                        providers[name] = cfg
+   300	            except Exception:
+   301	                pass
+   302	    return providers
+   303	
+   304	
+   305	BACKENDS.update(_load_custom_providers())
+   306	
+   307	
+   308	def _resolve_max_tokens(default: int) -> int:
+   309	    """Honour GRAPHIFY_MAX_OUTPUT_TOKENS env var override, else use backend default."""
+   310	    raw = os.environ.get("GRAPHIFY_MAX_OUTPUT_TOKENS", "").strip()
+   311	    if raw:
+   312	        try:
+   313	            v = int(raw)
+   314	            if v > 0:
+   315	                return v
+   316	        except ValueError:
+   317	            pass
+   318	    return default
+   319	
+   320	
+   321	# Model-name fragments for OpenAI-compatible "reasoning" models that reject an
+   322	# explicit temperature: the API returns 400 "Unsupported value: 'temperature'
+   323	# does not support 0 with this model. Only the default (1) value is supported."
+   324	# Covers the o1/o3/o4 reasoning series and the gpt-5 family, which share the
+   325	# same restriction. Matched case-insensitively against the resolved model id
+   326	# (issue #1191).
+   327	_FIXED_TEMPERATURE_MODEL_MARKERS = ("o1", "o1-", "o3", "o3-", "o4", "o4-", "gpt-5")
+   328	
+   329	
+   330	def _model_requires_default_temperature(model: str) -> bool:
+   331	    """True if `model` is a reasoning model that rejects an explicit temperature.
+   332	
+   333	    OpenAI's o-series (o1, o3, o4...) and gpt-5 family only accept the default
+   334	    temperature (1) and return HTTP 400 if any value — including 0 — is sent.
+   335	    We must omit the parameter entirely for these (#1191).
+   336	    """
+   337	    m = (model or "").lower()
+   338	    # Strip a leading "openai/" or provider prefix some gateways prepend.
+   339	    base = m.rsplit("/", 1)[-1]
+   340	    if base.startswith("gpt-5"):
+   341	        return True
+   342	    # o1 / o3 / o4 family: bare ("o1") or versioned ("o3-mini", "o1-preview").
+   343	    for fam in ("o1", "o3", "o4"):
+   344	        if base == fam or base.startswith(fam + "-"):
+   345	            return True
+   346	    return False
+   347	
+   348	
+   349	def _resolve_temperature(default: float | None, model: str = "") -> float | None:
+   350	    """Resolve the temperature to send, honouring GRAPHIFY_LLM_TEMPERATURE.
+   351	
+   352	    Precedence (issue #1191):
+   353	      1. GRAPHIFY_LLM_TEMPERATURE env var, if set:
+   354	           - a numeric value (e.g. "0", "0.2", "1") is used verbatim;
+   355	           - the literal "none"/"omit"/"default" (case-insensitive) means
+   356	             "omit the temperature parameter entirely" (-> None).
+   357	      2. Otherwise, reasoning models (o1/o3/o4/gpt-5) get None — the parameter
+   358	         must be omitted or the API rejects the request.
+   359	      3. Otherwise, the backend config default (`default`, usually 0).
+   360	
+   361	    Returns None when the temperature parameter should be omitted from the
+   362	    request; the call sites already guard `if temperature is not None`.
+   363	    """
+   364	    raw = os.environ.get("GRAPHIFY_LLM_TEMPERATURE", "").strip()
+   365	    if raw:
+   366	        if raw.lower() in ("none", "omit", "default"):
+   367	            return None
+   368	        try:
+   369	            return float(raw)
+   370	        except ValueError:
+   371	            print(
+   372	                f"[graphify] GRAPHIFY_LLM_TEMPERATURE={raw!r} is not a number or "
+   373	                "'none'; falling back to the backend default.",
+   374	                file=sys.stderr,
+   375	            )
+   376	    if _model_requires_default_temperature(model):
+   377	        return None
+   378	    return default
+   379	
+   380	
+   381	def _bedrock_inference_config(max_tokens: int, model: str = "") -> dict:
+   382	    """Build Bedrock inferenceConfig, honouring GRAPHIFY_LLM_TEMPERATURE.
+   383	
+   384	    Bedrock's Converse API treats `temperature` as optional; omitting it uses
+   385	    the model default. We default to 0 for deterministic extraction but let the
+   386	    env var override (or omit) it for parity with the OpenAI-compatible path.
+   387	    """
+   388	    cfg: dict = {"maxTokens": max_tokens}
+   389	    temp = _resolve_temperature(0, model)
+   390	    if temp is not None:
+   391	        cfg["temperature"] = temp
+   392	    return cfg
+   393	
+   394	
+   395	def _no_window_kwargs() -> dict:
+   396	    """subprocess kwargs that suppress the console window claude.cmd would
+   397	    otherwise pop on Windows. A labeling/extraction run spawns one `claude -p`

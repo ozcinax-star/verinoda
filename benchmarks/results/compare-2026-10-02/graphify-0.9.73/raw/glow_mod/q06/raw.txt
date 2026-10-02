@@ -1,0 +1,214 @@
+$ grep -rniE 'glowmod|yml|loaded|default|values|come' .   # 134 matching lines in 32 files
+src/main/java/com/example/glowmod/config/GlowConfig.java:1: package com.example.glowmod.config;
+src/main/java/com/example/glowmod/config/GlowConfig.java:3: import com.example.glowmod.GlowMod;
+src/main/java/com/example/glowmod/config/GlowConfig.java:14: /** Settings from config/glowmod.yml; every missing key falls back to {@link #DEFAULTS}. */
+src/main/java/com/example/glowmod/config/GlowConfig.java:17: private static final String FILE_NAME = "glowmod.yml";
+src/main/java/com/example/glowmod/config/GlowConfig.java:18: private static final GlowConfig DEFAULTS = new GlowConfig(4, 0.02, 8, 40, 8);
+src/main/java/com/example/glowmod/config/GlowConfig.java:19: private static volatile GlowConfig current = DEFAULTS;
+src/main/java/com/example/glowmod/config/GlowConfig.java:25: /** Reads the file; on first start the commented default is copied out of the mod jar first. */
+src/main/java/com/example/glowmod/config/GlowConfig.java:31: Files.copy(Objects.requireNonNull(in, "default " + FILE_NAME + " missing from the jar"), file);
+src/main/java/com/example/glowmod/config/GlowConfig.java:39: GlowMod.LOGGER.error("could not read {}, using defaults", file, e);
+src/main/java/com/example/glowmod/config/GlowConfig.java:40: current = DEFAULTS;
+src/main/java/com/example/glowmod/config/GlowConfig.java:49: number(wisp, "ritual_count", DEFAULTS.ritualWispCount()).intValue(),
+src/main/java/com/example/glowmod/config/GlowConfig.java:50: number(wisp, "natural_chance", DEFAULTS.naturalChance()).doubleValue(),
+src/main/java/com/example/glowmod/config/GlowConfig.java:51: number(repair, "blocks_per_tick", DEFAULTS.blocksPerTick()).intValue(),
+src/main/java/com/example/glowmod/config/GlowConfig.java:52: number(repair, "delay_ticks", DEFAULTS.repairDelayTicks()).intValue(),
+src/main/java/com/example/glowmod/config/GlowConfig.java:53: number(network, "max_summon_distance", DEFAULTS.maxSummonDistance()).intValue());
+src/main/resources/assets/glowmod/lang/en_us.json:2: "item.glowmod.lantern_staff": "Lantern Staff",
+src/main/resources/assets/glowmod/lang/en_us.json:3: "item.glowmod.ember_shard": "Ember Shard",
+src/main/resources/assets/glowmod/lang/en_us.json:4: "item.glowmod.wisp_heart": "Wisp Heart",
+src/main/resources/assets/glowmod/lang/en_us.json:5: "entity.glowmod.wisp": "Wisp",
+src/main/resources/assets/glowmod/lang/en_us.json:6: "key.glowmod.summon_wisp": "Call a Wisp",
+src/main/resources/assets/glowmod/lang/en_us.json:7: "category.glowmod": "Glow Mod",
+src/main/resources/assets/glowmod/lang/en_us.json:8: "command.glowmod.wisp.spawned": "A wisp appears.",
+src/main/resources/assets/glowmod/lang/en_us.json:9: "command.glowmod.wisp.failed": "The wisp would not come.",
+src/main/resources/assets/glowmod/lang/en_us.json:10: "command.glowmod.reload.done": "Glow Mod settings reloaded."
+README.md:14: - `src/main/java/com/example/glowmod/` - common (server + client) code
+README.md:17: - `src/main/resources/data/glowmod/` - data pack: functions, recipe, loot table
+README.md:18: - `src/main/resources/assets/glowmod/` - item models and translations
+README.md:19: - `src/main/resources/glowmod.yml` - default settings, copied to `config/` on first start
+src/main/resources/glowmod.yml:1: # Glow Mod settings. Copied to config/glowmod.yml on first start; edit that copy,
+src/main/resources/glowmod.yml:7: # chance (0..1) that a freshly loaded swamp chunk gets a wisp at night
+src/main/java/com/example/glowmod/ritual/Ritual.java:1: package com.example.glowmod.ritual;
+src/main/java/com/example/glowmod/ritual/Ritual.java:3: import com.example.glowmod.config.GlowConfig;
+src/main/java/com/example/glowmod/ritual/Ritual.java:4: import com.example.glowmod.entity.Wisp;
+src/main/java/com/example/glowmod/ritual/Ritual.java:5: import com.example.glowmod.repair.RepairScheduler;
+src/main/java/com/example/glowmod/ritual/Ritual.java:6: import com.example.glowmod.util.Datapack;
+src/main/java/com/example/glowmod/ritual/Ritual.java:22: Datapack.runQualified(world, Vec3d.ofBottomCenter(altar), "glowmod:ritual/start");
+src/main/java/com/example/glowmod/ritual/Ritual.java:39: world.setBlockState(pos, Blocks.AIR.getDefaultState());
+src/main/java/com/example/glowmod/entity/ModEntities.java:1: package com.example.glowmod.entity;
+src/main/java/com/example/glowmod/entity/ModEntities.java:3: import com.example.glowmod.GlowMod;
+src/main/java/com/example/glowmod/entity/ModEntities.java:4: import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
+... (94 more matching lines not shown)
+
+==> src/main/java/com/example/glowmod/config/GlowConfig.java:1-64 <==
+     1	package com.example.glowmod.config;
+     2	
+     3	import com.example.glowmod.GlowMod;
+     4	import java.io.IOException;
+     5	import java.io.InputStream;
+     6	import java.io.Reader;
+     7	import java.nio.file.Files;
+     8	import java.nio.file.Path;
+     9	import java.util.Map;
+    10	import java.util.Objects;
+    11	import net.fabricmc.loader.api.FabricLoader;
+    12	import org.yaml.snakeyaml.Yaml;
+    13	
+    14	/** Settings from config/glowmod.yml; every missing key falls back to {@link #DEFAULTS}. */
+    15	public record GlowConfig(int ritualWispCount, double naturalChance, int blocksPerTick, int repairDelayTicks,
+    16	                         int maxSummonDistance) {
+    17	    private static final String FILE_NAME = "glowmod.yml";
+    18	    private static final GlowConfig DEFAULTS = new GlowConfig(4, 0.02, 8, 40, 8);
+    19	    private static volatile GlowConfig current = DEFAULTS;
+    20	
+    21	    public static GlowConfig get() {
+    22	        return current;
+    23	    }
+    24	
+    25	    /** Reads the file; on first start the commented default is copied out of the mod jar first. */
+    26	    public static void load() {
+    27	        Path file = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
+    28	        try {
+    29	            if (Files.notExists(file)) {
+    30	                try (InputStream in = GlowConfig.class.getResourceAsStream("/" + FILE_NAME)) {
+    31	                    Files.copy(Objects.requireNonNull(in, "default " + FILE_NAME + " missing from the jar"), file);
+    32	                }
+    33	            }
+    34	            try (Reader reader = Files.newBufferedReader(file)) {
+    35	                Map<String, Object> root = new Yaml().load(reader);
+    36	                current = parse(root == null ? Map.of() : root);
+    37	            }
+    38	        } catch (IOException | RuntimeException e) {
+    39	            GlowMod.LOGGER.error("could not read {}, using defaults", file, e);
+    40	            current = DEFAULTS;
+    41	        }
+    42	    }
+    43	
+    44	    private static GlowConfig parse(Map<String, Object> root) {
+    45	        Map<String, Object> wisp = section(root, "wisp");
+    46	        Map<String, Object> repair = section(root, "repair");
+    47	        Map<String, Object> network = section(root, "network");
+    48	        return new GlowConfig(
+    49	                number(wisp, "ritual_count", DEFAULTS.ritualWispCount()).intValue(),
+    50	                number(wisp, "natural_chance", DEFAULTS.naturalChance()).doubleValue(),
+    51	                number(repair, "blocks_per_tick", DEFAULTS.blocksPerTick()).intValue(),
+    52	                number(repair, "delay_ticks", DEFAULTS.repairDelayTicks()).intValue(),
+    53	                number(network, "max_summon_distance", DEFAULTS.maxSummonDistance()).intValue());
+    54	    }
+    55	
+    56	    @SuppressWarnings("unchecked")
+    57	    private static Map<String, Object> section(Map<String, Object> root, String key) {
+    58	        return root.get(key) instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    59	    }
+    60	
+    61	    private static Number number(Map<String, Object> section, String key, Number fallback) {
+    62	        return section.get(key) instanceof Number n ? n : fallback;
+    63	    }
+    64	}
+
+==> src/main/resources/assets/glowmod/lang/en_us.json:1-11 <==
+     1	{
+     2	  "item.glowmod.lantern_staff": "Lantern Staff",
+     3	  "item.glowmod.ember_shard": "Ember Shard",
+     4	  "item.glowmod.wisp_heart": "Wisp Heart",
+     5	  "entity.glowmod.wisp": "Wisp",
+     6	  "key.glowmod.summon_wisp": "Call a Wisp",
+     7	  "category.glowmod": "Glow Mod",
+     8	  "command.glowmod.wisp.spawned": "A wisp appears.",
+     9	  "command.glowmod.wisp.failed": "The wisp would not come.",
+    10	  "command.glowmod.reload.done": "Glow Mod settings reloaded."
+    11	}
+
+==> README.md:1-26 <==
+     1	# Glow Mod (example)
+     2	
+     3	A small, fictional Fabric mod for Minecraft 1.21.1, used as a public example and
+     4	benchmark corpus for Verinoda's support of mod repositories (Java code plus data
+     5	pack, assets and YAML configuration linked by resource ids). It has not been
+     6	compiled or run in a game; textures (`.png`) are left out on purpose, so the
+     7	item models point at files that do not exist here.
+     8	
+     9	What it adds: a wisp mob, three items (lantern staff, ember shard, wisp heart),
+    10	a lantern ritual, the `/glow` operator command and one client key binding.
+    11	
+    12	Layout:
+    13	
+    14	- `src/main/java/com/example/glowmod/` - common (server + client) code
+    15	- `src/client/java/` - client-only code
+    16	- `src/gametest/java/` - Fabric game tests
+    17	- `src/main/resources/data/glowmod/` - data pack: functions, recipe, loot table
+    18	- `src/main/resources/assets/glowmod/` - item models and translations
+    19	- `src/main/resources/glowmod.yml` - default settings, copied to `config/` on first start
+    20	- `datapack/` - a standalone data pack for map makers (a copy of the wisp death function)
+    21	- `reference/original-plugin/` - excerpts of the Paper plugin this mod was ported
+    22	  from, kept for comparison; it is not built
+    23	
+    24	Some identifiers are Turkish (`etkinlestir` = enable, `baslat` = start,
+    25	`kaydet` = record, `temizle` = clean up, `alaniAc` = clear the area), as in the
+    26	private mod this example imitates.
+
+==> src/main/resources/glowmod.yml:1-18 <==
+     1	# Glow Mod settings. Copied to config/glowmod.yml on first start; edit that copy,
+     2	# then run /glow reload (or restart the server).
+     3	
+     4	wisp:
+     5	  # how many wisps the lantern ritual calls around the altar
+     6	  ritual_count: 4
+     7	  # chance (0..1) that a freshly loaded swamp chunk gets a wisp at night
+     8	  natural_chance: 0.02
+     9	
+    10	repair:
+    11	  # how many blocks burnt by the ritual are put back per server tick
+    12	  blocks_per_tick: 8
+    13	  # ticks to wait after the ritual before repairing starts (20 ticks = 1 second)
+    14	  delay_ticks: 40
+    15	
+    16	network:
+    17	  # a client may only ask for a wisp this many blocks away from the player
+    18	  max_summon_distance: 8
+
+==> src/main/java/com/example/glowmod/ritual/Ritual.java:1-43 <==
+     1	package com.example.glowmod.ritual;
+     2	
+     3	import com.example.glowmod.config.GlowConfig;
+     4	import com.example.glowmod.entity.Wisp;
+     5	import com.example.glowmod.repair.RepairScheduler;
+     6	import com.example.glowmod.util.Datapack;
+     7	import net.minecraft.block.BlockState;
+     8	import net.minecraft.block.Blocks;
+     9	import net.minecraft.registry.tag.BlockTags;
+    10	import net.minecraft.server.world.ServerWorld;
+    11	import net.minecraft.util.math.BlockPos;
+    12	import net.minecraft.util.math.Vec3d;
+    13	
+    14	/** The lantern ritual: the data pack plays the effects, the mod clears the circle and calls the wisps. */
+    15	public final class Ritual {
+    16	    private static final int RADIUS = 3;
+    17	
+    18	    private Ritual() {
+    19	    }
+    20	
+    21	    public static void baslat(ServerWorld world, BlockPos altar) {
+    22	        Datapack.runQualified(world, Vec3d.ofBottomCenter(altar), "glowmod:ritual/start");
+    23	        alaniAc(world, altar);
+    24	        int count = GlowConfig.get().ritualWispCount();
+    25	        for (int i = 0; i < count; i++) {
+    26	            double angle = 2 * Math.PI * i / count;
+    27	            BlockPos at = altar.add((int) Math.round(Math.cos(angle) * RADIUS), 1,
+    28	                    (int) Math.round(Math.sin(angle) * RADIUS));
+    29	            Wisp.spawn(world, at);
+    30	        }
+    31	    }
+    32	
+    33	    /** Burns away grass and flowers around the altar; RepairScheduler puts them back later. */
+    34	    private static void alaniAc(ServerWorld world, BlockPos altar) {
+    35	        for (BlockPos pos : BlockPos.iterate(altar.add(-RADIUS, 1, -RADIUS), altar.add(RADIUS, 2, RADIUS))) {
+    36	            BlockState state = world.getBlockState(pos);
+    37	            if (state.isIn(BlockTags.REPLACEABLE_BY_TREES)) {
+    38	                RepairScheduler.kaydet(world, pos.toImmutable(), state);
+    39	                world.setBlockState(pos, Blocks.AIR.getDefaultState());
+    40	            }
+    41	        }
+    42	    }
+    43	}

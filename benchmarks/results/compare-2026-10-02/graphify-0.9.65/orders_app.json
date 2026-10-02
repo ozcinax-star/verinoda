@@ -1,0 +1,6341 @@
+{
+ "benchmark": "verinoda raw-vs-graphify-vs-verinoda",
+ "schema": 3,
+ "set": {
+  "name": "orders_app",
+  "file": "<REPO>/verinoda/benchmark/questions/orders_app.json",
+  "description": "The Verinoda end-to-end example (examples/orders_app): framework-free HTTP handlers -> service -> pricing / repository -> SQLite, env configuration, pytest tests and one ADR. 10 questions: where x3, flow x2, config, tests, why, impact, behaviour.",
+  "questions": 10,
+  "gold_verified_by": "Gold facts were written by reading every file of examples/orders_app line by line; each fact's source.at/source.contains pair is re-checked against the benchmark copy before any approach is scored (metrics.validate_gold).",
+  "provenance": {
+   "questions_written_by": "benchmark harness author (an agent, round 1), before any approach was run on the set",
+   "gold_written_by": "same author, by reading every file of examples/orders_app",
+   "in_sample": true,
+   "caveat": "Verinoda has been developed against this example since round 1 (every track checks it), so Verinoda results on it are in-sample; questions and gold have not changed since 05890a1"
+  }
+ },
+ "params": {
+  "repeat": 2,
+  "raw": {
+   "top_files": 5,
+   "char_cap": 24000,
+   "grep_lines": 40,
+   "min_term_len": 3,
+   "terms": "verinoda.retrieval.terms_for (Graphify _query_terms)"
+  },
+  "graphify_vendored": {
+   "renderer": "verinoda.index.graphify_query_text",
+   "mode": "bfs",
+   "depth": 3,
+   "token_budget": 2000
+  },
+  "graphify_cli": {
+   "command": "graphify query <question>",
+   "mode": "bfs",
+   "depth": 2,
+   "token_budget": 2000
+  },
+  "verinoda_analyze": {
+   "budget": "config defaults (60 s, 40 tool calls, 6000 tokens)",
+   "challenge": true,
+   "run_tests": false
+  },
+  "verinoda_retrieve": {
+   "max_items": 10,
+   "max_chars": 6000
+  },
+  "verinoda_retrieve_text": {
+   "max_items": 10,
+   "max_chars": 6000,
+   "render_chars": 6000,
+   "call": "retrieval.render_text(retrieve(g, q, Budget(10, 6000)), 6000)"
+  },
+  "sweep": null,
+  "pinpoint_max_lines": 30,
+  "sweep_only": false
+ },
+ "token_count_method": "chars/4 estimate",
+ "llm": {
+  "enabled": false,
+  "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "model": null,
+  "prices_usd_per_mtok": null,
+  "price_source": null
+ },
+ "workdir": "<TMP>/verinoda-bench-dkr5ib0c",
+ "workdir_kept": false,
+ "corpus": {
+  "source": "<REPO>/examples/orders_app",
+  "source_commit": "5999912dc5c627a7e3d019e27e576667cf312386",
+  "source_dirty": true,
+  "snapshot": "working tree (tracked + untracked, not ignored)",
+  "include": null,
+  "exclude": null,
+  "file_count": 11,
+  "bytes": 4724,
+  "workdir_commit": "859e7bb57b5a6995ae6b08374e4022f2d4dd9450"
+ },
+ "gold_validation": {
+  "ok": true,
+  "facts_checked": 32,
+  "failures": []
+ },
+ "graphify_cli_status": "run",
+ "approaches": [
+  "raw",
+  "graphify_vendored",
+  "graphify_cli",
+  "verinoda_analyze",
+  "verinoda_retrieve",
+  "verinoda_retrieve_text"
+ ],
+ "environment": {
+  "date_utc": "2026-10-02T09:11:51+00:00",
+  "os": "Windows-11-10.0.26200-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD",
+  "cpu_count": 16,
+  "python": "3.13.14",
+  "python_impl": "CPython",
+  "verinoda_version": "0.4.0",
+  "vendored_graphify_commit": "20a20d30d8e7eef77675651f0199d87f913bd3e7",
+  "graphify_cli": {
+   "path": "<BENCH>\\agentbench\\envs\\graphify-0.9.65\\Scripts\\graphify.exe",
+   "version": "graphify 0.9.65"
+  },
+  "git": "git version 2.54.0.windows.1",
+  "verinoda_source_commit": "5999912dc5c627a7e3d019e27e576667cf312386",
+  "verinoda_package_changes_vs_commit": [],
+  "verinoda_package_diff_sha256": null
+ },
+ "index": {
+  "raw": {
+   "note": "no index; every query greps and reads the working tree"
+  },
+  "verinoda": {
+   "cold_seconds": 2.702,
+   "warm_seconds": 1.479,
+   "nodes": 41,
+   "edges": 74,
+   "warm_nodes": 41,
+   "warm_edges": 74,
+   "cache_files": 11,
+   "what": "workflow.scan = Graphify-derived AST index (in-process) + snapshot (file hashes) + stale-claim check; warm = same tree again with the AST cache present",
+   "used_by": [
+    "graphify_vendored",
+    "verinoda_analyze",
+    "verinoda_retrieve",
+    "verinoda_retrieve_text"
+   ]
+  },
+  "graphify_cli": {
+   "cold": {
+    "seconds": 14.366,
+    "ok": true,
+    "error": null,
+    "returncode": 0,
+    "nodes": 41,
+    "edges": 74,
+    "log": [
+     "Re-extracting code files in . (no LLM needed)...",
+     "[graphify watch] Rebuilt: 41 nodes, 74 edges, 8 communities",
+     "[graphify watch] graph.json, graph.html and GRAPH_REPORT.md updated in graphify-out",
+     "Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.",
+     "Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction."
+    ],
+    "stderr": {
+     "lines": 1,
+     "skill_version_warnings": 0,
+     "other": [
+      "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+     ]
+    },
+    "cache_files": 12
+   },
+   "warm": {
+    "seconds": 1.997,
+    "ok": true,
+    "error": null,
+    "returncode": 0,
+    "nodes": 41,
+    "edges": 74,
+    "log": [
+     "Re-extracting code files in . (no LLM needed)...",
+     "[graphify watch] No code-graph topology changes detected; outputs left untouched.",
+     "Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.",
+     "Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction."
+    ],
+    "stderr": {
+     "lines": 1,
+     "skill_version_warnings": 0,
+     "other": [
+      "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+     ]
+    },
+    "cache_files": 12
+   },
+   "what": "`graphify update .` subprocess (AST only, no LLM); includes interpreter start-up; warm = same tree again with graphify-out/cache present"
+  }
+ },
+ "questions": [
+  {
+   "id": "q01",
+   "category": "where",
+   "question": "Where is an order written to the database?",
+   "facts": 3,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.184,
+       "chars": 7033,
+       "sha256": "4b968517244b69a7a827f8a381f4aad61a725f4eb40c52c6ae91b7dc896e264c"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.11,
+       "chars": 7033,
+       "sha256": "4b968517244b69a7a827f8a381f4aad61a725f4eb40c52c6ae91b7dc896e264c"
+      }
+     ],
+     "score": {
+      "chars": 7033,
+      "tokens": 1759,
+      "sha256": "4b968517244b69a7a827f8a381f4aad61a725f4eb40c52c6ae91b7dc896e264c",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q01.save",
+        "q01.insert",
+        "q01.commit"
+       ],
+       "missed": [],
+       "shown": [
+        "q01.save",
+        "q01.insert",
+        "q01.commit"
+       ],
+       "via": {
+        "q01.save": "loc orders/repository.py:17",
+        "q01.insert": "loc orders/repository.py:17",
+        "q01.commit": "loc orders/repository.py:1-26"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 6,
+       "point_or_short": 45
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "order",
+        "written",
+        "database"
+       ],
+       "matching_files": 11,
+       "matching_lines": 50,
+       "files_read": [
+        {
+         "file": "orders/repository.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "docs/adr/0001-sqlite-persistence.md",
+         "lines": [
+          1,
+          7
+         ],
+         "of": 7
+        },
+        {
+         "file": "orders/api.py",
+         "lines": [
+          1,
+          28
+         ],
+         "of": 28
+        },
+        {
+         "file": "orders/service.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q01/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0266,
+       "chars": 10070,
+       "sha256": "00c115a2d4509af60c1c74307a00777ad98e6aae76f82039f4a893f913008daa"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0149,
+       "chars": 10070,
+       "sha256": "00c115a2d4509af60c1c74307a00777ad98e6aae76f82039f4a893f913008daa"
+      }
+     ],
+     "score": {
+      "chars": 10070,
+      "tokens": 2518,
+      "sha256": "00c115a2d4509af60c1c74307a00777ad98e6aae76f82039f4a893f913008daa",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q01.save"
+       ],
+       "missed": [
+        "q01.insert",
+        "q01.commit"
+       ],
+       "shown": [],
+       "via": {
+        "q01.save": "loc orders/repository.py:15"
+       }
+      },
+      "locators": {
+       "distinct": 53,
+       "files": 10,
+       "point_or_short": 53
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 37,
+       "edges_shown": 69,
+       "edge_confidence": {
+        "EXTRACTED": 64,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 37,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 69,
+       "checked": 19,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q01/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.6094,
+       "chars": 8478,
+       "sha256": "3ead01b91976e3a8751989984c201999b7b21213d7e591257b257b65db3e3cb4"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.5728,
+       "chars": 8478,
+       "sha256": "5dede40462d016d02170dfafe7950e180b019ee9bf44a2e9f26cec18c9775923"
+      }
+     ],
+     "score": {
+      "chars": 8478,
+      "tokens": 2120,
+      "sha256": "3ead01b91976e3a8751989984c201999b7b21213d7e591257b257b65db3e3cb4",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q01.save"
+       ],
+       "missed": [
+        "q01.insert",
+        "q01.commit"
+       ],
+       "shown": [],
+       "via": {
+        "q01.save": "loc orders/repository.py:15"
+       }
+      },
+      "locators": {
+       "distinct": 46,
+       "files": 9,
+       "point_or_short": 46
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 30,
+       "edges_shown": 58,
+       "edge_confidence": {
+        "EXTRACTED": 53,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 30,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 58,
+       "checked": 17,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q01/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 3.5768,
+       "chars": 6456,
+       "sha256": "46097481cc7a5a11e6e1dcf7559a7d3d09415d194a12ec90bd71de9982c82c5f",
+       "claims": 18,
+       "claims_reused": 0,
+       "claims_new": 18,
+       "internal_tool_calls": 27,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.68,
+       "chars": 6456,
+       "sha256": "6cd2aa4c15c03c00e3b70899594d9713e488a8e2385d79aeb05cf4b6129f1688",
+       "claims": 18,
+       "claims_reused": 18,
+       "claims_new": 0,
+       "internal_tool_calls": 27,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 6456,
+      "tokens": 1614,
+      "sha256": "46097481cc7a5a11e6e1dcf7559a7d3d09415d194a12ec90bd71de9982c82c5f",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q01.save",
+        "q01.insert",
+        "q01.commit"
+       ],
+       "missed": [],
+       "shown": [
+        "q01.save",
+        "q01.insert",
+        "q01.commit"
+       ],
+       "via": {
+        "q01.save": "loc orders/repository.py:17",
+        "q01.insert": "loc orders/repository.py:17",
+        "q01.commit": "loc orders/repository.py:19"
+       }
+      },
+      "locators": {
+       "distinct": 34,
+       "files": 11,
+       "point_or_short": 34
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 18,
+       "by_status": {
+        "strong_inference": 9,
+        "statically_verified": 8,
+        "primary_source_verified": 1
+       },
+       "verified": 9,
+       "inference": 9,
+       "verified_share": 0.5,
+       "inference_share": 0.5,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 26,
+        "design_doc": 1,
+        "graph_edge": 6,
+        "static_resolution": 4
+       },
+       "evidence_verifying": 31,
+       "evidence_non_verifying": 6,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 3.394,
+       "tool_calls": 27,
+       "context_chars": 12685,
+       "context_tokens_est": 3171,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 4,
+        "spent_s": 1.297,
+        "skipped": 0
+       }
+      },
+      "verdict": {
+       "met": true,
+       "verdicts": [
+        "met"
+       ],
+       "facts_in_claims": 3
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 13,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q01/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0812,
+       "chars": 5644,
+       "sha256": "ba55c0e3a683dd4e4dab5e55468b9842b46b03ba1ced864e7eff265073ab5049"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0799,
+       "chars": 5644,
+       "sha256": "ba55c0e3a683dd4e4dab5e55468b9842b46b03ba1ced864e7eff265073ab5049"
+      }
+     ],
+     "score": {
+      "chars": 5644,
+      "tokens": 1411,
+      "sha256": "ba55c0e3a683dd4e4dab5e55468b9842b46b03ba1ced864e7eff265073ab5049",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 0,
+       "found": [
+        "q01.save",
+        "q01.insert",
+        "q01.commit"
+       ],
+       "missed": [],
+       "shown": [],
+       "via": {
+        "q01.save": "loc orders/repository.py:15-20",
+        "q01.insert": "loc orders/repository.py:15-20",
+        "q01.commit": "loc orders/repository.py:15-20"
+       }
+      },
+      "locators": {
+       "distinct": 24,
+       "files": 6,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 8,
+       "edge_confidence": {
+        "INFERRED": 3,
+        "EXTRACTED": 5
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5988,
+        "truncated": true,
+        "expansions": [
+         "databas->db (abbreviation)"
+        ],
+        "more": [
+         "orders/repository.py:22-26 OrderRepository.get",
+         "orders/repository.py:15-20 OrderRepository.save"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 8,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q01/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1375,
+       "chars": 3632,
+       "sha256": "f697d41d218c08f8b59002a9f2497921b2fa62f8e663989f4bb90f8842fba46b"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1671,
+       "chars": 3632,
+       "sha256": "f697d41d218c08f8b59002a9f2497921b2fa62f8e663989f4bb90f8842fba46b"
+      }
+     ],
+     "score": {
+      "chars": 3632,
+      "tokens": 908,
+      "sha256": "f697d41d218c08f8b59002a9f2497921b2fa62f8e663989f4bb90f8842fba46b",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q01.save",
+        "q01.insert",
+        "q01.commit"
+       ],
+       "missed": [],
+       "shown": [
+        "q01.save",
+        "q01.insert",
+        "q01.commit"
+       ],
+       "via": {
+        "q01.save": "loc orders/repository.py:8-26",
+        "q01.insert": "loc orders/repository.py:8-26",
+        "q01.commit": "loc orders/repository.py:8-26"
+       }
+      },
+      "locators": {
+       "distinct": 24,
+       "files": 11,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q01/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q02",
+   "category": "flow",
+   "question": "What is the call path from the create-order HTTP handler to the database write?",
+   "facts": 3,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1939,
+       "chars": 6942,
+       "sha256": "1ac8c2de8b8018d4f8af014c301d5664952ac8b1ddcdceeeab5cc2f4cd7357e6"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1626,
+       "chars": 6942,
+       "sha256": "1ac8c2de8b8018d4f8af014c301d5664952ac8b1ddcdceeeab5cc2f4cd7357e6"
+      }
+     ],
+     "score": {
+      "chars": 6942,
+      "tokens": 1736,
+      "sha256": "1ac8c2de8b8018d4f8af014c301d5664952ac8b1ddcdceeeab5cc2f4cd7357e6",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q02.handler",
+        "q02.service",
+        "q02.sink"
+       ],
+       "missed": [],
+       "shown": [
+        "q02.handler",
+        "q02.service",
+        "q02.sink"
+       ],
+       "via": {
+        "q02.handler": "loc orders/api.py:18",
+        "q02.service": "loc orders/service.py:1-26",
+        "q02.sink": "loc orders/repository.py:17"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 6,
+       "point_or_short": 45
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "call",
+        "path",
+        "create",
+        "order",
+        "http",
+        "handler",
+        "database",
+        "write"
+       ],
+       "matching_files": 11,
+       "matching_lines": 54,
+       "files_read": [
+        {
+         "file": "orders/api.py",
+         "lines": [
+          1,
+          28
+         ],
+         "of": 28
+        },
+        {
+         "file": "orders/repository.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          5
+         ],
+         "of": 5
+        },
+        {
+         "file": "orders/service.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q02/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0258,
+       "chars": 2872,
+       "sha256": "31c772dee456e0766cdf368c6ac186ee0cf92d9774d3af50321d00baa57599d1"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0112,
+       "chars": 2872,
+       "sha256": "31c772dee456e0766cdf368c6ac186ee0cf92d9774d3af50321d00baa57599d1"
+      }
+     ],
+     "score": {
+      "chars": 2872,
+      "tokens": 718,
+      "sha256": "31c772dee456e0766cdf368c6ac186ee0cf92d9774d3af50321d00baa57599d1",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q02.handler"
+       ],
+       "missed": [
+        "q02.service",
+        "q02.sink"
+       ],
+       "shown": [],
+       "via": {
+        "q02.handler": "loc orders/api.py:18"
+       }
+      },
+      "locators": {
+       "distinct": 26,
+       "files": 6,
+       "point_or_short": 26
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 14,
+       "edges_shown": 15,
+       "edge_confidence": {
+        "EXTRACTED": 15
+       },
+       "truncated": false,
+       "nodes_found": 14,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 15,
+       "checked": 15,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q02/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.8402,
+       "chars": 2324,
+       "sha256": "e903520164b8c8da9d602b9c635e526770d6430e4b8fb3d994a72357ecda0aa1"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.5662,
+       "chars": 2324,
+       "sha256": "bbb9a369d3b9bde26c4b7ab3e4e8c61bdf2db5882920ad398f5699fd95036f82"
+      }
+     ],
+     "score": {
+      "chars": 2324,
+      "tokens": 581,
+      "sha256": "e903520164b8c8da9d602b9c635e526770d6430e4b8fb3d994a72357ecda0aa1",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q02.handler"
+       ],
+       "missed": [
+        "q02.service",
+        "q02.sink"
+       ],
+       "shown": [],
+       "via": {
+        "q02.handler": "loc orders/api.py:18"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 5,
+       "point_or_short": 20
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 11,
+       "edges_shown": 12,
+       "edge_confidence": {
+        "EXTRACTED": 12
+       },
+       "truncated": false,
+       "nodes_found": 11,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 12,
+       "checked": 12,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q02/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.0656,
+       "chars": 6217,
+       "sha256": "3f595c18373e8e013bb5d3ea219f81fb2411f67838fb338f4e2bae006c671f0a",
+       "claims": 17,
+       "claims_reused": 11,
+       "claims_new": 6,
+       "internal_tool_calls": 25,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.8049,
+       "chars": 6217,
+       "sha256": "7d18f3cf144e488ead249c0bb023c34cdeb37786e11ebdbfe5c8bc3161191b2f",
+       "claims": 17,
+       "claims_reused": 17,
+       "claims_new": 0,
+       "internal_tool_calls": 25,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 6217,
+      "tokens": 1555,
+      "sha256": "3f595c18373e8e013bb5d3ea219f81fb2411f67838fb338f4e2bae006c671f0a",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 2,
+       "found": [
+        "q02.handler",
+        "q02.service",
+        "q02.sink"
+       ],
+       "missed": [],
+       "shown": [
+        "q02.handler",
+        "q02.sink"
+       ],
+       "via": {
+        "q02.handler": "loc orders/api.py:18",
+        "q02.service": "loc orders/service.py:22",
+        "q02.sink": "loc orders/repository.py:17"
+       }
+      },
+      "locators": {
+       "distinct": 40,
+       "files": 11,
+       "point_or_short": 40
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 17,
+       "by_status": {
+        "statically_verified": 8,
+        "strong_inference": 8,
+        "primary_source_verified": 1
+       },
+       "verified": 9,
+       "inference": 8,
+       "verified_share": 0.529,
+       "inference_share": 0.471,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 25,
+        "design_doc": 1,
+        "graph_edge": 5,
+        "static_resolution": 4
+       },
+       "evidence_verifying": 30,
+       "evidence_non_verifying": 5,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 1.058,
+       "tool_calls": 25,
+       "context_chars": 11679,
+       "context_tokens_est": 2919,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 3,
+        "spent_s": 0.008,
+        "skipped": 0
+       }
+      },
+      "verdict": {
+       "met": true,
+       "verdicts": [
+        "met"
+       ],
+       "facts_in_claims": 3
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 12,
+       "checked": 5,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q02/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.087,
+       "chars": 5617,
+       "sha256": "71acd57eca95250de2c0a7304f3a8b2be2a1626d712764d8916e62eba083b325"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0685,
+       "chars": 5617,
+       "sha256": "71acd57eca95250de2c0a7304f3a8b2be2a1626d712764d8916e62eba083b325"
+      }
+     ],
+     "score": {
+      "chars": 5617,
+      "tokens": 1405,
+      "sha256": "71acd57eca95250de2c0a7304f3a8b2be2a1626d712764d8916e62eba083b325",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "shown_n": 1,
+       "found": [
+        "q02.handler",
+        "q02.sink"
+       ],
+       "missed": [
+        "q02.service"
+       ],
+       "shown": [
+        "q02.handler"
+       ],
+       "via": {
+        "q02.handler": "loc orders/api.py:18",
+        "q02.sink": "loc orders/repository.py:15-20"
+       }
+      },
+      "locators": {
+       "distinct": 31,
+       "files": 8,
+       "point_or_short": 31
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 6,
+       "edge_confidence": {
+        "EXTRACTED": 5,
+        "INFERRED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5958,
+        "truncated": true,
+        "expansions": [
+         "databas->db (abbreviation)"
+        ],
+        "more": [
+         "orders/service.py:1-1 (module level)",
+         "orders/service.py:8-9 ValidationError",
+         "orders/service.py:25-26 fetch_order",
+         "orders/service.py:12-16 validate_items",
+         "docs/adr/0001-sqlite-persistence.md:1-7 ADR 0001: SQLite for order persistence",
+         "orders/pricing.py:6-8 compute_total",
+         "tests/test_service.py:13-15 test_empty_order_rejected",
+         "tests/test_service.py:7-10 test_place_and_fetch_roundtrip",
+         "orders/repository.py:15-20 OrderRepository.save"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 6,
+       "checked": 5,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q02/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1629,
+       "chars": 3309,
+       "sha256": "e2c511bcd6395196abfa33cd9ac5722d89833da5fb9f34288f94a1a0f21426d3"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1437,
+       "chars": 3309,
+       "sha256": "e2c511bcd6395196abfa33cd9ac5722d89833da5fb9f34288f94a1a0f21426d3"
+      }
+     ],
+     "score": {
+      "chars": 3309,
+      "tokens": 828,
+      "sha256": "e2c511bcd6395196abfa33cd9ac5722d89833da5fb9f34288f94a1a0f21426d3",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 1,
+       "found": [
+        "q02.handler",
+        "q02.service",
+        "q02.sink"
+       ],
+       "missed": [],
+       "shown": [
+        "q02.handler"
+       ],
+       "via": {
+        "q02.handler": "loc orders/api.py:16-21",
+        "q02.service": "loc orders/service.py:19-22",
+        "q02.sink": "loc orders/repository.py:15-20"
+       }
+      },
+      "locators": {
+       "distinct": 26,
+       "files": 11,
+       "point_or_short": 26
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 4,
+       "edge_confidence": {
+        "EXTRACTED": 4
+       },
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 4,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q02/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q03",
+   "category": "config",
+   "question": "Which environment variables configure the orders service and where are they read?",
+   "facts": 3,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1471,
+       "chars": 5095,
+       "sha256": "fead473402bfddb8ac0c95553769e45c0883bdd6e04eeccbfd2386f6a1bd7537"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1647,
+       "chars": 5095,
+       "sha256": "fead473402bfddb8ac0c95553769e45c0883bdd6e04eeccbfd2386f6a1bd7537"
+      }
+     ],
+     "score": {
+      "chars": 5095,
+      "tokens": 1274,
+      "sha256": "fead473402bfddb8ac0c95553769e45c0883bdd6e04eeccbfd2386f6a1bd7537",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "missed": [],
+       "shown": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "via": {
+        "q03.db": "loc orders/config.py:5",
+        "q03.max": "loc orders/config.py:6",
+        "q03.discount": "loc orders/config.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 30,
+       "files": 11,
+       "point_or_short": 30
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "environment",
+        "variables",
+        "configure",
+        "orders",
+        "service",
+        "read"
+       ],
+       "matching_files": 11,
+       "matching_lines": 25,
+       "files_read": [
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          5
+         ],
+         "of": 5
+        },
+        {
+         "file": "orders/api.py",
+         "lines": [
+          1,
+          28
+         ],
+         "of": 28
+        },
+        {
+         "file": "orders/pricing.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "tests/test_service.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q03/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0178,
+       "chars": 10726,
+       "sha256": "1e022cbe6c9d7c63c48de1fc10e2c0bf97e452b863f69036ea7b6c65607582bb"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0177,
+       "chars": 10726,
+       "sha256": "1e022cbe6c9d7c63c48de1fc10e2c0bf97e452b863f69036ea7b6c65607582bb"
+      }
+     ],
+     "score": {
+      "chars": 10726,
+      "tokens": 2682,
+      "sha256": "1e022cbe6c9d7c63c48de1fc10e2c0bf97e452b863f69036ea7b6c65607582bb",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "shown_n": 0,
+       "found": [],
+       "missed": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "shown": [],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 56,
+       "files": 9,
+       "point_or_short": 56
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 38,
+       "edges_shown": 73,
+       "edge_confidence": {
+        "EXTRACTED": 68,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 38,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 73,
+       "checked": 21,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q03/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.5789,
+       "chars": 9798,
+       "sha256": "0ae11b1d1651273721adec68b88f2d1fec5d4823bca028f1e0792f56eabd23e2"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.6065,
+       "chars": 9798,
+       "sha256": "eb291036016850c1abc19a6f5e5791dd63bf9562334890f40c15929b814f7a58"
+      }
+     ],
+     "score": {
+      "chars": 9798,
+      "tokens": 2450,
+      "sha256": "0ae11b1d1651273721adec68b88f2d1fec5d4823bca028f1e0792f56eabd23e2",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "shown_n": 0,
+       "found": [],
+       "missed": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "shown": [],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 52,
+       "files": 9,
+       "point_or_short": 52
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 35,
+       "edges_shown": 68,
+       "edge_confidence": {
+        "EXTRACTED": 63,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 35,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 68,
+       "checked": 19,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q03/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.3071,
+       "chars": 4968,
+       "sha256": "30848447f9502cf230e1ca49035e04f0c4deaf6b5f0933b5668a501ce83f17b0",
+       "claims": 14,
+       "claims_reused": 3,
+       "claims_new": 11,
+       "internal_tool_calls": 28,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.853,
+       "chars": 4968,
+       "sha256": "39a3d6e2324be3bebfe540d64ec08fa7f1dc6d7739628c2b0eba7852d4a53350",
+       "claims": 14,
+       "claims_reused": 14,
+       "claims_new": 0,
+       "internal_tool_calls": 28,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 4968,
+      "tokens": 1242,
+      "sha256": "30848447f9502cf230e1ca49035e04f0c4deaf6b5f0933b5668a501ce83f17b0",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "missed": [],
+       "shown": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "via": {
+        "q03.db": "loc orders/config.py:5",
+        "q03.max": "loc orders/config.py:6",
+        "q03.discount": "loc orders/config.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 34,
+       "files": 11,
+       "point_or_short": 34
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 14,
+       "by_status": {
+        "statically_verified": 12,
+        "primary_source_verified": 1,
+        "strong_inference": 1
+       },
+       "verified": 13,
+       "inference": 1,
+       "verified_share": 0.929,
+       "inference_share": 0.071,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 13,
+        "design_doc": 1,
+        "graph_edge": 6,
+        "static_resolution": 5
+       },
+       "evidence_verifying": 19,
+       "evidence_non_verifying": 6,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 1.298,
+       "tool_calls": 28,
+       "context_chars": 9505,
+       "context_tokens_est": 2376,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 5,
+        "spent_s": 0.04,
+        "skipped": 0
+       }
+      },
+      "verdict": {
+       "met": true,
+       "verdicts": [
+        "met",
+        "met"
+       ],
+       "facts_in_claims": 3
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 6,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q03/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.085,
+       "chars": 5637,
+       "sha256": "1846fd5e826ef05d9c861988327968044c1ab6b5954c3b04c5a7dee19ba68aa4"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0864,
+       "chars": 5637,
+       "sha256": "1846fd5e826ef05d9c861988327968044c1ab6b5954c3b04c5a7dee19ba68aa4"
+      }
+     ],
+     "score": {
+      "chars": 5637,
+      "tokens": 1410,
+      "sha256": "1846fd5e826ef05d9c861988327968044c1ab6b5954c3b04c5a7dee19ba68aa4",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "missed": [],
+       "shown": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "via": {
+        "q03.db": "loc orders/config.py:5",
+        "q03.max": "loc orders/config.py:5-7",
+        "q03.discount": "loc orders/config.py:5-7"
+       }
+      },
+      "locators": {
+       "distinct": 36,
+       "files": 11,
+       "point_or_short": 36
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 6,
+       "edge_confidence": {
+        "EXTRACTED": 4,
+        "INFERRED": 2
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5971,
+        "truncated": true,
+        "more": [
+         "tests/test_pricing.py:8-9 test_no_discount_below_threshold",
+         "orders/service.py:8-9 ValidationError",
+         "tests/test_service.py:7-10 test_place_and_fetch_roundtrip",
+         "tests/test_service.py:13-15 test_empty_order_rejected",
+         "orders/repository.py:22-26 OrderRepository.get",
+         "orders/api.py:16-21 create_order_handler",
+         "orders/__init__.py:1-1 (module level)",
+         "orders/api.py:24-28 get_order_handler",
+         "orders/api.py:9-13 get_repo",
+         "orders/repository.py:15-20 OrderRepository.save",
+         "tests/test_pricing.py:12-13 test_compute_total",
+         "orders/repository.py:9-13 OrderRepository.__init__",
+         "docs/adr/0001-sqlite-persistence.md:1-7 ADR 0001: SQLite for order persistence",
+         "pyproject.toml:1-8 orders-app"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 6,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q03/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.13,
+       "chars": 2954,
+       "sha256": "e5f2ba41a9943cf78a2eb9cd6455a37de42700797b4bf7e1806ab6e8f6816019"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1532,
+       "chars": 2954,
+       "sha256": "e5f2ba41a9943cf78a2eb9cd6455a37de42700797b4bf7e1806ab6e8f6816019"
+      }
+     ],
+     "score": {
+      "chars": 2954,
+      "tokens": 739,
+      "sha256": "e5f2ba41a9943cf78a2eb9cd6455a37de42700797b4bf7e1806ab6e8f6816019",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 1,
+       "found": [
+        "q03.db",
+        "q03.max",
+        "q03.discount"
+       ],
+       "missed": [],
+       "shown": [
+        "q03.db"
+       ],
+       "via": {
+        "q03.db": "loc orders/config.py:5-7",
+        "q03.max": "loc orders/config.py:5-7",
+        "q03.discount": "loc orders/config.py:5-7"
+       }
+      },
+      "locators": {
+       "distinct": 28,
+       "files": 11,
+       "point_or_short": 28
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 3,
+       "edge_confidence": {
+        "EXTRACTED": 3
+       },
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 3,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q03/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q04",
+   "category": "tests",
+   "question": "Which tests exercise the discount calculation?",
+   "facts": 4,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1109,
+       "chars": 2681,
+       "sha256": "f32cbb1793f87f44ef435ef674fcfd474bdcac952e3029f243ed2497423f9226"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1196,
+       "chars": 2681,
+       "sha256": "f32cbb1793f87f44ef435ef674fcfd474bdcac952e3029f243ed2497423f9226"
+      }
+     ],
+     "score": {
+      "chars": 2681,
+      "tokens": 671,
+      "sha256": "f32cbb1793f87f44ef435ef674fcfd474bdcac952e3029f243ed2497423f9226",
+      "facts": {
+       "total": 4,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q04.above",
+        "q04.below",
+        "q04.total"
+       ],
+       "missed": [
+        "q04.roundtrip"
+       ],
+       "shown": [
+        "q04.above",
+        "q04.below",
+        "q04.total"
+       ],
+       "via": {
+        "q04.above": "loc tests/test_pricing.py:4",
+        "q04.below": "loc tests/test_pricing.py:8",
+        "q04.total": "loc tests/test_pricing.py:1-13"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 4,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 5,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "tests",
+        "exercise",
+        "discount",
+        "calculation"
+       ],
+       "matching_files": 4,
+       "matching_lines": 12,
+       "files_read": [
+        {
+         "file": "tests/test_pricing.py",
+         "lines": [
+          1,
+          13
+         ],
+         "of": 13
+        },
+        {
+         "file": "orders/pricing.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "pyproject.toml",
+         "lines": [
+          1,
+          8
+         ],
+         "of": 8
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q04/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.012,
+       "chars": 10568,
+       "sha256": "10f3bf1fa86e40d7c283de29a5429d849c13629d47ff6d9a676fd8734ca66834"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0172,
+       "chars": 10568,
+       "sha256": "10f3bf1fa86e40d7c283de29a5429d849c13629d47ff6d9a676fd8734ca66834"
+      }
+     ],
+     "score": {
+      "chars": 10568,
+      "tokens": 2642,
+      "sha256": "10f3bf1fa86e40d7c283de29a5429d849c13629d47ff6d9a676fd8734ca66834",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 0,
+       "found": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "missed": [],
+       "shown": [],
+       "via": {
+        "q04.above": "loc tests/test_pricing.py:4",
+        "q04.below": "loc tests/test_pricing.py:8",
+        "q04.total": "loc tests/test_pricing.py:12",
+        "q04.roundtrip": "loc tests/test_service.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 55,
+       "files": 8,
+       "point_or_short": 55
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 36,
+       "edges_shown": 72,
+       "edge_confidence": {
+        "EXTRACTED": 67,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 36,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 72,
+       "checked": 21,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q04/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.3557,
+       "chars": 9593,
+       "sha256": "4dce80e9c0177635a1a2764712ac927e6a0bc3333ea7385c65eb20d158822942"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.5511,
+       "chars": 9593,
+       "sha256": "5fcd02df88e9d29c240391b8e5f61ee095bb0628032e680c9a753309ed275ae3"
+      }
+     ],
+     "score": {
+      "chars": 9593,
+      "tokens": 2399,
+      "sha256": "4dce80e9c0177635a1a2764712ac927e6a0bc3333ea7385c65eb20d158822942",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 0,
+       "found": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "missed": [],
+       "shown": [],
+       "via": {
+        "q04.above": "loc tests/test_pricing.py:4",
+        "q04.below": "loc tests/test_pricing.py:8",
+        "q04.total": "loc tests/test_pricing.py:12",
+        "q04.roundtrip": "loc tests/test_service.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 53,
+       "files": 8,
+       "point_or_short": 53
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 31,
+       "edges_shown": 67,
+       "edge_confidence": {
+        "EXTRACTED": 62,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 31,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 67,
+       "checked": 21,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q04/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.8686,
+       "chars": 5858,
+       "sha256": "a7fd3268029059eff37d3fabc30fcce4e92a0db996822525578519fa56bed5c5",
+       "claims": 9,
+       "claims_reused": 5,
+       "claims_new": 4,
+       "internal_tool_calls": 18,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.7563,
+       "chars": 5854,
+       "sha256": "ded7c9256e34f48c9a40568c01f39af5cc3bbf9d418a26be16fd85ee22cc3c73",
+       "claims": 9,
+       "claims_reused": 9,
+       "claims_new": 0,
+       "internal_tool_calls": 18,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 5858,
+      "tokens": 1465,
+      "sha256": "a7fd3268029059eff37d3fabc30fcce4e92a0db996822525578519fa56bed5c5",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 4,
+       "found": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "missed": [],
+       "shown": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "via": {
+        "q04.above": "loc tests/test_pricing.py:4",
+        "q04.below": "loc tests/test_pricing.py:8",
+        "q04.total": "loc tests/test_pricing.py:12",
+        "q04.roundtrip": "loc tests/test_service.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 35,
+       "files": 9,
+       "point_or_short": 35
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 9,
+       "by_status": {
+        "weak_inference": 2,
+        "statically_verified": 6,
+        "strong_inference": 1
+       },
+       "verified": 6,
+       "inference": 3,
+       "verified_share": 0.667,
+       "inference_share": 0.333,
+       "weak_or_unknown": 2,
+       "weak_or_unknown_unlabelled": 2,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 15,
+        "graph_edge": 4,
+        "static_resolution": 4
+       },
+       "evidence_verifying": 19,
+       "evidence_non_verifying": 4,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.861,
+       "tool_calls": 18,
+       "context_chars": 9531,
+       "context_tokens_est": 2382,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "verdict": {
+       "met": false,
+       "verdicts": [
+        "met_with_inference"
+       ],
+       "facts_in_claims": 4
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 1,
+       "matched": [
+        {
+         "id": "q04.n.empty_order",
+         "statement": "test_empty_order_rejected exercises the discount calculation (validate_items raises before compute_total runs)",
+         "matched": [
+          {
+           "text": "Test code statically reaches `apply_discount()` from: test_compute_total(), test_discount_applies_above_threshold(), test_empty_order_rejected(), test_no_discount_below_threshold()",
+           "status": "weak_inference"
+          },
+          {
+           "text": "Test code statically reaches `compute_total()` from: test_compute_total(), test_empty_order_rejected(), test_place_and_fetch_roundtrip()",
+           "status": "weak_inference"
+          }
+         ]
+        }
+       ],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 2
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 4,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q04/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0603,
+       "chars": 5287,
+       "sha256": "38b64c98d3eca8f1cd738eb87c0a80a6b4969e2970e597b17b7d41d219a77cad"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.086,
+       "chars": 5287,
+       "sha256": "38b64c98d3eca8f1cd738eb87c0a80a6b4969e2970e597b17b7d41d219a77cad"
+      }
+     ],
+     "score": {
+      "chars": 5287,
+      "tokens": 1322,
+      "sha256": "38b64c98d3eca8f1cd738eb87c0a80a6b4969e2970e597b17b7d41d219a77cad",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 4,
+       "found": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "missed": [],
+       "shown": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "via": {
+        "q04.above": "loc tests/test_pricing.py:4",
+        "q04.below": "loc tests/test_pricing.py:8",
+        "q04.total": "loc tests/test_pricing.py:12",
+        "q04.roundtrip": "loc tests/test_service.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 35,
+       "files": 9,
+       "point_or_short": 35
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 4,
+       "edge_confidence": {
+        "EXTRACTED": 4
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5605,
+        "truncated": true,
+        "more": [
+         "orders/service.py:19-22 place_order",
+         "orders/repository.py:8-26 OrderRepository",
+         "orders/service.py:25-26 fetch_order",
+         "orders/service.py:12-16 validate_items",
+         "orders/service.py:8-9 ValidationError",
+         "orders/api.py:9-13 get_repo",
+         "orders/repository.py:15-20 OrderRepository.save",
+         "orders/api.py:16-21 create_order_handler",
+         "orders/repository.py:22-26 OrderRepository.get",
+         "orders/api.py:24-28 get_order_handler",
+         "orders/repository.py:9-13 OrderRepository.__init__",
+         "docs/adr/0001-sqlite-persistence.md:1-7 ADR 0001: SQLite for order persistence"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 4,
+       "checked": 4,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q04/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1262,
+       "chars": 2708,
+       "sha256": "b2116b95e91ebf2e294fc4a518aa5933a754a6db877575fdaf783172bb9b113d"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1182,
+       "chars": 2708,
+       "sha256": "b2116b95e91ebf2e294fc4a518aa5933a754a6db877575fdaf783172bb9b113d"
+      }
+     ],
+     "score": {
+      "chars": 2708,
+      "tokens": 677,
+      "sha256": "b2116b95e91ebf2e294fc4a518aa5933a754a6db877575fdaf783172bb9b113d",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 4,
+       "found": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "missed": [],
+       "shown": [
+        "q04.above",
+        "q04.below",
+        "q04.total",
+        "q04.roundtrip"
+       ],
+       "via": {
+        "q04.above": "loc tests/test_pricing.py:5",
+        "q04.below": "loc tests/test_pricing.py:9",
+        "q04.total": "loc tests/test_pricing.py:12-13",
+        "q04.roundtrip": "loc tests/test_service.py:7-10"
+       }
+      },
+      "locators": {
+       "distinct": 25,
+       "files": 9,
+       "point_or_short": 25
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 3,
+       "edge_confidence": {
+        "EXTRACTED": 3
+       },
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 3,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q04/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q05",
+   "category": "why",
+   "question": "Why does the project use SQLite for persistence?",
+   "facts": 3,
+   "negatives": 0,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1169,
+       "chars": 2754,
+       "sha256": "d16f7a2d4b457bb3143f2e28e046de3e974767198c5f3f4c001c86f741e48872"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1102,
+       "chars": 2754,
+       "sha256": "d16f7a2d4b457bb3143f2e28e046de3e974767198c5f3f4c001c86f741e48872"
+      }
+     ],
+     "score": {
+      "chars": 2754,
+      "tokens": 689,
+      "sha256": "d16f7a2d4b457bb3143f2e28e046de3e974767198c5f3f4c001c86f741e48872",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "missed": [],
+       "shown": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "via": {
+        "q05.zero_ops": "loc docs/adr/0001-sqlite-persistence.md:1-7",
+        "q05.accepted": "loc docs/adr/0001-sqlite-persistence.md:1-7",
+        "q05.only_repo": "loc docs/adr/0001-sqlite-persistence.md:5"
+       }
+      },
+      "locators": {
+       "distinct": 12,
+       "files": 5,
+       "point_or_short": 12
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "project",
+        "use",
+        "sqlite",
+        "persistence"
+       ],
+       "matching_files": 5,
+       "matching_lines": 8,
+       "files_read": [
+        {
+         "file": "orders/repository.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "docs/adr/0001-sqlite-persistence.md",
+         "lines": [
+          1,
+          7
+         ],
+         "of": 7
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          5
+         ],
+         "of": 5
+        },
+        {
+         "file": "orders/__init__.py",
+         "lines": [
+          1,
+          1
+         ],
+         "of": 1
+        },
+        {
+         "file": "pyproject.toml",
+         "lines": [
+          1,
+          8
+         ],
+         "of": 8
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q05/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0102,
+       "chars": 8600,
+       "sha256": "fc0ed9667b48ec90e7fe047be770ce16c0edba66c08195855c7b62ea67f53d0f"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0139,
+       "chars": 8600,
+       "sha256": "fc0ed9667b48ec90e7fe047be770ce16c0edba66c08195855c7b62ea67f53d0f"
+      }
+     ],
+     "score": {
+      "chars": 8600,
+      "tokens": 2150,
+      "sha256": "fc0ed9667b48ec90e7fe047be770ce16c0edba66c08195855c7b62ea67f53d0f",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q05.only_repo"
+       ],
+       "missed": [
+        "q05.zero_ops",
+        "q05.accepted"
+       ],
+       "shown": [],
+       "via": {
+        "q05.only_repo": "loc docs/adr/0001-sqlite-persistence.md:5"
+       }
+      },
+      "locators": {
+       "distinct": 47,
+       "files": 8,
+       "point_or_short": 47
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 30,
+       "edges_shown": 59,
+       "edge_confidence": {
+        "EXTRACTED": 54,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 30,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 59,
+       "checked": 17,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q05/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.6226,
+       "chars": 2133,
+       "sha256": "6c73f676e1881946a7ba5ff80dc10093e9330bd3e862c9905c063c49f2396300"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.502,
+       "chars": 2133,
+       "sha256": "6c73f676e1881946a7ba5ff80dc10093e9330bd3e862c9905c063c49f2396300"
+      }
+     ],
+     "score": {
+      "chars": 2133,
+      "tokens": 534,
+      "sha256": "6c73f676e1881946a7ba5ff80dc10093e9330bd3e862c9905c063c49f2396300",
+      "facts": {
+       "total": 3,
+       "found_n": 0,
+       "pinpointed_n": 0,
+       "shown_n": 0,
+       "found": [],
+       "missed": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "shown": [],
+       "via": {}
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 6,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 9,
+       "edges_shown": 13,
+       "edge_confidence": {
+        "EXTRACTED": 13
+       },
+       "truncated": false,
+       "nodes_found": 9,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 13,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q05/graphify_cli.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.0873,
+       "chars": 5202,
+       "sha256": "20710537cc68507f5840ed5557316f268dcbf53df91f78093c7844555b6ec09f",
+       "claims": 19,
+       "claims_reused": 15,
+       "claims_new": 4,
+       "internal_tool_calls": 28,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.1845,
+       "chars": 5202,
+       "sha256": "ba0a9f755b455c5a1fa386acf116f58104f68f9ba245fd7d08d13977f9ab98d6",
+       "claims": 19,
+       "claims_reused": 19,
+       "claims_new": 0,
+       "internal_tool_calls": 28,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 5202,
+      "tokens": 1301,
+      "sha256": "20710537cc68507f5840ed5557316f268dcbf53df91f78093c7844555b6ec09f",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "missed": [],
+       "shown": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "via": {
+        "q05.zero_ops": "loc docs/adr/0001-sqlite-persistence.md:3-7",
+        "q05.accepted": "loc docs/adr/0001-sqlite-persistence.md:3-7",
+        "q05.only_repo": "loc docs/adr/0001-sqlite-persistence.md:3-7"
+       }
+      },
+      "locators": {
+       "distinct": 24,
+       "files": 9,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 19,
+       "by_status": {
+        "primary_source_verified": 4,
+        "statically_verified": 6,
+        "strong_inference": 9
+       },
+       "verified": 10,
+       "inference": 9,
+       "verified_share": 0.526,
+       "inference_share": 0.474,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "design_doc": 3,
+        "git_history": 1,
+        "source_code": 24,
+        "graph_edge": 6,
+        "static_resolution": 4
+       },
+       "evidence_verifying": 32,
+       "evidence_non_verifying": 6,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 1.081,
+       "tool_calls": 28,
+       "context_chars": 13102,
+       "context_tokens_est": 3275,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 1,
+        "spent_s": 0.001,
+        "skipped": 0
+       }
+      },
+      "verdict": {
+       "met": true,
+       "verdicts": [
+        "met"
+       ],
+       "facts_in_claims": 3
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 13,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q05/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0529,
+       "chars": 5651,
+       "sha256": "bc2ea427328455e598227c8fae98b6703f465e3fe4c21ff9ac09a024b81359de"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0837,
+       "chars": 5651,
+       "sha256": "bc2ea427328455e598227c8fae98b6703f465e3fe4c21ff9ac09a024b81359de"
+      }
+     ],
+     "score": {
+      "chars": 5651,
+      "tokens": 1413,
+      "sha256": "bc2ea427328455e598227c8fae98b6703f465e3fe4c21ff9ac09a024b81359de",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "missed": [],
+       "shown": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "via": {
+        "q05.zero_ops": "loc docs/adr/0001-sqlite-persistence.md:1-7",
+        "q05.accepted": "loc docs/adr/0001-sqlite-persistence.md:1-7",
+        "q05.only_repo": "loc docs/adr/0001-sqlite-persistence.md:5"
+       }
+      },
+      "locators": {
+       "distinct": 30,
+       "files": 8,
+       "point_or_short": 30
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 9,
+       "edge_confidence": {
+        "INFERRED": 3,
+        "EXTRACTED": 6
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5997,
+        "truncated": true,
+        "more": [
+         "orders/repository.py:22-26 OrderRepository.get",
+         "orders/repository.py:15-20 OrderRepository.save",
+         "orders/repository.py:9-13 OrderRepository.__init__",
+         "orders/api.py:24-28 get_order_handler",
+         "orders/api.py:16-21 create_order_handler",
+         "orders/service.py:12-16 validate_items",
+         "orders/service.py:8-9 ValidationError",
+         "orders/pricing.py:6-8 compute_total",
+         "orders/pricing.py:11-15 apply_discount"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 9,
+       "checked": 8,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q05/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1039,
+       "chars": 2992,
+       "sha256": "0cdf69b27cc30a1d41cef1db208d780f55487b7625db83cfaafb8283e6695fab"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1118,
+       "chars": 2992,
+       "sha256": "0cdf69b27cc30a1d41cef1db208d780f55487b7625db83cfaafb8283e6695fab"
+      }
+     ],
+     "score": {
+      "chars": 2992,
+      "tokens": 748,
+      "sha256": "0cdf69b27cc30a1d41cef1db208d780f55487b7625db83cfaafb8283e6695fab",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "missed": [],
+       "shown": [
+        "q05.zero_ops",
+        "q05.accepted",
+        "q05.only_repo"
+       ],
+       "via": {
+        "q05.zero_ops": "loc docs/adr/0001-sqlite-persistence.md:1-7",
+        "q05.accepted": "loc docs/adr/0001-sqlite-persistence.md:1-7",
+        "q05.only_repo": "loc docs/adr/0001-sqlite-persistence.md:1-7"
+       }
+      },
+      "locators": {
+       "distinct": 19,
+       "files": 9,
+       "point_or_short": 19
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 0,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q05/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q06",
+   "category": "impact",
+   "question": "What needs retesting if OrderRepository.save changes?",
+   "facts": 3,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1025,
+       "chars": 4993,
+       "sha256": "401cc7abb6aea5a9fdc1e8e629357c1ffb27b8110c28e8d8c075679500c902eb"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1101,
+       "chars": 4993,
+       "sha256": "401cc7abb6aea5a9fdc1e8e629357c1ffb27b8110c28e8d8c075679500c902eb"
+      }
+     ],
+     "score": {
+      "chars": 4993,
+      "tokens": 1249,
+      "sha256": "401cc7abb6aea5a9fdc1e8e629357c1ffb27b8110c28e8d8c075679500c902eb",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "via": {
+        "q06.caller": "loc orders/service.py:22",
+        "q06.handler": "loc orders/api.py:1-28",
+        "q06.test": "loc tests/test_service.py:8"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 5,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "needs",
+        "retesting",
+        "orderrepository",
+        "save",
+        "changes"
+       ],
+       "matching_files": 5,
+       "matching_lines": 13,
+       "files_read": [
+        {
+         "file": "orders/service.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "orders/repository.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "orders/api.py",
+         "lines": [
+          1,
+          28
+         ],
+         "of": 28
+        },
+        {
+         "file": "tests/test_service.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "docs/adr/0001-sqlite-persistence.md",
+         "lines": [
+          1,
+          7
+         ],
+         "of": 7
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q06/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0161,
+       "chars": 9803,
+       "sha256": "688433618bf3baefb8e9ec875bd18429071e9df4fd7f37be238d9fde4fb09fe2"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0123,
+       "chars": 9803,
+       "sha256": "688433618bf3baefb8e9ec875bd18429071e9df4fd7f37be238d9fde4fb09fe2"
+      }
+     ],
+     "score": {
+      "chars": 9803,
+      "tokens": 2451,
+      "sha256": "688433618bf3baefb8e9ec875bd18429071e9df4fd7f37be238d9fde4fb09fe2",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "shown_n": 1,
+       "found": [
+        "q06.handler",
+        "q06.test"
+       ],
+       "missed": [
+        "q06.caller"
+       ],
+       "shown": [
+        "q06.handler"
+       ],
+       "via": {
+        "q06.handler": "loc orders/api.py:18",
+        "q06.test": "loc tests/test_service.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 51,
+       "files": 8,
+       "point_or_short": 51
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 34,
+       "edges_shown": 68,
+       "edge_confidence": {
+        "EXTRACTED": 63,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 34,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 68,
+       "checked": 19,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q06/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 2.0967,
+       "chars": 8211,
+       "sha256": "f8f30eb97c1c28e9a88b2154cff2d8e1face0c420a49bb37fe654cd8e768c6db"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.7595,
+       "chars": 8211,
+       "sha256": "9194b60df83da083f6653f2b06fbdcab4b3c0bc95dbf801998b548cfac503093"
+      }
+     ],
+     "score": {
+      "chars": 8211,
+      "tokens": 2053,
+      "sha256": "f8f30eb97c1c28e9a88b2154cff2d8e1face0c420a49bb37fe654cd8e768c6db",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "shown_n": 1,
+       "found": [
+        "q06.handler",
+        "q06.test"
+       ],
+       "missed": [
+        "q06.caller"
+       ],
+       "shown": [
+        "q06.handler"
+       ],
+       "via": {
+        "q06.handler": "loc orders/api.py:18",
+        "q06.test": "loc tests/test_service.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 44,
+       "files": 7,
+       "point_or_short": 44
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 27,
+       "edges_shown": 57,
+       "edge_confidence": {
+        "EXTRACTED": 52,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 27,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 57,
+       "checked": 17,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q06/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.0425,
+       "chars": 8257,
+       "sha256": "c178349e629714ce13b416aa5803e9f7f15adae72b09b53989e246e964e185ed",
+       "claims": 14,
+       "claims_reused": 8,
+       "claims_new": 6,
+       "internal_tool_calls": 26,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.7937,
+       "chars": 8253,
+       "sha256": "03f7f6cb95b80f4d0897c4c34448b13eb713fcf8490164cb477ea5049c913ed4",
+       "claims": 14,
+       "claims_reused": 14,
+       "claims_new": 0,
+       "internal_tool_calls": 26,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 8257,
+      "tokens": 2065,
+      "sha256": "c178349e629714ce13b416aa5803e9f7f15adae72b09b53989e246e964e185ed",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "via": {
+        "q06.caller": "loc orders/service.py:22",
+        "q06.handler": "loc orders/api.py:18",
+        "q06.test": "loc tests/test_service.py:7"
+       }
+      },
+      "locators": {
+       "distinct": 42,
+       "files": 11,
+       "point_or_short": 42
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 14,
+       "by_status": {
+        "strong_inference": 7,
+        "weak_inference": 2,
+        "statically_verified": 5
+       },
+       "verified": 5,
+       "inference": 9,
+       "verified_share": 0.357,
+       "inference_share": 0.643,
+       "weak_or_unknown": 2,
+       "weak_or_unknown_unlabelled": 2,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 18,
+        "graph_edge": 9,
+        "static_resolution": 4
+       },
+       "evidence_verifying": 22,
+       "evidence_non_verifying": 9,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 1.035,
+       "tool_calls": 26,
+       "context_chars": 13044,
+       "context_tokens_est": 3261,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 1,
+        "spent_s": 0.182,
+        "skipped": 0
+       }
+      },
+      "verdict": {
+       "met": false,
+       "verdicts": [
+        "met_with_inference"
+       ],
+       "facts_in_claims": 3
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 8,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q06/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0766,
+       "chars": 5692,
+       "sha256": "5bf4c9e018e66859769811c5da4f3d6e717d517a26eb95bde3a18122608337ae"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0996,
+       "chars": 5692,
+       "sha256": "5bf4c9e018e66859769811c5da4f3d6e717d517a26eb95bde3a18122608337ae"
+      }
+     ],
+     "score": {
+      "chars": 5692,
+      "tokens": 1423,
+      "sha256": "5bf4c9e018e66859769811c5da4f3d6e717d517a26eb95bde3a18122608337ae",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "via": {
+        "q06.caller": "loc orders/service.py:22",
+        "q06.handler": "loc orders/api.py:18",
+        "q06.test": "loc tests/test_service.py:9"
+       }
+      },
+      "locators": {
+       "distinct": 28,
+       "files": 4,
+       "point_or_short": 28
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 9,
+       "edges": 0,
+       "edge_confidence": {},
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5966,
+        "truncated": true,
+        "expansions": [
+         "repositori->repo (abbreviation)"
+        ],
+        "more": [
+         "orders/api.py:16-21 create_order_handler",
+         "orders/api.py:24-28 get_order_handler"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q06/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1396,
+       "chars": 4284,
+       "sha256": "fd79ea49caa77f33b6cefd41cdc64e99315a4fdc3ae2619cdc75937f51cfd661"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1776,
+       "chars": 4284,
+       "sha256": "fd79ea49caa77f33b6cefd41cdc64e99315a4fdc3ae2619cdc75937f51cfd661"
+      }
+     ],
+     "score": {
+      "chars": 4284,
+      "tokens": 1071,
+      "sha256": "fd79ea49caa77f33b6cefd41cdc64e99315a4fdc3ae2619cdc75937f51cfd661",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q06.caller",
+        "q06.handler",
+        "q06.test"
+       ],
+       "via": {
+        "q06.caller": "loc orders/service.py:22",
+        "q06.handler": "loc orders/api.py:18",
+        "q06.test": "loc tests/test_service.py:9"
+       }
+      },
+      "locators": {
+       "distinct": 32,
+       "files": 11,
+       "point_or_short": 32
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 9,
+       "outline_edges": 14,
+       "edge_confidence": {
+        "INFERRED": 2,
+        "EXTRACTED": 12
+       },
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 14,
+       "checked": 14,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q06/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q07",
+   "category": "where",
+   "question": "Where is the 10% discount applied and what threshold controls it?",
+   "facts": 3,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1602,
+       "chars": 2478,
+       "sha256": "435694d6364ddbfdfc4ac1d61e40f5890f2e3a7898941615571767e592b83a9d"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1443,
+       "chars": 2478,
+       "sha256": "435694d6364ddbfdfc4ac1d61e40f5890f2e3a7898941615571767e592b83a9d"
+      }
+     ],
+     "score": {
+      "chars": 2478,
+      "tokens": 620,
+      "sha256": "435694d6364ddbfdfc4ac1d61e40f5890f2e3a7898941615571767e592b83a9d",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "missed": [],
+       "shown": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "via": {
+        "q07.apply": "loc orders/pricing.py:11",
+        "q07.threshold": "loc orders/config.py:7",
+        "q07.caller": "loc orders/pricing.py:8"
+       }
+      },
+      "locators": {
+       "distinct": 15,
+       "files": 3,
+       "point_or_short": 15
+      },
+      "agent_tool_calls": 4,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "discount",
+        "applied",
+        "threshold",
+        "controls"
+       ],
+       "matching_files": 3,
+       "matching_lines": 12,
+       "files_read": [
+        {
+         "file": "orders/pricing.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "tests/test_pricing.py",
+         "lines": [
+          1,
+          13
+         ],
+         "of": 13
+        },
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q07/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.017,
+       "chars": 8027,
+       "sha256": "40e63404a29dfbab0c5cb24f0c99d760a611e3b79c59b3a53eb2f8e15a459b10"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.014,
+       "chars": 8027,
+       "sha256": "40e63404a29dfbab0c5cb24f0c99d760a611e3b79c59b3a53eb2f8e15a459b10"
+      }
+     ],
+     "score": {
+      "chars": 8027,
+      "tokens": 2007,
+      "sha256": "40e63404a29dfbab0c5cb24f0c99d760a611e3b79c59b3a53eb2f8e15a459b10",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "shown_n": 0,
+       "found": [
+        "q07.apply",
+        "q07.caller"
+       ],
+       "missed": [
+        "q07.threshold"
+       ],
+       "shown": [],
+       "via": {
+        "q07.apply": "loc orders/pricing.py:11",
+        "q07.caller": "loc orders/pricing.py:8"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 7,
+       "point_or_short": 45
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 24,
+       "edges_shown": 56,
+       "edge_confidence": {
+        "EXTRACTED": 52,
+        "INFERRED": 4
+       },
+       "truncated": false,
+       "nodes_found": 24,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 56,
+       "checked": 17,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q07/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.7915,
+       "chars": 2814,
+       "sha256": "f3124008818e4b252a6ce61dd33818894ece71a327906fe72b58a3f88b75e85f"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.694,
+       "chars": 2814,
+       "sha256": "ae8a6927b53709ecc405305b63c3cf015efd4fdabb297cea213a56047c89e82b"
+      }
+     ],
+     "score": {
+      "chars": 2814,
+      "tokens": 704,
+      "sha256": "f3124008818e4b252a6ce61dd33818894ece71a327906fe72b58a3f88b75e85f",
+      "facts": {
+       "total": 3,
+       "found_n": 2,
+       "pinpointed_n": 2,
+       "shown_n": 0,
+       "found": [
+        "q07.apply",
+        "q07.caller"
+       ],
+       "missed": [
+        "q07.threshold"
+       ],
+       "shown": [],
+       "via": {
+        "q07.apply": "loc orders/pricing.py:11",
+        "q07.caller": "loc orders/pricing.py:8"
+       }
+      },
+      "locators": {
+       "distinct": 18,
+       "files": 4,
+       "point_or_short": 18
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 10,
+       "edges_shown": 18,
+       "edge_confidence": {
+        "EXTRACTED": 18
+       },
+       "truncated": false,
+       "nodes_found": 10,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 18,
+       "checked": 5,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q07/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.8901,
+       "chars": 3968,
+       "sha256": "4c9d197ed7c98ae36b2883b81b947ad9e6198b4927f1d681b322b9cd0aa767b5",
+       "claims": 12,
+       "claims_reused": 12,
+       "claims_new": 0,
+       "internal_tool_calls": 31,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.9387,
+       "chars": 3968,
+       "sha256": "8fb0c32a68032616b4e409a48a4a3ac34d3f326f4b17a0610591c2c4fb85c508",
+       "claims": 12,
+       "claims_reused": 12,
+       "claims_new": 0,
+       "internal_tool_calls": 31,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 3968,
+      "tokens": 992,
+      "sha256": "4c9d197ed7c98ae36b2883b81b947ad9e6198b4927f1d681b322b9cd0aa767b5",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "missed": [],
+       "shown": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "via": {
+        "q07.apply": "loc orders/pricing.py:11-15",
+        "q07.threshold": "loc orders/config.py:7",
+        "q07.caller": "loc orders/pricing.py:8"
+       }
+      },
+      "locators": {
+       "distinct": 28,
+       "files": 8,
+       "point_or_short": 28
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 12,
+       "by_status": {
+        "statically_verified": 12
+       },
+       "verified": 12,
+       "inference": 0,
+       "verified_share": 1.0,
+       "inference_share": 0.0,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 12,
+        "graph_edge": 5,
+        "static_resolution": 5
+       },
+       "evidence_verifying": 17,
+       "evidence_non_verifying": 5,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.882,
+       "tool_calls": 31,
+       "context_chars": 8950,
+       "context_tokens_est": 2237,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "verdict": {
+       "met": true,
+       "verdicts": [
+        "met",
+        "met"
+       ],
+       "facts_in_claims": 3
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 5,
+       "checked": 5,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q07/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0801,
+       "chars": 5600,
+       "sha256": "e7949ad5ee2d5a6648b713fefcdb6a86245e37c450bcd425f301ba778cc16202"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0888,
+       "chars": 5600,
+       "sha256": "e7949ad5ee2d5a6648b713fefcdb6a86245e37c450bcd425f301ba778cc16202"
+      }
+     ],
+     "score": {
+      "chars": 5600,
+      "tokens": 1400,
+      "sha256": "e7949ad5ee2d5a6648b713fefcdb6a86245e37c450bcd425f301ba778cc16202",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "missed": [],
+       "shown": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "via": {
+        "q07.apply": "loc orders/pricing.py:11",
+        "q07.threshold": "loc orders/config.py:7",
+        "q07.caller": "loc orders/pricing.py:8"
+       }
+      },
+      "locators": {
+       "distinct": 32,
+       "files": 7,
+       "point_or_short": 32
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 7,
+       "edge_confidence": {
+        "EXTRACTED": 6,
+        "INFERRED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5940,
+        "truncated": true,
+        "more": [
+         "orders/repository.py:15-20 OrderRepository.save",
+         "tests/test_service.py:13-15 test_empty_order_rejected",
+         "tests/test_service.py:7-10 test_place_and_fetch_roundtrip",
+         "orders/api.py:16-21 create_order_handler",
+         "orders/service.py:8-9 ValidationError",
+         "orders/api.py:9-13 get_repo",
+         "orders/service.py:25-26 fetch_order",
+         "orders/repository.py:22-26 OrderRepository.get",
+         "orders/api.py:24-28 get_order_handler",
+         "orders/repository.py:9-13 OrderRepository.__init__"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 7,
+       "checked": 7,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q07/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1275,
+       "chars": 2726,
+       "sha256": "da914d64d625eb903d39c2acdff1f2401c0067bedf2dce69b738d5e033cb7946"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1274,
+       "chars": 2726,
+       "sha256": "da914d64d625eb903d39c2acdff1f2401c0067bedf2dce69b738d5e033cb7946"
+      }
+     ],
+     "score": {
+      "chars": 2726,
+      "tokens": 682,
+      "sha256": "da914d64d625eb903d39c2acdff1f2401c0067bedf2dce69b738d5e033cb7946",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "missed": [],
+       "shown": [
+        "q07.apply",
+        "q07.threshold",
+        "q07.caller"
+       ],
+       "via": {
+        "q07.apply": "loc orders/pricing.py:11-15",
+        "q07.threshold": "loc orders/config.py:5-7",
+        "q07.caller": "loc orders/pricing.py:8"
+       }
+      },
+      "locators": {
+       "distinct": 24,
+       "files": 8,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 3,
+       "edge_confidence": {
+        "EXTRACTED": 3
+       },
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 3,
+       "checked": 3,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q07/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q08",
+   "category": "flow",
+   "question": "How does get_order_handler load an order from storage?",
+   "facts": 4,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1406,
+       "chars": 7124,
+       "sha256": "6b30f74ae902f63728fef6a3f42b59df2dd80c54dfdc4f7e628533d63d05f292"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1661,
+       "chars": 7124,
+       "sha256": "6b30f74ae902f63728fef6a3f42b59df2dd80c54dfdc4f7e628533d63d05f292"
+      }
+     ],
+     "score": {
+      "chars": 7124,
+      "tokens": 1781,
+      "sha256": "6b30f74ae902f63728fef6a3f42b59df2dd80c54dfdc4f7e628533d63d05f292",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 4,
+       "found": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "missed": [],
+       "shown": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "via": {
+        "q08.handler": "loc orders/api.py:25",
+        "q08.service": "loc orders/service.py:26",
+        "q08.select": "loc orders/repository.py:24",
+        "q08.missing": "loc orders/api.py:26"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 6,
+       "point_or_short": 45
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "get_order_handler",
+        "load",
+        "order",
+        "storage"
+       ],
+       "matching_files": 11,
+       "matching_lines": 47,
+       "files_read": [
+        {
+         "file": "orders/api.py",
+         "lines": [
+          1,
+          28
+         ],
+         "of": 28
+        },
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "orders/service.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "tests/test_service.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "orders/repository.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q08/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0157,
+       "chars": 9870,
+       "sha256": "0d43e695dbf882521e7d0b421141ffacb44899705c0166c7b312a709ff8b9e57"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0205,
+       "chars": 9870,
+       "sha256": "0d43e695dbf882521e7d0b421141ffacb44899705c0166c7b312a709ff8b9e57"
+      }
+     ],
+     "score": {
+      "chars": 9870,
+      "tokens": 2468,
+      "sha256": "0d43e695dbf882521e7d0b421141ffacb44899705c0166c7b312a709ff8b9e57",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q08.handler"
+       ],
+       "missed": [
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "shown": [],
+       "via": {
+        "q08.handler": "loc orders/api.py:25"
+       }
+      },
+      "locators": {
+       "distinct": 51,
+       "files": 8,
+       "point_or_short": 51
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 34,
+       "edges_shown": 68,
+       "edge_confidence": {
+        "EXTRACTED": 63,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 34,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 68,
+       "checked": 19,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q08/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.7393,
+       "chars": 8917,
+       "sha256": "767d4050f59969824b855b08bcc90d76669996455bd3b2712a1471a7e674ba78"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.6945,
+       "chars": 8917,
+       "sha256": "3c83e99fa3242b8465641ab0b530b69cf89ad8d388bcbbb93ceafd962aab2e7f"
+      }
+     ],
+     "score": {
+      "chars": 8917,
+      "tokens": 2230,
+      "sha256": "767d4050f59969824b855b08bcc90d76669996455bd3b2712a1471a7e674ba78",
+      "facts": {
+       "total": 4,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q08.handler"
+       ],
+       "missed": [
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "shown": [],
+       "via": {
+        "q08.handler": "loc orders/api.py:25"
+       }
+      },
+      "locators": {
+       "distinct": 46,
+       "files": 7,
+       "point_or_short": 46
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 31,
+       "edges_shown": 61,
+       "edge_confidence": {
+        "EXTRACTED": 56,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 31,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 61,
+       "checked": 17,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q08/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.9229,
+       "chars": 6715,
+       "sha256": "8690d4b10a03eef8d22e092fe78353391f59bbc8082d958e81e14b31df115fe8",
+       "claims": 14,
+       "claims_reused": 10,
+       "claims_new": 4,
+       "internal_tool_calls": 25,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.6532,
+       "chars": 6715,
+       "sha256": "1d1237fa94b57d9b75f474deaee011485e1da8cea8e3a8513d38f52e33712285",
+       "claims": 14,
+       "claims_reused": 14,
+       "claims_new": 0,
+       "internal_tool_calls": 25,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 6715,
+      "tokens": 1679,
+      "sha256": "8690d4b10a03eef8d22e092fe78353391f59bbc8082d958e81e14b31df115fe8",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 4,
+       "found": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "missed": [],
+       "shown": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "via": {
+        "q08.handler": "loc orders/api.py:25",
+        "q08.service": "loc orders/service.py:26",
+        "q08.select": "loc orders/repository.py:24",
+        "q08.missing": "loc orders/api.py:24-28"
+       }
+      },
+      "locators": {
+       "distinct": 37,
+       "files": 11,
+       "point_or_short": 37
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 14,
+       "by_status": {
+        "statically_verified": 9,
+        "strong_inference": 5
+       },
+       "verified": 9,
+       "inference": 5,
+       "verified_share": 0.643,
+       "inference_share": 0.357,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 20,
+        "graph_edge": 6,
+        "static_resolution": 6
+       },
+       "evidence_verifying": 26,
+       "evidence_non_verifying": 6,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.914,
+       "tool_calls": 25,
+       "context_chars": 11334,
+       "context_tokens_est": 2833,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 2,
+        "spent_s": 0.006,
+        "skipped": 0
+       }
+      },
+      "verdict": {
+       "met": true,
+       "verdicts": [
+        "met"
+       ],
+       "facts_in_claims": 4
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 11,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q08/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.084,
+       "chars": 5637,
+       "sha256": "0fd09665fe3dfeca4eccccb9ea2aaecd232224ba4f7076c10740215e58d26d67"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.072,
+       "chars": 5637,
+       "sha256": "0fd09665fe3dfeca4eccccb9ea2aaecd232224ba4f7076c10740215e58d26d67"
+      }
+     ],
+     "score": {
+      "chars": 5637,
+      "tokens": 1410,
+      "sha256": "0fd09665fe3dfeca4eccccb9ea2aaecd232224ba4f7076c10740215e58d26d67",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 4,
+       "found": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "missed": [],
+       "shown": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "via": {
+        "q08.handler": "loc orders/api.py:25",
+        "q08.service": "loc orders/service.py:26",
+        "q08.select": "loc orders/repository.py:22-26",
+        "q08.missing": "loc orders/api.py:24-28"
+       }
+      },
+      "locators": {
+       "distinct": 28,
+       "files": 5,
+       "point_or_short": 28
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 5,
+       "edge_confidence": {
+        "EXTRACTED": 4,
+        "INFERRED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5974,
+        "truncated": true,
+        "more": [
+         "orders/config.py:5-7 DATABASE_URL MAX_ITEMS_PER_ORDER DISCOUNT_THRESHOLD",
+         "tests/test_service.py:13-15 test_empty_order_rejected",
+         "orders/service.py:12-16 validate_items"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 5,
+       "checked": 5,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q08/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.149,
+       "chars": 4221,
+       "sha256": "e4e148710c84462d3f651a02d99145b156b731c4168057e41df0c9fc65add2b3"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1275,
+       "chars": 4221,
+       "sha256": "e4e148710c84462d3f651a02d99145b156b731c4168057e41df0c9fc65add2b3"
+      }
+     ],
+     "score": {
+      "chars": 4221,
+      "tokens": 1056,
+      "sha256": "e4e148710c84462d3f651a02d99145b156b731c4168057e41df0c9fc65add2b3",
+      "facts": {
+       "total": 4,
+       "found_n": 4,
+       "pinpointed_n": 4,
+       "shown_n": 4,
+       "found": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "missed": [],
+       "shown": [
+        "q08.handler",
+        "q08.service",
+        "q08.select",
+        "q08.missing"
+       ],
+       "via": {
+        "q08.handler": "loc orders/api.py:25",
+        "q08.service": "loc orders/service.py:26",
+        "q08.select": "loc orders/repository.py:22-26",
+        "q08.missing": "loc orders/api.py:24-28"
+       }
+      },
+      "locators": {
+       "distinct": 32,
+       "files": 11,
+       "point_or_short": 32
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 10,
+       "edge_confidence": {
+        "EXTRACTED": 8,
+        "INFERRED": 2
+       },
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 10,
+       "checked": 10,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q08/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q09",
+   "category": "where",
+   "question": "Where is the SQLite connection opened and what decides the database file?",
+   "facts": 3,
+   "negatives": 2,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.165,
+       "chars": 3410,
+       "sha256": "f38b21a9cb22047a1ac22622bae292bccb40cd9081aea05c71b388147031f244"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1159,
+       "chars": 3410,
+       "sha256": "f38b21a9cb22047a1ac22622bae292bccb40cd9081aea05c71b388147031f244"
+      }
+     ],
+     "score": {
+      "chars": 3410,
+      "tokens": 853,
+      "sha256": "f38b21a9cb22047a1ac22622bae292bccb40cd9081aea05c71b388147031f244",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q09.connect",
+        "q09.default",
+        "q09.env"
+       ],
+       "missed": [],
+       "shown": [
+        "q09.connect",
+        "q09.default",
+        "q09.env"
+       ],
+       "via": {
+        "q09.connect": "loc orders/repository.py:10",
+        "q09.default": "loc orders/repository.py:9",
+        "q09.env": "loc orders/config.py:5"
+       }
+      },
+      "locators": {
+       "distinct": 16,
+       "files": 4,
+       "point_or_short": 16
+      },
+      "agent_tool_calls": 5,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "sqlite",
+        "connection",
+        "opened",
+        "decides",
+        "database",
+        "file"
+       ],
+       "matching_files": 4,
+       "matching_lines": 12,
+       "files_read": [
+        {
+         "file": "docs/adr/0001-sqlite-persistence.md",
+         "lines": [
+          1,
+          7
+         ],
+         "of": 7
+        },
+        {
+         "file": "orders/repository.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "README.md",
+         "lines": [
+          1,
+          5
+         ],
+         "of": 5
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q09/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0169,
+       "chars": 8779,
+       "sha256": "04e77337fdb4d1c14c41979f5d5a5787f8472be1506ec47edea6f8517773db33"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.018,
+       "chars": 8779,
+       "sha256": "04e77337fdb4d1c14c41979f5d5a5787f8472be1506ec47edea6f8517773db33"
+      }
+     ],
+     "score": {
+      "chars": 8779,
+      "tokens": 2195,
+      "sha256": "04e77337fdb4d1c14c41979f5d5a5787f8472be1506ec47edea6f8517773db33",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q09.default"
+       ],
+       "missed": [
+        "q09.connect",
+        "q09.env"
+       ],
+       "shown": [],
+       "via": {
+        "q09.default": "loc orders/repository.py:9"
+       }
+      },
+      "locators": {
+       "distinct": 46,
+       "files": 7,
+       "point_or_short": 46
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 30,
+       "edges_shown": 60,
+       "edge_confidence": {
+        "EXTRACTED": 55,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 30,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 60,
+       "checked": 17,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q09/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.5464,
+       "chars": 5133,
+       "sha256": "866e40904c40af8e978ad4c0687d33860c46a620d2b3ef03be56655f2a8d6517"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.6517,
+       "chars": 5133,
+       "sha256": "b25e4caf1bff4320fe3f9e631f0019e48c7f96df41bc9ec84d758ef664377cf1"
+      }
+     ],
+     "score": {
+      "chars": 5133,
+      "tokens": 1284,
+      "sha256": "866e40904c40af8e978ad4c0687d33860c46a620d2b3ef03be56655f2a8d6517",
+      "facts": {
+       "total": 3,
+       "found_n": 1,
+       "pinpointed_n": 1,
+       "shown_n": 0,
+       "found": [
+        "q09.default"
+       ],
+       "missed": [
+        "q09.connect",
+        "q09.env"
+       ],
+       "shown": [],
+       "via": {
+        "q09.default": "loc orders/repository.py:9"
+       }
+      },
+      "locators": {
+       "distinct": 29,
+       "files": 6,
+       "point_or_short": 29
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 18,
+       "edges_shown": 35,
+       "edge_confidence": {
+        "INFERRED": 3,
+        "EXTRACTED": 32
+       },
+       "truncated": false,
+       "nodes_found": 18,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 35,
+       "checked": 8,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q09/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.9826,
+       "chars": 5415,
+       "sha256": "17e4095941b04867d9c1bde821dbe3b4721353db75b3f8d9c1b8db8dc422e477",
+       "claims": 19,
+       "claims_reused": 17,
+       "claims_new": 2,
+       "internal_tool_calls": 35,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.8912,
+       "chars": 5415,
+       "sha256": "2a329f0c848ef851ac1d3675564a0bd1340888d6f1e4fb65a8ba1bf39a6712ef",
+       "claims": 19,
+       "claims_reused": 19,
+       "claims_new": 0,
+       "internal_tool_calls": 35,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 5415,
+      "tokens": 1354,
+      "sha256": "17e4095941b04867d9c1bde821dbe3b4721353db75b3f8d9c1b8db8dc422e477",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q09.connect",
+        "q09.default",
+        "q09.env"
+       ],
+       "missed": [],
+       "shown": [
+        "q09.connect",
+        "q09.default",
+        "q09.env"
+       ],
+       "via": {
+        "q09.connect": "loc orders/repository.py:8-26",
+        "q09.default": "loc orders/repository.py:8-26",
+        "q09.env": "loc orders/config.py:5"
+       }
+      },
+      "locators": {
+       "distinct": 28,
+       "files": 9,
+       "point_or_short": 28
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 19,
+       "by_status": {
+        "statically_verified": 13,
+        "primary_source_verified": 2,
+        "strong_inference": 4
+       },
+       "verified": 15,
+       "inference": 4,
+       "verified_share": 0.789,
+       "inference_share": 0.211,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 25,
+        "design_doc": 2,
+        "graph_edge": 6,
+        "static_resolution": 4
+       },
+       "evidence_verifying": 31,
+       "evidence_non_verifying": 6,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 0,
+      "analysis_usage": {
+       "elapsed_s": 0.976,
+       "tool_calls": 35,
+       "context_chars": 13077,
+       "context_tokens_est": 3269,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null
+      },
+      "verdict": {
+       "met": true,
+       "verdicts": [
+        "met",
+        "met"
+       ],
+       "facts_in_claims": 3
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 12,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q09/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0791,
+       "chars": 5627,
+       "sha256": "494f931db2f256ae4cc816aa7463ceb51761393aa4e767230d82bd84cfa6f1c4"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0853,
+       "chars": 5627,
+       "sha256": "494f931db2f256ae4cc816aa7463ceb51761393aa4e767230d82bd84cfa6f1c4"
+      }
+     ],
+     "score": {
+      "chars": 5627,
+      "tokens": 1407,
+      "sha256": "494f931db2f256ae4cc816aa7463ceb51761393aa4e767230d82bd84cfa6f1c4",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 2,
+       "found": [
+        "q09.connect",
+        "q09.default",
+        "q09.env"
+       ],
+       "missed": [],
+       "shown": [
+        "q09.connect",
+        "q09.default"
+       ],
+       "via": {
+        "q09.connect": "loc orders/repository.py:9-13",
+        "q09.default": "loc orders/repository.py:9",
+        "q09.env": "loc orders/config.py:5-7"
+       }
+      },
+      "locators": {
+       "distinct": 24,
+       "files": 7,
+       "point_or_short": 24
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 8,
+       "edge_confidence": {
+        "INFERRED": 3,
+        "EXTRACTED": 5
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5965,
+        "truncated": true,
+        "expansions": [
+         "databas->db (abbreviation)"
+        ],
+        "more": [
+         "tests/test_service.py:13-15 test_empty_order_rejected",
+         "orders/config.py:5-7 DATABASE_URL MAX_ITEMS_PER_ORDER DISCOUNT_THRESHOLD",
+         "orders/repository.py:22-26 OrderRepository.get",
+         "orders/repository.py:15-20 OrderRepository.save"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 8,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q09/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1504,
+       "chars": 3148,
+       "sha256": "5864695c53d8e3dbe289dad7ff994b5fbda8bf7fbfc20f0b0afb7a42c5a5e003"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1592,
+       "chars": 3148,
+       "sha256": "5864695c53d8e3dbe289dad7ff994b5fbda8bf7fbfc20f0b0afb7a42c5a5e003"
+      }
+     ],
+     "score": {
+      "chars": 3148,
+      "tokens": 787,
+      "sha256": "5864695c53d8e3dbe289dad7ff994b5fbda8bf7fbfc20f0b0afb7a42c5a5e003",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q09.connect",
+        "q09.default",
+        "q09.env"
+       ],
+       "missed": [],
+       "shown": [
+        "q09.connect",
+        "q09.default",
+        "q09.env"
+       ],
+       "via": {
+        "q09.connect": "loc orders/repository.py:8-26",
+        "q09.default": "loc orders/repository.py:8-26",
+        "q09.env": "loc orders/config.py:5-7"
+       }
+      },
+      "locators": {
+       "distinct": 20,
+       "files": 9,
+       "point_or_short": 20
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 0,
+       "edge_confidence": {},
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 2,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q09/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  },
+  {
+   "id": "q10",
+   "category": "behaviour",
+   "question": "What happens when an order is submitted with no items?",
+   "facts": 3,
+   "negatives": 1,
+   "approaches": {
+    "raw": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1344,
+       "chars": 6428,
+       "sha256": "aadb6285b7a19bbbd3812f5aea0859e2acf2ced4bbed3a0d5ce2c8c189e74a72"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.138,
+       "chars": 6428,
+       "sha256": "aadb6285b7a19bbbd3812f5aea0859e2acf2ced4bbed3a0d5ce2c8c189e74a72"
+      }
+     ],
+     "score": {
+      "chars": 6428,
+      "tokens": 1607,
+      "sha256": "aadb6285b7a19bbbd3812f5aea0859e2acf2ced4bbed3a0d5ce2c8c189e74a72",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "via": {
+        "q10.raise": "loc orders/service.py:13",
+        "q10.status": "loc orders/api.py:1-28",
+        "q10.test": "loc tests/test_service.py:13"
+       }
+      },
+      "locators": {
+       "distinct": 45,
+       "files": 6,
+       "point_or_short": 45
+      },
+      "agent_tool_calls": 6,
+      "claims": "n/a (no claims): source text only",
+      "raw": {
+       "terms": [
+        "happens",
+        "order",
+        "submitted",
+        "items"
+       ],
+       "matching_files": 11,
+       "matching_lines": 53,
+       "files_read": [
+        {
+         "file": "orders/service.py",
+         "lines": [
+          1,
+          26
+         ],
+         "of": 26
+        },
+        {
+         "file": "orders/api.py",
+         "lines": [
+          1,
+          28
+         ],
+         "of": 28
+        },
+        {
+         "file": "orders/config.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "orders/pricing.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        },
+        {
+         "file": "tests/test_service.py",
+         "lines": [
+          1,
+          15
+         ],
+         "of": 15
+        }
+       ],
+       "truncated": false
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 0,
+       "checked": 0,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q10/raw.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_vendored": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0198,
+       "chars": 10090,
+       "sha256": "c39483fb3d62138c53653328579884762826c812511885f1fb7ff9757c308116"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0178,
+       "chars": 10090,
+       "sha256": "c39483fb3d62138c53653328579884762826c812511885f1fb7ff9757c308116"
+      }
+     ],
+     "score": {
+      "chars": 10090,
+      "tokens": 2523,
+      "sha256": "c39483fb3d62138c53653328579884762826c812511885f1fb7ff9757c308116",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 0,
+       "found": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "missed": [],
+       "shown": [],
+       "via": {
+        "q10.raise": "loc orders/service.py:14",
+        "q10.status": "loc orders/api.py:19",
+        "q10.test": "loc tests/test_service.py:13"
+       }
+      },
+      "locators": {
+       "distinct": 53,
+       "files": 10,
+       "point_or_short": 53
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 37,
+       "edges_shown": 69,
+       "edge_confidence": {
+        "EXTRACTED": 64,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 37,
+       "depth": 3,
+       "budget_tokens": 2000
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 69,
+       "checked": 19,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q10/graphify_vendored.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "graphify_cli": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 1.5798,
+       "chars": 8629,
+       "sha256": "b681148dbec1d1e9170cbe560645a94c2cb53a96d4bd0844fccc7093aab69975"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 1.7396,
+       "chars": 8629,
+       "sha256": "1c400bb583819046e6098fda55dc7f4731cf4463e983b367c491bb032368cdb4"
+      }
+     ],
+     "score": {
+      "chars": 8629,
+      "tokens": 2158,
+      "sha256": "b681148dbec1d1e9170cbe560645a94c2cb53a96d4bd0844fccc7093aab69975",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 0,
+       "found": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "missed": [],
+       "shown": [],
+       "via": {
+        "q10.raise": "loc orders/service.py:14",
+        "q10.status": "loc orders/api.py:19",
+        "q10.test": "loc tests/test_service.py:13"
+       }
+      },
+      "locators": {
+       "distinct": 46,
+       "files": 9,
+       "point_or_short": 46
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): graph context; EDGE lines are scored as asserted relations",
+      "graphify": {
+       "nodes_shown": 31,
+       "edges_shown": 59,
+       "edge_confidence": {
+        "EXTRACTED": 54,
+        "INFERRED": 5
+       },
+       "truncated": false,
+       "nodes_found": 31,
+       "depth": 2,
+       "budget_tokens": 2000,
+       "stderr": {
+        "lines": 1,
+        "skill_version_warnings": 0,
+        "other": [
+         "  warning: skill is from graphify 0.9.73, but the package is 0.9.65 (older). Upgrade the package (e.g. 'uv tool upgrade graphifyy' or 'pip install -U graphifyy'); running 'graphify install' would down"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 59,
+       "checked": 17,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q10/graphify_cli.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_analyze": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.7,
+       "chars": 4919,
+       "sha256": "8fe749f598d051c8e7518057f2062f2fe1982c62f99b23f0730ca6a1d8482e4c",
+       "claims": 10,
+       "claims_reused": 7,
+       "claims_new": 3,
+       "internal_tool_calls": 21,
+       "budget_exhausted": null
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.6099,
+       "chars": 4919,
+       "sha256": "1959ad0b9dae0b6a88ff59abbce9eeeca32808728d694eb44909948de1871873",
+       "claims": 10,
+       "claims_reused": 10,
+       "claims_new": 0,
+       "internal_tool_calls": 21,
+       "budget_exhausted": null
+      }
+     ],
+     "score": {
+      "chars": 4919,
+      "tokens": 1230,
+      "sha256": "8fe749f598d051c8e7518057f2062f2fe1982c62f99b23f0730ca6a1d8482e4c",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "via": {
+        "q10.raise": "loc orders/service.py:12-16",
+        "q10.status": "loc orders/api.py:16-21",
+        "q10.test": "loc tests/test_service.py:15"
+       }
+      },
+      "locators": {
+       "distinct": 28,
+       "files": 11,
+       "point_or_short": 28
+      },
+      "agent_tool_calls": 1,
+      "claims": {
+       "total": 10,
+       "by_status": {
+        "statically_verified": 9,
+        "strong_inference": 1
+       },
+       "verified": 9,
+       "inference": 1,
+       "verified_share": 0.9,
+       "inference_share": 0.1,
+       "weak_or_unknown": 0,
+       "weak_or_unknown_unlabelled": 0,
+       "contradicted_shown": 0,
+       "stale_shown": 0,
+       "evidence_by_type": {
+        "source_code": 10,
+        "graph_edge": 6,
+        "static_resolution": 5
+       },
+       "evidence_verifying": 15,
+       "evidence_non_verifying": 6,
+       "contradicted_relations": 0,
+       "contradicted_but_cited_line_names_target": 0,
+       "contradicted_named_via_import_alias": 0
+      },
+      "unknowns": 1,
+      "analysis_usage": {
+       "elapsed_s": 0.694,
+       "tool_calls": 21,
+       "context_chars": 9065,
+       "context_tokens_est": 2266,
+       "token_count_method": "chars/4 estimate",
+       "exhausted": null,
+       "precise": {
+        "max_sites": 20,
+        "max_seconds": 1.5,
+        "sites": 2,
+        "spent_s": 0.003,
+        "skipped": 0
+       }
+      },
+      "verdict": {
+       "met": false,
+       "verdicts": [
+        "not_supported"
+       ],
+       "facts_in_claims": 2
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": [],
+       "presented_as_findings": 0,
+       "labelled_not_findings": 0
+      },
+      "relations": {
+       "asserted": 6,
+       "checked": 6,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q10/verinoda_analyze.txt"
+     },
+     "context_changed_on_warm": true,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.0635,
+       "chars": 5637,
+       "sha256": "299b5106232ab4da50da6d9fcac8e2faf50f5dab136d75d4ddbf39e6a286ed5a"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.0823,
+       "chars": 5637,
+       "sha256": "299b5106232ab4da50da6d9fcac8e2faf50f5dab136d75d4ddbf39e6a286ed5a"
+      }
+     ],
+     "score": {
+      "chars": 5637,
+      "tokens": 1410,
+      "sha256": "299b5106232ab4da50da6d9fcac8e2faf50f5dab136d75d4ddbf39e6a286ed5a",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "via": {
+        "q10.raise": "loc orders/service.py:14",
+        "q10.status": "loc orders/api.py:16-21",
+        "q10.test": "loc tests/test_service.py:15"
+       }
+      },
+      "locators": {
+       "distinct": 29,
+       "files": 7,
+       "point_or_short": 29
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval excerpts; edges are scored as asserted relations",
+      "retrieve": {
+       "items": 10,
+       "edges": 7,
+       "edge_confidence": {
+        "EXTRACTED": 6,
+        "INFERRED": 1
+       },
+       "budget": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "used_chars": 5983,
+        "truncated": true,
+        "more": [
+         "orders/repository.py:15-20 OrderRepository.save",
+         "tests/test_service.py:7-10 test_place_and_fetch_roundtrip",
+         "orders/api.py:9-13 get_repo"
+        ]
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 7,
+       "checked": 7,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q10/verinoda_retrieve.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    },
+    "verinoda_retrieve_text": {
+     "runs": [
+      {
+       "run": 1,
+       "kind": "cold",
+       "seconds": 0.1259,
+       "chars": 3853,
+       "sha256": "635b27d1698220bc97721bd84f1a701c5a55bedeef5fc13531e839036ee5459d"
+      },
+      {
+       "run": 2,
+       "kind": "warm",
+       "seconds": 0.1463,
+       "chars": 3853,
+       "sha256": "635b27d1698220bc97721bd84f1a701c5a55bedeef5fc13531e839036ee5459d"
+      }
+     ],
+     "score": {
+      "chars": 3853,
+      "tokens": 964,
+      "sha256": "635b27d1698220bc97721bd84f1a701c5a55bedeef5fc13531e839036ee5459d",
+      "facts": {
+       "total": 3,
+       "found_n": 3,
+       "pinpointed_n": 3,
+       "shown_n": 3,
+       "found": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "missed": [],
+       "shown": [
+        "q10.raise",
+        "q10.status",
+        "q10.test"
+       ],
+       "via": {
+        "q10.raise": "loc orders/service.py:12-16",
+        "q10.status": "loc orders/api.py:16-21",
+        "q10.test": "loc tests/test_service.py:15"
+       }
+      },
+      "locators": {
+       "distinct": 27,
+       "files": 11,
+       "point_or_short": 27
+      },
+      "agent_tool_calls": 1,
+      "claims": "n/a (no claims): retrieval text; its calls / called by outlines are scored as asserted relations",
+      "retrieve_text": {
+       "items": 10,
+       "outline_edges": 9,
+       "edge_confidence": {
+        "EXTRACTED": 8,
+        "INFERRED": 1
+       },
+       "truncated_note": false,
+       "params": {
+        "max_items": 10,
+        "max_chars": 6000,
+        "render_chars": 6000
+       }
+      },
+      "negatives": {
+       "checked": 1,
+       "matched_n": 0,
+       "matched": []
+      },
+      "relations": {
+       "asserted": 9,
+       "checked": 9,
+       "cited_line_missing_target": 0,
+       "named_via_import_alias": 0,
+       "examples": []
+      },
+      "context_file": "raw/orders_app/q10/verinoda_retrieve_text.txt"
+     },
+     "context_changed_on_warm": false,
+     "model": {
+      "status": "not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)"
+     }
+    }
+   }
+  }
+ ],
+ "summary": {
+  "raw": {
+   "questions": 10,
+   "errors": 0,
+   "facts_found": 31,
+   "facts_total": 32,
+   "facts_pinpointed": 31,
+   "facts_shown": 31,
+   "questions_all_facts": 9,
+   "tokens_mean": 1223.9,
+   "tokens_median": 1261.5,
+   "tokens_max": 1781,
+   "tokens_total": 12239,
+   "chars_total": 48938,
+   "facts_per_1k_tokens": 2.53,
+   "pinpointed_per_1k_tokens": 2.53,
+   "shown_per_1k_tokens": 2.53,
+   "locators_distinct_mean": 28.7,
+   "agent_tool_calls_mean": 5.6,
+   "seconds_cold_median": 0.144,
+   "seconds_cold_total": 1.456,
+   "seconds_warm_median": 0.129,
+   "seconds_warm_total": 1.342,
+   "facts_found_via_locator": 31,
+   "assertions_scored": false,
+   "negatives_matched": 0,
+   "negatives_checked": 15,
+   "relations_asserted": 0,
+   "relations_checked": 0,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "graphify_vendored": {
+   "questions": 10,
+   "errors": 0,
+   "facts_found": 16,
+   "facts_total": 32,
+   "facts_pinpointed": 16,
+   "facts_shown": 1,
+   "questions_all_facts": 2,
+   "tokens_mean": 2235.4,
+   "tokens_median": 2459.5,
+   "tokens_max": 2682,
+   "tokens_total": 22354,
+   "chars_total": 89405,
+   "facts_per_1k_tokens": 0.72,
+   "pinpointed_per_1k_tokens": 0.72,
+   "shown_per_1k_tokens": 0.04,
+   "locators_distinct_mean": 48.3,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.017,
+   "seconds_cold_total": 0.178,
+   "seconds_warm_median": 0.016,
+   "seconds_warm_total": 0.158,
+   "facts_found_via_locator": 16,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 15,
+   "relations_asserted": 609,
+   "relations_checked": 184,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "graphify_cli": {
+   "questions": 10,
+   "errors": 0,
+   "facts_found": 15,
+   "facts_total": 32,
+   "facts_pinpointed": 15,
+   "facts_shown": 1,
+   "questions_all_facts": 2,
+   "tokens_mean": 1651.3,
+   "tokens_median": 2086.5,
+   "tokens_max": 2450,
+   "tokens_total": 16513,
+   "chars_total": 66030,
+   "facts_per_1k_tokens": 0.91,
+   "pinpointed_per_1k_tokens": 0.91,
+   "shown_per_1k_tokens": 0.06,
+   "locators_distinct_mean": 36.9,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 1.616,
+   "seconds_cold_total": 16.761,
+   "seconds_warm_median": 1.629,
+   "seconds_warm_total": 16.338,
+   "facts_found_via_locator": 15,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 15,
+   "relations_asserted": 448,
+   "relations_checked": 133,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "verinoda_analyze": {
+   "questions": 10,
+   "errors": 0,
+   "facts_found": 32,
+   "facts_total": 32,
+   "facts_pinpointed": 32,
+   "facts_shown": 31,
+   "questions_all_facts": 10,
+   "tokens_mean": 1449.7,
+   "tokens_median": 1409.5,
+   "tokens_max": 2065,
+   "tokens_total": 14497,
+   "chars_total": 57975,
+   "facts_per_1k_tokens": 2.21,
+   "pinpointed_per_1k_tokens": 2.21,
+   "shown_per_1k_tokens": 2.14,
+   "locators_distinct_mean": 33,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 1.013,
+   "seconds_cold_total": 12.444,
+   "seconds_warm_median": 0.799,
+   "seconds_warm_total": 8.165,
+   "facts_found_via_locator": 32,
+   "assertions_scored": true,
+   "negatives_matched": 1,
+   "negatives_checked": 15,
+   "relations_asserted": 90,
+   "relations_checked": 56,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0,
+   "verdicts": {
+    "questions_met": 7,
+    "met_backed_fully": 7,
+    "met_backed_partly": 0,
+    "met_unbacked": 0,
+    "not_met_but_claims_complete": 2
+   },
+   "claims": {
+    "total": 146,
+    "by_status": {
+     "strong_inference": 45,
+     "statically_verified": 88,
+     "primary_source_verified": 9,
+     "weak_inference": 4
+    },
+    "verified_share": 0.664,
+    "inference_share": 0.336,
+    "weak_or_unknown": 4,
+    "weak_or_unknown_unlabelled": 4,
+    "negatives_presented_as_findings": 0,
+    "contradicted_relations": 0,
+    "contradicted_but_cited_line_names_target": 0,
+    "contradicted_named_via_import_alias": 0,
+    "unknowns": 3
+   },
+   "cache": {
+    "method": "claims whose id already existed in atlas.db before the run (same text + snapshot)",
+    "cold_claims": 146,
+    "cold_reused": 88,
+    "warm_claims": 146,
+    "warm_reused": 146
+   }
+  },
+  "verinoda_retrieve": {
+   "questions": 10,
+   "errors": 0,
+   "facts_found": 31,
+   "facts_total": 32,
+   "facts_pinpointed": 31,
+   "facts_shown": 26,
+   "questions_all_facts": 9,
+   "tokens_mean": 1401.1,
+   "tokens_median": 1410.0,
+   "tokens_max": 1423,
+   "tokens_total": 14011,
+   "chars_total": 56029,
+   "facts_per_1k_tokens": 2.21,
+   "pinpointed_per_1k_tokens": 2.21,
+   "shown_per_1k_tokens": 1.86,
+   "locators_distinct_mean": 29.7,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.08,
+   "seconds_cold_total": 0.75,
+   "seconds_warm_median": 0.084,
+   "seconds_warm_total": 0.833,
+   "facts_found_via_locator": 31,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 15,
+   "relations_asserted": 60,
+   "relations_checked": 54,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  },
+  "verinoda_retrieve_text": {
+   "questions": 10,
+   "errors": 0,
+   "facts_found": 32,
+   "facts_total": 32,
+   "facts_pinpointed": 32,
+   "facts_shown": 28,
+   "questions_all_facts": 10,
+   "tokens_mean": 846,
+   "tokens_median": 807.5,
+   "tokens_max": 1071,
+   "tokens_total": 8460,
+   "chars_total": 33827,
+   "facts_per_1k_tokens": 3.78,
+   "pinpointed_per_1k_tokens": 3.78,
+   "shown_per_1k_tokens": 3.31,
+   "locators_distinct_mean": 25.7,
+   "agent_tool_calls_mean": 1,
+   "seconds_cold_median": 0.134,
+   "seconds_cold_total": 1.353,
+   "seconds_warm_median": 0.145,
+   "seconds_warm_total": 1.432,
+   "facts_found_via_locator": 32,
+   "assertions_scored": true,
+   "negatives_matched": 0,
+   "negatives_checked": 15,
+   "relations_asserted": 46,
+   "relations_checked": 46,
+   "relations_cited_line_missing_target": 0,
+   "relations_named_via_import_alias": 0
+  }
+ },
+ "sweep": null,
+ "not_measured": [
+  "model-in-the-loop answer accuracy, model tokens and model cost - not measured: llm='none' (use --llm anthropic with ANTHROPIC_API_KEY set)",
+  "runtime correctness of answers (only presence of gold facts in the delivered context is scored)",
+  "OS file-cache effects are not separated from process warm-up in cold vs warm timings",
+  "memory use"
+ ],
+ "status": "ok",
+ "paths_sanitized": {
+  "placeholders": [
+   "<TMP>",
+   "<REPO>"
+  ],
+  "rule": "absolute home / temp / checkout paths replaced when written; see verinoda/benchmark/sanitize.py"
+ }
+}

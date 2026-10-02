@@ -1,0 +1,40 @@
+Graph: graphify-out/graph.json (194 nodes) | Traversal: BFS depth=2 | Start: ['Wisp'] | 17 nodes found
+
+NODE Wisp [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L15 community=glowplugin/Wisp.java]
+NODE glowplugin/Wisp.java [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L1 community=glowplugin/Wisp.java]
+NODE .spawn() [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L19 community=glowplugin/Wisp.java]
+NODE .isWisp() [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L26 community=glowplugin/Wisp.java]
+NODE .heart() [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L30 community=glowplugin/Wisp.java]
+NODE .Wisp() [src=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java loc=L16 community=glowplugin/Wisp.java]
+NODE org.bukkit.plugin.Plugin [src= loc= community=glowplugin/Wisp.java]
+NODE material [src= loc= community=WispListener.java]
+NODE org.bukkit.entity.Allay [src= loc= community=glowplugin/Wisp.java]
+NODE org.bukkit.inventory.ItemStack [src= loc= community=glowplugin/Wisp.java]
+NODE org.bukkit.Location [src= loc= community=glowplugin/Wisp.java]
+NODE component [src= loc= community=glowplugin/Wisp.java]
+NODE Entity [src= loc= community=glowplugin/Wisp.java]
+NODE entitytype [src= loc= community=glowplugin/Wisp.java]
+NODE namedtextcolor [src= loc= community=glowplugin/Wisp.java]
+NODE namespacedkey [src= loc= community=glowplugin/Wisp.java]
+NODE persistentdatatype [src= loc= community=glowplugin/Wisp.java]
+EDGE glowplugin/Wisp.java --contains [EXTRACTED]--> Wisp at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L15
+EDGE Wisp --method [EXTRACTED]--> .Wisp() at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L16
+EDGE Wisp --method [EXTRACTED]--> .spawn() at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L19
+EDGE Wisp --method [EXTRACTED]--> .isWisp() at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L26
+EDGE Wisp --method [EXTRACTED]--> .heart() at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L30
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> org.bukkit.inventory.ItemStack at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L10
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> persistentdatatype at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L11
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> org.bukkit.plugin.Plugin at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L12
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> component at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L3
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> namedtextcolor at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L4
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> org.bukkit.Location at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L5
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> material at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L6
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> namespacedkey at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L7
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> org.bukkit.entity.Allay at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L8
+EDGE glowplugin/Wisp.java --imports [EXTRACTED context=import]--> entitytype at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L9
+EDGE .spawn() --references [EXTRACTED context=parameter_type]--> org.bukkit.Location at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L19
+EDGE .spawn() --references [EXTRACTED context=parameter_type]--> org.bukkit.plugin.Plugin at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L19
+EDGE .spawn() --references [EXTRACTED context=return_type]--> org.bukkit.entity.Allay at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L19
+EDGE .isWisp() --references [EXTRACTED context=parameter_type]--> Entity at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L26
+EDGE .isWisp() --references [EXTRACTED context=parameter_type]--> org.bukkit.plugin.Plugin at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L26
+EDGE .heart() --references [EXTRACTED context=return_type]--> org.bukkit.inventory.ItemStack at=reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:L30

@@ -1,0 +1,1 @@
+$ grep -rniE 'sunucu|kapanırken|henüz|onarılmamış|bloklara|oluyor' .   # 0 matching lines in 0 files

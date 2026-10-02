@@ -1,0 +1,443 @@
+{
+ "r1:none vs r2:none": {
+  "n": 57,
+  "found": {
+   "x": 213,
+   "y": 212,
+   "wins": 3,
+   "ties": 52,
+   "losses": 2
+  },
+  "pinpointed": {
+   "x": 195,
+   "y": 184,
+   "wins": 11,
+   "ties": 44,
+   "losses": 2
+  },
+  "input": {
+   "ratio": 1.028,
+   "ci95": [
+    0.949,
+    1.112
+   ],
+   "lower_in": 23
+  },
+  "output": {
+   "ratio": 1.073,
+   "ci95": [
+    1.001,
+    1.156
+   ],
+   "lower_in": 23
+  },
+  "tool_calls": {
+   "ratio": 1.028,
+   "ci95": [
+    0.944,
+    1.117
+   ],
+   "lower_in": 14
+  },
+  "model_calls": {
+   "ratio": 1.02,
+   "ci95": [
+    0.956,
+    1.087
+   ],
+   "lower_in": 15
+  }
+ },
+ "r2:verinoda_first vs r2:none": {
+  "n": 57,
+  "found": {
+   "x": 212,
+   "y": 212,
+   "wins": 3,
+   "ties": 51,
+   "losses": 3
+  },
+  "pinpointed": {
+   "x": 199,
+   "y": 184,
+   "wins": 13,
+   "ties": 41,
+   "losses": 3
+  },
+  "input": {
+   "ratio": 0.838,
+   "ci95": [
+    0.777,
+    0.907
+   ],
+   "lower_in": 34
+  },
+  "output": {
+   "ratio": 0.775,
+   "ci95": [
+    0.723,
+    0.839
+   ],
+   "lower_in": 44
+  },
+  "tool_calls": {
+   "ratio": 0.714,
+   "ci95": [
+    0.651,
+    0.787
+   ],
+   "lower_in": 39
+  },
+  "model_calls": {
+   "ratio": 0.847,
+   "ci95": [
+    0.791,
+    0.908
+   ],
+   "lower_in": 29
+  }
+ },
+ "r2:graphify_first vs r2:none": {
+  "n": 57,
+  "found": {
+   "x": 214,
+   "y": 212,
+   "wins": 5,
+   "ties": 49,
+   "losses": 3
+  },
+  "pinpointed": {
+   "x": 191,
+   "y": 184,
+   "wins": 10,
+   "ties": 40,
+   "losses": 7
+  },
+  "input": {
+   "ratio": 0.979,
+   "ci95": [
+    0.913,
+    1.054
+   ],
+   "lower_in": 27
+  },
+  "output": {
+   "ratio": 0.855,
+   "ci95": [
+    0.781,
+    0.936
+   ],
+   "lower_in": 41
+  },
+  "tool_calls": {
+   "ratio": 0.843,
+   "ci95": [
+    0.777,
+    0.92
+   ],
+   "lower_in": 32
+  },
+  "model_calls": {
+   "ratio": 0.974,
+   "ci95": [
+    0.914,
+    1.04
+   ],
+   "lower_in": 22
+  }
+ },
+ "r2:verinoda_first vs r2:graphify_first": {
+  "n": 57,
+  "found": {
+   "x": 212,
+   "y": 214,
+   "wins": 2,
+   "ties": 52,
+   "losses": 3
+  },
+  "pinpointed": {
+   "x": 199,
+   "y": 191,
+   "wins": 8,
+   "ties": 47,
+   "losses": 2
+  },
+  "input": {
+   "ratio": 0.856,
+   "ci95": [
+    0.791,
+    0.924
+   ],
+   "lower_in": 41
+  },
+  "output": {
+   "ratio": 0.907,
+   "ci95": [
+    0.842,
+    0.98
+   ],
+   "lower_in": 42
+  },
+  "tool_calls": {
+   "ratio": 0.847,
+   "ci95": [
+    0.772,
+    0.924
+   ],
+   "lower_in": 36
+  },
+  "model_calls": {
+   "ratio": 0.87,
+   "ci95": [
+    0.809,
+    0.932
+   ],
+   "lower_in": 32
+  }
+ },
+ "r1:verinoda vs r1:none": {
+  "n": 57,
+  "found": {
+   "x": 208,
+   "y": 213,
+   "wins": 1,
+   "ties": 50,
+   "losses": 6
+  },
+  "pinpointed": {
+   "x": 187,
+   "y": 195,
+   "wins": 3,
+   "ties": 43,
+   "losses": 11
+  },
+  "input": {
+   "ratio": 0.994,
+   "ci95": [
+    0.909,
+    1.089
+   ],
+   "lower_in": 28
+  },
+  "output": {
+   "ratio": 0.979,
+   "ci95": [
+    0.895,
+    1.068
+   ],
+   "lower_in": 24
+  },
+  "tool_calls": {
+   "ratio": 1.022,
+   "ci95": [
+    0.926,
+    1.134
+   ],
+   "lower_in": 19
+  },
+  "model_calls": {
+   "ratio": 0.994,
+   "ci95": [
+    0.92,
+    1.074
+   ],
+   "lower_in": 20
+  }
+ },
+ "r1:graphify vs r1:none": {
+  "n": 57,
+  "found": {
+   "x": 207,
+   "y": 213,
+   "wins": 3,
+   "ties": 49,
+   "losses": 5
+  },
+  "pinpointed": {
+   "x": 190,
+   "y": 195,
+   "wins": 5,
+   "ties": 45,
+   "losses": 7
+  },
+  "input": {
+   "ratio": 1.005,
+   "ci95": [
+    0.933,
+    1.087
+   ],
+   "lower_in": 21
+  },
+  "output": {
+   "ratio": 1.077,
+   "ci95": [
+    0.997,
+    1.17
+   ],
+   "lower_in": 20
+  },
+  "tool_calls": {
+   "ratio": 1.044,
+   "ci95": [
+    0.966,
+    1.132
+   ],
+   "lower_in": 16
+  },
+  "model_calls": {
+   "ratio": 1.006,
+   "ci95": [
+    0.944,
+    1.077
+   ],
+   "lower_in": 17
+  }
+ },
+ "r3:auto_context vs r2:none": {
+  "n": 57,
+  "found": {
+   "x": 207,
+   "y": 212,
+   "wins": 3,
+   "ties": 49,
+   "losses": 5
+  },
+  "pinpointed": {
+   "x": 187,
+   "y": 184,
+   "wins": 13,
+   "ties": 37,
+   "losses": 7
+  },
+  "input": {
+   "ratio": 0.882,
+   "ci95": [
+    0.816,
+    0.954
+   ],
+   "lower_in": 33
+  },
+  "output": {
+   "ratio": 1.0,
+   "ci95": [
+    0.934,
+    1.078
+   ],
+   "lower_in": 26
+  },
+  "tool_calls": {
+   "ratio": 0.878,
+   "ci95": [
+    0.806,
+    0.959
+   ],
+   "lower_in": 31
+  },
+  "model_calls": {
+   "ratio": 0.883,
+   "ci95": [
+    0.825,
+    0.945
+   ],
+   "lower_in": 30
+  }
+ },
+ "r3:auto_context vs r1:none": {
+  "n": 57,
+  "found": {
+   "x": 207,
+   "y": 213,
+   "wins": 2,
+   "ties": 50,
+   "losses": 5
+  },
+  "pinpointed": {
+   "x": 187,
+   "y": 195,
+   "wins": 4,
+   "ties": 45,
+   "losses": 8
+  },
+  "input": {
+   "ratio": 0.858,
+   "ci95": [
+    0.754,
+    0.965
+   ],
+   "lower_in": 31
+  },
+  "output": {
+   "ratio": 0.932,
+   "ci95": [
+    0.882,
+    0.985
+   ],
+   "lower_in": 33
+  },
+  "tool_calls": {
+   "ratio": 0.855,
+   "ci95": [
+    0.78,
+    0.931
+   ],
+   "lower_in": 30
+  },
+  "model_calls": {
+   "ratio": 0.866,
+   "ci95": [
+    0.782,
+    0.95
+   ],
+   "lower_in": 29
+  }
+ },
+ "r3:auto_context vs r2:verinoda_first": {
+  "n": 57,
+  "found": {
+   "x": 207,
+   "y": 212,
+   "wins": 2,
+   "ties": 51,
+   "losses": 4
+  },
+  "pinpointed": {
+   "x": 187,
+   "y": 199,
+   "wins": 4,
+   "ties": 43,
+   "losses": 10
+  },
+  "input": {
+   "ratio": 1.052,
+   "ci95": [
+    0.979,
+    1.137
+   ],
+   "lower_in": 25
+  },
+  "output": {
+   "ratio": 1.29,
+   "ci95": [
+    1.221,
+    1.362
+   ],
+   "lower_in": 7
+  },
+  "tool_calls": {
+   "ratio": 1.23,
+   "ci95": [
+    1.129,
+    1.34
+   ],
+   "lower_in": 7
+  },
+  "model_calls": {
+   "ratio": 1.042,
+   "ci95": [
+    0.982,
+    1.113
+   ],
+   "lower_in": 9
+  }
+ }
+}

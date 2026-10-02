@@ -1,0 +1,95 @@
+expanded: block entity->blockentity, menu type->menutype, recipe serializer->recipe_serializer (+1 more)
+## src/main/java/net/ashvale/emberforge/EmberForge.java:21-32 EmberForge.EmberForge
+21 public EmberForge(IEventBus modBus, ModContainer container) {
+22     ModBlocks.BLOCKS.register(modBus);
+23     ModBlocks.BLOCK_ENTITIES.register(modBus);
+24     ModItems.ITEMS.register(modBus);
+25     ModItems.CREATIVE_TABS.register(modBus);
+26     ModMenus.MENUS.register(modBus);
+27     ModRecipes.RECIPE_TYPES.register(modBus);
+28     ModRecipes.RECIPE_SERIALIZERS.register(modBus);
+30     container.registerConfig(ModConfig.Type.COMMON, EmberConfig.SPEC);
+31     LOGGER.info("Emberforge is heating up");
+32 }
+## src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:12-25 ModRecipes
+12 public final class ModRecipes {
+13     public static final DeferredRegister<RecipeType<?>> RECIPE_TYPES =
+14             DeferredRegister.create(Registries.RECIPE_TYPE, EmberForge.MOD_ID);
+15     public static final DeferredRegister<RecipeSerializer<?>> RECIPE_SERIALIZERS =
+16             DeferredRegister.create(Registries.RECIPE_SERIALIZER, EmberForge.MOD_ID);
+18     public static final Supplier<RecipeType<ForgingRecipe>> FORGING_TYPE =
+19             RECIPE_TYPES.register("forging", () -> RecipeType.simple(EmberForge.id("forging")));
+20     public static final Supplier<RecipeSerializer<ForgingRecipe>> FORGING_SERIALIZER =
+21             RECIPE_SERIALIZERS.register("forging", ForgingRecipe.Serializer::new);
+23     private ModRecipes() {
+24     }
+25 }
+## src/main/java/net/ashvale/emberforge/registry/ModMenus.java:12-20 ModMenus
+12 public final class ModMenus {
+13     public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, EmberForge.MOD_ID);
+15     public static final Supplier<MenuType<EmberForgeMenu>> EMBER_FORGE =
+16             MENUS.register("ember_forge", () -> IMenuTypeExtension.create(EmberForgeMenu::new));
+18     private ModMenus() {
+19     }
+20 }
+## src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:52-55 ForgingRecipe.getSerializer
+52 @Override
+53 public RecipeSerializer<?> getSerializer() {
+54     return ModRecipes.FORGING_SERIALIZER.get();
+55 }
+## src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:18-40 ModBlocks
+18 public final class ModBlocks {
+19     public static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(EmberForge.MOD_ID);
+20     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
+21             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, EmberForge.MOD_ID);
+23     public static final DeferredBlock<EmberForgeBlock> EMBER_FORGE = BLOCKS.register("ember_forge",
+24             () -> new EmberForgeBlock(BlockBehaviour.Properties.of()
+25                     .mapColor(MapColor.STONE)
+26                     .strength(3.5F)
+27                     .requiresCorrectToolForDrops()
+28                     .lightLevel(state -> state.getValue(EmberForgeBlock.LIT) ? 13 : 0)));
+30     public static final DeferredBlock<DropExperienceBlock> CINDER_ORE = BLOCKS.register("cinder_ore",
+31             () -> new DropExperienceBlock(UniformInt.of(1, 4),
+32                     BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_ORE)));
+34     public static final Supplier<BlockEntityType<EmberForgeBlockEntity>> EMBER_FORGE_ENTITY =
+35             BLOCK_ENTITIES.register("ember_forge",
+36                     () -> BlockEntityType.Builder.of(EmberForgeBlockEntity::new, EMBER_FORGE.get()).build(null));
+38     private ModBlocks() {
+39     }
+40 }
+## src/main/java/net/ashvale/emberforge/event/ModEvents.java:15-36 ModEvents
+15 @EventBusSubscriber(modid = EmberForge.MOD_ID)
+16 public final class ModEvents {
+17     private ModEvents() {
+18     }
+20     @SubscribeEvent
+21     public static void onRegisterCommands(RegisterCommandsEvent event) {
+22         ForgeCommands.register(event.getDispatcher());
+23     }
+25     /** Punching a lit forge with an empty hand burns. */
+26     @SubscribeEvent
+27     public static void onLeftClickForge(PlayerInteractEvent.LeftClickBlock event) {
+28         Level level = event.getLevel();
+29         Player player = event.getEntity();
+30         BlockState state = level.getBlockState(event.getPos());
+31         if (!level.isClientSide && state.is(ModBlocks.EMBER_FORGE.get()) && state.getValue(EmberForgeBlock.LIT)
+32                 && player.getMainHandItem().isEmpty()) {
+33             player.hurt(level.damageSources().hotFloor(), 1.0F);
+34         }
+35     }
+36 }
+## src/main/java/net/ashvale/emberforge/client/ClientSetup.java:10-19 ClientSetup
+10 @EventBusSubscriber(modid = EmberForge.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+11 public final class ClientSetup {
+12     private ClientSetup() {
+13     }
+15     @SubscribeEvent
+16     public static void registerScreens(RegisterMenuScreensEvent event) {
+17         event.register(ModMenus.EMBER_FORGE.get(), EmberForgeScreen::new);
+18     }
+19 }
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:62-86 public static final class Serializer implements RecipeSerializer<ForgingRecipe>
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:57-60 @Override public RecipeType<?> getType()
+… 122 more candidates not shown: src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:69-73 @Override public <T extends BlockEntity> BlockEnti; src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:24-87 public record ForgingRecipe(Ingredient ingredient, ; src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:13-42 @EventBusSubscriber(modid = EmberForge.MOD_ID, bus ; …
+next: verinoda query "…" --max-chars 12000

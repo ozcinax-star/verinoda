@@ -1,0 +1,125 @@
+analysis ana_1d81b2a0d8fc, snapshot snp_efed543690f2 (commit e74155e7f1)
+understood as: Understood (rules): q1 [config] Which environment variable raises the maximum graph.json size | q2 [define] what is the default limit?
+plan check: graph.json: not_found
+plan links: raises -> tests/test_querylog.py:122-130; size -> graphify/cli.py:658-674; limit -> graphify/exporters/html.py:17-30
+q1 [unmet] config: Which environment variable raises the maximum graph.json size
+  [statically_verified] `_resolve_max_tokens()` in graphify/llm.py reads environment variable GRAPHIFY_MAX_OUTPUT_TOKENS (graphify/llm.py:310)  (clm_20031ab4913c)
+  [statically_verified] `_resolve_max_retries()` in graphify/llm.py reads environment variable GRAPHIFY_MAX_RETRIES (graphify/llm.py:428)  (clm_677e7ac36425)
+  [statically_verified] `_resolve_max_retry_depth()` in graphify/llm.py reads environment variable GRAPHIFY_MAX_RETRY_DEPTH (graphify/llm.py:452)  (clm_c05341795d9a)
+  [statically_verified] `dispatch_command()` in graphify/cli.py reads environment variable GRAPHIFY_MAX_WORKERS (graphify/cli.py:3417)  (clm_a1401b489c20)
+  [strong_inference] `_run_hook_guard` reads setting `graph.json` (graphify/cli.py:840) (uncertain: a string-keyed read found by a pattern: which setting object answers it is not traced)  (clm_8b03be8e236e)
+  unknown: what is `graph.json` in this repository?: no file named `graph.json` in this repository; next: use a name as written in the code, or check whether it comes from a library (`verinoda research`)
+q2 [met] define: what is the default limit?
+  [statically_verified] `_max_graph_file_bytes()` is defined at graphify/security.py:35-66  (clm_eee4eb3d6dc8)
+  [statically_verified] `backend_detection_env_vars()` is defined at graphify/llm.py:3157-3169  (clm_8a74058efddd)
+context (found on the way; not what answers):
+  [statically_verified] `check_graph_file_size_cap()` calls `_max_graph_file_bytes()` (graphify/security.py:373)  (clm_65e9f952b07b)
+  [observed 0.80] `load_graph()` calls `check_graph_file_size_cap()` (graphify/callflow_html.py:270) (uncertain: call site graphify/callflow_html.py:270: `check_graph_file_size_cap` is rebound locally at line 268 before the call)  (clm_3e9764ed1e67)
+  [statically_verified] `install()` is defined at graphify/hooks.py:864-891  (clm_3b08d290d65e)
+  [statically_verified] `dispatch_command()` calls `install()` (graphify/cli.py:1194)  (clm_ef0ff6e618e6)  [not challenged: claim_limit]
+  [strong_inference] `dispatch_command()` calls `_viz_node_limit()` (graphify/cli.py:2369) (uncertain: `_viz_node_limit` is rebound locally at line 2368 before the call; precise resolution: not resolved (budget))  (clm_af58f21a6f6c)  [not challenged: claim_limit]
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_3e9764ed1e67: statically_verified -> observed  graphify/callflow_html.py:270: `check_graph_file_size_cap` is rebound locally at line 268 before the call
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: environ->env, maximum->max
+## graphify/security.py:35-66 def _max_graph_file_bytes() -> int
+  doc: Return the graph.json size cap in bytes.
+  called by: check_graph_file_size_cap (graphify/security.py:373); test_max_graph_bytes_default_when_unset (tests/test_security.py:243); test_max_graph_bytes_default_when_blank (tests/test_security.py:248); test_max_graph_bytes_plain_integer (tests/test_security.py:253); test_max_graph_bytes_mb_suffix_is_binary (tests/test_security.py:258); test_max_graph_bytes_gb_suffix_is_binary (tests/test_security.py:263); test_max_graph_bytes_suffix_is_case_insensitive (tests/test_security.py:268); test_max_graph_bytes_tolerates_space_before_suffix (tests/test_security.py:273) (+2)
+  const graphify/security.py:32: _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
+  graphify/security.py:37-45
+38 Honors the ``GRAPHIFY_MAX_GRAPH_BYTES`` environment variable so users with
+39 large codebases can raise the limit without editing source. The value may
+40 be plain bytes (``671088640``) or carry an ``MB`` / ``GB`` suffix
+41 (``640MB``, ``2GB`` — case-insensitive, binary multipliers: ``MB`` is
+42 1024*1024 and ``GB`` is 1024*1024*1024, i.e. MiB / GiB).
+43 Falls back to ``_MAX_GRAPH_FILE_BYTES`` (512 MiB) when the env var is unset,
+44 blank, or unparseable.
+  graphify/security.py:57-66
+57 elif text.endswith("MB"):
+58     multiplier = 1024 * 1024
+59     text = text[:-2].strip()
+60 try:
+61     value = int(text)
+62 except ValueError:
+63     return _MAX_GRAPH_FILE_BYTES
+64 if value <= 0:
+65     return _MAX_GRAPH_FILE_BYTES
+66 return value * multiplier
+## graphify/llm.py:3157-3169 backend_detection_env_vars
+  doc: Every environment variable ``detect_backend()`` consults, in probe order.
+  calls: _backend_env_keys@3165
+  const graphify/llm.py:101: BACKENDS: dict[str, dict] = {
+  const graphify/llm.py:3150: _BACKEND_DETECTION_EXTRA_ENV = (
+3157 def backend_detection_env_vars() -> tuple[str, ...]:
+3158     """Every environment variable ``detect_backend()`` consults, in probe order.
+3160     Covers the API-key variables of every registered backend (built-in and
+3161     custom) plus the endpoint/region/host variables checked directly.
+3162     """
+3163     seen: dict[str, None] = {}
+3164     for name in BACKENDS:
+3165         for env_key in _backend_env_keys(name):
+3166             seen.setdefault(env_key, None)
+3167     for env_key in _BACKEND_DETECTION_EXTRA_ENV:
+3168         seen.setdefault(env_key, None)
+3169     return tuple(seen)
+## graphify/security.py:357-383 def check_graph_file_size_cap(path: Path) -> None
+  doc: Reject *path* if its size exceeds the configured graph-file cap.
+  calls: _max_graph_file_bytes@373
+  called by: _load_existing_graph (graphify/build.py:1635); load_graph (graphify/callflow_html.py:270); dispatch_command (graphify/cli.py:2088); _enforce_graph_size_cap_or_exit (graphify/cli.py:671); _read_json_file (graphify/diagnostics.py:300); existing_graph_node_count (graphify/export.py:249); to_json (graphify/export.py:277); global_add (graphify/global_graph.py:109) (+12)
+  graphify/security.py:364-368
+365 The cap is resolved on every call via :func:`_max_graph_file_bytes`, so the
+366 ``GRAPHIFY_MAX_GRAPH_BYTES`` env var can be set before import and still
+367 apply.
+  graphify/security.py:374-383
+374 try:
+375     size = path.stat().st_size
+376 except OSError:
+377     return
+378 if size > cap:
+379     raise ValueError(
+380         f"graph file {path} is {size:_d} bytes, exceeds {cap:_d}-byte cap\n"
+381         f"(set GRAPHIFY_MAX_GRAPH_BYTES=<bytes> or "
+382         f"GRAPHIFY_MAX_GRAPH_BYTES=<N>GB to raise the limit)"
+383     )
+## tests/test_security.py:294-299 test_graph_size_cap_over_limit_raises
+294 def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path):
+295     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
+296     p = tmp_path / "graph.json"
+297     p.write_text('{"nodes": [], "links": [], "padding": "x" * 50}', encoding="utf-8")
+298     with pytest.raises(ValueError, match="exceeds"):
+299         check_graph_file_size_cap(p)
+## tests/test_security.py:288-291 test_graph_size_cap_under_limit_returns_none
+288 def test_graph_size_cap_under_limit_returns_none(tmp_path):
+289     p = tmp_path / "graph.json"
+290     p.write_text('{"nodes": [], "links": []}', encoding="utf-8")
+291     assert check_graph_file_size_cap(p) is None
+## graphify/llm.py:1300-1309 _backend_env_keys
+1300 def _backend_env_keys(backend: str) -> list[str]:
+1301     """Return accepted API-key environment variables for a backend."""
+1302     cfg = BACKENDS[backend]
+1303     keys = cfg.get("env_keys")
+1304     if keys:
+1305         return list(keys)
+1306     env_key = cfg.get("env_key")
+1307     if env_key:
+1308         return [env_key]
+1309     return []
+## graphify/cli.py:2569-2583 _load_graph
+2569 def _load_graph(p: str):
+2570     path_obj = Path(p)
+2571     try:
+2572         size = path_obj.stat().st_size
+2573     except OSError as exc:
+2574         raise RuntimeError(f"cannot stat {p}: {exc}") from exc
+2575     if size > _MERGE_MAX_BYTES:
+2576         raise RuntimeError(
+2577             f"graph.json {p} is {size} bytes, exceeds {_MERGE_MAX_BYTES}-byte cap"
+2578         )
+2579     data = json.loads(path_obj.read_text(encoding="utf-8"))
+2580     # A committed raw (--no-cluster) graph stores edges under "edges";
+2581     # parse via the shared links/edges-normalizing loader (#2212).
+2582     from graphify.paths import load_node_link_graph as _lnlg
+2583     return _lnlg(data), data
+graphify/callflow_html.py:265-305 def load_graph(path: str | Path) -> tuple
+… 1359 more candidates not shown: graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None; graphify/paths.py:474-500 def load_node_link_graph(path_or_data); graphify/diagnostics.py:295-310 def _read_json_file(path: str | Path) -> dict[str, Any]; graphify/callflow_html.py:2011-2047 def main()
+next: verinoda query "…" --max-chars 12000

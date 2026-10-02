@@ -1,0 +1,83 @@
+## repoatlas/store.py:187-198 (module level)
+187 -- History is append-only and claims are never deleted.
+188 CREATE TRIGGER IF NOT EXISTS no_delete_history BEFORE DELETE ON claim_history
+189 BEGIN SELECT RAISE(ABORT, 'claim_history is append-only'); END;
+190 CREATE TRIGGER IF NOT EXISTS no_update_history BEFORE UPDATE ON claim_history
+191 BEGIN SELECT RAISE(ABORT, 'claim_history is append-only'); END;
+192 CREATE TRIGGER IF NOT EXISTS no_delete_claims BEFORE DELETE ON claims
+193 BEGIN SELECT RAISE(ABORT, 'claims are never deleted; change their status'); END;
+194 CREATE TRIGGER IF NOT EXISTS no_delete_evidence BEFORE DELETE ON evidence
+195 BEGIN SELECT RAISE(ABORT, 'evidence is never deleted'); END;
+196 CREATE TRIGGER IF NOT EXISTS no_delete_feedback BEFORE DELETE ON feedback
+197 BEGIN SELECT RAISE(ABORT, 'feedback is never deleted'); END;
+198 CREATE TRIGGER IF NOT EXISTS no_delete_memory BEFORE DELETE ON memory
+## tests/test_store.py:66-74 test_schema_created_with_version_and_triggers
+  calls: _tables@67, _version@68, _triggers@69
+  const tests/test_store.py:17: TABLES = {"meta", "snapshots", "snapshot_files", "claims", "evidence", "claim_evidence", "claim_history",
+66 def test_schema_created_with_version_and_triggers(st):
+67     assert TABLES <= _tables(st.conn)
+68     assert _version(st.conn) == SCHEMA_VERSION >= 2
+69     trig = _triggers(st.conn)
+70     for name in ("no_delete_history", "no_update_history", "no_delete_claims", "no_delete_evidence",
+71                  "no_delete_feedback", "no_delete_memory", "no_delete_claim_evidence", "no_update_claim_evidence",
+72                  "no_delete_snapshots", "no_delete_experiments", "no_delete_analyses", "no_delete_research"):
+73         assert name in trig, name
+74     assert st.conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+## repoatlas/store.py:202-213 _SCHEMA_V2
+202 # v2: close the remaining holes in "nothing is deleted". Without these a
+203 # claim_evidence link (support/refutation) could be removed or flipped
+204 # silently, and experiments/snapshots/analyses/research records - the
+205 # provenance that claims point at - could disappear.
+206 _SCHEMA_V2 = """
+207 CREATE TRIGGER IF NOT EXISTS no_delete_claim_evidence BEFORE DELETE ON claim_evidence
+208 BEGIN SELECT RAISE(ABORT, 'claim_evidence links are never deleted; add refuting evidence instead'); END;
+209 CREATE TRIGGER IF NOT EXISTS no_update_claim_evidence BEFORE UPDATE ON claim_evidence
+210 BEGIN SELECT RAISE(ABORT, 'claim_evidence links are immutable'); END;
+211 CREATE TRIGGER IF NOT EXISTS no_delete_snapshots BEFORE DELETE ON snapshots
+212 BEGIN SELECT RAISE(ABORT, 'snapshots are never deleted'); END;
+213 CREATE TRIGGER IF NOT EXISTS no_delete_snapshot_files BEFORE DELETE ON snapshot_files
+## tests/test_store.py:89-105 test_migrates_a_v1_database_keeping_data
+ 89 def test_migrates_a_v1_database_keeping_data(tmp_path):
+ 90     p = tmp_path / "old.db"
+ 91     conn = sqlite3.connect(p)
+ 92     conn.executescript(storemod._MIGRATIONS[1])
+ 93     conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', '1')")
+ 94     ts = now()
+ 95     conn.execute("INSERT INTO claims (id, text, project, status, confidence, created_at, updated_at)"
+ 96                  " VALUES ('clm_old', 'legacy', 'p', 'weak_inference', 0.4, ?, ?)", (ts, ts))
+ 97     conn.commit()
+ 98     assert "no_delete_claim_evidence" not in _triggers(conn)
+ 99     conn.close()
+101     st = Store(p)
+102     assert _version(st.conn) == SCHEMA_VERSION
+103     assert st.claim("clm_old")["text"] == "legacy"
+104     assert "no_delete_claim_evidence" in _triggers(st.conn)
+105     st.close()
+## repoatlas/store.py:260-271 (module level)
+260 -- D24 claim dependencies at symbol/facet level
+261 CREATE TABLE IF NOT EXISTS claim_deps (
+262     claim_id TEXT NOT NULL REFERENCES claims(id),
+263     dep_key TEXT NOT NULL,
+264     facet TEXT NOT NULL,
+265     fp TEXT,
+266     scheme TEXT NOT NULL,
+267     created_at TEXT NOT NULL,
+268     PRIMARY KEY (claim_id, dep_key, facet)
+269 );
+270 CREATE INDEX IF NOT EXISTS idx_claim_deps_key ON claim_deps(dep_key, facet);
+271 CREATE TRIGGER IF NOT EXISTS no_delete_claim_deps BEFORE DELETE ON claim_deps
+## tests/test_critique.py:347-357 test_deleted_claim_file_is_stale_in_critique
+347 def test_deleted_claim_file_is_stale_in_critique(proj):
+348     repo, st, cl, g = proj
+349     snap = st.latest_snapshot()
+350     ln = _line(repo, "orders/config.py", "ORDERS_DISCOUNT_THRESHOLD")
+351     c = cl.create("threshold from env", project=snap["project"], snapshot=snap, status="statically_verified",
+352                   evidence=[(evmod.source_evidence(repo, "orders/config.py", ln, commit=None), "supports")])
+353     (repo / "orders" / "config.py").unlink()
+354     res = critique.challenge(st, repo, c["id"], graph=g)
+355     stale = next(f for f in res["findings"] if f["check"] == "staleness")
+356     assert stale["result"] == "fail" and "orders/config.py (removed)" in stale["detail"]
+357     assert res["after"]["status"] == "stale"
+## repoatlas/store.py:5-13 * Nothing is deleted. Claims change status; memories are invalidated;
+… 835 more candidates not shown: repoatlas/store.py:405-647 class Store; repoatlas/store.py:603-604 def claim(self, cid: str) -> dict | None; repoatlas/store.py:272-275 BEGIN SELECT RAISE(ABORT, 'claim dependencies are never deleted'); END;; repoatlas/store.py:214-221 BEGIN SELECT RAISE(ABORT, 'snapshot files are never deleted'); END;
+next: verinoda query "…" --max-chars 12000

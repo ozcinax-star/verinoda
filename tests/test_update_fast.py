@@ -118,3 +118,54 @@ def test_mcp_index_update_is_fast_after_a_slow_build(proj, monkeypatch):
     res = AtlasTools(repo).index_update()
     assert res["index_mode"] == "full"
     assert json.dumps(res)  # a plain result
+
+
+def test_a_function_in_a_new_file_ranks_by_its_name_before_the_graph_has_it(proj):
+    """After ``update --fast`` a new source file is a data unit until the background build ends; a question that
+    names a function it defines must still find that function first, not similarly named symbols the graph has."""
+    repo, st, started = proj
+    p = repo / "orders" / "pricing.py"
+    p.write_text(p.read_text(encoding="utf-8") + "".join(
+        f"\n\ndef loyalty_bonus_v{i}(points):\n    return points * {i}\n" for i in range(1, 7)), encoding="utf-8")
+    workflow.update(st, repo)  # the graph has the six
+    (repo / "orders" / "promo.py").write_text("def loyalty_bonus_v7(points):\n    return points * 7\n", encoding="utf-8")
+    res = workflow.update(st, repo, fast=True)
+    assert res["index_mode"] == "deferred" and "orders/promo.py" in res["graph_behind"]
+    hits = retrieval.retrieve(index.load(repo), "loyalty_bonus_v7", retrieval.Budget(5, 4000))
+    files = [it.get("file") for it in hits.get("items", [])]
+    assert files and files[0] == "orders/promo.py", files
+
+
+def test_every_background_start_or_refusal_is_logged(proj, monkeypatch):
+    """The background log records completions only; a start, and a start refused, leave a line too, so a build that
+    never ran (or never finished) can be told apart afterwards."""
+    from verinoda.paths import index_dir
+
+    repo, _st, started = proj
+    log = index_dir(repo) / workflow._BG_LOG
+    got = workflow.start_background_update(repo)
+    assert got["started"] is True
+    text = log.read_text(encoding="utf-8")
+    assert "background start: pid 4242" in text
+    monkeypatch.setattr(buildlock, "is_locked", lambda r: True)
+    got = workflow.start_background_update(repo)
+    assert got["started"] is False
+    assert "background not started: another index build is running" in log.read_text(encoding="utf-8")
+
+
+def test_a_child_and_its_parent_both_append_to_the_background_log(tmp_path):
+    """The log is handed to the detached child as its stdout; lines the parent (or another build) adds afterwards
+    must not be overwritten by the child's writes from its stale position (Windows' 'ab' appends only for the
+    process that opened it)."""
+    import sys
+
+    log = tmp_path / "background_update.log"
+    log.write_text("earlier\n", encoding="utf-8")
+    child = "import sys, time; time.sleep(0.5); print('child line', flush=True)"
+    with workflow._open_append(log) as out:
+        p = subprocess.Popen([sys.executable, "-c", child], stdout=out, stderr=out)
+    with open(log, "a", encoding="utf-8") as fh:  # the parent's note, written while the child still runs
+        fh.write("parent line\n")
+    p.wait(timeout=30)
+    lines = log.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "earlier" and "parent line" in lines and "child line" in lines, lines

@@ -1,0 +1,111 @@
+analysis ana_bb897a817c0b, snapshot snp_96a6e3b2d02d (commit 906a99fb8c)
+understood as: Anladığım (kurallarla): q1 [konum] Bir wisp öldüğünde hangi eşyalar düşüyor | q2 [konum] bunlar nerede tanımlanıyor? (karşılıklar: eşyalar=item)
+plan links: wisp -> src/main/java/com/example/glowmod/command/GlowCommands.java:27-36
+q1 [met] locate: Bir wisp öldüğünde hangi eşyalar düşüyor
+  [statically_verified] `ModItems` is defined at src/main/java/com/example/glowmod/item/ModItems.java:12-32  (clm_ac2a4932aacd)
+  [statically_verified] src/main/resources/data/glowmod/function/wisp_death.mcfunction:4 contains: summon minecraft:item ~ ~0.5 ~ {Item:{id:"glowmod:wisp_heart",count:1,components:{"minecraft:custom_name":'{"text":"Wisp Heart","color":"aqu  (clm_d236bf054e2a)
+  [statically_verified] src/main/resources/assets/glowmod/models/item/wisp_heart.json:4 contains: "layer0": "glowmod:item/wisp_heart"  (clm_0fa615f0cbff)
+q2 [met] locate: bunlar nerede tanımlanıyor?
+  (also answers this: clm_ac2a4932aacd)
+  [statically_verified] `.initialize()` is defined at src/main/java/com/example/glowmod/item/ModItems.java:25-31  (clm_282dfacd75f7)
+  [statically_verified] `.ModItems()` is defined at src/main/java/com/example/glowmod/item/ModItems.java:17-18  (clm_0c26865797f3)
+  [statically_verified] src/main/resources/assets/glowmod/models/item/ember_shard.json:4 contains: "layer0": "glowmod:item/ember_shard"  (clm_97f5a30649e9)
+  [statically_verified] src/main/resources/assets/glowmod/models/item/lantern_staff.json:4 contains: "layer0": "glowmod:item/lantern_staff"  (clm_5d4c7552ab65)
+context (found on the way; not what answers):
+  [strong_inference] `onDeath` names `wisp_death` (src/main/resources/data/glowmod/function/wisp_death.mcfunction); src/main/java/com/example/glowmod/entity/Wisp.java:42 contains: Datapack.run(serverWorld, getPos(), "wisp_death"); (uncertain: `wisp_death` is a bare name: it was matched to src/main/resources/data/glowmod/function/wisp_death.mcfunction by file name, the namespace is not written on the line)  (clm_919af973f6bc)
+  [strong_inference] `Wisp.onDeath()` calls `Datapack.run()` (src/main/java/com/example/glowmod/entity/Wisp.java:42) (uncertain: which definition the call at src/main/java/com/example/glowmod/entity/Wisp.java:42 binds to is checked for Python only)  (clm_f140416156af)
+  [strong_inference] `ModItems` names `lantern_staff` (src/main/resources/assets/glowmod/models/item/lantern_staff.json); src/main/java/com/example/glowmod/item/ModItems.java:13 contains: public static final Item LANTERN_STAFF = register("lantern_staff", new Item(new Item.Settings().maxCount(1))); (uncertain: `lantern_staff` is a bare name: it was matched to src/main/resources/assets/glowmod/models/item/lantern_staff.json by file name, the namespace is not written on the line)  (clm_a50e7006b1d1)
+  [strong_inference] `ModItems` names `ember_shard` (src/main/resources/assets/glowmod/models/item/ember_shard.json); src/main/java/com/example/glowmod/item/ModItems.java:14 contains: public static final Item EMBER_SHARD = register("ember_shard", new Item(new Item.Settings())); (uncertain: `ember_shard` is a bare name: it was matched to src/main/resources/assets/glowmod/models/item/ember_shard.json by file name, the namespace is not written on the line)  (clm_aaa78bd1bb17)
+  [strong_inference] `GlowMod.onInitialize()` calls `ModItems.initialize()` (src/main/java/com/example/glowmod/GlowMod.java:22) (uncertain: which definition the call at src/main/java/com/example/glowmod/GlowMod.java:22 binds to is checked for Python only)  (clm_a44c1ea9859d)  [not challenged: claim_limit]
+  [strong_inference] `GlowMod.onInitialize()` calls `GlowConfig.load()` (src/main/java/com/example/glowmod/GlowMod.java:21) (uncertain: which definition the call at src/main/java/com/example/glowmod/GlowMod.java:21 binds to is checked for Python only)  (clm_7b85e27fceb4)  [not challenged: claim_limit]
+  +1 more context claim(s) (--json lists them)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: wisp->summon_wisp, wisp->summon, wisp->wisp_heart (+7 more)
+## src/gametest/java/com/example/glowmod/test/WispTests.java:22-28 WispTests.deadWispLeavesItsHeart
+22 @GameTest(templateName = EMPTY_STRUCTURE)
+23 public void deadWispLeavesItsHeart(TestContext context) {
+24     Wisp wisp = context.spawnEntity(ModEntities.WISP, AIR);
+25     wisp.kill();
+26     context.expectItemAt(ModItems.WISP_HEART, AIR, 2.0);
+27     context.complete();
+28 }
+## src/main/resources/data/glowmod/function/wisp_death.mcfunction:1-5 glowmod:wisp_death
+  doc: Runs at the spot where a wisp died.
+  names: `glowmod:wisp_heart` (line 4, id) -> src/main/resources/assets/glowmod/models/item/wisp_heart.json
+  named by: onDeath (src/main/java/com/example/glowmod/entity/Wisp.java:42) as `wisp_death` (bare name, inferred)
+  same content: datapack/data/glowmod/function/wisp_death.mcfunction
+1 # Runs at the spot where a wisp died.
+2 particle minecraft:soul_fire_flame ~ ~0.5 ~ 0.3 0.3 0.3 0.02 30
+3 playsound minecraft:block.amethyst_block.chime neutral @a[distance=..16] ~ ~ ~ 1 1.4
+4 summon minecraft:item ~ ~0.5 ~ {Item:{id:"glowmod:wisp_heart",count:1,components:{"minecraft:custom_name":'{"text":"Wisp Heart","color":"aqua","italic":false}'…
+5 summon minecraft:experience_orb ~ ~0.5 ~ {Value:5}
+## src/main/resources/assets/glowmod/models/item/wisp_heart.json:1-6 glowmod:item/wisp_heart
+  named by: ModItems (src/main/java/com/example/glowmod/item/ModItems.java:15) as `wisp_heart` (bare name, inferred); glowmod:en_us (src/main/resources/assets/glowmod/lang/en_us.json:4) as `glowmod:wisp_heart`; glowmod:tr_tr (src/main/resources/assets/glowmod/lang/tr_tr.json:4) as `glowmod:wisp_heart` (+1 more)
+1 {
+2   "parent": "minecraft:item/generated",
+3   "textures": {
+4     "layer0": "glowmod:item/wisp_heart"
+5   }
+6 }
+## src/main/java/com/example/glowmod/entity/Wisp.java:38-44 Wisp.onDeath
+  names: `wisp_death` (line 42, bare name, inferred) -> src/main/resources/data/glowmod/function/wisp_death.mcfunction
+38 @Override
+39 public void onDeath(DamageSource damageSource) {
+40     super.onDeath(damageSource);
+41     if (getWorld() instanceof ServerWorld serverWorld) {
+42         Datapack.run(serverWorld, getPos(), "wisp_death");
+43     }
+44 }
+## src/main/java/com/example/glowmod/item/ModItems.java:12-32 ModItems
+  names: `lantern_staff` (line 13, bare name, inferred) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `ember_shard` (line 14, bare name, inferred) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+12 public final class ModItems {
+13     public static final Item LANTERN_STAFF = register("lantern_staff", new Item(new Item.Settings().maxCount(1)));
+14     public static final Item EMBER_SHARD = register("ember_shard", new Item(new Item.Settings()));
+15     public static final Item WISP_HEART = register("wisp_heart", new Item(new Item.Settings().rarity(Rarity.UNCOMMON)));
+17     private ModItems() {
+18     }
+20     private static Item register(String name, Item item) {
+21         return Registry.register(Registries.ITEM, Identifier.of(GlowMod.MOD_ID, name), item);
+22     }
+24     /** Loads the class (so the fields above register) and puts the items into the creative tabs. */
+25     public static void initialize() {
+26         ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> entries.add(LANTERN_STAFF));
+27         ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
+28             entries.add(EMBER_SHARD);
+29             entries.add(WISP_HEART);
+30         });
+31     }
+32 }
+## src/main/resources/assets/glowmod/lang/en_us.json:1-11 glowmod:en_us
+  names: `glowmod:lantern_staff` (line 2, lang) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `glowmod:ember_shard` (line 3, lang) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+ 1 {
+ 2   "item.glowmod.lantern_staff": "Lantern Staff",
+ 3   "item.glowmod.ember_shard": "Ember Shard",
+ 4   "item.glowmod.wisp_heart": "Wisp Heart",
+ 5   "entity.glowmod.wisp": "Wisp",
+ 6   "key.glowmod.summon_wisp": "Call a Wisp",
+ 7   "category.glowmod": "Glow Mod",
+ 8   "command.glowmod.wisp.spawned": "A wisp appears.",
+ 9   "command.glowmod.wisp.failed": "The wisp would not come.",
+10   "command.glowmod.reload.done": "Glow Mod settings reloaded."
+11 }
+## src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 glowmod:tr_tr
+  names: `glowmod:lantern_staff` (line 2, lang) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `glowmod:ember_shard` (line 3, lang) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+ 1 {
+ 2   "item.glowmod.lantern_staff": "Fener Asası",
+ 3   "item.glowmod.ember_shard": "Kor Kırığı",
+ 4   "item.glowmod.wisp_heart": "Wisp Kalbi",
+ 5   "entity.glowmod.wisp": "Wisp",
+ 6   "key.glowmod.summon_wisp": "Wisp Çağır",
+ 7   "category.glowmod": "Glow Mod",
+ 8   "command.glowmod.wisp.spawned": "Bir wisp belirdi.",
+ 9   "command.glowmod.wisp.failed": "Wisp gelmedi.",
+10   "command.glowmod.reload.done": "Glow Mod ayarları yeniden yüklendi."
+11 }
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:29-35 @EventHandler public void onDeath(EntityDeathEvent event)
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:30-34 public static ItemStack heart()
+src/main/resources/assets/glowmod/models/item/ember_shard.json:1-6 {
+src/main/resources/assets/glowmod/models/item/lantern_staff.json:1-6 {
+… 86 more candidates not shown: src/main/java/com/example/glowmod/entity/Wisp.java:28-36 public static Wisp spawn(ServerWorld world, BlockPos pos); src/gametest/java/com/example/glowmod/test/WispTests.java:11-29 public class WispTests implements FabricGameTest; src/gametest/java/com/example/glowmod/test/WispTests.java:14-20 @GameTest(templateName = EMPTY_STRUCTURE) public void wi; src/main/java/c…
+next: verinoda query "…" --max-chars 12000

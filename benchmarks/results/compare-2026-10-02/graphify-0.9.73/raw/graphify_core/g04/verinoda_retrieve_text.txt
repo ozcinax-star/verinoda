@@ -1,0 +1,89 @@
+## graphify/cache.py:45-69 _cleanup_stale_ast_entries
+  doc: Remove AST cache entries left behind by other graphify versions.
+  called by: cache_dir (graphify/cache.py:958)
+  const graphify/cache.py:42: _cleaned_ast_dirs: set[str] = set()
+  graphify/cache.py:45-47
+45 def _cleanup_stale_ast_entries(ast_base: Path, current_dir: Path) -> None:
+46     """Remove AST cache entries left behind by other graphify versions.
+  graphify/cache.py:59-69
+60 for child in ast_base.iterdir():
+61     if child == current_dir:
+62         continue
+63     try:
+64         if child.is_dir() and child.name.startswith("v"):
+65             shutil.rmtree(child, ignore_errors=True)
+66         elif child.suffix == ".json":
+67             child.unlink()
+68     except OSError:
+69         pass
+## graphify/cache.py:965-1068 def load_cached(path: Path, root: Path = Path("."), kind: str = "ast", cache_root: Path | None = None, prompt: "str | Path | None" = None, prompt_file: "str | Path | None" = None, allow_legacy: bool …
+  doc: Return cached extraction for this file if hash matches, else None.
+  calls: file_hash@1003, _resolve_prompt_fp@1006, cache_dir@1007, _semantic_entry_matches_path@1051, _absolutize_source_files_in@1060, _absolutize_ids_in@1066
+  called by: check_semantic_cache (graphify/cache.py:1282); save_semantic_cache (graphify/cache.py:1633); _extract_single_file (graphify/extract.py:6586); extract (graphify/extract.py:6906)
+  const graphify/cache.py:86: _legacy_semantic_hits = 0
+  const graphify/cache.py:92: _corrupt_cache_entries = 0
+  graphify/cache.py:971-975
+972 Cache key: SHA256 of file contents.
+973 Cache value: stored as graphify-out/cache/{kind}/{hash}.json (AST entries
+974 under the per-version subdirectory, see :func:`cache_dir`).
+  graphify/cache.py:987-1000
+ 988 ``prompt`` (semantic kinds) is the extraction prompt — text, or a Path to
+ 989 the prompt file — that the caller is about to extract with. It selects the
+ 990 p{fingerprint}/ namespace, so an entry produced by a different prompt is a
+ 991 miss rather than a silent stale hit (#1939). When it is given and the
+ 992 fingerprinted namespace misses, ``allow_legacy`` (default True) falls back
+ 993 to a flat-layout entry: those predate fingerprinting, so their vintage is
+ 994 unknowable — they are served rather than re-billed, and the hit is counted
+ 995 so :func:`check_semantic_cache` can report N to the user. Callers that must
+ 996 not mix vintages within one entry (see :func:`save_semantic_cache`'s
+ 997 ``merge_existing``) pass allow_legacy=False.
+ 998 Returns None if no cache entry or file has changed.
+ 999 """
+1000 global _legacy_semantic_hits, _corrupt_cache_entries
+## graphify/cache.py:1161-1176 clear_cache
+  doc: Delete all cache entries (ast/, semantic/, semantic-deep/, and legacy flat entries).
+1161 def clear_cache(root: Path = Path(".")) -> None:
+1162     """Delete all cache entries (ast/, semantic/, semantic-deep/, and legacy
+1163     flat entries)."""
+1164     base = Path(root).resolve() / _GRAPHIFY_OUT / "cache"
+1165     # Legacy flat entries
+1166     if base.is_dir():
+1167         for f in base.glob("*.json"):
+1168             f.unlink()
+1169     # Namespaced entries, all globbed recursively: ast/ has per-version subdirs,
+1170     # semantic-deep/ holds --mode deep entries (#1894), and both semantic kinds
+1171     # have per-prompt-fingerprint subdirs (#1939).
+1172     for kind in ("ast", "semantic", "semantic-deep"):
+1173         d = base / kind
+1174         if d.is_dir():
+1175             for f in d.glob("**/*.json"):
+1176                 f.unlink()
+## graphify/cache.py:1143-1158 cached_files
+1143 def cached_files(root: Path = Path(".")) -> set[str]:
+1144     """Return set of file hashes that have a valid cache entry (any kind)."""
+1145     base = Path(root).resolve() / _GRAPHIFY_OUT / "cache"
+1146     hashes: set[str] = set()
+1147     # Legacy flat entries
+1148     if base.is_dir():
+1149         hashes.update(p.stem for p in base.glob("*.json"))
+1150     # Namespaced entries, all globbed recursively: ast/ has per-version subdirs,
+1151     # semantic-deep/ holds --mode deep entries (#1894), and both semantic kinds
+1152     # have per-prompt-fingerprint subdirs alongside pre-fingerprint flat entries
+1153     # (#1939).
+1154     for kind in ("ast", "semantic", "semantic-deep"):
+1155         d = base / kind
+1156         if d.is_dir():
+1157             hashes.update(p.stem for p in d.glob("**/*.json"))
+1158     return hashes
+## graphify/cache.py:1379-1680 def save_semantic_cache( nodes: list[dict], edges: list[dict], hyperedges: list[dict] | None = None, root: Path = Path("."), merge_existing: bool = False, allowed_source_files: Iterable[str | Path] |…
+  calls: _semantic_source_matcher@1443, load_cached@1633, _group_has_partial_marker@1655, save_cached@1665
+  called by: dispatch_command (graphify/cli.py:4111); extract_corpus_parallel (graphify/llm.py:2684)
+  graphify/cache.py:1393-1397
+1394 Groups nodes and edges by source_file, then saves one cache entry per file
+1395 under cache/semantic/ (separate from AST entries in cache/ast/) to prevent
+1396 hash-key collisions (#582).
+## graphify/cache.py:933-962 def cache_dir(root: Path = Path("."), kind: str = "ast", prompt_fp: str | None = None) -> Path
+  calls: _cleanup_stale_ast_entries@958
+  called by: load_cached (graphify/cache.py:1007); save_cached (graphify/cache.py:1124)
+… 1518 more candidates not shown: graphify/cache.py:1179-1230 def prune_semantic_cache(root: Path, live_hashes: set[str]) -> int; graphify/cache.py:22-31 # AST cache entries are the output of graphify's own extractor code, so they; graphify/cache.py:124-168 _resolve_prompt_fp; graphify/cache.py:1233-1315 check_semantic_cache
+next: verinoda query "…" --max-chars 12000

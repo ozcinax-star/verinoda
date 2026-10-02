@@ -1,0 +1,1277 @@
+{
+ "overall": {
+  "arms": {
+   "auto_context": {
+    "sessions": 57,
+    "failed": 0,
+    "found": 207,
+    "pinpointed": 187,
+    "facts": 218,
+    "all_facts_questions": 49,
+    "tokens_mean": 668,
+    "tool_calls_mean": 5.4,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   }
+  },
+  "pairs": {}
+ },
+ "out_of_sample": {
+  "arms": {
+   "auto_context": {
+    "sessions": 36,
+    "failed": 0,
+    "found": 146,
+    "pinpointed": 136,
+    "facts": 151,
+    "all_facts_questions": 33,
+    "tokens_mean": 618,
+    "tool_calls_mean": 5.1,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   }
+  },
+  "pairs": {}
+ },
+ "in_sample": {
+  "arms": {
+   "auto_context": {
+    "sessions": 21,
+    "failed": 0,
+    "found": 61,
+    "pinpointed": 51,
+    "facts": 67,
+    "all_facts_questions": 16,
+    "tokens_mean": 753,
+    "tool_calls_mean": 6.0,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   }
+  },
+  "pairs": {}
+ },
+ "by_set": {
+  "forge_mod": {
+   "arms": {
+    "auto_context": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 67,
+     "pinpointed": 60,
+     "facts": 68,
+     "all_facts_questions": 13,
+     "tokens_mean": 575,
+     "tool_calls_mean": 5.1,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {}
+  },
+  "glow_mod": {
+   "arms": {
+    "auto_context": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 49,
+     "pinpointed": 47,
+     "facts": 50,
+     "all_facts_questions": 13,
+     "tokens_mean": 523,
+     "tool_calls_mean": 4.4,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {}
+  },
+  "graphify_core": {
+   "arms": {
+    "auto_context": {
+     "sessions": 9,
+     "failed": 0,
+     "found": 34,
+     "pinpointed": 30,
+     "facts": 37,
+     "all_facts_questions": 7,
+     "tokens_mean": 718,
+     "tool_calls_mean": 5.4,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {}
+  },
+  "heldout_repoatlas": {
+   "arms": {
+    "auto_context": {
+     "sessions": 8,
+     "failed": 0,
+     "found": 30,
+     "pinpointed": 29,
+     "facts": 33,
+     "all_facts_questions": 7,
+     "tokens_mean": 861,
+     "tool_calls_mean": 6.2,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {}
+  },
+  "verinoda_user_tr": {
+   "arms": {
+    "auto_context": {
+     "sessions": 12,
+     "failed": 0,
+     "found": 27,
+     "pinpointed": 21,
+     "facts": 30,
+     "all_facts_questions": 9,
+     "tokens_mean": 780,
+     "tool_calls_mean": 6.5,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {}
+  }
+ },
+ "per_question": {
+  "forge_mod/q01": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q01.network",
+     "q01.hammer"
+    ],
+    "tokens": 430,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q02": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 2,
+    "total": 5,
+    "found_ids": [
+     "q02.fuel",
+     "q02.source",
+     "q02.stoke",
+     "q02.overload",
+     "q02.test"
+    ],
+    "tokens": 369,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q03": {
+   "auto_context": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 3,
+    "total": 6,
+    "found_ids": [
+     "q03.type",
+     "q03.serializer",
+     "q03.codec",
+     "q03.lookup",
+     "q03.ingots",
+     "q03.hammer"
+    ],
+    "tokens": 701,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q04": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q04.file",
+     "q04.key",
+     "q04.heat",
+     "q04.slot",
+     "q04.tick"
+    ],
+    "tokens": 492,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q05": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q05.modifier",
+     "q05.biomes",
+     "q05.placed",
+     "q05.configured"
+    ],
+    "tokens": 605,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q06": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 4,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q06.declare",
+     "q06.toml",
+     "q06.heatmath",
+     "q06.fuel",
+     "q06.sync"
+    ],
+    "tokens": 598,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q07": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q07.declare",
+     "q07.toml",
+     "q07.check",
+     "q07.registered"
+    ],
+    "tokens": 369,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q08": {
+   "auto_context": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 2,
+    "total": 6,
+    "found_ids": [
+     "q08.unlit",
+     "q08.lit",
+     "q08.model",
+     "q08.lit_model",
+     "q08.item",
+     "q08.lit_state"
+    ],
+    "tokens": 602,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q09": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 3,
+    "total": 5,
+    "found_ids": [
+     "q09.tr",
+     "q09.en",
+     "q09.block",
+     "q09.item",
+     "q09.container"
+    ],
+    "tokens": 504,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q10": {
+   "auto_context": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 3,
+    "total": 6,
+    "found_ids": [
+     "q10.button",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler",
+     "q10.stoke"
+    ],
+    "tokens": 812,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q11": {
+   "auto_context": {
+    "found": 6,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 6,
+    "found_ids": [
+     "q11.ticker",
+     "q11.fuel",
+     "q11.source",
+     "q11.forge",
+     "q11.cool",
+     "q11.lit"
+    ],
+    "tokens": 671,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q12": {
+   "auto_context": {
+    "found": 6,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 6,
+    "found_ids": [
+     "q12.command",
+     "q12.run",
+     "q12.id",
+     "q12.fill",
+     "q12.nbt",
+     "q12.messages"
+    ],
+    "tokens": 811,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q13": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q13.advancement",
+     "q13.trigger",
+     "q13.tag"
+    ],
+    "tokens": 537,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q14": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q14.be",
+     "q14.menu",
+     "q14.serializer",
+     "q14.bus"
+    ],
+    "tokens": 544,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q01": {
+   "auto_context": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 0,
+    "total": 6,
+    "found_ids": [
+     "q01.command",
+     "q01.lantern",
+     "q01.ritual",
+     "q01.chunk",
+     "q01.network",
+     "q01.gametest"
+    ],
+    "tokens": 506,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q02": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q02.init",
+     "q02.reload"
+    ],
+    "tokens": 279,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q03": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q03.ondeath",
+     "q03.namespace",
+     "q03.heart",
+     "q03.loot"
+    ],
+    "tokens": 818,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q04": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q04.baslat",
+     "q04.helper",
+     "q04.execute",
+     "q04.command"
+    ],
+    "tokens": 633,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q05": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 3,
+    "total": 3,
+    "found_ids": [
+     "q05.start",
+     "q05.self",
+     "q05.java"
+    ],
+    "tokens": 388,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q06": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q06.load",
+     "q06.copy",
+     "q06.fallback",
+     "q06.caller"
+    ],
+    "tokens": 640,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q07": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 2,
+    "shown": 3,
+    "total": 3,
+    "found_ids": [
+     "q07.yml",
+     "q07.parse",
+     "q07.use"
+    ],
+    "tokens": 549,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q08": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q08.file",
+     "q08.keys",
+     "q08.pattern"
+    ],
+    "tokens": 344,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q09": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q09.model",
+     "q09.en",
+     "q09.tr",
+     "q09.item"
+    ],
+    "tokens": 298,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q10": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 2,
+    "total": 5,
+    "found_ids": [
+     "q10.key",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler"
+    ],
+    "tokens": 797,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q11": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q11.hook",
+     "q11.restore",
+     "q11.clear"
+    ],
+    "tokens": 525,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q12": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q12.helper",
+     "q12.fields",
+     "q12.init"
+    ],
+    "tokens": 394,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q13": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q13.check",
+     "q13.spawn",
+     "q13.cooldown"
+    ],
+    "tokens": 517,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q14": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 2,
+    "total": 2,
+    "found_ids": [
+     "q14.spawn",
+     "q14.listener"
+    ],
+    "tokens": 635,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g01": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "g01.func",
+     "g01.ratio",
+     "g01.cut",
+     "g01.caller"
+    ],
+    "tokens": 732,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g02": {
+   "auto_context": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 5,
+    "total": 6,
+    "found_ids": [
+     "g02.entry",
+     "g02.terms",
+     "g02.score",
+     "g02.seeds",
+     "g02.traverse",
+     "g02.render"
+    ],
+    "tokens": 890,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g03": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "g03.disable",
+     "g03.path",
+     "g03.enable",
+     "g03.responses"
+    ],
+    "tokens": 401,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g04": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 2,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "g04.dir",
+     "g04.key",
+     "g04.load",
+     "g04.save"
+    ],
+    "tokens": 852,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g05": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "g05.env",
+     "g05.default",
+     "g05.check"
+    ],
+    "tokens": 353,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g06": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "g06.reason",
+     "g06.fallback",
+     "g06.list"
+    ],
+    "tokens": 647,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g07": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 4,
+    "found_ids": [
+     "g07.bench",
+     "g07.mcp"
+    ],
+    "tokens": 697,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g08": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 6,
+    "found_ids": [
+     "g08.entry",
+     "g08.detect",
+     "g08.extract",
+     "g08.build",
+     "g08.write"
+    ],
+    "tokens": 977,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g09": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "g09.default",
+     "g09.env",
+     "g09.over"
+    ],
+    "tokens": 910,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h01": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "h01.kill",
+     "h01.call",
+     "h01.container",
+     "h01.drain"
+    ],
+    "tokens": 604,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h02": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "h02.allow",
+     "h02.scrub",
+     "h02.set",
+     "h02.path"
+    ],
+    "tokens": 681,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h03": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 5,
+    "total": 5,
+    "found_ids": [
+     "h03.cli",
+     "h03.build",
+     "h03.rebuild",
+     "h03.snapshot",
+     "h03.stale"
+    ],
+    "tokens": 658,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h04": {
+   "auto_context": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "h04.source",
+     "h04.check",
+     "h04.url",
+     "h04.feedback",
+     "h04.research"
+    ],
+    "tokens": 1203,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h05": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 0,
+    "total": 4,
+    "found_ids": [
+     "h05.inv",
+     "h05.changed",
+     "h05.files",
+     "h05.caller"
+    ],
+    "tokens": 1080,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h06": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 2,
+    "total": 2,
+    "found_ids": [
+     "h06.trigger",
+     "h06.rule"
+    ],
+    "tokens": 633,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h07": {
+   "auto_context": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 0,
+    "total": 4,
+    "found_ids": [
+     "h07.level",
+     "h07.classify",
+     "h07.runtime",
+     "h07.refuse"
+    ],
+    "tokens": 954,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h08": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "h08.modify",
+     "h08.cli"
+    ],
+    "tokens": 1075,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u01": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u01.detect",
+     "u01.share",
+     "u01.names"
+    ],
+    "tokens": 1191,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u02": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u02.graph",
+     "u02.export"
+    ],
+    "tokens": 556,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u03": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u03.version",
+     "u03.route",
+     "u03.poll"
+    ],
+    "tokens": 557,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u04": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u04.dir",
+     "u04.save"
+    ],
+    "tokens": 539,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u05": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u05.rels",
+     "u05.cap"
+    ],
+    "tokens": 761,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u06": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u06.scrubber",
+     "u06.scrub"
+    ],
+    "tokens": 777,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u07": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u07.switch",
+     "u07.var"
+    ],
+    "tokens": 514,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u08": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u08.judge",
+     "u08.met"
+    ],
+    "tokens": 909,
+    "failed": false,
+    "tool_calls": 11,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u09": {
+   "auto_context": {
+    "found": 3,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u09.update",
+     "u09.full",
+     "u09.affected"
+    ],
+    "tokens": 1143,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u10": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "u10.csp",
+     "u10.token"
+    ],
+    "tokens": 802,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u11": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u11.strip",
+     "u11.file"
+    ],
+    "tokens": 806,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u12": {
+   "auto_context": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u12.sig",
+     "u12.burst"
+    ],
+    "tokens": 807,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  }
+ }
+}

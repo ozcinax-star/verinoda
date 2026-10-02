@@ -1,0 +1,94 @@
+expanded: sitelerden->site_hash, sitelerden->site_ev, sitelerden->site_ok (+6 more)
+## verinoda/references/classify.py:350-374 _bitbucket
+  calls: _repo_identity@352, _ref_splits@360, _set_ref@360, _lines@361
+  called by: classify_url (verinoda/references/classify.py:514)
+  const verinoda/references/classify.py:50: SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+  verinoda/references/classify.py:350-362
+350 def _bitbucket(spec: dict, host: str, segs: list[str], frag: str, query: str) -> dict:
+351     owner, repo = segs[0], re.sub(r"\.git$", "", segs[1])
+352     _repo_identity(spec, host, owner, f"{owner}/{repo}")
+353     rest = segs[2:]
+354     if not rest:
+355         return spec
+356     action, tail = rest[0], rest[1:]
+357     req = spec["requested"]
+358     if action in ("src", "raw") and tail:
+359         spec["class"] = "git_file" if len(tail) > 1 else "git_repo"
+360         _set_ref(spec, _ref_splits(tail))
+361         req["lines"] = _lines(frag)
+362     elif action in ("commits", "commit") and tail and SHA_RE.match(tail[0]):
+  verinoda/references/classify.py:367-374
+367 elif action == "pull-requests" and tail and tail[0].isdigit():
+368     spec["class"] = "pull_request"
+369     req["number"] = int(tail[0])
+370     spec["notes"].append("Bitbucket Cloud does not publish pull-request refs over git; the head needs its API")
+371 elif action == "issues" and tail and tail[0].isdigit():
+372     spec["class"] = "issue"
+373     req["number"] = int(tail[0])
+374 return spec
+## verinoda/references/classify.py:443-456 _package
+  called by: classify_url (verinoda/references/classify.py:531); _purl (verinoda/references/classify.py:654); _classify (verinoda/references/classify.py:722); _gomod (verinoda/references/classify.py:762); classify_mention (verinoda/references/classify.py:863)
+443 def _package(spec: dict, ecosystem: str, name: str, version: str | None, *, exact: bool | None,
+444              spec_text: str | None = None, namespace: str | None = None, guessed: bool = False) -> dict:
+445     spec["class"] = "package"
+446     full = f"{namespace}/{name}" if namespace else name
+447     purl_name = full if ecosystem != "npm" or not full.startswith("@") else "%40" + full[1:]
+448     spec["identity"]["package"] = {"ecosystem": ecosystem, "name": full, "purl": f"pkg:{ecosystem}/{purl_name}",
+449                                    "ecosystem_guessed": guessed}
+450     req = spec["requested"]
+451     req["version_text"] = version
+452     req["version_exact"] = exact
+453     req["version_spec"] = spec_text
+454     if version and exact:
+455         spec["immutable"] = True
+456     return spec
+## verinoda/references/render.py:12-35 _ref_line
+  called by: compact (verinoda/references/render.py:40); render_text (verinoda/references/render.py:55)
+12 def _ref_line(r: dict) -> dict:
+13     pin = r.get("pin") or {}
+14     out = {"id": r["id"], "class": r["class"], "status": r["status"],
+15            "what": (r.get("identity") or {}).get("canonical_url") or (r.get("requested") or {}).get("url")
+16            or ((r.get("identity") or {}).get("package") or {}).get("purl")
+17            or ((r.get("identity") or {}).get("paper") or {}).get("arxiv_id")
+18            or ((r.get("identity") or {}).get("app") or {}).get("name") or (r.get("requested") or {}).get("path"),
+19            "pin": pin.get("display"), "basis": pin.get("basis"), "value": pin.get("value")}
+20     req = r.get("requested") or {}
+21     if req.get("path"):
+22         out["path"] = req["path"]
+23     if req.get("lines"):
+24         out["lines"] = req["lines"]
+25     if r.get("mismatches"):
+26         out["mismatches"] = [f"{m['code']} {m['severity']}: {m['detail']}" for m in r["mismatches"][:4]]
+27     if r.get("unresolved"):
+28         out["unresolved"] = [{"what": u["what"], "why": u["why"], "next_step": u["next_step"]}
+29                              for u in r["unresolved"][:3]]
+30     if r.get("alternates"):
+31         out["alternates"] = [a["pin"].get("display") for a in r["alternates"][:3]]
+32     warn = [w for w in r.get("warnings") or [] if w.startswith("W_")]
+33     if warn:
+34         out["warnings"] = warn[:2]
+35     return {k: v for k, v in out.items() if v not in (None, [], {})}
+## verinoda/references/resolver.py:151-166 _identity_key
+151 def _identity_key(ref: dict) -> str | None:
+152     ident = ref["identity"]
+153     cls = ref["class"]
+154     if cls in GIT_CLASSES and ident.get("canonical_url"):
+155         req = ref["requested"]
+156         return f"git:{ident['canonical_url'].lower()}|{cls}|{req.get('url_ref')}|{req.get('path')}|{req.get('number')}"
+157     if cls in ("issue", "pull_request", "merge_request") and ident.get("canonical_url"):
+158         return f"num:{ident['canonical_url'].lower()}|{ref['requested'].get('number')}"
+159     if cls == "package" and ident.get("package") and ident["package"].get("ecosystem") != "unknown":
+160         p = ident["package"]
+161         return f"pkg:{p['ecosystem']}/{_norm_name(p['name'])}|{ref['requested'].get('version_text')}"
+162     if cls in ("paper",) and ident.get("paper"):
+163         return f"arxiv:{ident['paper']['arxiv_id']}|{ref['requested'].get('version_text')}"
+164     if cls == "doi":
+165         return f"doi:{ident['paper']['doi'].lower()}"
+166     return None
+## verinoda/ui/server.py:136-319 def make_handler(atlas: Atlas, port: list[int], token: str = "", watcher: Watcher | None = None)
+  verinoda/ui/server.py:139-143
+140 class Handler(BaseHTTPRequestHandler):
+141     server_version = "verinoda-ui"
+142     sys_version = ""
+… 363 more candidates not shown: verinoda/references/classify.py:133-147 def _set_ref(spec: dict, candidates: list[list], *, hint: str = "heads_first", k; verinoda/references/mentions.py:220-231 _GIT_CUE = re.compile(r"\b(?:PR|pull request|pull req|issues?|commits?|fork|bran; verinoda/ui/server.py:8-12 The one thing it writes is your own notes (``POST /api/usernote``, :mod:`verinoda.usernotes`); …
+next: verinoda query "…" --max-chars 12000
