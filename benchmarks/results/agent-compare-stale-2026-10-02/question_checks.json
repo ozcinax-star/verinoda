@@ -1,0 +1,602 @@
+[
+ {
+  "repo": "axios__axios",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "NEW lib/core/mergeConfig.js:127 is `timeoutErrorMessage: defaultToConfig2`. At OLD the mergeMap had `timeoutMessage: defaultToConfig2` at line 89, so the fact did change. Trap `timeoutMessage` is at OLD lib/core/mergeConfig.js:89, and git grep -w at NEW finds nothing in the whole repository (rc=1). The question uses only the public option name and mergeConfig, so it does not leak."
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "NEW InterceptorManager.js:82 has `const id = internals.nextId++`, and the id is stored in the handlerEntries Map with {handler, index} at lines 85-88. Line 112 returns early when handlers[entry.index] !== entry.handler. Lines 119-120 call trimHandlers when iterationDepth is 0. At OLD, use() returned `this.handlers.length - 1` and eject only nulled handlers[id]: there was no counter, no stale check and no trimming. All three facts are new and are needed to answer both 'ejecting' and 'inspecting' (the handlers length can shrink). There are no traps. No leak."
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q3",
+  "verifier": "corrected",
+  "reasons": "I checked NEW Axios.js lines 217, 219-221, 224-234 and 240-246 against OLD lines 210-222. OLD did `newConfig = onFulfilled(newConfig)`, called onRejected unconditionally, and always dispatched. I dropped sync-interceptor-nullish-fulfilled-skipped: the question asks about a handler that throws, so a good answer would not need to cover a missing onFulfilled. sync-interceptor-dispatch-only-if-no-promise (line 240) is correct, but its second sentence covered dispatchRequest itself throwing, which the question does not ask about. I reworded it to the part the question asks about: whether the request is sent. The other two facts are verified at lines 219 and 227. There are no traps. No leak."
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q4",
+  "verifier": "kept",
+  "reasons": "NEW http.js:269 has `if (!proxy && proxy !== false && allowEnvProxy && !isNodeEnvProxyEnabled(proxyEnvAgent))`. getProxyEnvAgent (lines 130-134) returns the configured agent or the global agent, and isNodeEnvProxyEnabled (lines 118-128) checks for an own `proxyEnv` that is not null. Lines 93-96 hold the support table {22:21, 24:5}, and major > 24 is handled at line 109. Lines 1008-1018 assign `proxyApplied = setProxy(..., !isHttp2)`. Lines 1035-1040 reject with 'HTTP/2 requests with a proxy are not supported' and ERR_NOT_SUPPORT. At OLD, setProxy(options, configProxy, location, isRedirect, configHttpsAgent) always called getProxyForUrl and had no proxyEnv or HTTP/2 handling, so all four facts changed. There are no traps. The question names only user-facing concepts, so it does not leak."
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "NEW lib/core/methodList.js:3 freezes [get, delete, head, options, post, put, patch, purge, link, unlink, query], and the file does not exist at OLD. NEW defaults/index.js:174 iterates over methodList, where OLD line 173 hard-coded 7 methods. NEW Axios.js:158 uses methodList.concat('common'), where OLD line 152 hard-coded the list. All three facts changed and a good answer needs them. There are no traps. The question does not name methodList, so it does not leak."
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q1",
+  "verifier": "corrected",
+  "reasons": "utils-methods-from-node-http verified at NEW lib/utils.js:29 (METHODS from node:http at line 15, exports.methods = METHODS.map(toLowerCase)); OLD utils.js had no methods export. app-methods-from-utils verified at NEW lib/application.js:20; OLD line 17 was require('methods'). app-verb-delegation-loop dropped: the same methods.forEach loop defining app[method] with the app.get(setting) special case and route delegation already existed at OLD lib/application.js:472, so it did not change. No stale traps to check. Question has no leak and asks about the changed source of the verb list."
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "NEW lib/response.js:407 has opts.etag = this.app.enabled('etag') and line 408 has var file = send(req, pathname, opts). At OLD (around line 392) sendFile called send(req, pathname, opts) directly and never touched opts.etag, so the app setting had no effect and a caller's etag option was not overridden. Both facts are new behaviour and answer the two parts of the question. No leak."
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "NEW lib/response.js:17 has var deprecate = require('depd')('express'). Lines 831, 835 and 839 hold the three deprecate calls, and line 843 then goes on to set Location, so the redirect still proceeds. OLD response.js has no depd/deprecate at all. No leak, since the question names only public API behaviour."
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q4",
+  "verifier": "corrected",
+  "reasons": "links-array-multiple-rel verified at NEW lib/response.js:102-105 (Array.isArray branch, each URL mapped, joined with ', '). OLD line 96 had only the single-entry concatenation. links-single-value-template dropped: a non-array value giving one <url>; rel=\"rel\" entry is the same behaviour as OLD line 96, and only the syntax changed (template literal instead of concatenation). It is not something the question asks about. No leak."
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "NEW lib/response.js:146 checks ArrayBuffer.isView(chunk) and sets type 'bin' at line 148 when no Content-Type is set; other objects go to this.json at line 151. OLD line 134 used Buffer.isBuffer(chunk). This is a real change and the question does not leak."
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "All 4 facts verified at NEW: config.py:31 has DATABASE_URL: PostgresDsn, and there are no POSTGRES_* fields. config.py:33-40 has the before-validator _use_psycopg_driver, which rewrites postgres:// or postgresql:// to postgresql+psycopg://. db.py:7 has create_engine(str(settings.DATABASE_URL)). alembic/env.py:34 has get_url returning str(settings.DATABASE_URL). At OLD all of these used SQLALCHEMY_DATABASE_URI, built from POSTGRES_* fields, so every fact changed. Traps: SQLALCHEMY_DATABASE_URI (OLD config.py:60), POSTGRES_SERVER (:52) and POSTGRES_USER (:54) are present at OLD, and git grep -w over the whole repo at NEW finds none of them. The question has no paths or new names and does not leak."
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q2",
+  "verifier": "corrected",
+  "reasons": "Checked main.py:27-33 at NEW: CORSMiddleware is added unconditionally with allow_origins=[settings.FRONTEND_HOST]. At OLD it was added conditionally, using all_cors_origins. Fact fsft-frontend-host-default sits at config.py:26, which is correct. However, the default http://localhost:5173 is unchanged from OLD (config.py:36). I reworded the fact so it centres on what changed: FRONTEND_HOST is now the only CORS-related setting, with no separate origins list. Traps: BACKEND_CORS_ORIGINS (OLD :39) and all_cors_origins (OLD :45) are both present at OLD, and git grep at NEW finds neither. The question does not leak."
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "Verified at NEW: config.py:27 has FASTAPI_ENV: Literal['development'] | None = None. api/main.py:13 includes the private router only if FASTAPI_ENV == 'development'. config.py:74 warns in development and raises otherwise, and lines 82-83 check the DATABASE_URL password. config.py:23 has SECRET_KEY: str with no default. At OLD these were ENVIRONMENT == 'local' and SECRET_KEY = secrets.token_urlsafe(32), so every fact changed. The Sentry check is also on FASTAPI_ENV (main.py:18). Trap: ENVIRONMENT is present at OLD config.py:37, and git grep -w at NEW gives no match anywhere in the repo. The question mentions only SECRET_KEY, which existed at OLD, so it does not leak."
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q4",
+  "verifier": "corrected",
+  "reasons": "Verified main.tsx:17-20 at NEW: client.setConfig({baseURL: VITE_API_URL ?? '', auth: () => localStorage access_token}). handleApiError at lines 22-29 checks AxiosError and response?.status in [401,403], and line 23 is within range. client.gen.ts:16 has createClient(createConfig({throwOnError: true})), and that file does not exist at OLD. At OLD, main.tsx used OpenAPI.BASE/TOKEN and ApiError with error.status. I dropped fsft-extract-error-from-axios-response. It is accurate (utils.ts:3-5 reads err.response?.data detail), but extractErrorMessage is toast message extraction, not the base URL, the token or the global 401/403 handler, so a good answer to this question would not include it. Traps: ApiError (OLD ApiError.ts:4), CancelablePromise (OLD CancelablePromise.ts:20), OpenAPI.ts (OLD; the OpenAPI const is at :43) and request.ts are all present at OLD. Neither identifier is found by git grep -w at NEW, and cat-file -e fails at NEW for both paths. The question does not leak."
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "Verified at NEW: main.py:11 sets FRONTEND_DIR = Path(__file__).parent / 'frontend', and main.py:36 has app.frontend('/', directory=FRONTEND_DIR). vite.config.ts:10-11 has outDir '../backend/app/frontend' and emptyOutDir true, while OLD had no build section. backend/Dockerfile:1 is 'FROM oven/bun:1 AS frontend-build', with bun run build at :16; at OLD the Dockerfile started FROM python. Dockerfile:54 copies --from=frontend-build into /app/backend/app/frontend. Traps: frontend/Dockerfile, frontend/nginx.conf and frontend/nginx-backend-not-found.conf all exist at OLD, and cat-file -e fails for all three at NEW. The question does not leak."
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "NEW sqlmodel/main.py:757-760 maps datetime/AwareDatetime/NaiveDatetime: NaiveDatetime -> DateTime(timezone=False), else UTCDateTime(); OLD main.py:720-721 returned plain DateTime. sqltypes.py:33-39 raises ValueError on a naive value and converts to UTC (line 33 is the check, OK); sqltypes.py:46-49 attaches timezone.utc or converts to UTC. OLD sqltypes.py has no UTCDateTime. _compat.py:185-191 loops over Annotated metadata applying the last AwareDatetime/NaiveDatetime; OLD _compat.py has no AwareDatetime/NaiveDatetime handling. The question uses no leaked names, and an answer about naive-value handling would naturally cover the NaiveDatetime opt-out. No traps to check."
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "NEW main.py:55 imports dataclass_transform from typing_extensions (OLD line 52 imported only deprecated). NEW main.py:557 has @dataclass_transform(kw_only_default=True, field_specifiers=(Field, FieldInfo)); OLD main.py:520 used @__dataclass_transform__(..., field_descriptors=...). Traps: __dataclass_transform__ is defined at OLD main.py:93, and field_descriptors is used at OLD main.py:520 (also 98). git grep -w on NEW finds neither. No leak."
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "NEW main.py:95-100 defines MIN/MAX_ITEMS_DEPRECATION_MSG, and the overloads annotate min_items/max_items with deprecated(...) at lines 261-267 and others. NEW main.py:436-439 warns and maps min_items to min_length; lines 440-443 do the same for max_items. OLD passed both straight through (OLD main.py:423-424) and had no deprecation message. Lines are within tolerance. No traps."
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q4",
+  "verifier": "kept",
+  "reasons": "NEW main.py:92 defines SaTypeOrInstance = TypeEngine[Any] | type[TypeEngine[Any]]; OLD typed sa_type as type[Any] (OLD 211, 270). NEW main.py:155-159 raises RuntimeError when 'type_' is in sa_column_kwargs; OLD had no such check. NEW main.py:835 returns Column(*args, type_=sa_type, **kwargs); OLD main.py:796 returned Column(sa_type, *args, **kwargs). The question names only public API (sa_column_kwargs, Column). No traps."
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "NEW scripts/docs.py:105 runs ['zensical','serve','--dev-addr','127.0.0.1:8008'] and line 117 runs ['zensical','build']; OLD lines 111 and 123 used mkdocs. Trap scripts/mkdocs_hooks.py is listed at OLD mkdocs.yml:219, and cat-file -e at NEW fails. Trap generate_renamed_section_items is defined at OLD scripts/mkdocs_hooks.py:9 and gets no git grep -w match at NEW. The question does not name the hook file or the function."
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "At NEW, recovery.go:64-68 asserts rec.(error) and uses errors.Is against syscall.EPIPE (66), syscall.ECONNRESET (67) and http.ErrAbortHandler (68). Lines 81-86 call c.Error(err) and c.Abort() for a broken connection (83-84) and handle(c, rec) otherwise. At OLD, recovery.go:60-70 used *net.OpError, *os.SyscallError and lowercase string matching, so all three facts are new. Fact 3's c.Error/c.Abort branch existed at OLD too, but which panics reach it changed, and an answer would need it. Traps: brokenPipe is at OLD recovery.go:60 and dunnoBytes at OLD recovery.go:26. git grep -w finds neither at NEW. The question names no new symbol, path or fact wording."
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "At NEW, gin.go:785 calls sanitizePathChars(prefix) and gin.go:786 calls removeRepeatedChar(prefix, '/'). sanitizePathChars is defined at gin.go:799 as a strings.Map filter that keeps a-z, A-Z, 0-9, '/' and '-'. removeRepeatedChar is defined at path.go:155 and is buffer-based. At OLD, neither identifier exists anywhere: OLD gin.go:49-50 defines the regSafePrefix and regRemoveRepeatedChar regexps, used at 752-753, and OLD imports regexp. Both traps exist at OLD gin.go:49/50 and git grep -w finds neither at NEW. The question uses only user-facing terms (RedirectTrailingSlash, X-Forwarded-Prefix, Location)."
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "At NEW, context.go:997-1000 reads http.LocalAddrContextKey and sets trusted=true when Network() has the prefix \"unix\". RemoteIP parsing and isTrustedProxy only run when the request is not already trusted (1003-1012). context.go:1016 joins c.Request.Header.Values(headerName) with \",\" before validateHeader. At OLD, ClientIP (context.go:942-953) always parsed RemoteIP and called isTrustedProxy, and passed c.requestHeader(headerName) to validateHeader. Both facts are new. There are no traps. The question does not leak."
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q4",
+  "verifier": "kept",
+  "reasons": "At NEW, gin.go:97 declares the Engine field routeTreesUpdated sync.Once, and gin.go:663-665 has ServeHTTP calling engine.routeTreesUpdated.Do(func(){ engine.updateRouteTrees() }). At OLD, routeTreesUpdated does not exist (git grep finds nothing). OLD ServeHTTP (gin.go:637) did not call updateRouteTrees; only Run did (OLD gin.go:537). Both facts are new. There are no traps. The question describes user-visible usage and does not name new internals."
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "At NEW, binding/form_mapping.go:142 declares the setOptions field parser string, and lines 174-175 fill it from a parser= tag option. The fact's line 174 shows setOpt.parser = v, which is acceptable. trySetUsingParser at 201-211 handles case \"encoding.TextUnmarshaler\" (203) and calls UnmarshalText on value.Addr(). In setByForm's scalar branch, trySetUsingParser at 314 runs before trySetCustom at 316. At OLD, setOptions had only isDefaultExists and defaultValue, and trySetUsingParser and parser do not exist. All facts are new. There are no traps. The question names only the standard UnmarshalText method, not the new tag option or function."
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "At NEW, Gson.java:223 is `this(GsonBuilder.DEFAULT);` and line 247 is `if (builder == GsonBuilder.DEFAULT)`, which reuses DEFAULT_CONSTRUCTOR_CONSTRUCTOR, DEFAULT_JSON_ADAPTER_ANNOTATION_TYPE_ADAPTER_FACTORY and DEFAULT_TYPE_ADAPTER_FACTORIES. Otherwise it calls builder.createFactories. GsonBuilder.java:124 declares the static DEFAULT_TYPE_ADAPTER_FACTORIES, computed from DEFAULT.createFactories(...). GsonBuilder.java:925 starts createFactories, and the factory order matches the fact. None of this exists at OLD: there is no createFactories, DEFAULT_TYPE_ADAPTER_FACTORIES or GsonBuilder.DEFAULT in gson/src/main, and OLD Gson() at line 252 calls the long this(...) constructor. Trap addTypeAdaptersForDate is at OLD GsonBuilder.java:922 (called at 896), and `git grep -w` at NEW finds nothing. The question uses only public API names and does not leak."
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "At NEW, GsonBuilder.java:1019-1025 has doubleAdapter() and floatAdapter() choosing DOUBLE/DOUBLE_STRICT and FLOAT/FLOAT_STRICT. TypeAdapters.java:526 is `DOUBLE_STRICT = new DoubleAdapter(true)`. TypeAdapters.java:513 is the private static checkValidFloatingPoint, called by the strict Float and Double adapters (lines 474 and 507). LongSerializationPolicy.java:66-68 is STRING.typeAdapter(), which returns TypeAdapters.LONG_AS_STRING. GsonBuilder.createFactories uses this for long, AtomicLong and AtomicLongArray (lines 949-960). At OLD, none of DOUBLE_STRICT, FLOAT_STRICT, LONG_AS_STRING or typeAdapter() exists in gson/src/main. The strict adapters and checkValidFloatingPoint were in Gson.java (lines 449-572). The question has no traps, which is right because the old names still exist at NEW, and it does not leak."
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "OLD MapTypeAdapterFactory.java:191 and :204 use `V replaced = map.put(key, value); if (replaced != null) throw`. At NEW, line 191 (array form) and line 204 (object form) check `if (map.containsKey(key)) throw new JsonSyntaxException(\"duplicate key: \" + key)` before put. The change in behaviour is confirmed: with {\"a\": null, \"a\": \"x\"}, OLD lets the later value win silently and NEW throws. No traps, and no leak."
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q4",
+  "verifier": "kept",
+  "reasons": "JavaTimeTypeAdapters.java does not exist at OLD (cat-file fails) and exists at NEW. Line 44 is `final class JavaTimeTypeAdapters implements TypeAdapters.FactorySupplier`, and its javadoc (lines 30-42) says it freezes the JDK 21 reflective shape without using reflection. Lines 65-66 define INSTANT as IntegerFieldsTypeAdapter(\"seconds\", \"nanos\"). TypeAdapters.java:949 is javaTimeTypeAdapterFactory(), which uses Class.forName and returns null on ReflectiveOperationException or LinkageError. GsonBuilder.java:979-982 adds it after CALENDAR_FACTORY and before SQL_TYPE_FACTORIES. javaTimeTypeAdapterFactory and FactorySupplier are absent at OLD. No traps, and no leak."
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "At NEW, JsonReader.java:1093 (nextLong) and :1336 (nextInt) call validateAscii(peekedString) before parseLong and parseInt. Line 1858 defines validateAscii, which throws syntaxError(\"String contains non-ASCII characters: ...\") for any char above 127 (line 1861). At OLD there is no validateAscii, and parseLong/parseInt are called directly at lines 1096 and 1338. No traps, and no leak."
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "Verified at NEW graphify/__main__.py: line 726 calls _refresh_stale_skills() inside the `not any(arg in _silent_cmds ...)` block (silent cmds install/uninstall/hook-check/hook-guard) just before the _check_skill_version loop; line 289 checks GRAPHIFY_NO_AUTO_REFRESH in (1,true,yes); line 317 skips directories with more than one writer or the vscode entry, and _stale_stamp (line 343) returns None for equal or newer stamps. graphify/install.py:98 defines _skill_lock (flock/msvcrt, lock file under ~/.cache/graphify/skill-locks/ per line 60), used by install/uninstall paths and by the refresh with wait=False (__main__.py:324). git grep at OLD finds none of _refresh_stale_skills, _skill_lock or NO_AUTO_REFRESH, so every fact is new. No stale traps. The question is phrased from the user's side and leaks no identifiers or paths."
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q2",
+  "verifier": "corrected",
+  "reasons": "Diff of graphify/llm.py confirms that OLD split-retried inside the try/except and returned left|right, so an exception in a half propagated. NEW sets parsed = {} at line 3381 (correct), and the batch re-raises only when nothing was named at line 3409/3410 (within tolerance). The fact label-retry-halves-catch cited 3394, which is the `for half` loop line; the per-half try is at 3400 and the except that records `failure` is at 3406-3407, so I moved the source to graphify/llm.py:3406. All facts are new compared with OLD. The question does not leak."
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "OLD graphify/watch.py:180-184 yielded True on ImportError of fcntl, so there was no locking on Windows. NEW: the msvcrt import fallback and the no-op only when both are None are at lines 187-193 (cited 191 is ok); _win_lock_offset = 4096 is at line 204; the blocking loop with msvcrt.locking(LK_NBLCK) is at line 218 with time.sleep(0.05) at 221, and the non-blocking path yields False at 227. All of this is new. The question names only the user-visible .rebuild.lock file, so it does not leak."
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q4",
+  "verifier": "kept",
+  "reasons": "The graphify/report.py diff confirms these lines at NEW: the _real_node definition at line 158 (excludes file, concept and file_type rationale nodes); the community listing `real_nodes = [n for n in nodes if _real_node(n)]` at line 301, which feeds the 'Nodes (N)' line at 312; and thin_communities using _real_count at line 336. At OLD the listing and count filtered with _ifn only. Trap _ifn exists at OLD report.py:156 (and 159, 162, 284), and git grep -w _ifn at NEW over the whole repo returns no match. The question uses only report output text and does not leak."
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "OLD _top_level_dir returned the whole path when it had no '/' and compared dirs only. NEW graphify/analyze.py:226-229 normalises backslashes and './' and returns '.' at line 229. Lines 280-282 compare (repo attribute, top-level dir) tuples for top_u/top_v. Both facts are new. The quoted phrase is the user-visible reason string, so it is not a leak."
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "src/Idn.php does not exist at OLD. At NEW, Idn::normalizeConversionOption is at line 22 (true maps to IDNA_DEFAULT, null/false to null, an int is accepted, anything else throws) and Idn::convertUri is at line 42; its private idnToAsci calls idn_to_ascii with INTL_IDNA_VARIANT_UTS46 (line 82). Client.php:689/691 and RedirectMiddleware.php:231/233 call Idn::normalizeConversionOption and Idn::convertUri. At OLD the same calls were Utils::normalizeIdnConversionOption and Utils::idnUriConvert (Client.php:663, RedirectMiddleware.php:199). Both traps exist at OLD (src/Utils.php:369 and :391), and git grep -w finds neither anywhere at NEW. The question names only the idn_conversion option, which is public, so nothing leaks."
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "Neither src/Handler/Timeout.php nor src/Handler/Clock.php exists at OLD. At NEW, Timeout::toMilliseconds is at line 23 and rejects non-numeric, negative, non-finite and sub-millisecond positive values. Clock::now returns hrtime(true)/1e9 at line 21. At OLD, Utils::currentTime (src/Utils.php:333) had a microtime fallback. CurlFactory.php:2685 calls Timeout::toMilliseconds($options['timeout'], 'timeout'), and StreamHandler.php:219 starts on_stats timing with Clock::now(); at OLD both used Utils::. The trap timeoutToMilliseconds exists at OLD src/Utils.php:345 and gets no git grep -w match at NEW. currentTime cannot be a trap because a local variable $currentTime still exists at NEW. Nothing leaks."
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q3",
+  "verifier": "corrected",
+  "reasons": "src/Handler/ProxyEnv.php:20 declares final class ProxyEnv, and resolveProxySelection is at :36 with #[\\SensitiveParameter] on $proxyOption (line 38). At OLD, ProxyEnvironment.php:20/36 had the same method without the attribute. CurlFactory.php:2715 (also :535 and :2195) and StreamHandler.php:1760 call ProxyEnv::resolveProxySelection; at OLD they called ProxyEnvironment::. Both traps are valid: git grep -w ProxyEnvironment at NEW returns nothing, and cat-file -e NEW:src/Handler/ProxyEnvironment.php fails. Correction: the question asks only which class resolves the proxy, so a good answer would not mention the SensitiveParameter attribute. I trimmed that clause from fact proxyenv-resolve-selection and kept the entry-point part, which the old class name makes untrue at OLD. The question does not leak."
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q4",
+  "verifier": "kept",
+  "reasons": "At NEW, Client.php:1571 calls \\json_encode($options['json'], \\JSON_THROW_ON_ERROR), and line 1573 wraps a JsonException in InvalidArgumentException('json_encode error: ...'). FileCookieJar.php:104 uses \\json_encode with JSON_HEX_TAG | JSON_THROW_ON_ERROR, and :141 uses \\json_decode($json, true, 512, \\JSON_THROW_ON_ERROR). At OLD these calls were Utils::jsonEncode/jsonDecode (Client.php:1448, FileCookieJar.php:100/129), so every fact changed. No traps are listed. A trap would not work anyway, because jsonEncode/jsonDecode still appear in CHANGELOG.md and UPGRADING.md at NEW. The question does not leak."
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q5",
+  "verifier": "corrected",
+  "reasons": "Every fact checks out at NEW in src/Cookie/CookieJar.php. Line 283 skips Secure cookies and cookies that would overlay a stored Secure cookie on a non-https request; overlaysSecureCookie and isSecureCookieOverlay check the name, Secure flag, expiry, domain overlap and path. Line 287 rejects __Secure- without Secure, comparing the lowercased name. Line 290 has the __Host- rule, including hasPathAttribute. Line 295 has the MAX_SET_COOKIE_FIELDS (50) cap. OLD extractCookies (lines 238-263) had none of these checks. Correction: the question asks only about plain http responses and the name prefixes, so a good answer would not mention the 50-cookie cap. I dropped fact cookiejar-max-accepted rather than widen the question. No traps are listed; the change is additive. __Secure- and __Host- are standard cookie-prefix names, so naming them does not leak."
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q1",
+  "verifier": "kept",
+  "reasons": "Checked algo.go at NEW. Line 746 is the M==1 / IsBytes / ASCII dispatch to fuzzyMatchV2Single, and it comes before asciiFuzzyIndex at 751. fuzzyMatchV2Single at 514 uses trySkip, scores scoreMatch + bonus*bonusFirstCharMultiplier, breaks on a boundary bonus in forward mode and allocates no arrays. The two-character dispatch at 760 comes after the scope is computed. fuzzyMatchV2Two at 562 allocates H0/C0/H1/C1 only when withPos is set. None of these identifiers exist at OLD (git grep finds nothing). The question names only FuzzyMatchV2, which exists at OLD, so nothing leaks. There are no traps."
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "OLD asciiFuzzyIndex returned (0, input.Length()) for any non-byte input, under the comment 'Can't determine'. At NEW, line 433 returns runeFuzzyIndex, and the full range comes back only when runePrefilterable rejects the pair (at 428-431) or the disableRunePrefilter test hook is set. runeFuzzyIndex at 382 matches the fact (indexAsciiRune or indexRune, -1,-1 when a rune is missing, end limited to the last occurrence). runePrefilterable at 354 matches the fact. chars.go:187 defines MayFoldToAscii backed by flagMayFold. The foldableRanges bitmap (foldableBits) exists, and normalizeRune (algo.go:308) now calls util.MayFoldToAscii where OLD had the 0x00C0/0xFF61 check (OLD algo.go:306). None of these identifiers exist at OLD. 'Phase 1' is an OLD comment, so the question leaks nothing."
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "OLD tmux.go always used display-popup -E. At NEW, tmux.go:225 calls tmuxFloatingPaneInfo inside the nativeBorder branch, sets opts.Tmux.border = true and returns runTmuxFloatingPane. tmuxFloatingPaneInfo requires TMUX_PANE and makes one tmux invocation (display-message with window size, plus list-commands new-pane) at 33-35, checking the output for 'new-pane'. Line 167 builds the pane command 'echo $? > code; tmux wait-for -S signal'. The .code file is pre-created with O_EXCL at 127-128, and the script at 187-198 waits on the channel and exits with the file's code or 130. Line 174 has new-pane -P -F '#{pane_id}' with width-2/height-2 and -X/-Y, after an 'if window_zoomed_flag resize-pane -Z'. --popup and --tmux both exist at OLD (options.go:2683), so the question leaks nothing."
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q4",
+  "verifier": "corrected",
+  "reasons": "All four facts check out at NEW. terminal_windows.go:23 opens CONOUT$ and polls GetConsoleScreenBufferInfo on a ticker, with a non-blocking send of resizeSignal. resizePollInterval = 100ms is at line 14. terminal.go:6331 calls notifyOnResize(ctx, resizeChan) inside !ShouldEmitResizeEvent, which is the light renderer, and ctx comes from context.WithCancel in Loop. terminal_unix.go:14-19 calls signal.Stop on ctx.Done. At OLD the Windows version was a TODO and the Unix one never stopped. The problem was scope: the question asked only about Windows, so a good answer would not include the Unix signal.Stop fact. I reworded the teardown part to cover each platform so that fact is still asked for. Nothing leaks."
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q5",
+  "verifier": "kept",
+  "reasons": "OLD disableModes always sent ?2004l (OLD light.go:995), and Init only called findOffset. At NEW, light.go:1123-1126 restores ?2004h when pasteWasSet is true and otherwise sends ?2004l. Line 63 is startupQueries = {offsetQuery, pasteModeQuery, offsetQuery}. Lines 270-271 call queryStartup outside the fullscreen branch and store pasteWasSet. light_unix.go:184-199 treats 1 or 3 as set, leaves the value nil for no reply or 0, and backspaces when col2 > col on the same row. pasteWasSet, queryStartup and startupQueries are absent at OLD. Nothing leaks."
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q1",
+  "verifier": "corrected",
+  "reasons": "I checked pager.rs:46 (from_bin returns Builtin for \"builtin\"), output.rs:101-102 (try_pager returns BuiltinPager::new() before resolve_binary) and output.rs:24-33/199/212-214 (minus::Pager clone, spawn of dynamic_paging, FmtWrite handle, join on Drop). All match NEW and none exist at OLD, where git grep finds no builtin pager or minus. config.rs:118 is correct and changed too: OLD mapped straight to pager.bin. But get_pager_executable is only a helper that reports executable names (used by help display and main.rs:289). A good answer about how the built-in pager is chosen, started and written to would not need it, so I dropped fact bat-get-pager-exe-builtin-none. The question does not leak anything. No traps."
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q2",
+  "verifier": "kept",
+  "reasons": "controller.rs:42/50 at NEW take Option<&mut OutputHandle<'_>>, where OLD:39/46 took Option<OutputHandle<'_>> by value. controller.rs:58 builds an OutputType only when output_handle.is_none() (OLD always built one). controller.rs:91-95 sets attached_to_pager to true for (Some(_), _) and otherwise uses is_pager(), where OLD used output_type.is_pager() always. main.rs:210-211 at NEW buffers into a String via OutputHandle::FmtWrite and calls OutputType::from_mode only at 251-254. OLD opened the pager at 209-211 before the loop and wrote 'Theme: ' headers. All lines are within tolerance. Controller::run and --list-themes are public names present at both commits, so there is no leak. No traps."
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q3",
+  "verifier": "kept",
+  "reasons": "line_range.rs:101-125 at NEW has the 3-part branch, with an empty middle meaning N::C. Line 110 has saturating_sub/add of the context around N, and line 121 has start-C..end+C. At OLD the match had only arms 1 and 2, plus an error 'more than one ':' character' (OLD:101-104). The question describes user-facing syntax without copying a fact. No traps."
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q4",
+  "verifier": "kept",
+  "reasons": "clap_app.rs:37-38 at NEW has disable_help_flag/disable_version_flag, and the explicit help (SetTrue) and version (ArgAction::Version) args are at 661-673. OLD had only disable_help_subcommand. app.rs:95-124 checks get_flag(\"help\"), calls display_help and exits 0. Inside display_help, the Config at 161-178 uses QuitIfOneScreen unless paging is off, language Some(\"help\") when colored, and theme(theme_options); line 175 is within tolerance. app.rs:206-211 has should_skip_config for -V/--version/--diagnostic(s), and 242-268 is the help-tolerant parsing. OLD matches() (OLD app.rs:58-88) skipped config only for cache or --no-config and propagated parse errors. No leak. No traps."
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q5",
+  "verifier": "corrected",
+  "reasons": "theme.rs:269-273 at NEW uses theme_mode(QueryOptions::default()) and maps ThemeMode::Dark/Light. OLD:269-272 used color_scheme and ColorScheme as ColorsaurusScheme. Fact bat-detect-theme-mode is correct at line 270. Fact bat-macos-std-home-dir is correct (line 291: std::env::home_dir, where OLD used home::home_dir). But it concerns the macOS system-preference lookup, not terminal background detection through terminal_colorsaurus, so a good answer to this question would not contain it. I dropped it and removed the macOS sentence from what_changed. The trap ColorsaurusScheme exists at OLD src/theme.rs:269, and git grep -w at NEW gives no match (rc=1), so I kept it. terminal_colorsaurus is a dependency crate name a developer would know, so there is no leak."
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q1",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q2",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q3",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q4",
+  "mechanical_drops": [],
+  "kept": true
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q5",
+  "mechanical_drops": [],
+  "kept": true
+ }
+]
