@@ -6,7 +6,7 @@ changed (score_big.py).
 
 CONFIG: {"tasks": tasks.json, "copies": {arm: working copy}, "out": results.jsonl, "model": "claude-sonnet-5-5",
 "plugin_dir": the mod, "mod_options": {"auto": "nudge"}, "path_dirs": {arm: [dirs put on PATH]}, "drop_path": ["...\\.local\\bin"],
-"arms": [...], "workers": n, "timeout_s": s, "max_turns": n}. Resumable: a task and arm already in `out` is skipped.
+"arms": [...], "arm_workers": {arm: n}, "workers": default n, "timeout_s": s, "max_turns": n}. Resumable: a task and arm already in `out` is skipped.
 """
 
 from __future__ import annotations
@@ -168,11 +168,46 @@ def one(cfg: dict, task: dict, arm: str) -> dict:
             "output_tokens": int(usage.get("output_tokens") or 0), "answer": answer, **st}
 
 
+def free_mb() -> int | None:
+    """Free physical memory in MB (Windows), else None: a Verinoda session on a big index holds gigabytes."""
+    if sys.platform != "win32":
+        return None
+    import ctypes
+
+    class Status(ctypes.Structure):
+        _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong), ("total", ctypes.c_ulonglong),
+                    ("avail", ctypes.c_ulonglong), ("tpage", ctypes.c_ulonglong), ("apage", ctypes.c_ulonglong),
+                    ("tvirt", ctypes.c_ulonglong), ("avirt", ctypes.c_ulonglong), ("ext", ctypes.c_ulonglong)]
+
+    st = Status()
+    st.length = ctypes.sizeof(Status)
+    return int(st.avail // (1024 * 1024)) if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)) else None
+
+
 def status_paths(copy: str) -> set[str]:
     """What `git status` shows in a working copy: the setup's own files are in it before the run, so what a run
     changed is the difference between the two."""
     out = subprocess.run(["git", "-C", copy, "status", "--porcelain"], capture_output=True, text=True, check=False).stdout
     return set(out.splitlines())
+
+
+def run_by_arm(todo: list, limits: dict, work, default: int = 2) -> list:
+    """Run ``work((task, arm))`` for every item, at most ``limits[arm]`` at once per arm, the arms side by side (a
+    Verinoda session holds gigabytes on a big index, a plain one almost nothing). A crashing item does not stop the
+    others; the ones that crashed are returned with their errors, and a rerun picks them up."""
+    by_arm: dict[str, list] = {}
+    for item in todo:
+        by_arm.setdefault(item[1], []).append(item)
+    pools = {a: ThreadPoolExecutor(limits.get(a, default)) for a in by_arm}
+    futures = [(item, pools[a].submit(work, item)) for a, items in by_arm.items() for item in items]
+    failed = []
+    for item, fut in futures:
+        exc = fut.exception()
+        if exc is not None:
+            failed.append((item, repr(exc)))
+    for pool in pools.values():
+        pool.shutdown()
+    return failed
 
 
 def main() -> int:
@@ -185,6 +220,16 @@ def main() -> int:
     todo = [(t, a) for t in tasks for a in cfg["arms"] if (t["id"], a) not in done]
     lock = threading.Lock()
     before = {a: status_paths(cfg["copies"][a]) for a in cfg["arms"]}
+    stop = threading.Event()
+
+    def monitor() -> None:
+        low = free_mb()
+        while not stop.wait(120):
+            now = free_mb()
+            low = now if low is None or now is None else min(low, now)
+            print(f"{time.strftime('%H:%M:%S')} free memory {now} MB (lowest so far {low})", flush=True)
+
+    threading.Thread(target=monitor, daemon=True).start()
     print(f"{len(todo)} sessions to run ({len(done)} done)", flush=True)
 
     def work(item):
@@ -197,8 +242,9 @@ def main() -> int:
               f"tool={r['verinoda_calls'] or r['graphify_calls']} net={len(r['network'])} turns={r['num_turns']} {r['seconds']} s",
               flush=True)
 
-    with ThreadPoolExecutor(cfg.get("workers", 8)) as ex:
-        list(ex.map(work, todo))
+    for item, err in run_by_arm(todo, cfg.get("arm_workers", {}), work, cfg.get("workers", 2)):
+        print(f"FAILED {item[0]['id']}:{item[1]} {err}", flush=True)
+    stop.set()
     for arm in cfg["arms"]:
         changed = sorted(status_paths(cfg["copies"][arm]) ^ before[arm])
         print(f"{arm}: {len(changed)} paths changed in the working copy by the run {changed[:5]}", flush=True)

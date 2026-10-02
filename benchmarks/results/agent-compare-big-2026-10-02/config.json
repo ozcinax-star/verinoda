@@ -1,0 +1,43 @@
+{
+ "tasks": "<REPO>/benchmarks/results/agent-compare-big-2026-10-02/tasks.json",
+ "copies": {
+  "none": "<BIG>/none",
+  "graphify": "<BIG>/graphify",
+  "verinoda_mod": "<BIG>/verinoda",
+  "verinoda_setup": "<BIG>/verinoda_setup"
+ },
+ "out": "<BIG>/results.jsonl",
+ "model": "claude-sonnet-5-5",
+ "plugin_dir": "<REPO>/claude-mods/verinoda-live",
+ "mod_options": {
+  "auto": "nudge"
+ },
+ "path_dirs": {
+  "graphify": [
+   "<BENCH>/envs/graphify/Scripts"
+  ],
+  "verinoda_mod": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_setup": [
+   "<REPO>/.venv/Scripts"
+  ]
+ },
+ "drop_path": [
+  "<USER>/.local/bin"
+ ],
+ "arms": [
+  "none",
+  "graphify",
+  "verinoda_mod",
+  "verinoda_setup"
+ ],
+ "timeout_s": 1800,
+ "max_turns": 80,
+ "arm_workers": {
+  "none": 4,
+  "graphify": 2,
+  "verinoda_mod": 2,
+  "verinoda_setup": 2
+ }
+}

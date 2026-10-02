@@ -326,3 +326,36 @@ def test_big_status_difference_is_what_a_run_changed_not_what_the_setup_added(tm
     assert before == {"?? .mcp.json"}
     (tmp_path / "a.py").write_bytes(b"x = 2\n")  # what a run changed
     assert sorted(big_run.status_paths(str(tmp_path)) ^ before) == [" M a.py"]
+
+
+def test_big_run_limits_how_many_sessions_run_at_once_per_arm_and_survives_a_crashing_one():
+    import threading
+    import time
+    lock, now, peak, seen = threading.Lock(), {}, {}, []
+
+    def work(item):
+        _, arm = item
+        with lock:
+            now[arm] = now.get(arm, 0) + 1
+            peak[arm] = max(peak.get(arm, 0), now[arm])
+        time.sleep(0.05)
+        with lock:
+            now[arm] -= 1
+            seen.append(item)
+
+    todo = [(f"t{i}", arm) for i in range(6) for arm in ("none", "verinoda_mod")]
+    big_run.run_by_arm(todo, {"none": 3, "verinoda_mod": 1}, work)
+    assert sorted(seen) == sorted(todo) and peak["verinoda_mod"] == 1 and 1 < peak["none"] <= 3
+
+    def crashing(item):
+        if item[0] == "t1":
+            raise RuntimeError("boom")
+        seen.append(("ok", *item))
+
+    seen.clear()
+    failed = big_run.run_by_arm([("t0", "none"), ("t1", "none"), ("t2", "none")], {}, crashing)
+    assert [f[0] for f in failed] == [("t1", "none")] and len(seen) == 2
+
+
+def test_big_run_reads_free_memory_where_it_can():
+    assert big_run.free_mb() is None or big_run.free_mb() > 0
