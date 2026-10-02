@@ -12,8 +12,10 @@ import re
 import sys
 from pathlib import Path
 
-LEAK = re.compile(r"gold\.json|questions\.json|prep\.json|benchmark/questions|benchmarks/results|verinoda-mod"
-                  r"|agent/[a-z_]+/(?:none|verinoda|graphify)\b")
+# the real-world study runs the build under test from its checkout: that executable is a tool, not a leak
+LEAK = re.compile(r"gold\.json|questions\.json|prep\.json|benchmark/questions|benchmarks/results|realworld/gold"
+                  r"|verinoda-mod(?!/\.venv/scripts/verinoda\.exe)"
+                  r"|(?:agent|rw)/[^/\s\"']+/(?:none|verinoda|graphify)\b")
 ARM_DIR = {"none": "none", "verinoda": "verinoda", "graphify": "graphify",
            "verinoda_first": "verinoda", "graphify_first": "graphify", "auto_context": "none"}
 
@@ -33,10 +35,11 @@ def usage(wf_dir: Path) -> dict[str, dict]:
         files = list(wf_dir.rglob(f"agent-{aid}.jsonl"))
         if not files:
             continue
-        key = label.removeprefix("r2 ").removeprefix("r3 ")
+        study = "rw" if label.startswith("rw ") else "agent"
+        key = label.removeprefix("r2 ").removeprefix("r3 ").removeprefix("rw ")
         set_name, rest = key.split("/", 1)
         arm = rest.split(":")[1]
-        own = f"agent/{set_name}/{ARM_DIR[arm]}"
+        own = f"{study}/{set_name.lower()}/{ARM_DIR[arm]}"  # the transcript text is lowercased
         u = {"tool_calls": 0, "verinoda_cli": 0, "graphify_cli": 0, "mcp_verinoda": 0, "leaks": []}
         usage_by_msg: dict[str, dict] = {}  # a streamed message is logged on several lines; its last usage counts
         for line in files[0].read_text(encoding="utf-8").splitlines():
