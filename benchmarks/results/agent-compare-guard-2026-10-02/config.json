@@ -18,7 +18,7 @@
   "plain",
   "guard"
  ],
- "workers": 6,
+ "workers": 8,
  "timeout_s": 2700,
  "max_turns": 100
 }
