@@ -211,7 +211,8 @@ def test_member_calls_bind_to_the_own_receiver_only(tmp_path):
     assert not any(tgt == "Other.save" for _, _, tgt in pairs)
     # Go: `b.Bind()` on a parameter is not the method's own Context.Bind; `c.MustBindWith()` is
     assert ("context.go", "Context.Bind", "Context.MustBindWith") in pairs
-    assert not any(src == "Context.ShouldBindWith" for f, src, _ in pairs if f == "context.go")
+    # ... `b Binding` is an interface: its declaration of Bind, a lead (tests/test_rw_receivers.py), nothing else
+    assert {tgt for f, src, tgt in pairs if f == "context.go" and src == "Context.ShouldBindWith"} == {"Binding.Bind"}
     # Rust: `self.step()` binds; `builder.build_parallel().run()` is not the free `run`; `Vec::new()` is not
     # Worker::new, `Worker::new()` is
     assert ("main.rs", "Worker.run", "Worker.step") in pairs

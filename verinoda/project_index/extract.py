@@ -50,7 +50,7 @@ from verinoda.project_index.extractors.dm import extract_dm, extract_dmf, extrac
 from verinoda.project_index.extractors.elixir import extract_elixir  # noqa: F401
 from verinoda.project_index.extractors.erlang import extract_erlang, resolve_erlang_remote_calls  # noqa: F401
 from verinoda.project_index.extractors.fortran import _cpp_preprocess, extract_fortran  # noqa: F401
-from verinoda.project_index.extractors.go import _GO_PREDECLARED_FUNCS, extract_go  # noqa: F401
+from verinoda.project_index.extractors.go import _GO_PREDECLARED_FUNCS, extract_go, resolve_go_receiver_calls  # noqa: F401
 from verinoda.project_index.extractors.json_config import extract_json  # noqa: F401
 from verinoda.project_index.extractors.commonlisp import extract_commonlisp  # noqa: F401
 from verinoda.project_index.extractors.markdown import extract_markdown, _MD_LINK_INDEX_CACHE  # noqa: F401
@@ -5011,6 +5011,266 @@ def _resolve_rust_self_member_calls(
         })
 
 
+def _rust_crate_names(source_files: set[str]) -> set[str]:
+    """The names of the crates the corpus' Rust files belong to (`[package] name` / `[lib] name` of the
+    nearest Cargo.toml, `-` read as `_`)."""
+    names: set[str] = set()
+    seen: set[Path] = set()
+    for sf in source_files:
+        p = Path(sf)
+        if not p.is_absolute():
+            continue
+        for d in p.parents:
+            if d in seen:
+                break
+            seen.add(d)
+            cargo = d / "Cargo.toml"
+            if not cargo.is_file():
+                continue
+            try:
+                text = cargo.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                break
+            section = ""
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("["):
+                    section = line.strip("[] ")
+                    continue
+                m = re.match(r'name\s*=\s*"([^"]+)"', line)
+                if m and section in ("package", "lib"):
+                    names.add(m.group(1).replace("-", "_"))
+            break
+    return names
+
+
+def _resolve_rust_typed_member_calls(
+    per_file: list[dict],
+    all_nodes: list[dict],
+    all_edges: list[dict],
+) -> None:
+    """Verinoda patch: Rust calls on a receiver whose type the caller's file states (rust.py `rust_type`).
+
+    `Type::m()` (`rust_via` "path"), `x.m()` on a parameter or `let` of a stated type ("local"), on
+    `let x = Type::f(..)` where `f` returns `Self` ("ret"), and on a trait object or `impl Trait` ("dyn").
+    The type binds only when the corpus declares exactly one struct, enum or trait of that name and the name
+    comes from this crate's source (`rust_roots`: `crate`/`self`/`super`, a crate of the corpus or a module
+    file of it), so `std::process::Command::new()` never binds to a `Command` the project declares. The
+    method is the one the type's impl blocks define (exactly one; pooled like `self.m()` calls); a trait
+    object's call binds to the trait's own declaration of the method, a lead to its implementations.
+    `Type::m()` is EXTRACTED when the name was imported or written with its path, INFERRED (0.85) through a
+    glob import; a receiver's type gives INFERRED (0.85; 0.75 for a trait method).
+    """
+    raw = [rc for result in per_file for rc in result.get("raw_calls", [])
+           if rc.get("rust_type") and rc.get("callee") and rc.get("caller_nid")]
+    if not raw:
+        return
+    rust_nodes = [n for n in all_nodes if str(n.get("source_file") or "").endswith(".rs")]
+    files = {str(n.get("source_file")) for n in rust_nodes}
+    crate_names = _rust_crate_names(files)
+    internal = {"crate", "self", "super"} | crate_names
+    rs_paths = {sf.replace("\\", "/") for sf in files}
+    for sf in files:
+        p = Path(sf.replace("\\", "/"))
+        if p.stem == "mod":   # `a/mod.rs` is the module `a`; any other directory name is not a module
+            if p.parent.name:
+                internal.add(p.parent.name)
+        elif p.stem not in ("lib", "main"):
+            internal.add(p.stem)
+
+    def module_path(sf: str) -> tuple[str, tuple[str, ...]] | None:
+        """(the crate's root directory, the module path) of a Rust file: `src/a/b.rs` under `src/lib.rs` is
+        ("src", (a, b)); None when no `lib.rs` / `main.rs` of the corpus sits above it."""
+        p = Path(sf.replace("\\", "/"))
+        parts = [] if p.stem in ("lib", "main", "mod") else [p.stem]
+        d = p.parent
+        if p.stem == "mod":
+            parts = [d.name]
+            d = d.parent
+        while True:
+            if (d / "lib.rs").as_posix() in rs_paths or (d / "main.rs").as_posix() in rs_paths:
+                return d.as_posix(), tuple(reversed(parts))
+            if d.parent == d or not d.name:
+                return None
+            parts.append(d.name)
+            d = d.parent
+
+    def glob_declares(rc: dict, type_name: str) -> bool:
+        """A name only `use super::*` / `use crate::m::*` supplies is this crate's type only when the glob's
+        module is the file that declares it (`use super::*` of a test module re-exports the parent's
+        `use std::process::Command` as well)."""
+        owners = [nid for nid in by_bare.get(type_name, []) if nid in contains_targets]
+        if len(owners) != 1:
+            return False
+        decl = module_path(str(node_by_id.get(owners[0], {}).get("source_file") or ""))
+        here = module_path(str(rc.get("source_file") or ""))
+        if decl is None or here is None or decl[0] != here[0]:
+            return False
+        for g in rc.get("rust_glob_paths") or []:
+            if g and g[0] == "crate":
+                target = list(g[1:])
+            elif g and g[0] in ("self", "super"):
+                target = list(here[1])
+                rest = list(g)
+                while rest and rest[0] in ("self", "super"):
+                    if rest.pop(0) == "super":
+                        if not target:
+                            break
+                        target.pop()
+                target += rest
+            else:
+                continue
+            if tuple(target) == decl[1]:
+                return True
+        return False
+    contains_targets = {e.get("target") for e in all_edges if e.get("relation") == "contains"}
+    by_bare: dict[str, list[str]] = {}
+    for n in rust_nodes:
+        bare = str(n.get("label", "")).split("<", 1)[0].strip()
+        if bare and not bare.endswith(")"):
+            by_bare.setdefault(bare, []).append(n["id"])
+    node_by_id = {n.get("id"): n for n in all_nodes}
+    methods: dict[tuple[str, str], set[str]] = {}
+    for e in all_edges:
+        if e.get("relation") != "method":
+            continue
+        tgt = node_by_id.get(e.get("target"))
+        if tgt is not None:
+            name = str(tgt.get("label", "")).strip("()").lstrip(".")
+            methods.setdefault((e.get("source"), name), set()).add(e.get("target"))
+
+    def method_of(type_name: str, name: str, only_declared: bool = False) -> str | None:
+        owners = by_bare.get(type_name, [])
+        if sum(1 for nid in owners if nid in contains_targets) != 1:
+            return None   # not declared in the corpus, or declared twice
+        if only_declared:
+            owners = [nid for nid in owners if nid in contains_targets]
+        cands: set[str] = set()
+        for nid in owners:
+            cands |= methods.get((nid, name), set())
+        return next(iter(cands)) if len(cands) == 1 else None
+
+    existing = {(e.get("source"), e.get("target")) for e in all_edges if e.get("relation") == "calls"}
+    for rc in raw:
+        roots = rc.get("rust_roots") or []
+        if not roots or any(r not in internal for r in roots):
+            continue
+        type_name, via, callee = str(rc["rust_type"]), rc.get("rust_via"), str(rc["callee"])
+        if "rust_glob_paths" in rc and not glob_declares(rc, type_name):
+            continue
+        if via == "ret":
+            ctor = method_of(type_name, str(rc.get("rust_ctor") or ""))
+            if ctor is None or not node_by_id.get(ctor, {}).get("_rust_returns_self"):
+                continue
+        tgt = method_of(type_name, callee, only_declared=(via == "dyn"))
+        if tgt is None:
+            continue
+        caller = rc["caller_nid"]
+        if tgt == caller or (caller, tgt) in existing:
+            continue
+        existing.add((caller, tgt))
+        if via == "path":
+            exact = not rc.get("rust_glob")
+            confidence, score = ("EXTRACTED", 1.0) if exact else ("INFERRED", 0.85)
+        else:
+            confidence, score = "INFERRED", (0.75 if via == "dyn" else 0.85)
+        all_edges.append({
+            "source": caller,
+            "target": tgt,
+            "relation": "calls",
+            "context": "call",
+            "confidence": confidence,
+            "confidence_score": score,
+            "source_file": rc.get("source_file", ""),
+            "source_location": rc.get("source_location"),
+            "weight": 1.0,
+        })
+
+
+def _resolve_php_static_calls(
+    per_file: list[dict],
+    all_nodes: list[dict],
+    all_edges: list[dict],
+) -> None:
+    """Verinoda patch: PHP `Foo::m()` of a class another file declares binds to Foo's method `m`.
+
+    The engine leaves such a call with the FQN its file's namespace and `use` imports give the written name
+    (`php_static_fqn`); each class node carries its own (`_php_fqn`). The class is the one node of that FQN
+    (or, when the calling file's namespace could not be read, the one class of that name). The method is the
+    class's own `m`, else the first `m` up its `extends` chain while every base is in the corpus. Edges:
+    EXTRACTED for the class's own method, INFERRED (0.85) for an inherited one or a class found by name only.
+    When the class has no such method in the corpus, the call links the class itself (INFERRED, as before).
+    """
+    raw = [rc for result in per_file for rc in result.get("raw_calls", [])
+           if rc.get("php_static_class") and rc.get("callee") and rc.get("caller_nid")]
+    if not raw:
+        return
+    by_fqn: dict[str, list[str]] = {}
+    by_bare: dict[str, list[str]] = {}
+    for n in all_nodes:
+        fqn = n.get("_php_fqn")
+        if isinstance(fqn, str) and fqn:
+            by_fqn.setdefault(fqn, []).append(n["id"])
+            by_bare.setdefault(fqn.rsplit("\\", 1)[-1], []).append(n["id"])
+    if not by_fqn:
+        return
+    node_by_id = {n.get("id"): n for n in all_nodes}
+    methods: dict[tuple[str, str], set[str]] = {}
+    bases: dict[str, list[str]] = {}
+    for e in all_edges:
+        if e.get("relation") == "method":
+            tgt = node_by_id.get(e.get("target"))
+            if tgt is not None:
+                name = str(tgt.get("label", "")).strip("()").lstrip(".").lower()
+                methods.setdefault((e.get("source"), name), set()).add(e.get("target"))
+        elif e.get("relation") == "inherits":
+            bases.setdefault(e.get("source"), []).append(e.get("target"))
+
+    def find(cls: str, name: str) -> tuple[str | None, bool]:
+        """(the method, found on the class itself)."""
+        own = methods.get((cls, name), set())
+        if own:
+            return (next(iter(own)) if len(own) == 1 else None), True
+        seen, cur = {cls}, cls
+        while True:
+            ups = bases.get(cur, [])
+            if len(ups) != 1 or ups[0] in seen or not node_by_id.get(ups[0], {}).get("_php_fqn"):
+                return None, False   # no base, several, or one outside the corpus: not known
+            cur = ups[0]
+            seen.add(cur)
+            hit = methods.get((cur, name), set())
+            if hit:
+                return (next(iter(hit)) if len(hit) == 1 else None), False
+
+    existing = {(e.get("source"), e.get("target")) for e in all_edges if e.get("relation") == "calls"}
+    for rc in raw:
+        fqn = rc.get("php_static_fqn")
+        cands = sorted(set(by_fqn.get(fqn, []) if fqn else by_bare.get(str(rc["php_static_class"]).lower(), [])))
+        if len(cands) != 1:
+            continue
+        cls = cands[0]
+        tgt, own = find(cls, str(rc["callee"]).lower())
+        if tgt is not None:
+            confidence, score = ("EXTRACTED", 1.0) if own and fqn else ("INFERRED", 0.85)
+        else:
+            tgt, confidence, score = cls, "INFERRED", 0.85
+        caller = rc["caller_nid"]
+        if tgt == caller or (caller, tgt) in existing:
+            continue
+        existing.add((caller, tgt))
+        all_edges.append({
+            "source": caller,
+            "target": tgt,
+            "relation": "calls",
+            "context": "call",
+            "confidence": confidence,
+            "confidence_score": score,
+            "source_file": rc.get("source_file", ""),
+            "source_location": rc.get("source_location"),
+            "weight": 1.0,
+        })
+
+
 def _resolve_elixir_import_targets(
     per_file: list[dict],
     all_nodes: list[dict],
@@ -5228,6 +5488,17 @@ register_language_resolver(
 )
 register_language_resolver(
     LanguageResolver("rust_self_member_calls", frozenset({".rs"}), _resolve_rust_self_member_calls)
+)
+# Verinoda patch: Rust receivers of a stated type, Go receivers typed across the files of a package
+register_language_resolver(
+    LanguageResolver("rust_typed_member_calls", frozenset({".rs"}), _resolve_rust_typed_member_calls)
+)
+register_language_resolver(
+    LanguageResolver("go_receiver_calls", frozenset({".go"}), resolve_go_receiver_calls)
+)
+register_language_resolver(
+    LanguageResolver("php_static_calls", frozenset({".php", ".phtml", ".php3", ".php4", ".php5", ".php7", ".phps"}),
+                     _resolve_php_static_calls)
 )
 # Verinoda patch: ported from upstream Graphify v0.9.73 (ef4450d)
 register_language_resolver(
@@ -7973,6 +8244,9 @@ def extract(
     # of these files with no import evidence is gated below (#1659).
     _JS_TS_CALL_SUFFIXES = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
     _go_module_cache: dict[Path, str | None] = {}
+    _js_function_ids = (  # Verinoda patch: see js_function_only below
+        {n["id"] for n in all_nodes if str(n.get("label") or "").endswith("()")}
+        if any(rc.get("js_function_only") for rc in all_raw_calls) else set())
     for rc in all_raw_calls:
         callee = rc.get("callee", "")
         if not callee:
@@ -8017,6 +8291,10 @@ def extract(
         candidates = global_label_to_nids.get(callee, [])
         if not candidates and _lang_is_case_insensitive(rc.get("source_file")):
             candidates = global_label_to_nids_ci.get(callee.lower(), [])
+        # Verinoda patch: an imported `fn.call(...)` / `fn.apply(...)` calls fn only when fn is a function, not
+        # a class with a static `call` or an object
+        if rc.get("js_function_only"):
+            candidates = [c for c in candidates if c in _js_function_ids]
         if not candidates:
             continue
         # Cross-language guard: never bind a call to a definition in a different

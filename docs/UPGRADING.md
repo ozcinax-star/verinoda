@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D170)
+## Upgrading from 0.4.0 (D137-D171)
 
 ### D137: Trigram regex index
 
@@ -452,6 +452,21 @@ unchanged. `AtlasTools.group_view()` and `ProjectHub.group_view()` are new. No c
 New command `verinoda pin FUNCTION [--tests SELECT ...] [--max-cases N] [--out PATH] [--force] [--timeout S] [--no-record]`. It is opt-in and runs the project's tests, so it needs `verinoda trust <path>` (or a container runtime), like `observe`. It writes `tests/pinned/test_pin_<module>__<name>.py` only after that file passed a run; `--force` replaces only a file it generated for the same function, and links, junctions and hidden folders are refused. The exit code is 0 when something was pinned, otherwise 3.
 
 `experiments.run` gains `add_files` ({path: bytes} written over a working-tree copy and listed in `source.added`; the evidence locator says `working tree + added PATH`). The new run artifacts are `pin.jsonl` and `pin_replay.jsonl`. Nothing changes in the store schema, the MCP tools (still 44) or existing commands.
+
+### D171: Receivers of a stated type: Go, Rust, PHP static calls, JS call/apply/bind
+
+The first scan or update after upgrading re-extracts every code file once (`cache._AST_CACHE_SCHEMA` 12 -> 14).
+Graphs gain `calls` edges:
+- Go calls on receivers typed through other files of the package (INFERRED 0.85), and to interface method
+  declarations (INFERRED 0.75).
+- Rust `Type::m()` across files (EXTRACTED; INFERRED through a glob import), calls on locals and parameters of a
+  stated type (INFERRED 0.85), and to trait method declarations for trait objects (INFERRED 0.75).
+- PHP `self::`/`static::`/`parent::` and `Class::m()` calls to the method.
+- JS/TS `fn.call`/`fn.apply` as calls of `fn`, and `fn.bind` as an `indirect_call`.
+
+A PHP `calls` edge from a static call to a class becomes an edge to its method. A query or saved claim that relied
+on `X -calls-> Utils` should name the method (`Utils.chooseHandler`). Two new node markers, `_rust_returns_self` and
+`_php_fqn`, are stored in graph.json. The tq-audit table (`tests/test_tq_measured.py`) needs a rerun after the merge.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
