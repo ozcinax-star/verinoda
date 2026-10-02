@@ -16,9 +16,12 @@ module does the same work for only the files an edit can change, behind a switch
   that make or end an edge on a non-path id an edited file starts or stops making (or naming as a base) and
   the importers of an edited file whose imports changed. The batch B adds the files defining what A's files
   reference as a stub, an import or a base, the files their imports resolve to, and two other makers of each
-  non-path id they make. The unmodified vendored ``extract()`` runs over B, given the rest of the corpus as
-  read-only resolution context as the vendored incremental path does; the rows A's files own replace theirs
-  in the stored extraction (:func:`_splice`).
+  non-path id they make, and every file with a stored edge onto an edited file's nodes. The unmodified vendored
+  ``extract()`` runs over B, given the rest of the corpus as read-only resolution context as the vendored
+  incremental path does; a file of B whose rows come out otherwise than stored joins A (and B is made again);
+  the rows A's files own replace theirs in the stored extraction (:func:`_splice`). The files an update
+  changed without building the graph (no node of theirs in it) are remembered in the ledger and extracted
+  again by the next patch.
 * **The graph**: :func:`build_rows` does what ``build_from_json`` and ``to_json`` do to an AST-only
   extraction without NetworkX (a pair of nodes keeps one edge, chosen by the same rules in the same
   order), so graph.json is made from the patched extraction in a few seconds; each node keeps the
@@ -44,7 +47,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-LEDGER_VERSION = 1
+LEDGER_VERSION = 2
 LEDGER_DIR = "incremental"
 LEDGER_FILE = "ledger.json"
 EXTRACTION_FILE = "extraction.json"
@@ -208,19 +211,32 @@ def pre_ids(result: dict, repo: Path, path) -> list[str]:
     except (ValueError, OSError):
         rel = Path(path)
     stem = make_id(_file_stem(rel))
-    out = set()
+    # by provenance, not by substring: store/store.go's stem is ``store_store``, and so is the id of its
+    # package's ``type Store``. A symbol's id holds the stem and an underscore before the rest (after the
+    # absolute root, before the corpus pass makes ids relative); the file node's label is the file's name.
+    own: dict[str, bool] = {}
     for n in result.get("nodes") or []:
         nid = n.get("id") if isinstance(n, dict) else None
-        if isinstance(nid, str) and nid and stem not in nid:
-            out.add("n:" + nid)
+        if isinstance(nid, str) and nid:
+            own[nid] = own.get(nid, False) or stem not in nid or (
+                n.get("label") != rel.name and stem + "_" not in nid)
+
+    def shared(x) -> bool:
+        if not isinstance(x, str) or not x:
+            return False
+        if x in own:
+            return own[x]
+        return stem + "_" not in x and x != stem and not x.endswith("_" + stem)
+
+    out = {"n:" + nid for nid, yes in own.items() if yes}
     for e in result.get("edges") or []:
+        if not isinstance(e, dict):
+            continue
         for k in ("source", "target"):
-            x = e.get(k) if isinstance(e, dict) else None
-            if isinstance(x, str) and x and stem not in x:
-                out.add("t:" + x)
-        tgt = e.get("target") if isinstance(e, dict) else None
-        if e.get("relation") in _BASE_RELATIONS and isinstance(tgt, str) and tgt and stem not in tgt:
-            out.add("i:" + tgt)  # a base named by a shared id: the type passes treat that stub apart
+            if shared(e.get(k)):
+                out.add("t:" + e[k])
+        if e.get("relation") in _BASE_RELATIONS and shared(e.get("target")):
+            out.add("i:" + e["target"])  # a base named by a shared id: the type passes treat that stub apart
     return sorted(out)
 
 
@@ -404,6 +420,29 @@ def drop(repo: Path) -> None:
             (d / name).unlink()
         except OSError:
             pass
+
+
+def note_unbuilt(repo: Path, modified) -> list[str]:
+    """An update that took a snapshot without building the graph (the changed files have no node in it): the
+    ledger's files among them are remembered, and the next patch extracts them again (their rows in the
+    ledger's extraction describe their older text). Returns the files noted."""
+    d = ledger_dir(Path(repo))
+    try:
+        ledger = json.loads((d / LEDGER_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(ledger, dict) or ledger.get("version") != LEDGER_VERSION:
+        return []
+    known = set(ledger.get("paths") or ())
+    got = sorted({f for f in modified if f in known} - set(ledger.get("pending") or ()))
+    if not got:
+        return []
+    try:
+        ledger["pending"] = sorted(set(ledger.get("pending") or ()) | set(got))
+        _write_text(d / LEDGER_FILE, json.dumps(ledger, ensure_ascii=False))
+    except OSError:
+        drop(repo)  # not remembered: the next update is a full build
+    return got
 
 
 def _write_text(p: Path, text: str) -> None:
@@ -721,15 +760,16 @@ def _same_file(sf: str, own: str, repo: Path) -> bool:
         return False
 
 
-def _def_entry(n: dict) -> tuple:
-    """What other files can see of a definition: everything but its id, place and file."""
-    d = {k: v for k, v in n.items() if k not in ("id", "source_file", "source_location", "_origin",
-                                                 "origin_file", "definition_file")}
+def _def_entry(n: dict, *, with_id: bool = False) -> tuple:
+    """What other files can see of a definition: everything but its place and file, and but its id unless
+    ``with_id`` (a method moved to another class of the file keeps everything but its id)."""
+    drop = ("source_file", "source_location", "_origin", "origin_file", "definition_file") + (() if with_id else ("id",))
+    d = {k: v for k, v in n.items() if k not in drop}
     return (_norm_label(n.get("label")), json.dumps(d, sort_keys=True, default=str))
 
 
-def _post_defs(rows: list[dict]) -> set[tuple]:
-    return {_def_entry(n) for n in rows if n.get("source_file") and n.get("file_type") != "rationale"}
+def _post_defs(rows: list[dict], *, with_id: bool = False) -> set[tuple]:
+    return {_def_entry(n, with_id=with_id) for n in rows if n.get("source_file") and n.get("file_type") != "rationale"}
 
 
 def _import_rows(edges: list[dict]) -> set[tuple]:
@@ -772,10 +812,11 @@ def _attempt(repo: Path, diff: dict) -> dict:
 
     if diff.get("added") or diff.get("removed"):
         raise _Fallback("files were added or removed")
-    modified = sorted(set(diff.get("modified") or []))
+    ledger, X = _load_ledger(repo)
+    # files an earlier update changed without building the graph: their stored rows are older than their text
+    modified = sorted(set(diff.get("modified") or []) | set(ledger.get("pending") or ()))
     if not modified:
         raise _Fallback("no file changed")
-    ledger, X = _load_ledger(repo)
     if ledger.get("stamp") != buildlock.extraction_stamp(repo):
         raise _Fallback("the extraction stamp is not the ledger's")
     if ledger.get("pinned") != pinned_now() or pinned_now() != PINNED:
@@ -917,13 +958,19 @@ def _attempt(repo: Path, diff: dict) -> dict:
         old_t, new_t = toks(f), new_toks[f]
         if old_t is None or new_t is None:
             raise _Fallback(f"{f} is too large to read for names")
+    # the subclasses of an edited file's types: an inherited member's type is read from the base's file
+    for f in M:
+        ids = {n["id"] for n in nodes_by_file.get(f, [])}
+        A |= {sf for sf, rows in edges_by_file.items() if sf and sf != f
+              and any(e.get("relation") in _BASE_RELATIONS and e.get("target") in ids for e in rows)}
     A = _with_stem_siblings(A, by_stem, stem_of)
 
     why: Counter = Counter()  # what brought the most files into the batch (said when it is too large)
 
-    def batch(A_: set[str]) -> set[str]:
+    def batch(A_: set[str], keep_why: bool = False) -> set[str]:
         B_ = set(A_)
-        why.clear()
+        if not keep_why:
+            why.clear()
         for f in A_:
             info = pre.get(f) or _closure_inputs(repo, f, cache_root)
             pre[f] = info
@@ -945,10 +992,39 @@ def _attempt(repo: Path, diff: dict) -> dict:
                         B_.add(sf)
         return B_
 
-    B = batch(A)
+    # the files with an edge onto an edited file's nodes: an edit their names do not show (a default export or
+    # an alias renamed, a package moved) changes those edges. They are extracted with the batch, and one whose
+    # edges onto an edited file's nodes (old or new ids: relation, direction and that end) come out otherwise is
+    # a suspect: its own closure joins the batch, and if they still come out otherwise it joins A. Only those
+    # edges are compared, and only with the closure there: the rest of a file's rows (its own ids too) can come
+    # out otherwise in a batch that does not hold what they resolve to, which is why only A's rows are taken.
+    watch: set[str] = set()
+    for f in M:
+        watch |= importers(f)
+    old_ids_m = {n["id"] for f in M for n in nodes_by_file.get(f, []) if isinstance(n.get("id"), str)}
+    suspects: set[str] = set()
+
+    def onto_m(rows, ids) -> set[tuple]:
+        out_ = set()
+        for e in rows:
+            if e.get("target") in ids:
+                out_.add((e.get("relation"), ">", e.get("target")))
+            if e.get("source") in ids:
+                out_.add((e.get("relation"), "<", e.get("source")))
+        return out_
+
+    def with_watch(B_: set[str]) -> set[str]:
+        extra = watch - B_
+        if len(extra) > 5:
+            why["files with an edge onto an edited file"] = len(extra)
+        if suspects:
+            B_ = B_ | batch(suspects, keep_why=True)
+        return B_ | extra
+
+    B = with_watch(batch(A))
     lap("closure")
     cap = max(100, min(MAX_BATCH, int(len(paths) * MAX_BATCH_SHARE)))
-    for _round in range(3):
+    for _round in range(5):
         if len(B) > cap:
             top = ", ".join(f"{k} ({v})" for k, v in why.most_common(4))
             raise _Fallback(f"the batch has {len(B)} files (more than {cap})" + (f": {top}" if top else ""))
@@ -958,21 +1034,46 @@ def _attempt(repo: Path, diff: dict) -> dict:
         new = _extract_batch(repo, B, order, X)
         # the definitions the batch made for A's files, against the ledger's: a change seen only now widens A
         grown = set(A)
+        new_nodes: dict[str, list[dict]] = {}
+        new_edges: dict[str, list[dict]] = {}
+        for n in new["nodes"]:
+            new_nodes.setdefault(n.get("source_file") or "", []).append(n)
+        for e in new["edges"]:
+            new_edges.setdefault(e.get("source_file") or "", []).append(e)
         for f in A:
-            changed = _post_defs([n for n in new["nodes"] if n.get("source_file") == f]) ^ \
-                _post_defs(nodes_by_file.get(f, []))
+            now, before = new_nodes.get(f, []), nodes_by_file.get(f, [])
+            changed = _post_defs(now) ^ _post_defs(before)
+            # with their ids: a definition whose id moved (another owner) is a change its users see
+            moved_ids = _post_defs(now, with_id=True) ^ _post_defs(before, with_id=True)
             if f in M:
-                grown |= users({lab for lab, _ in changed if lab})
+                grown |= users({lab for lab, _ in changed | moved_ids if lab})
             elif changed:
                 raise _Fallback(f"{f} defines something else now although it did not change")
-            if f in M and _import_rows([e for e in new["edges"] if e.get("source_file") == f]) != \
-                    _import_rows(edges_by_file.get(f, [])):
+            elif moved_ids:  # salted otherwise by the edit, or by a batch without what it resolves against
+                raise _Fallback(f"{f} names a definition otherwise now although it did not change")
+            if f in M and _import_rows(new_edges.get(f, [])) != _import_rows(edges_by_file.get(f, [])):
                 grown |= importers(f)
+        # a watched file outside A whose edges onto an edited file's nodes the batch made otherwise
+        m_ids = old_ids_m | {n["id"] for f in M for n in new_nodes.get(f, []) if isinstance(n.get("id"), str)}
+        fresh_suspects = set()
+        for f in watch - A:
+            if onto_m(new_edges.get(f, []), m_ids) != onto_m(edges_by_file.get(f, []), m_ids):
+                if f in suspects:
+                    grown.add(f)
+                else:
+                    fresh_suspects.add(f)
+        for f in fresh_suspects:
+            if Path(f).suffix.lower() not in LANGUAGES:
+                raise _Fallback(f"{f} may be affected: a language the closure is not checked for")
+        suspects |= fresh_suspects
         grown = _with_stem_siblings(grown, by_stem, stem_of)
-        if grown <= A:
+        if grown <= A and not fresh_suspects:
             break
+        for f in grown - A:
+            if Path(f).suffix.lower() not in LANGUAGES:
+                raise _Fallback(f"{f} would be extracted again: a language the closure is not checked for")
         A = grown
-        B = batch(A)
+        B = with_watch(batch(A))
     else:
         raise _Fallback("the affected set did not settle")
     lap("extract")
@@ -1022,6 +1123,7 @@ def _attempt(repo: Path, diff: dict) -> dict:
         tokens[f] = " ".join(sorted(new_toks[f]))
         pre_store[f] = sorted(pre[f]["pre"])
     ledger["graph_sha"] = hashlib.blake2b(text.encode("utf-8"), digest_size=16).hexdigest()
+    ledger.pop("pending", None)  # extracted again above (they were in M)
     dirs = ledger.get("dirs") or {}
     for f in M:
         parent = Path(f).parent.as_posix()

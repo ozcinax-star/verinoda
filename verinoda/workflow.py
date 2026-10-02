@@ -431,6 +431,12 @@ def _update(store: Store, repo: Path, *, fast: bool = False) -> dict:
             # shrink, so rebuild with force rather than keep their nodes.
             stats = index.build(repo, force=True, prune_missing=True)
             forced = True
+    if stats is None and diff["modified"]:
+        # the graph is kept; the ledger of the update proportional to the change remembers the corpus files
+        # among these (their rows describe their older text), and its next patch extracts them again
+        from verinoda import incremental
+
+        incremental.note_unbuilt(repo, diff["modified"])
     if stats is None and any(f.lower().endswith(".sql") for f in changed):
         # a .sql file is no graph file, but its tables are in the receiver sidecar (verinoda.dataschema): the
         # graph is kept, the sidecar is made again (every other file's facts reused by sha256)
