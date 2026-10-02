@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import shutil
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -112,3 +113,17 @@ def test_end_to_end_both_modes_end_fresh(tmp_path):
             assert m["graph_fresh"] in (None, "1/1") and m["gone_absent"] in (None, "1/1"), (step, mode, m)
         assert by_mode["full"]["text_now"] in (None, "1/1") and by_mode["full"]["symbol_now"] in (None, "1/1")
         assert by_mode["fast"]["median_graph_seconds"] is not None
+
+
+def test_verinoda_runs_from_the_install_never_from_a_corpus_that_is_verinoda(tmp_path, monkeypatch):
+    """`python -m verinoda` with the corpus as cwd imports the corpus's own `verinoda/` package when the corpus is
+    Verinoda's source (the large mod_live run is); `-P` keeps the cwd off sys.path."""
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return types.SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+    monkeypatch.setattr(bench.subprocess, "run", fake_run)
+    bench.run_verinoda(sys.executable, tmp_path, "update", "--json")
+    assert seen["argv"][:4] == [sys.executable, "-P", "-m", "verinoda"]

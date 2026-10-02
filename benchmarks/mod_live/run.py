@@ -129,7 +129,8 @@ class Ran:
 def run_verinoda(python: str, repo: Path, *args: str, timeout: float = 900.0) -> Ran:
     """``python -m verinoda <args>`` on ``repo``, named explicitly (``init`` by PATH, the rest by --repo)."""
     where = [str(repo)] if args[0] == "init" else ["--repo", str(repo)]
-    argv = [python, "-m", "verinoda", *args, *where]
+    # -P: the corpus is the cwd, and a corpus that is Verinoda's own source would otherwise be imported instead
+    argv = [python, "-P", "-m", "verinoda", *args, *where]
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     t0 = time.perf_counter()
     p = subprocess.run(argv, cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace",
