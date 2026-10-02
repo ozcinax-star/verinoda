@@ -15,17 +15,22 @@ PATH) by itself; `/config` overrides both (`root`, `cli`, `python`) and turns th
 | Review after commits (`/verinoda-guard on\|off`) | When a Bash or PowerShell command moved the project's `HEAD` (read before and after), `verinoda review --base HEAD~1` runs in the background and a toast gives its risk and findings; a commit made while one runs is reviewed after it. | off |
 | `/verinoda-panel` pane | In Turkish (technical nouns kept): the index state as glyph + words + colour with the one action that applies (`u`), the last commit review with its risk band and a 2-line summary (`d` for the rest), auto-context as a fixed three-way control (`1`-`3`) and commit review as a two-way control (`r`), and a purple Claude mascot with glasses in the room left over, animated like Claude Code's own (it blinks and shuffles its feet; while Verinoda works it reads, a glint sweeping its lenses; `hooks/mascot.tsx`, drawn by the surface as a `Client`, so frames repaint only its region; still on surfaces without `Client`) (hidden inline, below 24 columns or when the content needs the rows). | - |
 
-## Why nudge and not search
+## Nudge, search or off: what was measured
 
-Measured on 57 questions with a model in the loop (`benchmarks/results/agent-compare-2026-10-02/`):
+Two pre-registered studies with a model in the loop:
 
-- offered Verinoda, the agent called it in 6 of 57 sessions (adoption, not accuracy, is the problem);
-- told to start with `analyze` (what **nudge** says), it found the same facts as searching by hand at 16 % fewer
-  input tokens, 22 % fewer output tokens and 29 % fewer tool calls (intervals exclude the noise floor);
-- handed `query` results up front (what **search** does), it used fewer input tokens but found 5-6 facts fewer:
-  ranked leads anchor it.
+- on 57 questions over corpora of 37-226 files (`benchmarks/results/agent-compare-2026-10-02/`): offered Verinoda,
+  the agent called it in 6 of 57 sessions; told to start with `analyze` (what **nudge** says), it found the same
+  facts as searching by hand at 16 % fewer input tokens, 22 % fewer output tokens and 29 % fewer tool calls;
+  handed `query` results up front (what **search** does), it found 5-6 facts fewer: ranked leads anchor it;
+- on 51 questions over the ten real-world repositories (`benchmarks/results/agent-compare-realworld-2026-10-02/`):
+  told to start with `analyze`, it found the same facts (109 against 107 of 113, no measurable difference) at
+  **1.14x** input tokens and 0.84x output tokens: one more turn per session, the agent still reading the cited code.
+  The input saving of the small corpora did not replicate.
 
-Both stay off until the person turns one on; the measured recommendation is `/verinoda-auto nudge`.
+So neither mode is a measured win on real code: **nudge** trades input tokens for output tokens at the same facts,
+**search** costs facts. Both stay off until the person turns one on. What the mod adds regardless of the mode is
+an index that stays fresh while Claude edits, and commit reviews.
 
 ## Developing it
 

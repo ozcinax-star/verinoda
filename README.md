@@ -1,6 +1,6 @@
 # Verinoda Symbiosis
 
-> **Verinoda + Claude Code, together.** This repository is [Verinoda](https://github.com/ozcinax-star/verinoda) with **verinoda-live**, a Claude Code mod that keeps the index fresh while Claude edits, nudges the agent to use it (measured: the same facts at 16 % fewer input tokens and 29 % fewer tool calls), reviews commits, and shows it all in a pane with an animated mascot. Start with [SYMBIOSIS.md](SYMBIOSIS.md); the mod is [claude-mods/verinoda-live](claude-mods/verinoda-live). Everything below is Verinoda's own README.
+> **Verinoda + Claude Code, together.** This repository is [Verinoda](https://github.com/ozcinax-star/verinoda) with **verinoda-live**, a Claude Code mod that keeps the index fresh while Claude edits, can nudge the agent to use it (measured: the same facts; fewer tokens on small corpora, 14 % more input tokens on real repositories), reviews commits, and shows it all in a pane with an animated mascot. Start with [SYMBIOSIS.md](SYMBIOSIS.md); the mod is [claude-mods/verinoda-live](claude-mods/verinoda-live). Everything below is Verinoda's own README.
 
 ## Verinoda
 
