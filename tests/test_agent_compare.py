@@ -185,3 +185,29 @@ def test_usage_reads_stale_study_sessions_and_flags_the_history_and_other_copies
     a = usage.usage(wf)["gin-gonic__gin/q2:verinoda_stale"]
     assert a["tool_calls"] == 4
     assert sorted(a["leaks"]) == ["stale/gin-gonic__gin/fresh", "stale/hist", "tree_new.json"]
+
+
+guard_run = _load("guard_run")
+
+
+def test_guard_arms_differ_only_by_the_plugin_and_the_prompt_never_names_verinoda(tmp_path):
+    task = {"id": "t1", "prompt": "Add f() to pkg/a.py."}
+    p = guard_run.prompt_for(task, tmp_path, "C:/env/python.exe")
+    assert "Add f() to pkg/a.py." in p and "verinoda" not in p.lower()
+    plain = guard_run.session_argv(p, "plain", "C:/mod", 100)
+    guard = guard_run.session_argv(p, "guard", "C:/mod", 100)
+    assert guard[:len(plain)] == plain and guard[len(plain):] == ["--plugin-dir", "C:/mod"]
+    assert "--strict-mcp-config" in plain
+
+
+def test_guard_notes_are_counted_from_the_hook_context_and_bad_sites_from_the_check(tmp_path):
+    lines = [{"type": "attachment", "attachment": {"type": "hook_additional_context",
+                                                   "content": ["[Verinoda check] The lines you just changed ..."]}},
+             {"type": "user", "message": {"content": "quoting [Verinoda check] in a prompt is not a note"}},
+             {"type": "attachment", "attachment": {"type": "hook_additional_context", "content": ["other hook"]}}]
+    t = tmp_path / "s.jsonl"
+    t.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    assert guard_run.count_notes(t) == 1 and guard_run.count_notes(None) == 0
+    report = {"sites": [{"at": "a.py:1:2", "verdict": "absent"}, {"at": "a.py:3:1", "verdict": "unknown"},
+                        {"at": "b.py:9:9", "verdict": "mismatch"}]}
+    assert guard_run.bad_sites(report) == ["a.py:1:2", "b.py:9:9"]
