@@ -416,3 +416,176 @@ def test_cli_lsp_and_resolve_call(repo, capsys):
     assert "no 'nothere' on src/app.ts:4" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         cli.main(["lsp", "hover", "src/app.ts:4", "--timeout", "0", "--repo", str(repo)])
+
+
+# -- review round -------------------------------------------------------------------------------------------
+
+U_JAVA = ("package d;\n\npublic class U {\n    public int run(int x) { return x; }\n"
+          "    public int run(String s) { return 0; }\n}\n")
+M_JAVA = ("package d;\n\npublic class M {\n    public static int go() {\n        U u = new U();\n"
+          "        return u.run(\"s\");\n    }\n}\n")
+RUN_STRING = {"path": "src/main/java/d/U.java", "line": 5, "col": 16}
+
+
+def _overload_files(repo: Path) -> None:
+    for rel, text in (("src/main/java/d/U.java", U_JAVA), ("src/main/java/d/M.java", M_JAVA)):
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_bytes(text.encode("utf-8"))
+
+
+def test_an_adjacent_overload_is_not_read_as_the_header_of_the_named_one(repo):
+    _overload_files(repo)
+    use_fake(repo, {**TABLE, "definition": {"src/main/java/d/M.java:6:18": [RUN_STRING]}}, languages=("java",))
+    with lsp.Session(repo) as s:
+        wrong = lsp.resolve_call(s, "src/main/java/d/M.java", 6, ".run()", target_path="src/main/java/d/U.java",
+                                 target_line=4)
+        right = lsp.resolve_call(s, "src/main/java/d/M.java", 6, ".run()", target_path="src/main/java/d/U.java",
+                                 target_line=5)
+    assert (wrong["kind"], wrong["verdict"]) == ("definitive", "refutes")
+    assert right["verdict"] == "confirms"
+
+
+def test_header_lines_are_annotations_modifiers_and_comments_only(tmp_path):
+    files = {
+        # TypeScript overload signatures: the neighbour is a declaration of its own
+        "o.ts": "export function f(a: string): void;\nexport function f(a: number): void;\n",
+        # an annotation whose arguments span lines, a Javadoc comment, modifiers on their own line
+        "A.java": ("class A {\n    @RequestMapping(\n        value = \"/run\",\n        method = GET)\n"
+                   "    /** runs (it) */\n    public static\n    int run() { return 1; }\n}\n"),
+        # GNU style C: the return type on the line above the name
+        "g.c": "static int\nhelper (int n)\n{\n  return n;\n}\n",
+        # a one-line method above the named one, and a field holding a value
+        "B.java": "class B {\n    int x = 1;\n    void go() {}\n    void run() {}\n}\n",
+        "p.py": "@app.route(\"/x\")\n# a comment\nasync def run():\n    pass\n",
+    }
+    for rel, text in files.items():
+        (tmp_path / rel).write_text(text, encoding="utf-8")
+    s = lsp.Session(tmp_path)
+
+    def m(path, server_line, node_line, token):
+        return lsp.matches(s, {"path": path, "line": server_line}, path, node_line, token)
+
+    assert not m("o.ts", 2, 1, "f")            # the graph's overload is not the server's
+    assert m("A.java", 7, 2, "run")             # annotation, its argument lines, comment, modifiers
+    assert m("g.c", 2, 1, "helper")
+    assert not m("B.java", 4, 3, "run") and not m("B.java", 3, 2, "go")
+    assert m("p.py", 3, 1, "run")
+    # a graph node without a line matches no location
+    assert not m("o.ts", 2, None, "f") and not m("o.ts", 2, 0, "f")
+
+
+def test_a_target_without_a_line_is_undetermined(repo):
+    use_fake(repo, TABLE)
+    with lsp.Session(repo) as s:
+        res = lsp.resolve_call(s, "src/app.ts", 4, "helper()", target_path="src/lib.ts", target_line=None)
+    assert res["kind"] == "definitive" and res["verdict"] == "undetermined" and "no line" in res["reason"]
+
+
+def test_an_overload_edge_is_refuted_end_to_end(tmp_path):
+    from verinoda import workflow
+    from verinoda.store import open_store
+
+    repo = tmp_path / "proj"
+    _overload_files(repo)
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        use_fake(repo, {**TABLE, "definition": {"src/main/java/d/M.java:6:18": [RUN_STRING]}},
+                 languages=("java",))
+        res = lsp.verify_edges(st, repo, paths=["src"])
+    finally:
+        st.close()
+    rows = {r["target_at"]: r for r in res["results"] if r["token"] == "run"}
+    assert set(rows) == {"src/main/java/d/U.java:4", "src/main/java/d/U.java:5"}, res["results"]
+    r4, r5 = rows["src/main/java/d/U.java:4"], rows["src/main/java/d/U.java:5"]
+    # the server binds the call to run(String): only that edge is confirmed
+    assert (r5["verdict"], r5["status"]) == ("confirms", "statically_verified"), r5
+    # the edge to run(int) is refuted; its claim text (`M.go()` calls `U.run()` at M.java:6) is the same as the
+    # confirmed edge's, so it is listed against that claim rather than contradicting a true statement
+    assert (r4["verdict"], r4["shared_with"], r4["definition"]) == (
+        "refutes", "src/main/java/d/U.java:5", ["src/main/java/d/U.java:5"]), r4
+    assert r4["claim"] == r5["claim"] and res["refuted_same_name"] == 1
+
+
+def test_a_server_that_exits_while_its_child_holds_stdout_is_exited_not_a_hang(repo):
+    pid = repo / "pid.txt"
+    use_fake(repo, {**TABLE, "mode": "crash", "pidfile": str(pid), "child": True})
+    t0 = time.monotonic()
+    with lsp.Session(repo, timeout=8) as s:
+        h = lsp.navigate(s, "hover", "src/app.ts", 4, name="helper")
+        asked = time.monotonic() - t0
+    closed = time.monotonic() - t0
+    assert h["status"] == "unknown" and "the server exited (exit code 7)" in h["reason"], h
+    assert asked < 5 and closed < 7, (asked, closed)
+    assert gone(int(pid.read_text()))
+    assert gone(int(Path(str(pid) + ".child").read_text()))   # the tree is stopped though its root had exited
+
+
+def test_diagnostics_under_another_spelling_of_the_uri(repo):
+    use_fake(repo, {**TABLE, "uri_style": "vscode"})
+    with lsp.Session(repo) as s:
+        h = lsp.navigate(s, "hover", "src/app.ts", 4, name="helper")
+    assert h["status"] == "answered"
+    assert h["diagnostics"] == [{"line": 5, "severity": "warning", "message": "unused value"}]
+
+
+def test_array_params_from_the_server_do_not_break_the_client(repo):
+    use_fake(repo, {**TABLE, "bad_params": True})
+    with lsp.Session(repo, timeout=5) as s:
+        d = lsp.navigate(s, "definition", "src/app.ts", 4, name="helper")
+    assert d["status"] == "answered" and d["definitions"][0]["line"] == 1, d
+
+
+def test_file_uris_round_trip_decoded_once(tmp_path):
+    from urllib.parse import quote
+
+    for name in ("x%41.ts", "a b.ts", "ş ğ%20.ts"):
+        p = tmp_path / name
+        assert lsp.path_of_uri(p.as_uri()) == p, name
+    if os.name == "nt":   # vscode-uri's spelling of the same file: lower-case drive, ':' encoded
+        p = tmp_path / "x%41.ts"
+        uri = "file:///" + str(p)[0].lower() + "%3A" + quote(str(p)[2:].replace(os.sep, "/"))
+        assert lsp.path_key(lsp.path_of_uri(uri)) == lsp.path_key(p)
+
+
+def test_lines_are_split_as_lsp_counts_them(tmp_path):
+    assert lsp.split_lines("a\x0cb\x0bc\x1cd\x85e f\r\ng\rh\ni\n") == [
+        "a\x0cb\x0bc\x1cd\x85e f", "g", "h", "i"]
+    assert lsp.split_lines("") == [] and lsp.split_lines("x") == ["x"] and lsp.split_lines("x\n\n") == ["x", ""]
+    repo = tmp_path / "c"
+    repo.mkdir()
+    (repo / "a.c").write_bytes(b"int helper(int);\n/* page */\x0c\nint main(void) {\n  helper(1);\n}\n")
+    use_fake(repo, {**TABLE, "definition": {"a.c:4:3": [{"path": "a.c", "line": 1, "col": 5}]}},
+             languages=("c",))
+    with lsp.Session(repo) as s:
+        assert s.lines("a.c")[3] == "  helper(1);"
+        res = lsp.resolve_call(s, "a.c", 4, "helper()", target_path="a.c", target_line=1)
+    assert (res["kind"], res["verdict"]) == ("definitive", "confirms"), res
+
+
+def test_a_neighbouring_declaration_named_by_the_server_contradicts_the_edge(tmp_path):
+    from verinoda import workflow
+    from verinoda.store import open_store
+
+    repo = tmp_path / "proj"
+    _overload_files(repo)
+    (repo / "src/main/java/d/U.java").write_bytes(U_JAVA.replace("run(String s)", "walk(String s)").encode())
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "init")
+    workflow.init(repo)
+    st = open_store(repo)
+    try:
+        workflow.scan(st, repo)
+        use_fake(repo, {**TABLE, "definition": {"src/main/java/d/M.java:6:18": [RUN_STRING]}},
+                 languages=("java",))
+        res = lsp.verify_edges(st, repo, paths=["src"])
+    finally:
+        st.close()
+    r = next(x for x in res["results"] if x["token"] == "run")
+    assert r["target_at"] == "src/main/java/d/U.java:4"
+    assert (r["verdict"], r["status"]) == ("refutes", "contradicted") and "shared_with" not in r, r

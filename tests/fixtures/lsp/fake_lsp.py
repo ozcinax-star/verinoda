@@ -16,7 +16,12 @@ The table (JSON) holds:
 ``diagnostics``         ``{path: [{"line", "col", "message", "severity"}]}`` published when the file is opened
 ``log``                 a file each received method is appended to (one per line)
 ``pidfile``             a file the server writes its process id to
-``child``               start a sleeping child process (its id goes to ``pidfile`` + ".child")
+``child``               start a sleeping child process (its id goes to ``pidfile`` + ".child"); it inherits the
+                        server's stdout, so the client never sees that pipe end while the child runs
+``uri_style``           ``vscode``: publish diagnostics under vscode-uri's spelling of the file's URI
+                        (``file:///c%3A/...``)
+``bad_params``          after ``initialized``, also send a ``workspace/configuration`` request and a
+                        ``publishDiagnostics`` whose ``params`` is an array
 
 Standard library only; nothing is installed or reached over a network.
 """
@@ -26,7 +31,7 @@ import os
 import subprocess
 import sys
 import time
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 from urllib.request import url2pathname
 
 TABLE = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -183,14 +188,23 @@ def main():
             send({"jsonrpc": "2.0", "id": "cfg-1", "method": "workspace/configuration",
                   "params": {"items": [{"section": "fake"}]}})
             send({"jsonrpc": "2.0", "method": "window/logMessage", "params": {"type": 3, "message": "ready"}})
+            if TABLE.get("bad_params"):   # JSON-RPC allows array params; the client must not choke on them
+                send({"jsonrpc": "2.0", "id": "cfg-2", "method": "workspace/configuration", "params": [1, 2]})
+                send({"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": ["x"]})
         elif method == "textDocument/didOpen":
             td = msg["params"]["textDocument"]
             rel = rel_of(td["uri"])
             diags = [{"range": rng(d["line"], d.get("col", 1)), "message": d["message"],
                       "severity": d.get("severity", 1), "source": "fake"}
                      for d in (TABLE.get("diagnostics") or {}).get(rel, [])]
+            uri = td["uri"]
+            if TABLE.get("uri_style") == "vscode":   # vscode-uri's spelling: lower-case drive, ':' encoded
+                p = os.path.abspath(path_of(uri)).replace("\\", "/")
+                if len(p) > 1 and p[1] == ":":
+                    p = "/" + p[0].lower() + p[1:]
+                uri = "file://" + quote(p, safe="/")
             send({"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
-                  "params": {"uri": td["uri"], "diagnostics": diags}})
+                  "params": {"uri": uri, "diagnostics": diags}})
         elif method == "shutdown":
             if MODE == "hang":
                 continue

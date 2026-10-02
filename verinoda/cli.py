@@ -3934,6 +3934,8 @@ def _r_lsp_verify(r: dict) -> None:
               + (f" {x['verdict']}" if x.get("verdict") else "") + f" ({x.get('server')})")
         if x.get("verdict") == "refutes":
             print(f"      the server: {', '.join(x.get('definition') or [])}; the graph: {x['target_at']}")
+        if x.get("shared_with"):
+            print(f"      {x['reason']}")
         if x.get("uncertainty"):
             print(f"      ? {x['uncertainty']}")
     for x in r.get("unanswered") or []:

@@ -40,7 +40,6 @@ import time
 from collections import deque
 from pathlib import Path
 from urllib.parse import unquote, urlparse
-from urllib.request import url2pathname
 
 START_TIMEOUT_S = 60.0       # starting a server and its initialize answer
 REQUEST_TIMEOUT_S = 30.0     # one query; --timeout changes it
@@ -52,6 +51,7 @@ DEFAULT_SITES = 200          # fresh call-site questions per command (config bud
 DEFAULT_SECONDS = 120.0      # seconds spent on them (config budget.lsp_seconds)
 MAX_RESULTS = 200            # locations listed per answer; the rest counted
 HEADER_GAP = 12              # lines between a graph node's line and the server's name line read as one header
+_SLICE_S = 0.5               # a waiting request checks whether the server is still running this often
 OPS = ("definition", "references", "hover", "calls", "implementations", "types")
 
 # file suffix -> (server key, LSP languageId)
@@ -81,8 +81,12 @@ _PROVIDER = {"definition": "definitionProvider", "references": "referencesProvid
              "calls": "callHierarchyProvider", "implementations": "implementationProvider",
              "types": "typeHierarchyProvider"}
 _OUTSIDE_PARTS = {".venv", "venv", "site-packages", "node_modules", ".tox", ".nox", ".gradle", "target"}
-_HEADER_LINE = re.compile(r"^\s*(?:$|@|//|/\*|\*|#\[|(?:export|public|private|protected|internal|static|async|"
-                          r"abstract|final|override|default|declare|synchronized|native|open|inline)\b)")
+# a header line between a declaration's first line and its name: a comment or a Rust attribute, or annotations and
+# decorators followed by modifiers and type words that do not declare anything themselves
+_COMMENT_LINE = re.compile(r"^\s*(?:$|//|/\*|\*|#(?:!?\[|\s|$))")
+_ANNOTATION = re.compile(r"\s*@[\w$.]+")
+_STRING = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'')
+_DECLARES = re.compile(r"[\w$>\]]\s*\(|[;{}]\s*$|=")
 _WORD = r"[\w$]"
 
 
@@ -100,6 +104,68 @@ def _kill_tree(proc: subprocess.Popen) -> None:
     from verinoda.codecheck_external import _kill_tree as kill
 
     kill(proc)
+
+
+def _job_for(proc: subprocess.Popen):
+    """Windows: a job object holding the server and every process it starts, killed when the job is closed
+    (also when Verinoda itself ends); None elsewhere or when the system refuses one (then ``taskkill /T``)."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateJobObjectW.restype = wintypes.HANDLE
+        k32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+        k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]
+        k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        k32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+        class Basic(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                        ("SchedulingClass", wintypes.DWORD)]
+
+        class Extended(ctypes.Structure):
+            _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", ctypes.c_uint64 * 6),
+                        ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                        ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        job = k32.CreateJobObjectW(None, None)
+        if not job:
+            return None
+        info = Extended()
+        info.BasicLimitInformation.LimitFlags = 0x2000   # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not (k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))   # extended limits
+                and k32.AssignProcessToJobObject(job, int(proc._handle))):
+            k32.CloseHandle(job)
+            return None
+        return (k32, job)
+    except (OSError, AttributeError, TypeError, ValueError):
+        return None
+
+
+def _stop_tree(proc: subprocess.Popen, job) -> None:
+    """Stop the server and every process it started, whether the server itself is still running or not."""
+    if job is not None:
+        k32, handle = job
+        k32.CloseHandle(handle)   # kill on close: the server and its descendants
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:  # pragma: no cover
+            pass
+    elif os.name != "nt":   # pragma: no cover - POSIX: the session's process group outlives its leader
+        import signal
+
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+    if proc.poll() is None:
+        _kill_tree(proc)
 
 
 class Client:
@@ -122,6 +188,7 @@ class Client:
         self._wlock = threading.Lock()
         self._stderr: deque = deque(maxlen=STDERR_TAIL)
         self._threads: list[threading.Thread] = []
+        self._job = None
 
     # process -------------------------------------------------------------------------------------------
     def start(self) -> "Client":
@@ -134,6 +201,7 @@ class Client:
                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, **kw)
         except OSError as exc:
             raise LspError(f"{self.argv[0]} could not be started: {exc}") from exc
+        self._job = _job_for(self.proc)
         for fn in (self._read_loop, self._drain_stderr):
             t = threading.Thread(target=fn, daemon=True)
             t.start()
@@ -202,15 +270,20 @@ class Client:
                             rc = self.proc.wait(timeout=1)
                         except subprocess.TimeoutExpired:
                             rc = None
-                    tail = self.stderr_tail()
-                    self._fail("the server exited" + (f" (exit code {rc})" if rc is not None else "")
-                               + (f"; it wrote: {tail[-300:]}" if tail else ""))
+                    self._fail(self._exited(rc))
                     return
                 self._dispatch(msg)
         except _Garbage as exc:
             self._fail(f"the server wrote output that is not LSP ({exc})")
         except (OSError, ValueError) as exc:
             self._fail(f"reading the server failed: {exc}")
+        except Exception as exc:   # a message of an unexpected shape: the reader must not end without a reason
+            self._fail(f"the server sent a message the client could not handle ({type(exc).__name__}: {exc})")
+
+    def _exited(self, rc: int | None) -> str:
+        tail = self.stderr_tail()
+        return ("the server exited" + (f" (exit code {rc})" if rc is not None else "")
+                + (f"; it wrote: {tail[-300:]}" if tail else ""))
 
     def _dispatch(self, msg: dict) -> None:
         method = msg.get("method")
@@ -223,11 +296,12 @@ class Client:
             return
         if not isinstance(method, str):
             return
+        params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
         if "id" in msg:                                # a request from the server: always answered
-            params = msg.get("params") or {}
             result = None
             if method == "workspace/configuration":
-                result = [None] * len(params.get("items") or [])
+                items = params.get("items")
+                result = [None] * (len(items) if isinstance(items, list) else 0)
             elif method == "workspace/workspaceFolders":
                 result = [{"uri": self.root.as_uri(), "name": self.root.name}]
             try:
@@ -236,9 +310,12 @@ class Client:
                 pass   # the client is broken now; the waiting request sees why
             return
         if method == "textDocument/publishDiagnostics":
-            p = msg.get("params") or {}
-            if isinstance(p.get("uri"), str) and isinstance(p.get("diagnostics"), list):
-                self.diagnostics[p["uri"]] = p["diagnostics"][:MAX_RESULTS]
+            uri = params.get("uri")
+            if isinstance(uri, str) and isinstance(params.get("diagnostics"), list):
+                # keyed by the file, not the URI's spelling (a server may write file:///c%3A/... for file:///C:/...)
+                path = path_of_uri(uri)
+                key = path_key(path) if path is not None else uri
+                self.diagnostics[key] = [d for d in params["diagnostics"][:MAX_RESULTS] if isinstance(d, dict)]
 
     def _send(self, msg: dict) -> None:
         body = json.dumps(msg).encode("utf-8")
@@ -267,12 +344,26 @@ class Client:
         try:
             self._send({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
             limit = self.timeout if timeout is None else timeout
-            if not ev.wait(limit):
-                self._fail(f"no answer to {method} within {limit:g} s")
-                try:   # tell the server to stop working on it; it is not asked again
-                    self._send({"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": rid}})
-                except LspError:
-                    pass
+            deadline = time.monotonic() + limit
+            exited_at = None
+            # in slices: a server that exited is noticed even when a process it started still holds its stdout
+            # open (its reader then never sees the end of the pipe)
+            while not ev.wait(max(0.0, min(_SLICE_S, deadline - time.monotonic()))):
+                now = time.monotonic()
+                rc = self.proc.poll()
+                if rc is not None:
+                    if exited_at is None:
+                        exited_at = now        # one more slice for an answer still in the pipe
+                    elif now - exited_at >= _SLICE_S:
+                        self._fail(self._exited(rc))
+                        break
+                if now >= deadline:
+                    self._fail(f"no answer to {method} within {limit:g} s")
+                    try:   # tell the server to stop working on it; it is not asked again
+                        self._send({"jsonrpc": "2.0", "method": "$/cancelRequest", "params": {"id": rid}})
+                    except LspError:
+                        pass
+                    break
             with self._lock:
                 msg = self._answers.pop(rid, None)
             if msg is None:
@@ -312,8 +403,8 @@ class Client:
                 proc.wait(timeout=SHUTDOWN_TIMEOUT_S)
             except (LspError, subprocess.TimeoutExpired):
                 pass
-        if proc.poll() is None:
-            _kill_tree(proc)
+        job, self._job = self._job, None
+        _stop_tree(proc, job)
         try:
             proc.stdin.close()
         except (OSError, ValueError):
@@ -503,7 +594,7 @@ class Session:
         if path not in self._lines:
             p = Path(path) if Path(path).is_absolute() else self.repo / path
             try:
-                self._lines[path] = p.read_text(encoding="utf-8", errors="replace").splitlines()
+                self._lines[path] = split_lines(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 self._lines[path] = None
         return self._lines[path]
@@ -557,12 +648,30 @@ def path_of_uri(uri: str) -> Path | None:
     u = urlparse(uri)
     if u.scheme != "file":
         return None
-    p = url2pathname(unquote(u.path))
-    if os.name == "nt" and len(p) > 2 and p[0] in "\\/" and p[2] == ":":
-        p = p[1:]
-    if u.netloc and os.name == "nt":
-        p = f"\\\\{u.netloc}{p}"
+    p = unquote(u.path)   # once: a file name may hold a literal '%'
+    if os.name == "nt":
+        if re.match(r"/[A-Za-z]:", p):   # /C:/x, and vscode-uri's /c%3A/x once decoded
+            p = p[1:]
+        p = p.replace("/", "\\")
+        if u.netloc and u.netloc != "localhost":
+            p = f"\\\\{u.netloc}{p}"
+    elif u.netloc and u.netloc != "localhost":
+        p = f"//{u.netloc}{p}"
     return Path(p)
+
+
+def path_key(path: Path) -> str:
+    """One spelling per file: its real path, case-folded where the file system folds case."""
+    return os.path.normcase(os.path.realpath(path))
+
+
+def split_lines(text: str) -> list[str]:
+    """The lines of ``text`` as LSP and the graph count them: split at CR LF, CR and LF only
+    (``str.splitlines`` also splits at form feeds, vertical tabs and Unicode line separators)."""
+    out = re.split(r"\r\n|\r|\n", text)
+    if out and out[-1] == "":
+        out.pop()
+    return out
 
 
 def utf16_col(text: str, char_col: int) -> int:
@@ -641,7 +750,7 @@ def navigate(s: Session, op: str, rel: str, line: int, col: int | None = None, n
         pos = {"textDocument": {"uri": uri}, "position": {"line": line - 1, "character": utf16_col(text, c0)}}
         out.update(_ask(s, c, op, pos))
         out["status"] = "answered"
-        diags = c.diagnostics.get(uri)
+        diags = c.diagnostics.get(path_key(s.repo / rel))
         if diags:
             out["diagnostics"] = [_diag(d) for d in diags[:50]]
     except LspError as exc:
@@ -736,7 +845,8 @@ def _hover_text(res) -> str | None:
 
 
 def _diag(d: dict) -> dict:
-    start = ((d.get("range") or {}).get("start") or {})
+    rng = d.get("range") if isinstance(d.get("range"), dict) else {}
+    start = rng.get("start") if isinstance(rng.get("start"), dict) else {}
     return {"line": int(start.get("line", 0)) + 1, "severity": {1: "error", 2: "warning", 3: "information",
                                                                  4: "hint"}.get(d.get("severity"), "error"),
             "message": str(d.get("message"))[:300], **({"code": d["code"]} if d.get("code") is not None else {})}
@@ -828,13 +938,53 @@ def _resolve(s: Session, lang: tuple[str, str], rel: str, line: int, token: str,
     return out
 
 
-def matches(s: Session, t: dict, target_path: str, target_line: int | None) -> bool:
+def _header(gap: list[str], token: str | None) -> bool:
+    """Can the lines ``gap`` stand between a declaration's first line and its name? Blank lines, comments,
+    attributes, annotations and decorators (their arguments may span lines), modifiers and type words; never a
+    line that declares or calls something itself (a name followed by ``(``, an ``=``, a line ending in ``;``,
+    ``{`` or ``}``) or that holds the name outside an annotation."""
+    depth = 0   # open parentheses of an annotation's arguments
+    for raw in gap:
+        text = _STRING.sub('""', raw)
+        if depth:
+            depth = max(0, depth + text.count("(") - text.count(")"))
+            continue
+        if _COMMENT_LINE.match(text):
+            continue
+        rest = text
+        while True:
+            m = _ANNOTATION.match(rest)
+            if not m:
+                break
+            rest = rest[m.end():]
+            if rest.lstrip().startswith("("):
+                d, i = 0, len(rest) - len(rest.lstrip())
+                while i < len(rest):
+                    d += {"(": 1, ")": -1}.get(rest[i], 0)
+                    i += 1
+                    if d == 0:
+                        break
+                rest = rest[i:]
+                if d:
+                    depth = d
+                    break
+        if depth or not rest.strip():
+            continue
+        if _DECLARES.search(rest):
+            return False
+        if token and re.search(rf"(?<!{_WORD}){re.escape(token)}(?!{_WORD})", rest):
+            return False
+    return True
+
+
+def matches(s: Session, t: dict, target_path: str, target_line: int | None, token: str | None = None) -> bool:
     """Is the server's location ``t`` the graph node at ``target_path:target_line``? The same file and the same
-    line, or the node's line opens the declaration whose name the server points at (annotations, decorators,
-    modifiers and comments between them), or the server's full range starts on the node's line."""
-    if t.get("path") != target_path:
+    line, or the node's line opens the declaration whose name the server points at (only header lines between
+    them: annotations, decorators, modifiers, type words, comments), or the server's full range starts on the
+    node's line. A node without a line matches nothing."""
+    if t.get("path") != target_path or not target_line:
         return False
-    if not target_line or t.get("line") == target_line:
+    if t.get("line") == target_line:
         return True
     if (t.get("span") or [None])[0] == target_line:
         return True
@@ -842,7 +992,7 @@ def matches(s: Session, t: dict, target_path: str, target_line: int | None) -> b
     if target_line < ln <= target_line + HEADER_GAP:
         lines = s.lines(target_path) or []
         gap = lines[target_line - 1:ln - 1]
-        return len(gap) == ln - target_line and all(_HEADER_LINE.match(x) for x in gap)
+        return len(gap) == ln - target_line and _header(gap, token)
     return False
 
 
@@ -852,7 +1002,11 @@ def _judge(s: Session, c: Client, lang: tuple[str, str], out: dict, tp: str, tl:
     if out["kind"] != "definitive":
         out["verdict"] = "undetermined"
         return
-    if any(matches(s, t, tp, tl) for t in out["targets"]):
+    if not tl:
+        out.update(verdict="undetermined", reason="the graph's target has no line to compare the definition with")
+        return
+    token = out.get("token")
+    if any(matches(s, t, tp, tl, token) for t in out["targets"]):
         out["verdict"] = "confirms"
         return
     d = out["targets"][0]
@@ -871,7 +1025,7 @@ def _judge(s: Session, c: Client, lang: tuple[str, str], out: dict, tp: str, tl:
                 out.update(verdict="undetermined", reason=f"the call binds to {d['path']}:{d['line']}; the "
                                                           f"server could not list its implementations ({exc})")
                 return
-            if any(matches(s, t, tp, tl) for t in impls):
+            if any(matches(s, t, tp, tl, token) for t in impls):
                 out.update(kind="dynamic", verdict="undetermined", implementations=impls[:5],
                            reason=f"the call binds to {d['path']}:{d['line']}, and the graph's target is one of its "
                                   "implementations: the runtime class decides which one runs")
@@ -962,8 +1116,18 @@ def verify_edges(store, repo: Path, *, paths: list[str] | None = None, max_edges
     rows, unknown, skipped = [], [], 0
     t0 = time.perf_counter()
     try:
+        answered = []
         for f, ln, u, v, d in edges:
             res = resolve_call(s, f, ln, g.label(v), target_path=g.file(v), target_line=g.line(v))
+            answered.append((f, ln, u, v, d, res))
+        # Edges from one call site to same-named targets (overloads) share one claim text: the edge the server
+        # confirms settles it, and an edge to another of those targets is listed as refuted without
+        # contradicting that claim. Confirmed edges go first so that their claim is the one recorded.
+        confirmed = {(f, ln, u, g.label(v)): f"{g.file(v)}:{g.line(v)}" for f, ln, u, v, d, res in answered
+                     if res and res.get("verdict") == "confirms"}
+        answered.sort(key=lambda e: not (e[5] and e[5].get("verdict") == "confirms"))
+        shared: dict[tuple, dict] = {}
+        for f, ln, u, v, d, res in answered:
             edge = {"at": f"{f}:{ln}", "caller": g.label(u), "target": g.label(v),
                     "target_at": f"{g.file(v)}:{g.line(v)}" if g.line(v) else g.file(v),
                     "token": target_token(g.label(v))}
@@ -974,9 +1138,23 @@ def verify_edges(store, repo: Path, *, paths: list[str] | None = None, max_edges
                 unknown.append({**edge, "status": "unknown", "reason": res.get("reason"),
                                 **({"next_step": res["next_step"]} if res.get("next_step") else {})})
                 continue
+            key = (f, ln, u, g.label(v))
+            if res.get("verdict") == "refutes" and key in confirmed:
+                row = {**edge, "server": res.get("tool"), "kind": res.get("kind"), "verdict": "refutes",
+                       "definition": [f"{t.get('path')}:{t.get('line')}" for t in res.get("targets") or []][:3],
+                       "shared_with": confirmed[key],
+                       "reason": f"the call binds to {confirmed[key]}, another target of the same name; the claim "
+                                 "both edges share is settled by that edge, not contradicted by this one"}
+                c = shared.get(key)
+                if c is not None:
+                    row.update(claim=c["id"], status=c["status"], text=c["text"])
+                rows.append(row)
+                continue
             c = analysis._edge_claim(rec, g, u, v, d, snap["commit_sha"])
             if c is not None and c["id"] in rec.reused:
                 c = _settle(rec, c, res, snap["commit_sha"])
+            if c is not None and res.get("verdict") == "confirms":
+                shared[key] = c
             row = {**edge, "server": res.get("tool"), "kind": res.get("kind"), "verdict": res.get("verdict"),
                    "definition": [f"{t.get('path')}:{t.get('line')}" for t in res.get("targets") or []][:3]}
             if res.get("reason"):
@@ -991,9 +1169,11 @@ def verify_edges(store, repo: Path, *, paths: list[str] | None = None, max_edges
     finally:
         if own:
             s.close()
+    rows.sort(key=lambda r: (r["at"].rpartition(":")[0], int(r["at"].rpartition(":")[2]), str(r["target_at"])))
     counts: dict[str, int] = {}
     for r in rows:
-        counts[r.get("status") or "no_claim"] = counts.get(r.get("status") or "no_claim", 0) + 1
+        if not r.get("shared_with"):   # its claim is counted with the edge that settled it
+            counts[r.get("status") or "no_claim"] = counts.get(r.get("status") or "no_claim", 0) + 1
     out = {"status": "done" if rows else "unknown", "edges": total, "checked": len(rows) + len(unknown),
            "claims": counts, "unknown": len(unknown), "results": rows, "unanswered": unknown[:50],
            "servers": list(s.status.values()), "seconds": round(time.perf_counter() - t0, 3)}
@@ -1001,6 +1181,9 @@ def verify_edges(store, repo: Path, *, paths: list[str] | None = None, max_edges
         out["not_checked"] = f"{total - len(edges)} edges past --max-edges {max_edges}"
     if skipped:
         out["not_checked_budget"] = skipped
+    same_name = sum(1 for r in rows if r.get("shared_with"))
+    if same_name:
+        out["refuted_same_name"] = same_name
     if s.budget is not None:
         out["budget"] = s.budget.as_dict()
     if not total:
