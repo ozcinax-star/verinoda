@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D172)
+## Upgrading from 0.4.0 (D137-D173)
 
 ### D137: Trigram regex index
 
@@ -478,6 +478,14 @@ trusted (the user config always can). New config keys: `lsp.servers` (`{language
 `budget.lsp_sites` / `budget.lsp_seconds`. When a resolver (jedi, SCIP or a language server) confirms a call edge
 outside Python, the claim no longer carries the "checked for Python only" uncertainty. No schema change; MCP
 tools unchanged (44).
+
+### D173: Incremental update behind a switch (stage 2 of update proportional to the change)
+
+Nothing changes by default. `VERINODA_INCREMENTAL=1` (or `"index": {"incremental": true}` in
+`.verinoda/config.json`) makes `verinoda update` patch the graph when only existing files changed content: the
+next full build (a `scan`, or an `update` that needs one) writes the ledger under `.verinoda/index/incremental/`,
+and later updates say in `incremental` whether they patched and, if not, why. `tools/graph_equal.py` ignores
+`community_name` as it ignores `community`.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
