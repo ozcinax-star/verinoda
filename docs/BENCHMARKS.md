@@ -28,7 +28,7 @@ Sections: [Update 2026-10-02](#update-2026-10-02-graphify-0973-contextbench-agai
 ## Update 2026-10-02: Graphify 0.9.73, ContextBench again, agents in the loop, `update --fast`
 
 Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-2026-10-02/`,
-`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`,
+`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`, `agent-compare-guard-2026-10-02/`,
 `mod-live-2026-10-02/`,
 `mod-live-self-quiet-2026-10-02/`. Verinoda at 5999912.
 
@@ -58,6 +58,11 @@ Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-
   itself on projects under 300 files; on the five larger ones (not pre-registered) a stale index cost 1.18-1.23x the
   input tokens of no index (both runs), and the fresh one cut that to 0.81x of the stale cost in one run (0.94x,
   not significant, in the other).
+- **Checking each edit** (`agent-compare-guard-2026-10-02/`, 30 coding tasks with hidden tests on Graphify internals
+  changed after the model's training data and on SQLModel, 60 real headless Claude Code sessions, pre-registered):
+  verinoda-live 0.4.0's check after edits against no plugin. Both arms passed 30/30, no session left a name that
+  does not exist, and the check never had anything to report: every session read the code before its first edit
+  (a median of 4 reads or searches), so it called the real names. No measurable difference; the same cost.
 - **`update --fast` on 2,876 files** (`mod-live-self-quiet-2026-10-02/`): 6-7x quicker than a plain update (about
   20 s against 130-155 s), the graph caught up after 2.5-3 min. Two findings, both fixed: a function in a file added
   since the last build lost to similarly named symbols until the graph had it (it now ranks as the symbol will;

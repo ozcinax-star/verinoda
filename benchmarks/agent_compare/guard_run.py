@@ -84,9 +84,15 @@ def git_env() -> dict:
     return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 
+def _force_remove(func, path, _exc) -> None:
+    """git's pack files are read-only; on Windows that stops a delete until the flag is cleared."""
+    os.chmod(path, 0o700)
+    func(path)
+
+
 def prepare(base: Path, dest: Path) -> None:
-    if dest.exists():
-        shutil.rmtree(dest)
+    if dest.exists():  # left by an interrupted run: started over
+        shutil.rmtree(dest, onerror=_force_remove)
     env = git_env()
     sha = run(["git", "-C", str(base), "rev-parse", "HEAD"], None, env)[1].strip()
     assert run(["git", "clone", "-q", "--shared", str(base), str(dest)], None, env)[0] == 0
