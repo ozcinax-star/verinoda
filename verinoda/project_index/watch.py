@@ -1148,6 +1148,36 @@ def _canonical_topology_for_compare(graph_data: dict) -> dict:
     return canonical
 
 
+def _list_sizes(graph_data: dict, *, dicts_only: tuple[str, ...] = ()) -> dict[str, int | None]:
+    sizes: dict[str, int | None] = {}
+    for key in ("nodes", "links", "edges", "hyperedges"):
+        if key not in graph_data:
+            continue
+        items = graph_data[key]
+        if not isinstance(items, list):
+            sizes[key] = None
+        elif key in dicts_only:
+            sizes[key] = sum(1 for item in items if isinstance(item, dict))
+        else:
+            sizes[key] = len(items)
+    return sizes
+
+
+def _same_for_compare(a: dict, b: dict, *, topology: bool = False) -> bool:
+    """``json.dumps(canonical(a)) == json.dumps(canonical(b))``, without sorting both graphs when their list sizes
+    already differ (Verinoda patch, 1.1: the two compares cost seconds on a large graph and an edit that adds or
+    removes a symbol always changes a size). A list that is not a list keeps the full compare."""
+    dicts_only = ("nodes", "links", "edges") if topology else ()
+    sa, sb = _list_sizes(a, dicts_only=dicts_only), _list_sizes(b, dicts_only=dicts_only)
+    if sa.keys() != sb.keys():
+        return False
+    if any(sa[k] is not None and sb[k] is not None and sa[k] != sb[k] for k in sa):
+        return False
+    canon = _canonical_topology_for_compare if topology else _canonical_graph_for_compare
+    return (json.dumps(canon(a), sort_keys=True, ensure_ascii=False)
+            == json.dumps(canon(b), sort_keys=True, ensure_ascii=False))
+
+
 def _topology_from_graph(G) -> dict:
     from networkx.readwrite import json_graph
     try:
@@ -1935,10 +1965,7 @@ def _rebuild_code(
                     )
                     return False
                 try:
-                    same_graph = (
-                        json.dumps(_canonical_graph_for_compare(existing_payload), sort_keys=True, ensure_ascii=False)
-                        == json.dumps(_canonical_graph_for_compare(candidate_graph_data), sort_keys=True, ensure_ascii=False)
-                    )
+                    same_graph = _same_for_compare(existing_payload, candidate_graph_data)
                 except Exception:
                     same_graph = False
             if not same_graph:
@@ -2008,10 +2035,7 @@ def _rebuild_code(
         candidate_topology = _topology_from_graph(G)
         if existing_graph_data:
             try:
-                same_topology = (
-                    json.dumps(_canonical_topology_for_compare(existing_graph_data), sort_keys=True, ensure_ascii=False)
-                    == json.dumps(_canonical_topology_for_compare(candidate_topology), sort_keys=True, ensure_ascii=False)
-                )
+                same_topology = _same_for_compare(existing_graph_data, candidate_topology, topology=True)
             except Exception:
                 same_topology = False
             if same_topology:
@@ -2138,10 +2162,7 @@ def _rebuild_code(
                 )
                 return False
             try:
-                same_graph = (
-                    json.dumps(_canonical_graph_for_compare(existing_payload), sort_keys=True, ensure_ascii=False)
-                    == json.dumps(_canonical_graph_for_compare(candidate_graph_data), sort_keys=True, ensure_ascii=False)
-                )
+                same_graph = _same_for_compare(existing_payload, candidate_graph_data)
             except Exception:
                 same_graph = False
         if report_path.exists():
