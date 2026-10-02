@@ -28,7 +28,8 @@ Sections: [Update 2026-10-02](#update-2026-10-02-graphify-0973-contextbench-agai
 ## Update 2026-10-02: Graphify 0.9.73, ContextBench again, agents in the loop, `update --fast`
 
 Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-2026-10-02/`,
-`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `mod-live-2026-10-02/`,
+`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`,
+`mod-live-2026-10-02/`,
 `mod-live-self-quiet-2026-10-02/`. Verinoda at 5999912.
 
 - **Eight sets against Graphify** (`compare-2026-10-02/`): query 284/319 at 1,313 tokens per question (2.52 facts per
@@ -50,6 +51,13 @@ Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-
   start with analyze 109/113, +2 [-4 to +10]; Graphify first 111/113, +4 [-1 to +12]). The first study's
   input-token saving did not replicate: starting with analyze cost 1.14x input tokens [1.06-1.23] (one more
   sequential turn per session, the agents still read the cited code) at 0.84x output tokens [0.78-0.91].
+- **Agents after the code moved on** (`agent-compare-stale-2026-10-02/`, 50 questions about code changed between an
+  older upstream commit, where the index was built, and the pinned one; 150 sessions, pre-registered): a fresh index
+  against a stale one, no measurable difference in facts (144 vs 147 of 153; the agent alone 147) or in stale
+  citations; no answer in any arm described removed code as current. `analyze` turned out to refresh a stale index
+  itself on projects under 300 files; on the five larger ones (not pre-registered) a stale index cost 1.18-1.23x the
+  input tokens of no index (both runs), and the fresh one cut that to 0.81x of the stale cost in one run (0.94x,
+  not significant, in the other).
 - **`update --fast` on 2,876 files** (`mod-live-self-quiet-2026-10-02/`): 6-7x quicker than a plain update (about
   20 s against 130-155 s), the graph caught up after 2.5-3 min. Two findings, both fixed: a function in a file added
   since the last build lost to similarly named symbols until the graph had it (it now ranks as the symbol will;

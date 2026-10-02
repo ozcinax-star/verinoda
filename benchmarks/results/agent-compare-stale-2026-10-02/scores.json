@@ -1,0 +1,3084 @@
+{
+ "overall": {
+  "none": {
+   "found": 147,
+   "facts": 153,
+   "stale_citations": 14,
+   "answers_with_stale_citation": 5,
+   "citations": 910,
+   "answers_naming_a_trap": 3,
+   "sessions": 50
+  },
+  "verinoda_stale": {
+   "found": 147,
+   "facts": 153,
+   "stale_citations": 18,
+   "answers_with_stale_citation": 6,
+   "citations": 981,
+   "answers_naming_a_trap": 3,
+   "sessions": 50
+  },
+  "verinoda_fresh": {
+   "found": 144,
+   "facts": 153,
+   "stale_citations": 17,
+   "answers_with_stale_citation": 7,
+   "citations": 1014,
+   "answers_naming_a_trap": 1,
+   "sessions": 50
+  }
+ },
+ "by_repo": {
+  "Graphify-Labs__graphify": {
+   "none": "13/15",
+   "verinoda_stale": "13/15",
+   "verinoda_fresh": "12/15"
+  },
+  "axios__axios": {
+   "none": "14/14",
+   "verinoda_stale": "13/14",
+   "verinoda_fresh": "14/14"
+  },
+  "expressjs__express": {
+   "none": "10/10",
+   "verinoda_stale": "10/10",
+   "verinoda_fresh": "10/10"
+  },
+  "fastapi__full-stack-fastapi-template": {
+   "none": "14/17",
+   "verinoda_stale": "15/17",
+   "verinoda_fresh": "15/17"
+  },
+  "fastapi__sqlmodel": {
+   "none": "14/14",
+   "verinoda_stale": "14/14",
+   "verinoda_fresh": "14/14"
+  },
+  "gin-gonic__gin": {
+   "none": "13/13",
+   "verinoda_stale": "12/13",
+   "verinoda_fresh": "12/13"
+  },
+  "google__gson": {
+   "none": "17/17",
+   "verinoda_stale": "17/17",
+   "verinoda_fresh": "17/17"
+  },
+  "guzzle__guzzle": {
+   "none": "18/18",
+   "verinoda_stale": "18/18",
+   "verinoda_fresh": "17/18"
+  },
+  "junegunn__fzf": {
+   "none": "19/20",
+   "verinoda_stale": "20/20",
+   "verinoda_fresh": "18/20"
+  },
+  "sharkdp__bat": {
+   "none": "15/15",
+   "verinoda_stale": "15/15",
+   "verinoda_fresh": "15/15"
+  }
+ },
+ "per_question": {
+  "Graphify-Labs__graphify/q1": {
+   "none": {
+    "found": 3,
+    "total": 4,
+    "found_ids": [
+     "cli-auto-refresh-stale-skills",
+     "auto-refresh-opt-out-env",
+     "auto-refresh-skips-newer-or-shared"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 4,
+    "found_ids": [
+     "cli-auto-refresh-stale-skills",
+     "auto-refresh-opt-out-env",
+     "auto-refresh-skips-newer-or-shared"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 4,
+    "found_ids": [
+     "cli-auto-refresh-stale-skills",
+     "auto-refresh-opt-out-env"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q2": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "label-retry-parse-fail-empty",
+     "label-retry-halves-catch",
+     "label-retry-raise-only-if-none"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "label-retry-parse-fail-empty",
+     "label-retry-halves-catch",
+     "label-retry-raise-only-if-none"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 4,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "label-retry-parse-fail-empty",
+     "label-retry-halves-catch",
+     "label-retry-raise-only-if-none"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q3": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "rebuild-lock-msvcrt-fallback",
+     "rebuild-lock-win-offset",
+     "rebuild-lock-win-blocking-poll"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 22,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "rebuild-lock-msvcrt-fallback",
+     "rebuild-lock-win-offset",
+     "rebuild-lock-win-blocking-poll"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 27,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "rebuild-lock-msvcrt-fallback",
+     "rebuild-lock-win-offset",
+     "rebuild-lock-win-blocking-poll"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 23,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q4": {
+   "none": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "report-real-node-predicate",
+     "report-community-list-real-nodes"
+    ],
+    "stale": 2,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 2
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "report-real-node-predicate",
+     "report-community-list-real-nodes"
+    ],
+    "stale": 3,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 3
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "report-real-node-predicate",
+     "report-community-list-real-nodes"
+    ],
+    "stale": 2,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 2
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q5": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "top-level-dir-root-dot",
+     "surprise-cross-repo-key-includes-repo"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "top-level-dir-root-dot",
+     "surprise-cross-repo-key-includes-repo"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "top-level-dir-root-dot",
+     "surprise-cross-repo-key-includes-repo"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 22,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "axios__axios/q1": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "mergeconfig-timeouterrormessage-defaulttoconfig2"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 10,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "mergeconfig-timeouterrormessage-defaulttoconfig2"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 9,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "mergeconfig-timeouterrormessage-defaulttoconfig2"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 9,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "axios__axios/q2": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "interceptor-use-returns-counter-id",
+     "interceptor-eject-ignores-stale-ids",
+     "interceptor-eject-trims-trailing-nulls"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "interceptor-use-returns-counter-id",
+     "interceptor-eject-ignores-stale-ids"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 22,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "interceptor-use-returns-counter-id",
+     "interceptor-eject-ignores-stale-ids",
+     "interceptor-eject-trims-trailing-nulls"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 23,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "axios__axios/q3": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sync-interceptor-no-onrejected-rejects",
+     "sync-interceptor-thenable-onrejected-delays-dispatch",
+     "sync-interceptor-dispatch-only-if-no-promise"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 15,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sync-interceptor-no-onrejected-rejects",
+     "sync-interceptor-thenable-onrejected-delays-dispatch",
+     "sync-interceptor-dispatch-only-if-no-promise"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sync-interceptor-no-onrejected-rejects",
+     "sync-interceptor-thenable-onrejected-delays-dispatch",
+     "sync-interceptor-dispatch-only-if-no-promise"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "axios__axios/q4": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "setproxy-defers-env-proxy-to-node",
+     "node-native-env-proxy-versions",
+     "http2-env-proxy-disabled",
+     "http2-proxy-rejected"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 21,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "setproxy-defers-env-proxy-to-node",
+     "node-native-env-proxy-versions",
+     "http2-env-proxy-disabled",
+     "http2-proxy-rejected"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "setproxy-defers-env-proxy-to-node",
+     "node-native-env-proxy-versions",
+     "http2-env-proxy-disabled",
+     "http2-proxy-rejected"
+    ],
+    "stale": 1,
+    "stale_kinds": {
+     "missing_file": 1,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 29,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "axios__axios/q5": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "methodlist-shared-module",
+     "defaults-headers-from-methodlist",
+     "axios-flatten-strips-methodlist"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 10,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "methodlist-shared-module",
+     "defaults-headers-from-methodlist",
+     "axios-flatten-strips-methodlist"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 11,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "methodlist-shared-module",
+     "defaults-headers-from-methodlist",
+     "axios-flatten-strips-methodlist"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 10,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "expressjs__express/q1": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "utils-methods-from-node-http",
+     "app-methods-from-utils"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 7,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "utils-methods-from-node-http",
+     "app-methods-from-utils"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 8,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "utils-methods-from-node-http",
+     "app-methods-from-utils"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 7,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "expressjs__express/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sendfile-etag-from-app-setting",
+     "sendfile-send-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 15,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sendfile-etag-from-app-setting",
+     "sendfile-send-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 14,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sendfile-etag-from-app-setting",
+     "sendfile-send-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "expressjs__express/q3": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "response-requires-depd",
+     "redirect-deprecate-missing-url",
+     "redirect-deprecate-nonstring-url",
+     "redirect-deprecate-nonnumber-status"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 11,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "response-requires-depd",
+     "redirect-deprecate-missing-url",
+     "redirect-deprecate-nonstring-url",
+     "redirect-deprecate-nonnumber-status"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "response-requires-depd",
+     "redirect-deprecate-missing-url",
+     "redirect-deprecate-nonstring-url",
+     "redirect-deprecate-nonnumber-status"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "expressjs__express/q4": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "links-array-multiple-rel"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 10,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "links-array-multiple-rel"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 9,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "links-array-multiple-rel"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 8,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "expressjs__express/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "send-arraybuffer-view-binary"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 17,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "send-arraybuffer-view-binary"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "send-arraybuffer-view-binary"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fsft-database-url-setting",
+     "fsft-psycopg-scheme-rewrite",
+     "fsft-engine-uses-database-url",
+     "fsft-alembic-get-url-database-url"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fsft-database-url-setting",
+     "fsft-psycopg-scheme-rewrite",
+     "fsft-engine-uses-database-url",
+     "fsft-alembic-get-url-database-url"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 15,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fsft-database-url-setting",
+     "fsft-psycopg-scheme-rewrite",
+     "fsft-engine-uses-database-url",
+     "fsft-alembic-get-url-database-url"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 14,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "fsft-cors-only-frontend-host",
+     "fsft-frontend-host-default"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 11,
+    "trap_mentions": [
+     "BACKEND_CORS_ORIGINS"
+    ],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "fsft-cors-only-frontend-host",
+     "fsft-frontend-host-default"
+    ],
+    "stale": 1,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 1
+    },
+    "citations": 12,
+    "trap_mentions": [
+     "BACKEND_CORS_ORIGINS"
+    ],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "fsft-cors-only-frontend-host",
+     "fsft-frontend-host-default"
+    ],
+    "stale": 1,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 1
+    },
+    "citations": 13,
+    "trap_mentions": [
+     "BACKEND_CORS_ORIGINS"
+    ],
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q3": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fsft-fastapi-env-setting",
+     "fsft-private-router-dev-only",
+     "fsft-changethis-warn-in-dev",
+     "fsft-secret-key-required"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fsft-fastapi-env-setting",
+     "fsft-private-router-dev-only",
+     "fsft-changethis-warn-in-dev",
+     "fsft-secret-key-required"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fsft-fastapi-env-setting",
+     "fsft-private-router-dev-only",
+     "fsft-changethis-warn-in-dev",
+     "fsft-secret-key-required"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 23,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q4": {
+   "none": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "fsft-client-setconfig",
+     "fsft-handle-api-error-axios"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 14,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "fsft-client-setconfig",
+     "fsft-client-gen-throw-on-error",
+     "fsft-handle-api-error-axios"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "fsft-client-setconfig",
+     "fsft-client-gen-throw-on-error",
+     "fsft-handle-api-error-axios"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q5": {
+   "none": {
+    "found": 2,
+    "total": 4,
+    "found_ids": [
+     "fsft-app-frontend-mount",
+     "fsft-vite-outdir-backend"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 8,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 4,
+    "found_ids": [
+     "fsft-app-frontend-mount",
+     "fsft-vite-outdir-backend"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 17,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 4,
+    "found_ids": [
+     "fsft-app-frontend-mount",
+     "fsft-vite-outdir-backend"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "sqlm-datetime-utc-default",
+     "sqlm-utcdatetime-rejects-naive",
+     "sqlm-utcdatetime-result-utc",
+     "sqlm-annotated-naive-meta"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 13,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "sqlm-datetime-utc-default",
+     "sqlm-utcdatetime-rejects-naive",
+     "sqlm-utcdatetime-result-utc",
+     "sqlm-annotated-naive-meta"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "sqlm-datetime-utc-default",
+     "sqlm-utcdatetime-rejects-naive",
+     "sqlm-utcdatetime-result-utc",
+     "sqlm-annotated-naive-meta"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 24,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sqlm-dataclass-transform-import",
+     "sqlm-metaclass-field-specifiers"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 13,
+    "trap_mentions": [
+     "__dataclass_transform__"
+    ],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sqlm-dataclass-transform-import",
+     "sqlm-metaclass-field-specifiers"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 9,
+    "trap_mentions": [
+     "__dataclass_transform__",
+     "field_descriptors"
+    ],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sqlm-dataclass-transform-import",
+     "sqlm-metaclass-field-specifiers"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q3": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sqlm-min-items-deprecated-msg",
+     "sqlm-min-items-warn-map",
+     "sqlm-max-items-warn-map"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 11,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sqlm-min-items-deprecated-msg",
+     "sqlm-min-items-warn-map",
+     "sqlm-max-items-warn-map"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sqlm-min-items-deprecated-msg",
+     "sqlm-min-items-warn-map",
+     "sqlm-max-items-warn-map"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q4": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sqlm-satype-instance-alias",
+     "sqlm-reject-type-in-kwargs",
+     "sqlm-column-type-kwarg"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sqlm-satype-instance-alias",
+     "sqlm-reject-type-in-kwargs",
+     "sqlm-column-type-kwarg"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "sqlm-satype-instance-alias",
+     "sqlm-reject-type-in-kwargs",
+     "sqlm-column-type-kwarg"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 22,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q5": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sqlm-docs-live-zensical",
+     "sqlm-docs-build-zensical"
+    ],
+    "stale": 1,
+    "stale_kinds": {
+     "missing_file": 1,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 9,
+    "trap_mentions": [
+     "scripts/mkdocs_hooks.py",
+     "generate_renamed_section_items"
+    ],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sqlm-docs-live-zensical",
+     "sqlm-docs-build-zensical"
+    ],
+    "stale": 2,
+    "stale_kinds": {
+     "missing_file": 2,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 11,
+    "trap_mentions": [
+     "scripts/mkdocs_hooks.py",
+     "generate_renamed_section_items"
+    ],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sqlm-docs-live-zensical",
+     "sqlm-docs-build-zensical"
+    ],
+    "stale": 1,
+    "stale_kinds": {
+     "missing_file": 1,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q1": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "gin-recovery-errors-is-epipe-econnreset",
+     "gin-recovery-erraborthandler-suppressed",
+     "gin-recovery-brokenpipe-abort"
+    ],
+    "stale": 3,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 3
+    },
+    "citations": 14,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "gin-recovery-errors-is-epipe-econnreset",
+     "gin-recovery-erraborthandler-suppressed",
+     "gin-recovery-brokenpipe-abort"
+    ],
+    "stale": 4,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 4
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "gin-recovery-errors-is-epipe-econnreset",
+     "gin-recovery-erraborthandler-suppressed",
+     "gin-recovery-brokenpipe-abort"
+    ],
+    "stale": 4,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 4
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q2": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "gin-redirect-prefix-sanitize-helper",
+     "gin-sanitizepathchars-def",
+     "gin-removerepeatedchar-path-go"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "gin-redirect-prefix-sanitize-helper",
+     "gin-sanitizepathchars-def",
+     "gin-removerepeatedchar-path-go"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 15,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "gin-redirect-prefix-sanitize-helper",
+     "gin-sanitizepathchars-def",
+     "gin-removerepeatedchar-path-go"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q3": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "gin-clientip-unix-socket-trusted",
+     "gin-clientip-joins-multiple-header-values"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 34,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "gin-clientip-unix-socket-trusted",
+     "gin-clientip-joins-multiple-header-values"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 33,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "gin-clientip-unix-socket-trusted",
+     "gin-clientip-joins-multiple-header-values"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 31,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q4": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "gin-engine-routetreesupdated-once",
+     "gin-servehttp-updates-route-trees"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 12,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "gin-engine-routetreesupdated-once",
+     "gin-servehttp-updates-route-trees"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 13,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "gin-engine-routetreesupdated-once",
+     "gin-servehttp-updates-route-trees"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 17,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q5": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "gin-form-setoptions-parser",
+     "gin-form-trysetusingparser-textunmarshaler",
+     "gin-form-parser-before-custom"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 29,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "gin-form-trysetusingparser-textunmarshaler",
+     "gin-form-parser-before-custom"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "gin-form-trysetusingparser-textunmarshaler",
+     "gin-form-parser-before-custom"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 28,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "google__gson/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "gson-ctor-takes-builder-default",
+     "gson-default-reuses-factories",
+     "gsonbuilder-createfactories",
+     "gsonbuilder-default-factories-static"
+    ],
+    "stale": 2,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 2
+    },
+    "citations": 15,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "gson-ctor-takes-builder-default",
+     "gson-default-reuses-factories",
+     "gsonbuilder-createfactories",
+     "gsonbuilder-default-factories-static"
+    ],
+    "stale": 2,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 2
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "gson-ctor-takes-builder-default",
+     "gson-default-reuses-factories",
+     "gsonbuilder-createfactories",
+     "gsonbuilder-default-factories-static"
+    ],
+    "stale": 2,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 2
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "google__gson/q2": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "double-strict-adapter-selection",
+     "typeadapters-double-strict",
+     "typeadapters-check-valid-fp",
+     "long-policy-string-adapter"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 15,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "double-strict-adapter-selection",
+     "typeadapters-double-strict",
+     "typeadapters-check-valid-fp",
+     "long-policy-string-adapter"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 17,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "double-strict-adapter-selection",
+     "typeadapters-double-strict",
+     "typeadapters-check-valid-fp",
+     "long-policy-string-adapter"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "google__gson/q3": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "map-dup-key-containskey-array",
+     "map-dup-key-containskey-object"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 10,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "map-dup-key-containskey-array",
+     "map-dup-key-containskey-object"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 9,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "map-dup-key-containskey-array",
+     "map-dup-key-containskey-object"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 9,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "google__gson/q4": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "javatime-adapters-class",
+     "javatime-instant-seconds-nanos",
+     "javatime-factory-reflective-load",
+     "javatime-factory-registered"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 27,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "javatime-adapters-class",
+     "javatime-instant-seconds-nanos",
+     "javatime-factory-reflective-load",
+     "javatime-factory-registered"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 23,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "javatime-adapters-class",
+     "javatime-instant-seconds-nanos",
+     "javatime-factory-reflective-load",
+     "javatime-factory-registered"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "google__gson/q5": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "jsonreader-nextlong-validate-ascii",
+     "jsonreader-nextint-validate-ascii",
+     "jsonreader-validate-ascii-throws"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 6,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "jsonreader-nextlong-validate-ascii",
+     "jsonreader-nextint-validate-ascii",
+     "jsonreader-validate-ascii-throws"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "jsonreader-nextlong-validate-ascii",
+     "jsonreader-nextint-validate-ascii",
+     "jsonreader-validate-ascii-throws"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 13,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "idn-class-normalize-option",
+     "idn-class-convert-uri",
+     "idn-client-call",
+     "idn-redirect-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 21,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "idn-class-normalize-option",
+     "idn-class-convert-uri",
+     "idn-client-call",
+     "idn-redirect-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 21,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "idn-class-normalize-option",
+     "idn-class-convert-uri",
+     "idn-client-call",
+     "idn-redirect-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q2": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "timeout-to-ms-class",
+     "clock-now-hrtime",
+     "curlfactory-timeout-call",
+     "streamhandler-clock-stats"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 37,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "timeout-to-ms-class",
+     "clock-now-hrtime",
+     "curlfactory-timeout-call",
+     "streamhandler-clock-stats"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 39,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "timeout-to-ms-class",
+     "clock-now-hrtime",
+     "curlfactory-timeout-call",
+     "streamhandler-clock-stats"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 37,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q3": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "proxyenv-class",
+     "proxyenv-resolve-selection",
+     "curlfactory-proxyenv-call",
+     "streamhandler-proxyenv-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 14,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "proxyenv-class",
+     "proxyenv-resolve-selection",
+     "curlfactory-proxyenv-call",
+     "streamhandler-proxyenv-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 4,
+    "found_ids": [
+     "proxyenv-class",
+     "proxyenv-resolve-selection",
+     "curlfactory-proxyenv-call"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q4": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "client-json-native-encode",
+     "filecookiejar-native-encode",
+     "filecookiejar-native-decode"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "client-json-native-encode",
+     "filecookiejar-native-encode",
+     "filecookiejar-native-decode"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 14,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "client-json-native-encode",
+     "filecookiejar-native-encode",
+     "filecookiejar-native-decode"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q5": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "cookiejar-insecure-response-guard",
+     "cookiejar-secure-prefix",
+     "cookiejar-host-prefix"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "cookiejar-insecure-response-guard",
+     "cookiejar-secure-prefix",
+     "cookiejar-host-prefix"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "cookiejar-insecure-response-guard",
+     "cookiejar-secure-prefix",
+     "cookiejar-host-prefix"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 19,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-v2-single-char-dispatch",
+     "fzf-v2-single-char-routine",
+     "fzf-v2-two-char-dispatch",
+     "fzf-v2-two-char-routine"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-v2-single-char-dispatch",
+     "fzf-v2-single-char-routine",
+     "fzf-v2-two-char-dispatch",
+     "fzf-v2-two-char-routine"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-v2-single-char-dispatch",
+     "fzf-v2-single-char-routine",
+     "fzf-v2-two-char-dispatch",
+     "fzf-v2-two-char-routine"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 23,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q2": {
+   "none": {
+    "found": 3,
+    "total": 4,
+    "found_ids": [
+     "fzf-rune-prefilter-entry",
+     "fzf-rune-fuzzy-index",
+     "fzf-rune-prefilterable"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 24,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-rune-prefilter-entry",
+     "fzf-rune-fuzzy-index",
+     "fzf-rune-prefilterable",
+     "fzf-chars-may-fold-flag"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-rune-prefilter-entry",
+     "fzf-rune-fuzzy-index",
+     "fzf-rune-prefilterable",
+     "fzf-chars-may-fold-flag"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q3": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-tmux-floating-pane-dispatch",
+     "fzf-tmux-floating-pane-probe",
+     "fzf-tmux-floating-pane-exit-code",
+     "fzf-tmux-floating-pane-new-pane"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 27,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-tmux-floating-pane-dispatch",
+     "fzf-tmux-floating-pane-probe",
+     "fzf-tmux-floating-pane-exit-code",
+     "fzf-tmux-floating-pane-new-pane"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 32,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 2,
+    "total": 4,
+    "found_ids": [
+     "fzf-tmux-floating-pane-dispatch",
+     "fzf-tmux-floating-pane-probe"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 25,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q4": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-win-resize-poll",
+     "fzf-win-resize-interval",
+     "fzf-resize-ctx-param",
+     "fzf-unix-resize-stop"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 22,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-win-resize-poll",
+     "fzf-win-resize-interval",
+     "fzf-resize-ctx-param",
+     "fzf-unix-resize-stop"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 23,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-win-resize-poll",
+     "fzf-win-resize-interval",
+     "fzf-resize-ctx-param",
+     "fzf-unix-resize-stop"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 22,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q5": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-light-paste-restore",
+     "fzf-light-startup-queries",
+     "fzf-light-init-query-startup",
+     "fzf-light-query-startup-parse"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-light-paste-restore",
+     "fzf-light-startup-queries",
+     "fzf-light-init-query-startup",
+     "fzf-light-query-startup-parse"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 17,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "fzf-light-paste-restore",
+     "fzf-light-startup-queries",
+     "fzf-light-init-query-startup",
+     "fzf-light-query-startup-parse"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 21,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q1": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "bat-pagerkind-builtin",
+     "bat-output-builtinpager-variant",
+     "bat-builtinpager-minus-thread"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 26,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "bat-pagerkind-builtin",
+     "bat-output-builtinpager-variant",
+     "bat-builtinpager-minus-thread"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 27,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "bat-pagerkind-builtin",
+     "bat-output-builtinpager-variant",
+     "bat-builtinpager-minus-thread"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 39,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q2": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "bat-controller-run-mut-handle",
+     "bat-controller-outputtype-only-if-none",
+     "bat-controller-attached-when-handle",
+     "bat-list-themes-buffer"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 20,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "bat-controller-run-mut-handle",
+     "bat-controller-outputtype-only-if-none",
+     "bat-controller-attached-when-handle",
+     "bat-list-themes-buffer"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 31,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "bat-controller-run-mut-handle",
+     "bat-controller-outputtype-only-if-none",
+     "bat-controller-attached-when-handle",
+     "bat-list-themes-buffer"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 23,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q3": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "bat-linerange-three-parts",
+     "bat-linerange-n-c-bounds",
+     "bat-linerange-n-m-c-bounds"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 31,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "bat-linerange-three-parts",
+     "bat-linerange-n-c-bounds",
+     "bat-linerange-n-m-c-bounds"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 30,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "bat-linerange-three-parts",
+     "bat-linerange-n-c-bounds",
+     "bat-linerange-n-m-c-bounds"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 34,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q4": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "bat-clap-disable-help-version",
+     "bat-app-help-display",
+     "bat-help-config-highlight",
+     "bat-skip-config-version-diag"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 28,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "bat-clap-disable-help-version",
+     "bat-app-help-display",
+     "bat-help-config-highlight",
+     "bat-skip-config-version-diag"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 37,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "bat-clap-disable-help-version",
+     "bat-app-help-display",
+     "bat-help-config-highlight",
+     "bat-skip-config-version-diag"
+    ],
+    "stale": 0,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 0
+    },
+    "citations": 27,
+    "trap_mentions": [],
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "bat-detect-theme-mode"
+    ],
+    "stale": 6,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 6
+    },
+    "citations": 16,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_stale": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "bat-detect-theme-mode"
+    ],
+    "stale": 6,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 6
+    },
+    "citations": 14,
+    "trap_mentions": [],
+    "failed": false
+   },
+   "verinoda_fresh": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "bat-detect-theme-mode"
+    ],
+    "stale": 6,
+    "stale_kinds": {
+     "missing_file": 0,
+     "past_end": 0,
+     "old_location": 6
+    },
+    "citations": 18,
+    "trap_mentions": [],
+    "failed": false
+   }
+  }
+ },
+ "decisions": {
+  "facts fresh-stale": {
+   "n": 50,
+   "diff": -3,
+   "ci95": [
+    -9,
+    1
+   ],
+   "wins": 1,
+   "ties": 46,
+   "losses": 3,
+   "input": {
+    "ratio": 0.92,
+    "ci95": [
+     0.846,
+     0.999
+    ]
+   },
+   "output": {
+    "ratio": 1.039,
+    "ci95": [
+     0.976,
+     1.115
+    ]
+   },
+   "tool_calls": {
+    "ratio": 0.94,
+    "ci95": [
+     0.867,
+     1.022
+    ]
+   }
+  },
+  "stale citations stale-fresh": {
+   "n": 50,
+   "diff": 1,
+   "ci95": [
+    -2,
+    5
+   ],
+   "wins": 2,
+   "ties": 47,
+   "losses": 1,
+   "input": {
+    "ratio": 1.087,
+    "ci95": [
+     1.001,
+     1.182
+    ]
+   },
+   "output": {
+    "ratio": 0.963,
+    "ci95": [
+     0.897,
+     1.025
+    ]
+   },
+   "tool_calls": {
+    "ratio": 1.063,
+    "ci95": [
+     0.978,
+     1.154
+    ]
+   }
+  },
+  "facts fresh-none": {
+   "n": 50,
+   "diff": -3,
+   "ci95": [
+    -9,
+    2
+   ],
+   "wins": 2,
+   "ties": 44,
+   "losses": 4,
+   "input": {
+    "ratio": 0.977,
+    "ci95": [
+     0.891,
+     1.07
+    ]
+   },
+   "output": {
+    "ratio": 0.814,
+    "ci95": [
+     0.756,
+     0.876
+    ]
+   },
+   "tool_calls": {
+    "ratio": 0.848,
+    "ci95": [
+     0.744,
+     0.959
+    ]
+   }
+  },
+  "facts stale-none": {
+   "n": 50,
+   "diff": 0,
+   "ci95": [
+    -4,
+    4
+   ],
+   "wins": 2,
+   "ties": 46,
+   "losses": 2,
+   "input": {
+    "ratio": 1.062,
+    "ci95": [
+     0.974,
+     1.154
+    ]
+   },
+   "output": {
+    "ratio": 0.783,
+    "ci95": [
+     0.726,
+     0.847
+    ]
+   },
+   "tool_calls": {
+    "ratio": 0.902,
+    "ci95": [
+     0.788,
+     1.021
+    ]
+   }
+  },
+  "stale citations stale-none": {
+   "n": 50,
+   "diff": 4,
+   "ci95": [
+    1,
+    8
+   ],
+   "wins": 4,
+   "ties": 46,
+   "losses": 0,
+   "input": {
+    "ratio": 1.062,
+    "ci95": [
+     0.974,
+     1.154
+    ]
+   },
+   "output": {
+    "ratio": 0.783,
+    "ci95": [
+     0.726,
+     0.847
+    ]
+   },
+   "tool_calls": {
+    "ratio": 0.902,
+    "ci95": [
+     0.788,
+     1.021
+    ]
+   }
+  },
+  "stale citations fresh-none": {
+   "n": 50,
+   "diff": 3,
+   "ci95": [
+    0,
+    7
+   ],
+   "wins": 3,
+   "ties": 47,
+   "losses": 0,
+   "input": {
+    "ratio": 0.977,
+    "ci95": [
+     0.891,
+     1.07
+    ]
+   },
+   "output": {
+    "ratio": 0.814,
+    "ci95": [
+     0.756,
+     0.876
+    ]
+   },
+   "tool_calls": {
+    "ratio": 0.848,
+    "ci95": [
+     0.744,
+     0.959
+    ]
+   }
+  }
+ }
+}
