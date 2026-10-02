@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D169)
+## Upgrading from 0.4.0 (D137-D170)
 
 ### D137: Trigram regex index
 
@@ -446,6 +446,12 @@ create NAME A B ... [--links-dir DIR]`, `group list|show|remove|link`, `group tr
 links file in `--links-dir`). One new MCP tool, `group_view`, in the full profile only: 44 tools; the core menu is
 unchanged. `AtlasTools.group_view()` and `ProjectHub.group_view()` are new. No change to `tq.py`, `index.py` or
 `project_index/`, so `tests/test_tq_measured.py` needs no `benchmark tq-audit` rerun for this change.
+
+### D170: Pinned regression tests from recorded calls
+
+New command `verinoda pin FUNCTION [--tests SELECT ...] [--max-cases N] [--out PATH] [--force] [--timeout S] [--no-record]`. It is opt-in and runs the project's tests, so it needs `verinoda trust <path>` (or a container runtime), like `observe`. It writes `tests/pinned/test_pin_<module>__<name>.py` only after that file passed a run; `--force` replaces only a file it generated for the same function, and links, junctions and hidden folders are refused. The exit code is 0 when something was pinned, otherwise 3.
+
+`experiments.run` gains `add_files` ({path: bytes} written over a working-tree copy and listed in `source.added`; the evidence locator says `working tree + added PATH`). The new run artifacts are `pin.jsonl` and `pin_replay.jsonl`. Nothing changes in the store schema, the MCP tools (still 44) or existing commands.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
