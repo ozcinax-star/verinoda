@@ -40,6 +40,12 @@ with it and without it the agent passed every hidden test and left no name that 
 fired, because the agent read the code before every edit. It works (a deliberate removed name is caught and the model
 told), it costs about nothing, and it is on by default as a safety net; it did not change an outcome in this study.
 
+And on a 27,078-file repository (`benchmarks/results/agent-compare-big-2026-10-02/`, 40 real Home Assistant bug reports,
+160 real sessions, twice): the agent with the mod and its nudge, with Graphify's own integration and with nothing found
+the same files (recall 37.3, 37.0 and 35.8 of 40; no decision reaches a claim, and a second run shows the differences
+are chance). The nudge reached every session; the agent used Verinoda in 6 to 7 of 40, and scored what it scored
+without it on those tasks. The mod added nothing to Verinoda's own setup there.
+
 So neither mode is a measured win on real code: **nudge** trades input tokens for output tokens at the same facts,
 **search** costs facts. Both stay off until the person turns one on. What the mod adds regardless of the mode is
 an index that stays fresh while Claude edits, and commit reviews.
