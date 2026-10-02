@@ -23,8 +23,11 @@ const NOTICE_MS = 6_000
 // `update --fast` takes the text in at once and rebuilds the graph in a background `verinoda update`.
 // The graph has caught up when no build holds the lock and no file changed since the latest snapshot
 // (the background build records it); the lock alone misses a build that has not taken it yet.
+// Run with the repo as cwd, `-c` puts the cwd ('') first on sys.path, which would import the repo's own verinoda/
+// when the repo is Verinoda's source; dropped first (`-P` would need Python 3.11, Verinoda supports 3.10).
 const GRAPH_STATE =
-  'import json, sys; from pathlib import Path; from verinoda import buildlock, freshness; ' +
+  'import sys; sys.path[:] = [p for p in sys.path if p]; ' +
+  'import json; from pathlib import Path; from verinoda import buildlock, freshness; ' +
   "r = Path(sys.argv[1]); print(json.dumps({'locked': buildlock.is_locked(r), " +
   "'behind': freshness.check(r).get('count', 0)}))"
 const EDIT_TOOLS = ['Edit', 'Write', 'NotebookEdit'] as const

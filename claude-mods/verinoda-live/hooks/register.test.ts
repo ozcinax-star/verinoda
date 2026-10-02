@@ -84,6 +84,8 @@ describe('verinoda-live', () => {
     await clock.advance(1_000)
     expect(polls.length).toBe(3)
     expect(polls[0]?.[0]).toBe(`${ROOT}/.venv/Scripts/python.exe`)
+    // run in the repo, `-c` would import the repo's own verinoda/ when the repo is Verinoda's source
+    expect(polls[0]?.[2]).toMatch(/^import sys; sys\.path\[:\] = \[p for p in sys\.path if p\]; /)
     expect(statuses.at(-1)).toBe('Verinoda: fresh ✓')
     expect(await $.command.run(UPDATE)).toEqual(expect.objectContaining({ text: 'index already fresh' }))
   })

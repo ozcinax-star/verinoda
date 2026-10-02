@@ -1,6 +1,6 @@
 {
   "name": "verinoda-live",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Verinoda in Claude Code: keeps the code index fresh while Claude edits, nudges the agent to use it, reviews commits, and shows it all in a Turkish pane with an animated mascot.",
   "types": "./types/index.d.ts",
   "userConfig": {
