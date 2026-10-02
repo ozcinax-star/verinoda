@@ -1,7 +1,7 @@
 {
  "schema": "verinoda.tq_calibration/1",
  "written": "2026-10-02",
- "commit": "f930da83e914",
+ "commit": "d3001d5e9960",
  "gold_files": {
   "tq_gold/held_out.json": "4860547c7c6ce26f0956c71882aa934eec3bc667b4accf1c73eb0202d60e589f",
   "tq_gold2/held_out.json": "c19578ede6befd35354ce8d43dfa6e1589d74e28e21c1e0afb1ee3bfd2f72031"
@@ -12,7 +12,7 @@
  },
  "score_sha": "c932e489945d742a70f2104024465bc2541a4ffae122d4407a9e6986a2b0260e",
  "engine": {
-  "sha": "6f68f91eff786927160580a89e822eeb536eb160ebc9478eb5fbefd4efe49be3",
+  "sha": "42a646e376bf2e0c1e0cde7e587dec3ee3fb58c3c67d5b5e6cc039065c866ed9",
   "roots": [
    "tq.py",
    "index.py"
@@ -66,6 +66,7 @@
    "health.py",
    "history.py",
    "hotspots.py",
+   "incremental.py",
    "index.py",
    "jvm_mixins.py",
    "jvmclass.py",
