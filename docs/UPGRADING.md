@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D171)
+## Upgrading from 0.4.0 (D137-D172)
 
 ### D137: Trigram regex index
 
@@ -467,6 +467,17 @@ Graphs gain `calls` edges:
 A PHP `calls` edge from a static call to a class becomes an edge to its method. A query or saved claim that relied
 on `X -calls-> Utils` should name the method (`Utils.chooseHandler`). Two new node markers, `_rust_returns_self` and
 `_php_fqn`, are stored in graph.json. The tq-audit table (`tests/test_tq_measured.py`) needs a rerun after the merge.
+
+### D172: Language-server navigation and call-edge verification (opt-in)
+
+New, opt-in: `verinoda lsp definition|references|hover|calls|implementations|types FILE:LINE[:COL] [NAME]`,
+`verinoda lsp verify [PATH ...]` and `resolve-call ... --lsp`. Nothing changes for an existing project until a
+command is run with them. Language servers are started only in trusted projects (`verinoda trust`); `lsp` joins
+the protected settings, so a repository's own `.verinoda/config.json` names a server only once the project is
+trusted (the user config always can). New config keys: `lsp.servers` (`{language: [argv ...]}`) and
+`budget.lsp_sites` / `budget.lsp_seconds`. When a resolver (jedi, SCIP or a language server) confirms a call edge
+outside Python, the claim no longer carries the "checked for Python only" uncertainty. No schema change; MCP
+tools unchanged (44).
 
 ## Upgrading from 0.3.2 (D60-D136)
 
