@@ -219,6 +219,9 @@ class _Recorder:
         self.context_unc: dict[str, list[str]] = defaultdict(list)
         # precise call-site resolution: one budget per analysis (None: not installed / not wanted)
         self.precise_budget = None
+        # a language-server session (verinoda.lsp.Session) that answers call sites in its languages instead
+        # (opt-in: `verinoda lsp verify`; None everywhere else)
+        self.lsp = None
         try:  # evidence groups (claims.attach(..., grp=)) exist once the trust engine is installed
             self.groups_ok = "grp" in inspect.signature(Claims.attach).parameters
         except (TypeError, ValueError):
@@ -373,20 +376,33 @@ def _precise_budget(repo: Path):
 def _precise(rec: _Recorder, at: str, target_label: str, target_path: str | None, target_line: int | None,
              commit: str | None) -> tuple[dict | None, dict | None, bool]:
     """``(result, evidence, skipped_for_budget)`` of a precise resolution of the call at ``at``."""
-    pb = rec.precise_budget
-    if pb is None:
-        return None, None, False
     from verinoda import precise
 
     path, _, ln = at.rpartition(":")
-    before = pb.skipped
-    try:
-        res = precise.resolve_call(rec.repo, path, int(ln), target_label, store=rec.store, budget=pb,
-                                   target_path=target_path, target_line=target_line)
-    except Exception:  # noqa: BLE001 - a resolver crash means "no precise answer"
-        return None, None, False
-    if res is None:
-        return None, None, pb.skipped > before
+    if rec.lsp is not None and rec.lsp.serves(path):
+        from verinoda import lsp
+
+        try:
+            res = lsp.resolve_call(rec.lsp, path, int(ln), target_label, target_path=target_path,
+                                   target_line=target_line)
+        except Exception:  # noqa: BLE001 - a client error means "no answer", never a verdict
+            return None, None, False
+        if res is None:
+            return None, None, True
+        if res.get("failed"):   # the server could not answer: no evidence either way
+            return None, None, False
+    else:
+        pb = rec.precise_budget
+        if pb is None:
+            return None, None, False
+        before = pb.skipped
+        try:
+            res = precise.resolve_call(rec.repo, path, int(ln), target_label, store=rec.store, budget=pb,
+                                       target_path=target_path, target_line=target_line)
+        except Exception:  # noqa: BLE001 - a resolver crash means "no precise answer"
+            return None, None, False
+        if res is None:
+            return None, None, pb.skipped > before
     try:
         ev = precise.resolution_evidence(rec.repo, res, commit=commit)
     except Exception:  # noqa: BLE001
@@ -460,7 +476,8 @@ def _edge_claim(rec: _Recorder, g: index.Graph, u: str, v: str, d: dict, commit:
             if grade is None or grade.code not in _CALL_FAIL:
                 # the binding the line's grade left open (INFERRED target, local rebinding, alias) is settled
                 status = "statically_verified"
-                unc = [x for x in unc if "is INFERRED" not in x and (grade is None or x != grade.reason)]
+                unc = [x for x in unc if "is INFERRED" not in x and "is checked for Python only" not in x
+                       and (grade is None or x != grade.reason)]
         elif res is not None and pev is not None and verdict == "refutes":
             pev = {**pev, "meta": {**(pev.get("meta") or {}), "strength": "definitive"}}
             if site_ev is not None:  # the line names it, but the resolver binds the call elsewhere
