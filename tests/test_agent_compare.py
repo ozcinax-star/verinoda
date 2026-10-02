@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -232,3 +233,79 @@ def test_guard_scores_pair_tasks_both_arms_ran_and_leave_unknown_checks_out_of_t
     d = score_guard.decide(c)
     assert d["passes guard-plain"]["diff"] == 0 and d["passes guard-plain"]["n"] == 3
     assert d["absent sites plain-guard"]["n"] == 2 and d["absent sites plain-guard"]["diff"] == 1
+
+
+big_run = _load("big_run")
+score_big = _load("score_big")
+
+
+def test_big_arms_differ_in_tools_and_plugin_only_and_the_prompt_names_no_tool(tmp_path):
+    cfg = {"model": "claude-sonnet-5-5", "plugin_dir": "C:/mod", "mod_options": {"auto": "nudge"}}
+    task = {"id": "pr1", "title": "Light does not turn off", "body": "It stays on after the timeout."}
+    p = big_run.prompt_for(task, tmp_path)
+    assert "Light does not turn off" in p and "verinoda" not in p.lower() and "graphify" not in p.lower()
+    argv = {a: big_run.session_argv(p, a, tmp_path, cfg) for a in ("none", "graphify", "verinoda_setup", "verinoda_mod")}
+    assert argv["none"] == argv["graphify"] and "--mcp-config" not in argv["none"]
+    assert "--mcp-config" in argv["verinoda_setup"] and "--plugin-dir" not in argv["verinoda_setup"]
+    assert argv["verinoda_mod"][:len(argv["verinoda_setup"])] == argv["verinoda_setup"]
+    assert argv["verinoda_mod"][-4:-2] == ["--plugin-dir", "C:/mod"]
+    assert json.loads(argv["verinoda_mod"][-1]) == {"pluginConfigs": {"verinoda-live": {"options": {"auto": "nudge"}}}}
+    assert argv["none"][argv["none"].index("--allowedTools") + 1] == "Bash Read Glob Grep Skill"
+    assert argv["verinoda_mod"][argv["verinoda_mod"].index("--allowedTools") + 1].endswith("mcp__verinoda")
+    assert "--setting-sources" in argv["none"] and "project,local" in argv["none"]
+
+
+def test_big_session_env_takes_the_users_tool_commands_off_path_and_adds_the_arms_own():
+    cfg = {"drop_path": ["C:/Users/u/.local/bin"], "path_dirs": {"graphify": ["C:/g/Scripts"]}}
+    base = {"PATH": os.pathsep.join([r"C:\Users\u\.local\bin", r"C:\Windows", "C:\\Users\\u\\.local\\bin\\"])}
+    g = big_run.session_env("graphify", cfg, base)["PATH"].split(os.pathsep)
+    assert g == ["C:/g/Scripts", r"C:\Windows"]
+    assert big_run.session_env("none", cfg, base)["PATH"].split(os.pathsep) == [r"C:\Windows"]
+    assert big_run.session_env("none", cfg, base)["GRAPHIFY_NO_AUTO_REFRESH"] == "1"
+
+
+def test_big_answers_name_at_most_five_distinct_files_relative_to_the_root(tmp_path):
+    root = tmp_path.as_posix()
+    ans = {"files": [{"path": f"{root}/homeassistant/a.py", "why": "x"}, {"path": r".\homeassistant\b.py", "why": "y"},
+                     {"path": "homeassistant/a.py", "why": "dup"}, {"path": "/homeassistant/c.py"}, {"path": ""},
+                     {"path": "d.py"}, {"path": "e.py"}, {"path": "f.py"}]}
+    assert big_run.files_named(ans, tmp_path) == ["homeassistant/a.py", "homeassistant/b.py", "homeassistant/c.py", "d.py", "e.py"]
+    assert big_run.files_named(None, tmp_path) == []
+    assert big_run.extract_answer({"structured_output": {"files": []}}) == {"files": []}
+    assert big_run.extract_answer({"result": 'text {"files": [{"path": "a.py"}]} more'}) == {"files": [{"path": "a.py"}]}
+    assert big_run.extract_answer({"result": "no json"}) is None
+
+
+def test_big_session_stats_count_tool_use_and_flag_network_lookups(tmp_path):
+    def use(name, **inp):
+        return {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": name, "input": inp}]}}
+    lines = [use("Bash", command="graphify query 'light timeout'"), use("Read", file_path="graphify-out/GRAPH_REPORT.md"),
+             use("mcp__verinoda__analyze", question="q"), use("Bash", command=r"C:\x\verinoda.exe query q --repo ."),
+             use("Bash", command="curl -s https://api.github.com/repos/home-assistant/core/pulls/1"), use("Grep", pattern="x")]
+    t = tmp_path / "s.jsonl"
+    t.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    s = big_run.session_stats(t)
+    assert s["tool_calls"] == 6 and s["verinoda_calls"] == 2 and s["graphify_calls"] == 2 and len(s["network"]) == 1
+    assert s["first_tools"] == ["Bash", "Read", "mcp__verinoda__analyze", "Bash", "Bash"]
+    assert big_run.session_stats(None)["tool_calls"] == 0
+
+
+def test_big_scores_pair_arms_on_recall_and_leave_network_sessions_out_in_the_second_view():
+    tasks = [{"id": f"t{i}", "gold": ["a.py", "b.py"] if i == 0 else ["c.py"]} for i in range(3)]
+
+    def row(i, arm, files, net=()):
+        return {"id": f"t{i}", "arm": arm, "files": files, "num_turns": 5, "seconds": 60.0, "cost_usd": 0.5,
+                "input_tokens": 1000, "output_tokens": 100, "verinoda_calls": 2 if arm == "verinoda_mod" else 0,
+                "graphify_calls": 0, "network": list(net), "answered": True}
+    res = [row(0, "none", ["a.py"]), row(0, "verinoda_mod", ["a.py", "b.py", "z.py"]),
+           row(1, "none", ["x.py"]), row(1, "verinoda_mod", ["c.py"], net=["curl x"]),
+           row(2, "none", ["c.py"]), row(2, "verinoda_mod", ["c.py"])]
+    rep = score_big.report(res, tasks)
+    s = rep["all sessions"]["summary"]
+    assert s["none"]["recall"] == 1.5 and s["verinoda_mod"]["recall"] == 3.0 and s["verinoda_mod"]["sessions_using_tool"] == 3
+    d = rep["all sessions"]["decisions"]["verinoda_mod - none"]
+    assert d["n"] == 3 and d["diff"] == 1.5 and (d["wins"], d["ties"], d["losses"]) == (2, 1, 0)
+    assert d["ci95"][0] <= 1.5 <= d["ci95"][1]
+    d2 = rep["without sessions that looked something up on the network"]["decisions"]["verinoda_mod - none"]
+    assert d2["n"] == 2 and d2["diff"] == 0.5
+    assert score_big.cell(["c.py", "a.py"], ["a.py", "b.py"]) == {"recall": 0.5, "solved": 0, "hit1": 0, "precision": 0.5, "named": 2}
