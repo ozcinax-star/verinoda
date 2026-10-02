@@ -1717,9 +1717,10 @@ def _rebuild_code(
                     # label: callability protects indirect calls (#2438), and
                     # Rust impl identity connects alpha-renamed generic blocks.
                     # Verinoda patch: _no_bare_name keeps JS/TS scoped symbols out of bare-name matching.
+                    # Verinoda patch: _rust_returns_self and _php_fqn type receivers and static calls (rust/PHP passes).
                     for marker in (
                         "_callable", "_callable_class", "_elixir_module", "_no_bare_name",
-                        "_rust_impl_key", "_rust_declaration_count",
+                        "_rust_impl_key", "_rust_declaration_count", "_rust_returns_self", "_php_fqn",
                     ):
                         if node.get(marker):
                             ctx_node[marker] = node[marker]

@@ -36,7 +36,7 @@ except Exception:
     _EXTRACTOR_VERSION = "unknown"
 
 # Bump when AST cache-key semantics change independently of the package version.
-_AST_CACHE_SCHEMA = 12  # 4: Rust generic-impl identity markers + Terraform block attributes; 5: Java/C# overloads;
+_AST_CACHE_SCHEMA = 13  # 4: Rust generic-impl identity markers + Terraform block attributes; 5: Java/C# overloads;
 # 6 (Verinoda D65): member calls bind in-file only on the own receiver (super(), Go, Rust, PHP, Ruby, JS)
 # 7 (Verinoda, review of D65): PHP and Go receiver types, Ruby self.class, super() in C3 order, Rust turbofish
 # 8 (Verinoda D68): an MCP config's extraction leaves out Verinoda's own server entry (mcp_ingest)
@@ -48,6 +48,8 @@ _AST_CACHE_SCHEMA = 12  # 4: Rust generic-impl identity markers + Terraform bloc
 #   salted Java method's overloads are numbered from its salted id
 # 12 (Verinoda patch): JS/TS functions assigned to a module object's property, and functions bound in a function
 #   body, are symbols; those JS/TS symbols carry the _no_bare_name marker
+# 13 (Verinoda patch): receivers of a stated type (Go chains, Rust locals, parameters, `Type::m()` and trait objects,
+#   PHP `Foo::m()`, JS/TS `fn.call/apply/bind`); `_rust_returns_self` / `_php_fqn` node markers
 
 # Version dirs already swept this process — cleanup runs once per (base, version).
 _cleaned_ast_dirs: set[str] = set()
