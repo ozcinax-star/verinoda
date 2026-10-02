@@ -265,7 +265,8 @@ def test_mcp_serve_takes_watch(monkeypatch, tmp_path):
     from verinoda import cli
 
     seen = {}
-    monkeypatch.setattr("verinoda.mcp.server.serve", lambda repo, profile=None, watch=False:
+    # serve() also takes projects, transport and more since the multi-project server: the stub accepts them
+    monkeypatch.setattr("verinoda.mcp.server.serve", lambda repo, profile=None, watch=False, **_:
                         seen.update(repo=repo, watch=watch))
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".verinoda").mkdir()
