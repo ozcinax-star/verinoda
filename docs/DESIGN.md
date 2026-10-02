@@ -16117,6 +16117,231 @@ crashes or timeouts, clean after each.
 - Run: `tests/test_graph_precision.py`, `tests/test_deadcode.py` and `tests/test_docs.py` together: 58 passed (23,
   16 and 19).
 
+## 142. Repository groups: cross-repository call links (D169, 2026-10-01)
+
+### 142.1 Why
+
+A service, its client library and the shared package they both import often live in separate repositories.
+Each one has its own Verinoda index, and a call from one into another ends in nothing: the graph of the calling
+repository holds the import as a bare `concept` node (or not at all, for `import pkg.mod as x`), and the call
+itself is dropped because its callee is not in that graph. `trace` from an API handler to the library function
+it calls found no path.
+
+The backlog row is done when a call from repo A to a function in repo B is an edge with its call site.
+Sourcegraph links repositories through a precise index; Graphify's `merge-graphs` (vendored, not used here)
+composes several `graph.json` files into one graph and binds parked member calls by bare type name when exactly
+one declaration matches; GitNexus groups repositories as well.
+
+### 142.2 Decisions
+
+- **A group, not a merged graph.** `verinoda group create NAME A B ...` names two or more members: registered
+  project names (`verinoda projects add`), `NAME=PATH` or folders, resolved by the same code as `mcp serve
+  --projects` (`mcp/projects.py`, `resolve_specs`). The group list is `groups.json` in the user config folder,
+  next to `projects.json`. Each member keeps its own index in its own `.verinoda`; nothing is copied and nothing of
+  the group is written into a member. `group list|show|remove` complete the set; `remove` deletes the links file
+  and never touches a member.
+- **`group link` reads indexes, never builds them.** A member without a graph is an error naming `verinoda scan`.
+  The member's graph gives its indexed files, its definitions and their lines. The importing side is read from the
+  member's indexed source files (the graph drops the unresolved calls, so it cannot give them back).
+- **What a member defines for others**, read from the member itself:
+  - Python: dotted module names of the indexed `.py` files. Packages are found by walking up `__init__.py`
+    folders and named from their source root (the repository, a folder with its own `pyproject.toml`,
+    `setup.py` or `setup.cfg`, or the `src`, `lib` or `python` folder of one); folders without `__init__.py`
+    between the source root and the topmost package are part of the name (a PEP 420 namespace: `acme/core/`
+    is `acme.core`, not `core`). A single module at a source root counts under `src`, `lib` or `python`, or
+    when the distribution names it (`py-modules` / `py_modules`, or the distribution's own name); any other
+    root-level file is a script. A namespace folder named after the distribution (`[project]` /
+    `[tool.poetry]` name in `pyproject.toml`, `setup.cfg`, `setup.py`) counts too. Top-level names such as
+    `tests`, `docs`, `scripts` and `setup` are never another member's API.
+  - JavaScript/TypeScript: the `name` of each `package.json` (the root's and the ones the index read), with its
+    entry file (`source`, `exports["."]` with its `import`/`default`/... conditions, `module`, `main`, `types`
+    when indexed, a built path under `dist`/`lib`/`build` mapped to `src`, else `src/index.*` or `index.*`) and
+    its `exports` subpath map.
+  - Go: the `module` path of each `go.mod`.
+  - Java: fully qualified class names from the indexed files' `package` lines.
+- **Imports first, then calls through them.** Python is read with `ast` (`import p.q`, `import p.q as x`,
+  `from p.q import f as g`; relative imports are the member's own) and by its scopes: an import inside a function
+  binds only there, a class body is not seen from its methods, and a call whose first name the reading scope also
+  binds otherwise (a `def`, a class, an assignment, a parameter, a loop or `with` target) is not followed.
+  JavaScript/TypeScript (`import ... from`, `require`), Go (single and block imports, aliases) and Java (class and
+  static imports) are read as text: imports with comments blanked (`cross_service.strip_js` for JavaScript),
+  calls with comments and the insides of string, template, regular expression, raw-string, rune, char and
+  text-block literals blanked too (a template's `${...}` stays code). A module the importing member defines
+  itself is its own and is left alone; so is a module that sits next to one of its files in a folder without
+  `__init__.py` (a script's folder and pytest's rootdir are on that file's path). A call is followed only through
+  a name such an import binds: `f(...)`, `alias.f(...)`, `pkg.mod.f(...)`, `Cls.method(...)`, `ns.f(...)`,
+  `new Cls(...)`.
+- **Resolution in the defining member's graph.** The qualified callee is matched against the member's module
+  table, then its definitions: a top-level symbol of that file, else a symbol the file imports or re-exports (graph
+  edges), else a Python `from x import name` in that module followed to its source (relative imports made
+  absolute, at most 6 steps), then a class's `method` edge for `Cls.m`. A JavaScript name resolves in the file
+  the import loads: the entry for the bare package; for `pkg/sub`, the `exports` map's `./sub` (or a `./x/*`
+  pattern) when the package has one, else `sub` or `src/sub` as a file (`.ts`, `.js`, ...) or a folder's
+  `index.*`. In that file it is its own symbol, a symbol it imports or re-exports, or one of a file it re-exports
+  whole (`export * from`, at most four files deep, never a test or example folder); nothing else in the package
+  is searched. Go names resolve in the package folder (not `_test.go` files); Java members of the class.
+- **One definition or no link.** A module two members define (two members ship `libb`) gives no link for any
+  call through that import: it is listed as `ambiguous` (`kind: module`) with the members. A name with several
+  definitions in the other member is listed as `ambiguous` (`kind: definition`) with the candidates. A call with
+  no definition found is counted (`unresolved`) and the first 50 are kept as a sample.
+- **Status by Verinoda's evidence rules.** A link is read from two texts, so it is a lead: `strong_inference`.
+  It is `statically_verified` only when the call-site line, re-read, names the callee
+  (`callsite.line_names_target`, which also accepts a Python import alias; or the local name, when the re-read
+  import line names the target) and the definition line, re-read, names it too. The record keeps both lines and
+  the import's `file:line` (`via`).
+- **What a link holds.** `from_member`, `caller` (the innermost symbol of the calling member whose span holds the
+  call line, else the file), `call_site` (`file:line` in A), `to_member`, `target`, `definition` (`file:line` in
+  B), `via`, `language`, `status` and `check`.
+- **Stored keyed by each member's graph.** `groups/<name>.links.json` in the user config folder, or the folder
+  given at `group create --links-dir` (refused inside a member). The file records each member's graph identity
+  (size, mtime, sha256 of `graph.json`, `index.graph_identity`). `show` and `trace` compare it
+  (`index.same_graph`); a member re-indexed since is listed in `stale_members` and every link to or from it is
+  marked `stale` until `group link` runs again. `show` and `trace` also re-read each link's call-site line: a line
+  that is no longer the text the link was made from (the calling member edited, not re-indexed yet) marks that
+  link `stale` (`call_site_changed` in `show`). Other source edits not yet indexed change nothing here, the same
+  rule the member's own answers follow through `freshness`.
+- **`group trace NAME SOURCE TARGET`.** A breadth-first search over each member's `calls` edges (graph loaded with
+  its receiver edges) and the group's links; `MEMBER:SYMBOL` picks a member when a name is in several (a name in
+  several members without it is an error that lists them). Each hop carries its call site, a link hop its
+  definition and status; exit 2 when there is no path.
+- **`group query NAME QUESTION`.** `retrieval.retrieve` on each member's own index; every hit is labelled with
+  its member. Scores come from each member's index and compare only roughly across members (the result says so).
+- **MCP: a full-profile tool, `group_view`.** Measured on examples/orders_app: the core menu is 4,426
+  characters; `group_view` behind `run_tool` with a one-line catalog entry would take it to 4,518, over the
+  4,500 test limit. So it is listed in the full profile only (44 tools; the full menu goes from about 48,980 to
+  50,125 characters, the tool itself is 1,146). It takes `group`, `action` (`show`, `trace`, `query`),
+  `source`, `target`, `question`, `max_items`. It answers only for a group whose every member the server serves
+  and, in a server over several projects, whose every member's own profile serves the tool: a server never reads
+  a folder it does not serve, and a core project's code is not read through a full-profile tool. In a server over
+  several projects it takes no `project` (it is about the projects together). `link` stays a CLI command (it
+  writes the links file). The hub answers it through a served project that is a member of the group, so an
+  unrelated project is not loaded.
+- **Review round.** A review found six ways a wrong link could come out `statically_verified`, all fixed with a
+  regression test each. (1) The importing member's own non-package modules (`tests/helpers.py` imported as
+  `helpers` by a test next to it, `scripts/common.py` by a script) were linked to the other member's root-level
+  files of that name. Now a module next to a file of the importing member is its own, and a root-level file of
+  the other member is API only when the distribution names it. (2) A PEP 420 namespace package
+  (`acme/core/__init__.py`, no `acme/__init__.py`) was registered as the top-level module `core`, so `from
+  acme.core import boot` gave no link and an unrelated `import core` gave a wrong one. It is now named from its
+  source root, and the other member is matched by the imported module or a package it is in, not by its first
+  name alone. (3, 4) Go, Java and JavaScript/TypeScript calls written in comments or in string, template,
+  raw-string or text-block literals were read as calls; the call scan now runs on text with them blanked.
+  (5) A JavaScript subpath was matched by file-name prefix (`@acme/b/utils` reached `src/utils-legacy.ts`) and
+  ignored the `exports` map, and a name the entry did not export was searched in every file of the package
+  (`test/t.ts` included). Subpaths now go through `exports` or an exact file/index match, and a name the loaded
+  file does not export (itself, by import or re-export, or through `export * from`) is unresolved. (6) Python
+  bindings were file-wide, so a function-level import, a module `def` of the same name and a parameter
+  shadowing the import were all linked; bindings now follow Python's scopes. Minor points fixed: group names
+  that are Windows device names (`CON`, `nul.x`) are refused; `show` and `trace` mark a link whose call-site line
+  changed since `link`; `ProjectHub.group_view` no longer goes through an unrelated first project; the namespace
+  roots are walked in a sorted order. The real-world pair gives the same 58 links after the changes.
+
+### 142.3 Measured
+
+Windows 11, Python 3.13, the machine shared with other running jobs (times vary by up to 60%).
+
+| Group | Members (indexed files) | Links | Verified | Ambiguous | Unlinked calls through imports | `group link` |
+|---|---|---|---|---|---|---|
+| Python fixture | appa (2), libb (3) | 4 | 4 | 0 | 0 | 0.020 s |
+| TypeScript fixture | appjs (2), libjs (3) | 3 | 3 | 0 | 0 | 0.015 s |
+| Go fixture | appgo (2), libgo (2) | 1 | 1 | 0 | 0 | 0.012 s |
+| Java fixture | appjava (1), libjava (1) | 1 | 1 | 0 | 0 | 0.012 s |
+| fastapi/full-stack-fastapi-template + fastapi/sqlmodel (C:/vbench, existing indexes, read only) | 175, 339 | 58 | 58 | 0 | 7 | 1.1-1.2 s after the review round (the two graphs load in 0.19-0.21 s) |
+
+- On the real pair the template's backend imports `sqlmodel` 23 times; 65 calls go through those imports. 58 are
+  links: `Field()` 23, `select()` 20, `AutoString` 5, `col()` 4, `Session` 4, `Relationship()` 2. `select`
+  resolves through two re-exports (`sqlmodel/__init__.py` -> `sql/expression.py` ->
+  `sql/_expression_select_gen.py`); before that step was added, 20 of the 27 unlinked calls were `select`.
+- The 7 unlinked calls are `func.count` (3), `delete` (3) and `create_engine` (1): names `sqlmodel` re-exports
+  from SQLAlchemy, which no member defines. That is the right answer: their definition is outside the group.
+- `sqlmodel` also defines a `docs_src` package (its documentation examples); nothing imports it.
+- Nothing in either member changed: the modification times of their `atlas.db` and index files were the same
+  before and after three `group link` runs, and no file outside `.verinoda` was written.
+
+### 142.4 Not done
+
+- **Instance calls are not followed.** `x = Engine(); x.run()` and `Engine().run()` give no link for `run`
+  (only `Engine(...)` itself links, to the class); the receiver's type is not inferred across repositories.
+  Graphify's parked `metadata.unresolved_calls` (which `merge-graphs` binds by name) are not read.
+- **Which definition runs is not known.** A link names the definition in the member's source tree; the code that
+  runs is whatever is installed (a published version, another checkout). The link says what the member's source
+  defines, not what the deployment imports.
+- **The graph's view of overloads.** `typing.overload` stubs share one graph node at the first `def`, so
+  `select()` links to `_expression_select_gen.py:106`, the first overload, not the implementation.
+- **Languages.** Python, JavaScript/TypeScript, Go and Java only (no Kotlin, C#, Rust, PHP). Go links only
+  exported package functions (`pkg.Func(`), not methods. JavaScript default imports and `export default` are not
+  resolved; a re-export chain is followed only through the graph's own `re_exports` edges (a named re-export, or
+  `export * from` at most four files deep). TypeScript path aliases (`@/x`) and workspace aliases other than the
+  `package.json` name are not read. An `exports` target that points at built output is mapped back only by the
+  `dist|lib|build|out|esm|cjs/` -> `src/` rule; conditions are taken in a fixed order (`source`, `import`,
+  `module`, `default`, `node`, `require`, `types`), not per importing environment.
+- **Python packaging details.** `package-dir` mappings other than the `src`/`lib`/`python` layouts are not read.
+  A namespace package is found only when one of its folders below the namespace holds an `__init__.py` (or
+  through the distribution's name). A package under a folder that is neither a source root nor holds a project
+  file is named with that folder (`packages/foo/foo/` without a `pyproject.toml` there is `packages.foo.foo`), so
+  an import of `foo` from another member gives no link: a missed link, not a wrong one.
+- **Python scopes are approximate where Python is dynamic.** A name bound both by an import and otherwise in the
+  same scope (`try: from x import f` / `except ImportError: def f(...)`) gives no link; `global` is honoured,
+  `nonlocal`, `del`, `exec` and walrus targets in comprehensions are not modelled. A module the importing member
+  could import itself is never linked, even when the other member is the one installed (a test folder with a
+  `helpers.py` next to it never links `import helpers` to another member).
+- **Aliased re-exports stay leads.** `from .sub import compute as calc` in the other member's `__init__.py`
+  resolves to `compute`, but the call line names `calc` and the definition line names `compute`, so such a
+  link never reaches `statically_verified` (it stays `strong_inference`).
+- **Literal blanking is lexical.** The JavaScript pass decides regular expression versus division by the token
+  before the `/` (`cross_service`'s rule); a misread slash can blank or keep the rest of that line. Nested
+  templates inside `${...}` are followed; JSX text is code to this pass.
+- **Staleness is keyed by graph.** A member whose source changed but whose index did not is not stale; run
+  `verinoda update` in the member first. The calling member's source is read as it is now, so a call site's line
+  can be newer than that member's graph (the caller attribution then uses the older spans). `show` and `trace`
+  catch only a changed call-site line; an edited definition line in the other member is caught when that member
+  is re-indexed.
+- **Cost.** `trace` loads every member's graph with its receiver edges, and `query` every member's search index;
+  neither keeps them between calls in the CLI. The sidecar keeps at most 10,000 links and 500 ambiguous entries
+  (`truncated: true` when cut).
+- **MCP.** `group_view` is not in the core menu (no room under its limit) and answers only in a server that
+  serves every member with the full profile.
+
+### 142.5 Tests
+
+`tests/test_repo_group.py` (20 test functions, 25 cases): fixture repositories written and scanned in a
+temporary folder, with the user config folder in a temporary folder too.
+
+- A Python application calling a library's package (src layout, named in `pyproject.toml`) through `from
+  libb.core import compute`, the package's re-export (`libb.compute`), `Cls.method` and `import libb.core as lc`:
+  four links with caller, call site and definition `file:line`, all `statically_verified`; the links file holds
+  each member's graph sha256; no file of either member outside `.verinoda` changed after `link`, `show` and
+  `trace`.
+- A definition line that does not name the callee when re-read keeps every link at `strong_inference`.
+- A TypeScript application importing `@acme/money` by its `package.json` name (named, aliased and namespace
+  imports; a commented-out import is not read): three links, the aliased one verified through the import line.
+- Go (`c "example.com/libgo/calc"`, `c.Add`) and Java (`import com.acme.util.Strings`, `Strings.shout`) pairs.
+- Ambiguity: a third repository that defines `libb` too: no link from the application, four `ambiguous` module
+  entries naming both members.
+- Staleness: the library's file edited (not stale yet: its graph is unchanged), `verinoda update` on it (its links
+  and the trace hop are stale), `group link` again (fresh, with the new definition line).
+- `trace` across members, `not_found` in the other direction, a trace before `link` refused; `query` labels hits
+  by member.
+- The CLI: `create` (a name taken, a `--links-dir` inside a member, a group of one refused), `link`, `trace`
+  (exit 2 without a path), `list`, `remove` (deletes the links file in `--links-dir`), `query`.
+- MCP: `group_view` listed and answering in a full server over both members; refused in a server that does not
+  serve a member, in a core server (not listed, and refused when called), and in a single-project server; a hub
+  answers through a project of the group, not through an unrelated first project.
+- Review round: the importing member's own `tests/helpers.py` and `scripts/common.py` give no link to the other
+  member's root-level files of those names, which are not its API, while the module its distribution is named
+  after links; a namespace package (`acme/core/__init__.py`) is `acme.core`, linked from `from acme.core import
+  boot`, not from `import core`; Python scopes (a function-level import links only inside its function; a module
+  `def` and a parameter shadow; a class attribute is not seen from its methods); Go and Java calls in comments,
+  strings, a raw string, a text block and a commented-out Go import are not read; JavaScript calls in strings and
+  a regular expression are not read while a template's `${...}` is, `@acme/b/utils` goes through the `exports` map
+  (not `src/utils-legacy.ts`), a `./feat/*` pattern resolves, `export * from` is followed, and a name the entry
+  does not export (`test/t.ts`) stays unresolved; Windows device names refused as group names; an edited call
+  site marks its link stale in `show` and `trace`.
+
+`tests/test_mcp.py`: `group_view`'s parameters, its read-only annotation, and its answer on an unscanned project
+(`group_unavailable`). `tests/test_docs.py`: README, ARCHITECTURE and UPGRADING state 44 tools; the README
+command table lists `group`; ARCHITECTURE names `repo_group.py`.
+
 ## Sources
 
 - **Retrieval:**

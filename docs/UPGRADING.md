@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D168)
+## Upgrading from 0.4.0 (D137-D169)
 
 ### D137: Trigram regex index
 
@@ -292,11 +292,21 @@ warning; the files were left out before as well. OCaml classes, `.cshtml` `@func
 redaction of more Terraform secret values change those languages' graphs on the rebuild. The query filter
 accepts `lang:cobol`, `lang:erlang`, `lang:r`, `lang:solidity` and `lang:vbnet`.
 
+### Repository groups (backlog 1.6)
+
+Nothing to migrate; no member index changes and nothing is written into a member. New commands `verinoda group
+create NAME A B ... [--links-dir DIR]`, `group list|show|remove|link`, `group trace NAME SOURCE TARGET` and
+`group query NAME QUESTION`. The user config folder gains `groups.json` and `groups/<name>.links.json` (or the
+links file in `--links-dir`). One new MCP tool, `group_view` (show, trace, query), in the full profile only:
+44 tools; the core menu is unchanged (4,426 characters on examples/orders_app). It answers only in a server that
+serves every member of the group (`mcp serve --profile full --projects A,B`). `AtlasTools` gains
+`group_view()`, `ProjectHub` gains `group_view()`.
+
 ### Several projects from one server (backlog 1.5)
 
 Nothing to migrate; a single-project server (`mcp serve`, `--repo`, `--repo-of`) lists the same core menu as
-before. Two new MCP tools, `list_projects` and `index_status`: 43 tools. A single-project server lists them only
-in the full profile; a core server over several projects reaches them through `run_tool`. New: `mcp serve
+before. Two new MCP tools, `list_projects` and `index_status`, took the count to 43. A single-project server
+lists them only in the full profile; a core server over several projects reaches them through `run_tool`. New: `mcp serve
 --projects A,B` / `--all-projects`, `--max-loaded N`, `--transport http` with `--host` / `--port`, `verinoda mcp
 daemon start|status|stop`, `verinoda mcp token [--rotate]` and `verinoda projects add|list|remove`. The user config
 folder gains `projects.json`, `mcp-token`, `mcp-daemon.json` and `mcp-daemon.log`. In a server over several
@@ -427,6 +437,15 @@ a member of a weak unit is weak as well (`via`).
 A bare call or a name passed by value in one file no longer binds to a nested function, an object-assigned method
 or a `Foo.prototype` method of another file. Some cross-file edges therefore go away, including right ones
 to a function a hook returns and the caller destructures (`const { logout } = useAuth()`).
+
+### D169: Repository groups: cross-repository call links
+
+Nothing to migrate; no member index changes and nothing is written into a member. New commands `verinoda group
+create NAME A B ... [--links-dir DIR]`, `group list|show|remove|link`, `group trace NAME SOURCE TARGET` and
+`group query NAME QUESTION`. The user config folder gains `groups.json` and `groups/<name>.links.json` (or the
+links file in `--links-dir`). One new MCP tool, `group_view`, in the full profile only: 44 tools; the core menu is
+unchanged. `AtlasTools.group_view()` and `ProjectHub.group_view()` are new. No change to `tq.py`, `index.py` or
+`project_index/`, so `tests/test_tq_measured.py` needs no `benchmark tq-audit` rerun for this change.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

@@ -1,0 +1,8208 @@
+{
+ "kind": "verinoda-realworld",
+ "date": "2026-10-02",
+ "environment": {
+  "verinoda_version": "0.3.2",
+  "python": "3.13.14",
+  "verinoda_commit": "a96f60e",
+  "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+  "verinoda_dirty": false,
+  "platform": "Windows-11-10.0.26200-SP0",
+  "cpus": 16
+ },
+ "runs": [
+  {
+   "at": "2026-10-02T02:25:13",
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "repos": [
+    "fastapi/full-stack-fastapi-template",
+    "fastapi/sqlmodel",
+    "expressjs/express",
+    "axios/axios",
+    "junegunn/fzf",
+    "gin-gonic/gin",
+    "sharkdp/bat",
+    "google/gson",
+    "guzzle/guzzle"
+   ]
+  }
+ ],
+ "paths_sanitized": [
+  "<CORPUS>",
+  "<REPO>",
+  "<HOME>"
+ ],
+ "repos": [
+  {
+   "name": "fastapi/full-stack-fastapi-template",
+   "tag": "0.12.0",
+   "sha": "84c5a9e11a9e58262599e3d772f5386924e02ca7",
+   "language": "Python + TypeScript",
+   "started": "2026-10-02T02:25:14",
+   "files": 254,
+   "scan_s": 18.157,
+   "update_s": 11.333,
+   "query_median_s": 1.393,
+   "analyze_median_s": 3.46,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 94866,
+   "gold": {
+    "hits": 10,
+    "total": 10,
+    "v2": {
+     "hits": 0,
+     "total": 0
+    },
+    "facts": [
+     {
+      "id": "def-authenticate",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.284
+     },
+     {
+      "id": "login-calls-authenticate",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.239
+     },
+     {
+      "id": "login-reaches-verify-password",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.412
+     },
+     {
+      "id": "users-create-calls-crud",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.208
+     },
+     {
+      "id": "def-get-current-user",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.204
+     },
+     {
+      "id": "route-login-access-token",
+      "v": 1,
+      "kind": "routes",
+      "hit": true,
+      "why": "",
+      "seconds": 1.207
+     },
+     {
+      "id": "route-read-item",
+      "v": 1,
+      "kind": "routes",
+      "hit": true,
+      "why": "",
+      "seconds": 1.32
+     },
+     {
+      "id": "schema-user-table",
+      "v": 1,
+      "kind": "schema",
+      "hit": true,
+      "why": "",
+      "seconds": 1.385
+     },
+     {
+      "id": "frontend-login-calls-sdk",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.558
+     },
+     {
+      "id": "query-jwt",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 3",
+      "seconds": 1.456
+     }
+    ]
+   },
+   "edit": {
+    "file": "backend/app/crud.py",
+    "after_line": 18,
+    "insert": "_VERINODA_BENCH_EDIT = 1"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 2.816,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 70,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 18.157,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1325,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-authenticate",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"authenticate\" and f.file = \"backend/app/crud.py\" return f",
+      "--json"
+     ],
+     "seconds": 1.284,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1051,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:login-calls-authenticate",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"login_access_token\" and b.name = \"authenticate\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.239,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1631,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:login-reaches-verify-password",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "login_access_token",
+      "verify_password",
+      "--json"
+     ],
+     "seconds": 1.412,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1023,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:users-create-calls-crud",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"create_user\" and a.file = \"backend/app/api/routes/users.py\" and b.name = \"create_user\" and b.file = \"backend/app/crud.py\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.208,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1668,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-get-current-user",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"get_current_user\" and f.file = \"backend/app/api/deps.py\" return f",
+      "--json"
+     ],
+     "seconds": 1.204,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1084,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:route-login-access-token",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.207,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8420,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:route-read-item",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.32,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8420,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:schema-user-table",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.385,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9333,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:frontend-login-calls-sdk",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"login\" and a.file = \"frontend/src/hooks/useAuth.ts\" and b.name = \"loginAccessToken\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.558,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1720,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-jwt",
+     "command": "query",
+     "argv": [
+      "query",
+      "where is the JWT access token created and signed",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.456,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5666,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does a user log in and get an access token",
+      "--json"
+     ],
+     "seconds": 1.419,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5734,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is the current user read from the token",
+      "--json"
+     ],
+     "seconds": 1.393,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5716,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are items created and listed",
+      "--json"
+     ],
+     "seconds": 1.379,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5678,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when a client posts to the login endpoint",
+      "--json"
+     ],
+     "seconds": 3.083,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10515,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are passwords hashed and verified",
+      "--json"
+     ],
+     "seconds": 3.837,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 12759,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "login_access_token",
+      "verify_password",
+      "--json"
+     ],
+     "seconds": 1.198,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1023,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.224,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1210,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"get_password_hash\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.214,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 4495,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "check",
+     "command": "check",
+     "argv": [
+      "check",
+      "backend/app/crud.py",
+      "--json"
+     ],
+     "seconds": 3.275,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3,
+      4
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2918,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "checked"
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.234,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9593,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 2.002,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10018,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 2.44,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 94866,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.469,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.209,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8420,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.33,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9333,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "taint",
+     "command": "taint",
+     "argv": [
+      "taint",
+      "--json"
+     ],
+     "seconds": 1.645,
+     "exit": 3,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 3543,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.756,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10831,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how does a user log in and get an access token"
+     ],
+     "seconds": 1.49,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 6250,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when a client posts to the login endpoint"
+     ],
+     "seconds": 2.547,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 7570,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 11.333,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1322,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 3.654,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11212,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 10.787,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1322,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "fastapi/sqlmodel",
+   "tag": "0.0.47",
+   "sha": "1c46f0decb64762b4beb085e3181428921166349",
+   "language": "Python",
+   "started": "2026-10-02T02:26:50",
+   "files": 526,
+   "scan_s": 28.01,
+   "update_s": 17.211,
+   "query_median_s": 1.536,
+   "analyze_median_s": 2.69,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 117038,
+   "gold": {
+    "hits": 10,
+    "total": 10,
+    "v2": {
+     "hits": 0,
+     "total": 0
+    },
+    "facts": [
+     {
+      "id": "def-get-column-from-field",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.322
+     },
+     {
+      "id": "metaclass-new-calls-column",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.378
+     },
+     {
+      "id": "column-calls-satype",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.342
+     },
+     {
+      "id": "model-validate-calls-compat",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.304
+     },
+     {
+      "id": "model-validate-reaches-compat",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.38
+     },
+     {
+      "id": "def-field-impl",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.319
+     },
+     {
+      "id": "class-sqlmodel",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.4
+     },
+     {
+      "id": "schema-hero-table",
+      "v": 1,
+      "kind": "schema",
+      "hit": true,
+      "why": "",
+      "seconds": 1.714
+     },
+     {
+      "id": "query-field-to-column",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 5",
+      "seconds": 1.579
+     },
+     {
+      "id": "query-session-exec",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.524
+     }
+    ]
+   },
+   "edit": {
+    "file": "sqlmodel/main.py",
+    "after_line": 837,
+    "insert": "_VERINODA_BENCH_EDIT = 1"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.272,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 51,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 28.01,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1294,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-get-column-from-field",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"get_column_from_field\" and f.file = \"sqlmodel/main.py\" return f",
+      "--json"
+     ],
+     "seconds": 1.322,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1078,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:metaclass-new-calls-column",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"__new__\" and a.file = \"sqlmodel/main.py\" and b.name = \"get_column_from_field\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.378,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1620,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:column-calls-satype",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "get_column_from_field",
+      "get_sqlalchemy_type",
+      "--json"
+     ],
+     "seconds": 1.342,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 727,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:model-validate-calls-compat",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"model_validate\" and a.file = \"sqlmodel/main.py\" and b.name = \"sqlmodel_validate\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.304,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1638,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:model-validate-reaches-compat",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "sqlmodel/main.py::model_validate",
+      "sqlmodel_validate",
+      "--json"
+     ],
+     "seconds": 1.38,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 729,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-field-impl",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"Field\" and f.file = \"sqlmodel/main.py\" return f",
+      "--json"
+     ],
+     "seconds": 1.319,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1015,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:class-sqlmodel",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (c:class) where c.name = \"SQLModel\" and c.file = \"sqlmodel/main.py\" return c",
+      "--json"
+     ],
+     "seconds": 1.4,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1013,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:schema-hero-table",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.714,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 81381,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-field-to-column",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a model field converted to a SQLAlchemy column type",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.579,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5739,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-session-exec",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does session exec return scalars for a select statement",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.524,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5765,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does a table model become a SQLAlchemy table",
+      "--json"
+     ],
+     "seconds": 1.536,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5695,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a model validated from a dict or an object",
+      "--json"
+     ],
+     "seconds": 1.561,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5676,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does session exec run a select",
+      "--json"
+     ],
+     "seconds": 1.508,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5712,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when a class is declared with table=True",
+      "--json"
+     ],
+     "seconds": 2.734,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9941,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are relationships between models set up",
+      "--json"
+     ],
+     "seconds": 2.646,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9290,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "sqlmodel/main.py::model_validate",
+      "sqlmodel_validate",
+      "--json"
+     ],
+     "seconds": 1.327,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 729,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.292,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1127,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"get_column_from_field\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.349,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1422,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "check",
+     "command": "check",
+     "argv": [
+      "check",
+      "sqlmodel/main.py",
+      "--json"
+     ],
+     "seconds": 5.107,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3,
+      4
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 18967,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "checked"
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.275,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10188,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 2.234,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 105113,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 3.576,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 117038,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.515,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.459,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 51570,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.715,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 81381,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "taint",
+     "command": "taint",
+     "argv": [
+      "taint",
+      "--json"
+     ],
+     "seconds": 2.29,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1290,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.67,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10343,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how does a table model become a SQLAlchemy table"
+     ],
+     "seconds": 1.425,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5434,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when a class is declared with table=True"
+     ],
+     "seconds": 2.93,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 7540,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 17.211,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1309,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 3.233,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11185,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 12.467,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1304,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "expressjs/express",
+   "tag": "v5.2.1",
+   "sha": "dbac741a49a5a64336b70c06e85c2e2706e36336",
+   "language": "JavaScript",
+   "started": "2026-10-02T02:28:47",
+   "files": 218,
+   "scan_s": 10.408,
+   "update_s": 8.418,
+   "query_median_s": 1.332,
+   "analyze_median_s": 2.718,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 78558,
+   "gold": {
+    "hits": 7,
+    "total": 10,
+    "v2": {
+     "hits": 2,
+     "total": 2
+    },
+    "facts": [
+     {
+      "id": "def-stringify",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.151
+     },
+     {
+      "id": "json-calls-stringify",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.163
+     },
+     {
+      "id": "json-calls-send",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.163
+     },
+     {
+      "id": "sendfile-calls-helper",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.297
+     },
+     {
+      "id": "render-reaches-tryrender",
+      "v": 1,
+      "kind": "trace",
+      "hit": false,
+      "why": "no path (no directed path)",
+      "seconds": 1.209
+     },
+     {
+      "id": "def-create-application",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.189
+     },
+     {
+      "id": "route-posts",
+      "v": 1,
+      "kind": "routes",
+      "hit": false,
+      "why": "route not in the table (same path: handler examples_route_separation_post_list)",
+      "seconds": 1.525
+     },
+     {
+      "id": "route-user-edit-put",
+      "v": 1,
+      "kind": "routes",
+      "hit": false,
+      "why": "route not in the table (same path: handler examples_route_middleware_index; handler examples_route_separation_user_edit; handler examples_route_separation_user_update)",
+      "seconds": 1.436
+     },
+     {
+      "id": "query-json-response",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.339
+     },
+     {
+      "id": "query-accepts",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 6",
+      "seconds": 1.453
+     },
+     {
+      "id": "route-posts@v2",
+      "v": 2,
+      "kind": "routes",
+      "hit": true,
+      "why": "",
+      "seconds": 1.415
+     },
+     {
+      "id": "route-user-edit-put@v2",
+      "v": 2,
+      "kind": "routes",
+      "hit": true,
+      "why": "",
+      "seconds": 1.411
+     }
+    ]
+   },
+   "edit": {
+    "file": "lib/response.js",
+    "after_line": 253,
+    "insert": "var verinodaBenchEdit = 1;"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.367,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 52,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 10.408,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1208,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-stringify",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"stringify\" and f.file = \"lib/response.js\" return f",
+      "--json"
+     ],
+     "seconds": 1.151,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1028,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:json-calls-stringify",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"json\" and a.file = \"lib/response.js\" and b.name = \"stringify\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.163,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1501,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:json-calls-send",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"json\" and a.file = \"lib/response.js\" and b.name = \"send\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.163,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1498,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:sendfile-calls-helper",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "lib/response.js::sendFile",
+      "lib/response.js::sendfile",
+      "--json"
+     ],
+     "seconds": 1.297,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 781,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:render-reaches-tryrender",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "lib/response.js::render",
+      "tryRender",
+      "--json"
+     ],
+     "seconds": 1.209,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 424,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-create-application",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"createApplication\" return f",
+      "--json"
+     ],
+     "seconds": 1.189,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1020,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:route-posts",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.525,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 73704,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:route-user-edit-put",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.436,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 73704,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-json-response",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a JSON response body serialized and sent",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.339,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 4281,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-accepts",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the request check which content types the client accepts",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.453,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 3795,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:route-posts@v2",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.415,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 73704,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:route-user-edit-put@v2",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.411,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 73704,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a JSON response sent",
+      "--json"
+     ],
+     "seconds": 1.332,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5624,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the application handle an incoming request",
+      "--json"
+     ],
+     "seconds": 1.326,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 3957,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a view rendered",
+      "--json"
+     ],
+     "seconds": 1.335,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 4470,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when res.json is called",
+      "--json"
+     ],
+     "seconds": 2.941,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 12401,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how does express create an application",
+      "--json"
+     ],
+     "seconds": 2.494,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10364,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "lib/response.js::json",
+      "stringify",
+      "--json"
+     ],
+     "seconds": 1.171,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 588,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.136,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1146,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"send\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.206,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2541,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.202,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8220,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 1.392,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 4733,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 1.823,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 78558,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.323,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.41,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 73704,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.229,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.471,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10334,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how is a JSON response sent"
+     ],
+     "seconds": 1.23,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5729,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when res.json is called"
+     ],
+     "seconds": 2.767,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8911,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 8.418,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2429,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 2.912,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11174,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 8.48,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1225,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "axios/axios",
+   "tag": "v1.20.0",
+   "sha": "84a9f3b9a4f3244b8c8e818f557d64c7b964fb25",
+   "language": "JavaScript + TypeScript",
+   "started": "2026-10-02T02:30:02",
+   "files": 466,
+   "scan_s": 23.981,
+   "update_s": 18.612,
+   "query_median_s": 1.487,
+   "analyze_median_s": 3.588,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 104280,
+   "gold": {
+    "hits": 9,
+    "total": 10,
+    "v2": {
+     "hits": 0,
+     "total": 0
+    },
+    "facts": [
+     {
+      "id": "def-dispatch-request",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.266
+     },
+     {
+      "id": "request-calls-private",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.282
+     },
+     {
+      "id": "private-request-merges-config",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.31
+     },
+     {
+      "id": "dispatch-checks-cancel",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.342
+     },
+     {
+      "id": "request-reaches-adapter",
+      "v": 1,
+      "kind": "trace",
+      "hit": false,
+      "why": "no path (no directed path)",
+      "seconds": 1.345
+     },
+     {
+      "id": "create-instance-binds",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.393
+     },
+     {
+      "id": "def-merge-config",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.291
+     },
+     {
+      "id": "def-get-adapter",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.286
+     },
+     {
+      "id": "query-interceptors",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.539
+     },
+     {
+      "id": "query-http-adapter",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.544
+     }
+    ]
+   },
+   "edit": {
+    "file": "lib/core/dispatchRequest.js",
+    "after_line": 26,
+    "insert": "const verinodaBenchEdit = 1;"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.262,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 46,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 23.981,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1185,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-dispatch-request",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"dispatchRequest\" return f",
+      "--json"
+     ],
+     "seconds": 1.266,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1052,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:request-calls-private",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"request\" and a.file = \"lib/core/Axios.js\" and b.name = \"_request\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.282,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1576,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:private-request-merges-config",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"_request\" and b.name = \"mergeConfig\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.31,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1556,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:dispatch-checks-cancel",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "dispatchRequest",
+      "throwIfCancellationRequested",
+      "--json"
+     ],
+     "seconds": 1.342,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 841,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:request-reaches-adapter",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "_request",
+      "lib/adapters/adapters.js::getAdapter",
+      "--json"
+     ],
+     "seconds": 1.345,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 591,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:create-instance-binds",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"createInstance\" and b.name = \"bind\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.393,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1464,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-merge-config",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"mergeConfig\" and f.file = \"lib/core/mergeConfig.js\" return f",
+      "--json"
+     ],
+     "seconds": 1.291,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1064,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-get-adapter",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"getAdapter\" and f.file = \"lib/adapters/adapters.js\" return f",
+      "--json"
+     ],
+     "seconds": 1.286,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1065,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-interceptors",
+     "command": "query",
+     "argv": [
+      "query",
+      "where are request and response interceptors chained around the request",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.539,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5398,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-http-adapter",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the node http adapter send the request and follow redirects",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.544,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 4594,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a request dispatched to the adapter",
+      "--json"
+     ],
+     "seconds": 1.487,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5533,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are request configs merged",
+      "--json"
+     ],
+     "seconds": 1.558,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5691,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are interceptors run",
+      "--json"
+     ],
+     "seconds": 1.464,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5382,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when axios.get is called",
+      "--json"
+     ],
+     "seconds": 4.291,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9623,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how is a request cancelled",
+      "--json"
+     ],
+     "seconds": 2.884,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9034,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "lib/core/Axios.js::request",
+      "lib/core/dispatchRequest.js::dispatchRequest",
+      "--json"
+     ],
+     "seconds": 1.43,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 518,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "no directed path"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.266,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1171,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"mergeConfig\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.295,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 3998,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.242,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9362,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 2.572,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2682,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 3.273,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 104280,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.442,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.572,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 36434,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.338,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.66,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10543,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how is a request dispatched to the adapter"
+     ],
+     "seconds": 1.431,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5448,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when axios.get is called"
+     ],
+     "seconds": 4.555,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 7958,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 18.612,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1568,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 3.699,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11957,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 16.864,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1216,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "junegunn/fzf",
+   "tag": "v0.74.4",
+   "sha": "a140afeb4d733cad3c96a56bf6db7e26853b6757",
+   "language": "Go",
+   "started": "2026-10-02T02:31:57",
+   "files": 161,
+   "scan_s": 15.69,
+   "update_s": 8.365,
+   "query_median_s": 1.595,
+   "analyze_median_s": 3.494,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 142220,
+   "gold": {
+    "hits": 8,
+    "total": 10,
+    "v2": {
+     "hits": 3,
+     "total": 3
+    },
+    "facts": [
+     {
+      "id": "def-run",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.239
+     },
+     {
+      "id": "main-calls-run",
+      "v": 1,
+      "kind": "trace",
+      "hit": false,
+      "why": "no path (no directed path)",
+      "seconds": 1.275
+     },
+     {
+      "id": "parse-calls-parse",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.24
+     },
+     {
+      "id": "run-calls-postprocess",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.255
+     },
+     {
+      "id": "run-calls-newmatcher",
+      "v": 1,
+      "kind": "trace",
+      "hit": false,
+      "why": "no path edge at src/matcher.go",
+      "seconds": 1.307
+     },
+     {
+      "id": "matcher-loop-scan",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.227
+     },
+     {
+      "id": "def-fuzzymatchv2",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.223
+     },
+     {
+      "id": "pattern-matchitem",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.266
+     },
+     {
+      "id": "query-fuzzy-algo",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.495
+     },
+     {
+      "id": "query-options",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.497
+     },
+     {
+      "id": "main-calls-run@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.281
+     },
+     {
+      "id": "run-calls-newmatcher@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.331
+     },
+     {
+      "id": "pattern-matchitem@v2",
+      "v": 2,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.219
+     }
+    ]
+   },
+   "edit": {
+    "file": "src/core.go",
+    "after_line": 55,
+    "insert": "\t_ = opts // verinoda-bench edit"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.285,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 47,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 15.69,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1187,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-run",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"Run\" and f.file = \"src/core.go\" return f",
+      "--json"
+     ],
+     "seconds": 1.239,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 985,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:main-calls-run",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "main.go",
+      "src/core.go",
+      "--json"
+     ],
+     "seconds": 1.275,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 313,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:parse-calls-parse",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"ParseOptions\" and b.name = \"parseOptions\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.24,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1514,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:run-calls-postprocess",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"Run\" and a.file = \"src/core.go\" and b.name = \"postProcessOptions\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.255,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1582,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:run-calls-newmatcher",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "Run",
+      "NewMatcher",
+      "--json"
+     ],
+     "seconds": 1.307,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 615,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:matcher-loop-scan",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"Loop\" and a.file = \"src/matcher.go\" and b.name = \"scan\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.227,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1471,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-fuzzymatchv2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"FuzzyMatchV2\" return f",
+      "--json"
+     ],
+     "seconds": 1.223,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1009,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:pattern-matchitem",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"MatchItem\" and a.file = \"src/pattern.go\" and b.name = \"basicMatch\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.266,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1539,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-fuzzy-algo",
+     "command": "query",
+     "argv": [
+      "query",
+      "fuzzy matching algorithm score calculation",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.495,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5677,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-options",
+     "command": "query",
+     "argv": [
+      "query",
+      "where are the command line options parsed",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.497,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5236,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:main-calls-run@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "main.go::main",
+      "src/core.go::Run",
+      "--json"
+     ],
+     "seconds": 1.281,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 484,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:run-calls-newmatcher@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "src/core.go::Run",
+      "NewMatcher",
+      "--json"
+     ],
+     "seconds": 1.331,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 542,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:pattern-matchitem@v2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"MatchItem\" and a.file = \"src/pattern.go\" and b.name = \"basicMatch\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.219,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1539,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the terminal draw the list of matches",
+      "--json"
+     ],
+     "seconds": 1.595,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5696,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is the input read from the default command",
+      "--json"
+     ],
+     "seconds": 1.639,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5655,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are results sorted by score",
+      "--json"
+     ],
+     "seconds": 1.388,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5630,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how does a keystroke change the query and rerun the matcher",
+      "--json"
+     ],
+     "seconds": 4.505,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10034,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are matches ranked",
+      "--json"
+     ],
+     "seconds": 2.482,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9574,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "main.go::main",
+      "NewMatcher",
+      "--json"
+     ],
+     "seconds": 1.275,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 683,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.226,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1177,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"scan\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.263,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1306,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.196,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 7868,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 2.437,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1509,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 2.823,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 142220,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.453,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.172,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 491,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.295,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.471,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10348,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how does the terminal draw the list of matches"
+     ],
+     "seconds": 1.532,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 6272,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "how does a keystroke change the query and rerun the matcher"
+     ],
+     "seconds": 4.621,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8399,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 8.365,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1203,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 3.032,
+     "exit": 3,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 14150,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 6.843,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1200,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "gin-gonic/gin",
+   "tag": "v1.12.0",
+   "sha": "73726dc606796a025971fe451f0aa6f1b9b847f6",
+   "language": "Go",
+   "started": "2026-10-02T02:33:23",
+   "files": 130,
+   "scan_s": 11.624,
+   "update_s": 7.752,
+   "query_median_s": 1.421,
+   "analyze_median_s": 2.679,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 149895,
+   "gold": {
+    "hits": 7,
+    "total": 10,
+    "v2": {
+     "hits": 1,
+     "total": 2
+    },
+    "facts": [
+     {
+      "id": "def-default",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.241
+     },
+     {
+      "id": "default-calls-new",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.24
+     },
+     {
+      "id": "default-calls-recovery",
+      "v": 1,
+      "kind": "trace",
+      "hit": false,
+      "why": "source not resolved (ambiguous)",
+      "seconds": 1.273
+     },
+     {
+      "id": "servehttp-calls-handle",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.239
+     },
+     {
+      "id": "request-reaches-tree",
+      "v": 1,
+      "kind": "trace",
+      "hit": false,
+      "why": "no path (no directed path)",
+      "seconds": 1.304
+     },
+     {
+      "id": "get-registers-route",
+      "v": 1,
+      "kind": "q",
+      "hit": false,
+      "why": "no row",
+      "seconds": 1.24
+     },
+     {
+      "id": "recovery-calls-writer",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.234
+     },
+     {
+      "id": "context-json-method",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.228
+     },
+     {
+      "id": "query-radix-tree",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.48
+     },
+     {
+      "id": "query-recovery",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.363
+     },
+     {
+      "id": "default-calls-recovery@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.246
+     },
+     {
+      "id": "request-reaches-tree@v2",
+      "v": 2,
+      "kind": "trace",
+      "hit": false,
+      "why": "no path (no directed path)",
+      "seconds": 1.29
+     }
+    ]
+   },
+   "edit": {
+    "file": "gin.go",
+    "after_line": 238,
+    "insert": "\t_ = engine // verinoda-bench edit"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.302,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 48,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 11.624,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1191,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-default",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"Default\" and f.file = \"gin.go\" return f",
+      "--json"
+     ],
+     "seconds": 1.241,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 983,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:default-calls-new",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"Default\" and a.file = \"gin.go\" and b.name = \"New\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.24,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1363,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:default-calls-recovery",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "Default",
+      "Recovery",
+      "--json"
+     ],
+     "seconds": 1.273,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 935,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:servehttp-calls-handle",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"ServeHTTP\" and a.file = \"gin.go\" and b.name = \"handleHTTPRequest\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.239,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1569,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:request-reaches-tree",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "ServeHTTP",
+      "getValue",
+      "--json"
+     ],
+     "seconds": 1.304,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 521,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:get-registers-route",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls*1..4]->(b:function) where a.name = \"GET\" and a.file = \"routergroup.go\" and b.name = \"addRoute\" and b.file = \"tree.go\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.24,
+     "exit": 1,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 803,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:recovery-calls-writer",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"Recovery\" and b.name = \"RecoveryWithWriter\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.234,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1475,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:context-json-method",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (m:function) where m.name = \"JSON\" and m.file = \"context.go\" return m",
+      "--json"
+     ],
+     "seconds": 1.228,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1023,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-radix-tree",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are request paths matched against the radix tree of routes",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.48,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5279,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-recovery",
+     "command": "query",
+     "argv": [
+      "query",
+      "where does the middleware recover from a panic and write a 500",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.363,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5201,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:default-calls-recovery@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "gin.go::Default",
+      "Recovery",
+      "--json"
+     ],
+     "seconds": 1.246,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 513,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:request-reaches-tree@v2",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "ServeHTTP",
+      "getValue",
+      "--json"
+     ],
+     "seconds": 1.29,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 521,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a route registered on a router group",
+      "--json"
+     ],
+     "seconds": 1.394,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5687,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the middleware chain call the next handler",
+      "--json"
+     ],
+     "seconds": 1.487,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5311,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is a JSON response rendered",
+      "--json"
+     ],
+     "seconds": 1.421,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5272,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when a request arrives at the engine",
+      "--json"
+     ],
+     "seconds": 2.809,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11643,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are panics recovered",
+      "--json"
+     ],
+     "seconds": 2.549,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9086,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "gin.go::Default",
+      "LoggerWithConfig",
+      "--json"
+     ],
+     "seconds": 1.289,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 719,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.211,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1180,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"Next\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.238,
+     "exit": 1,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 718,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.206,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8392,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 1.809,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 3292,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 2.397,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 149895,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.37,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.134,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 491,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.286,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.477,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10123,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how is a route registered on a router group"
+     ],
+     "seconds": 1.307,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 6186,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when a request arrives at the engine"
+     ],
+     "seconds": 2.801,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8737,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 7.752,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1199,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 3.244,
+     "exit": 3,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 14691,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 6.148,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1199,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "sharkdp/bat",
+   "tag": "v0.26.1",
+   "sha": "979ba22628bc9d8171f2cffca2bd5c90c9fc0a9e",
+   "language": "Rust",
+   "started": "2026-10-02T02:34:38",
+   "files": 974,
+   "scan_s": 35.584,
+   "update_s": 19.984,
+   "query_median_s": 1.557,
+   "analyze_median_s": 3.205,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 77105,
+   "gold": {
+    "hits": 8,
+    "total": 10,
+    "v2": {
+     "hits": 0,
+     "total": 0
+    },
+    "facts": [
+     {
+      "id": "def-run-controller",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.505
+     },
+     {
+      "id": "run-controller-new",
+      "v": 1,
+      "kind": "q",
+      "hit": false,
+      "why": "no row",
+      "seconds": 1.415
+     },
+     {
+      "id": "controller-run-delegates",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.42
+     },
+     {
+      "id": "main-reaches-run-controller",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.425
+     },
+     {
+      "id": "run-reaches-print-file-ranges",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.452
+     },
+     {
+      "id": "def-interactive-print-line",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.406
+     },
+     {
+      "id": "struct-controller",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.373
+     },
+     {
+      "id": "print-file-calls-header",
+      "v": 1,
+      "kind": "q",
+      "hit": false,
+      "why": "no row",
+      "seconds": 1.381
+     },
+     {
+      "id": "query-pager",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 4",
+      "seconds": 1.64
+     },
+     {
+      "id": "query-highlight",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 2",
+      "seconds": 1.632
+     }
+    ]
+   },
+   "edit": {
+    "file": "src/controller.rs",
+    "after_line": 46,
+    "insert": "    const VERINODA_BENCH_EDIT: u8 = 1;"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.315,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 46,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 35.584,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2182,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-run-controller",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"run_controller\" return f",
+      "--json"
+     ],
+     "seconds": 1.505,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1026,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:run-controller-new",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"run_controller\" and b.name = \"new\" and b.file = \"src/controller.rs\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.415,
+     "exit": 1,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 781,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:controller-run-delegates",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"run\" and a.file = \"src/controller.rs\" and b.name = \"run_with_error_handler\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.42,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1644,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:main-reaches-run-controller",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "src/bin/bat/main.rs::main",
+      "run_controller",
+      "--json"
+     ],
+     "seconds": 1.425,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 826,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:run-reaches-print-file-ranges",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "src/controller.rs::run",
+      "print_file_ranges",
+      "--json"
+     ],
+     "seconds": 1.452,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1442,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-interactive-print-line",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"print_line\" and f.file = \"src/printer.rs\" return f",
+      "--json"
+     ],
+     "seconds": 1.406,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1692,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:struct-controller",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (c:class) where c.name = \"Controller\" return c",
+      "--json"
+     ],
+     "seconds": 1.373,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 988,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:print-file-calls-header",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"print_file\" and a.file = \"src/controller.rs\" and b.name = \"print_header\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.381,
+     "exit": 1,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 787,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-pager",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is the pager command found and its arguments parsed",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.64,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5588,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-highlight",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is each line syntax highlighted with the theme before printing",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.632,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5580,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the controller print each input file",
+      "--json"
+     ],
+     "seconds": 1.557,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5644,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is the pager started",
+      "--json"
+     ],
+     "seconds": 1.537,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5592,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are syntax and theme assets loaded",
+      "--json"
+     ],
+     "seconds": 1.561,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5716,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when bat prints a file",
+      "--json"
+     ],
+     "seconds": 3.181,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10728,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are line ranges selected",
+      "--json"
+     ],
+     "seconds": 3.228,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11675,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "src/bin/bat/main.rs::run_controller",
+      "src/controller.rs::run_with_error_handler",
+      "--json"
+     ],
+     "seconds": 1.432,
+     "exit": 2,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 553,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "no directed path"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.393,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1240,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"print_line\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.423,
+     "exit": 1,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 724,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.327,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 7854,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 1.988,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 4453,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 4.783,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 77105,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.509,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.376,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 491,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.471,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.864,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 14099,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how does the controller print each input file"
+     ],
+     "seconds": 1.533,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 6215,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when bat prints a file"
+     ],
+     "seconds": 3.351,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8212,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 19.984,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2203,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 4.413,
+     "exit": 3,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 12775,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 16.532,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2203,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "google/gson",
+   "tag": "gson-parent-2.14.0",
+   "sha": "3ff35d6269894901ab8006258395aafc4b9765cd",
+   "language": "Java",
+   "started": "2026-10-02T02:36:47",
+   "files": 311,
+   "scan_s": 27.434,
+   "update_s": 24.791,
+   "query_median_s": 1.95,
+   "analyze_median_s": 4.018,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 162293,
+   "gold": {
+    "hits": 10,
+    "total": 10,
+    "v2": {
+     "hits": 0,
+     "total": 0
+    },
+    "facts": [
+     {
+      "id": "def-dopeek",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.589
+     },
+     {
+      "id": "peek-calls-dopeek",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.612
+     },
+     {
+      "id": "tojson-calls-getadapter",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.621
+     },
+     {
+      "id": "getadapter-calls-factory-create",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.626
+     },
+     {
+      "id": "fromjson-calls-getadapter",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.587
+     },
+     {
+      "id": "parsestring-reaches-streams",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.665
+     },
+     {
+      "id": "boundfields-calls-create",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.597
+     },
+     {
+      "id": "class-reflective-factory",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.568
+     },
+     {
+      "id": "query-reflective",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 2.018
+     },
+     {
+      "id": "query-json-reader",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.932
+     }
+    ]
+   },
+   "edit": {
+    "file": "gson/src/main/java/com/google/gson/Gson.java",
+    "after_line": 547,
+    "insert": "  private static final int VERINODA_BENCH_EDIT = 1;"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.311,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 46,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 27.434,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1185,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-dopeek",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"doPeek\" and f.file = \"gson/src/main/java/com/google/gson/stream/JsonReader.java\" return f",
+      "--json"
+     ],
+     "seconds": 1.589,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1212,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:peek-calls-dopeek",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"peek\" and a.file = \"gson/src/main/java/com/google/gson/stream/JsonReader.java\" and b.name = \"doPeek\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.612,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1951,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:tojson-calls-getadapter",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"toJson\" and a.file = \"gson/src/main/java/com/google/gson/Gson.java\" and b.name = \"getAdapter\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.621,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 3037,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:getadapter-calls-factory-create",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"getAdapter\" and a.file = \"gson/src/main/java/com/google/gson/Gson.java\" and b.name = \"create\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.626,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2009,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:fromjson-calls-getadapter",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"fromJson\" and a.file = \"gson/src/main/java/com/google/gson/Gson.java\" and b.name = \"getAdapter\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.587,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 3065,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:parsestring-reaches-streams",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "parseString",
+      "gson/src/main/java/com/google/gson/internal/Streams.java::parse",
+      "--json"
+     ],
+     "seconds": 1.665,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2327,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:boundfields-calls-create",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"getBoundFields\" and b.name = \"createBoundField\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.597,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2293,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:class-reflective-factory",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (c:class) where c.name = \"ReflectiveTypeAdapterFactory\" return c",
+      "--json"
+     ],
+     "seconds": 1.568,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1254,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-reflective",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are an object's fields read by reflection to build a type adapter",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 2.018,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5666,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-json-reader",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the streaming reader tokenize the JSON input",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.932,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5705,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does Gson choose a type adapter for a type",
+      "--json"
+     ],
+     "seconds": 2.016,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5745,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is an object serialized to JSON",
+      "--json"
+     ],
+     "seconds": 1.95,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5740,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the streaming reader read a token",
+      "--json"
+     ],
+     "seconds": 1.867,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5737,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when fromJson is called with a class",
+      "--json"
+     ],
+     "seconds": 4.576,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11279,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are fields of a class mapped to JSON names",
+      "--json"
+     ],
+     "seconds": 3.46,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8910,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "gson/src/main/java/com/google/gson/stream/JsonReader.java::peek",
+      "doPeek",
+      "--json"
+     ],
+     "seconds": 1.732,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1033,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.645,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1351,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"getAdapter\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.664,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 22683,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "check",
+     "command": "check",
+     "argv": [
+      "check",
+      "gson/src/main/java/com/google/gson/Gson.java",
+      "--json"
+     ],
+     "seconds": 1.675,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3,
+      4
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 35611,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "checked"
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.617,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 12846,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 2.804,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2545,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 4.002,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 162293,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.701,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.497,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 491,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.754,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.727,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10130,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how does Gson choose a type adapter for a type"
+     ],
+     "seconds": 1.868,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5627,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when fromJson is called with a class"
+     ],
+     "seconds": 4.76,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9159,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 24.791,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1232,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 6.325,
+     "exit": 3,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 76798,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 21.285,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1232,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  },
+  {
+   "name": "guzzle/guzzle",
+   "tag": "8.2.0",
+   "sha": "93939470950a9b11e2e84204166ef5e048c55fe4",
+   "language": "PHP",
+   "started": "2026-10-02T02:39:09",
+   "files": 176,
+   "scan_s": 23.427,
+   "update_s": 13.111,
+   "query_median_s": 1.572,
+   "analyze_median_s": 4.696,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 100702,
+   "gold": {
+    "hits": 8,
+    "total": 10,
+    "v2": {
+     "hits": 0,
+     "total": 0
+    },
+    "facts": [
+     {
+      "id": "def-transfer",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.385
+     },
+     {
+      "id": "sendasync-calls-transfer",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.473
+     },
+     {
+      "id": "send-calls-sendasync",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.429
+     },
+     {
+      "id": "requestasync-calls-transfer",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.362
+     },
+     {
+      "id": "send-reaches-apply-options",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 1.396
+     },
+     {
+      "id": "stack-create-chooses-handler",
+      "v": 1,
+      "kind": "q",
+      "hit": false,
+      "why": "no row",
+      "seconds": 1.35
+     },
+     {
+      "id": "stack-create-pushes-redirect",
+      "v": 1,
+      "kind": "q",
+      "hit": false,
+      "why": "no row",
+      "seconds": 1.437
+     },
+     {
+      "id": "def-choose-handler",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 1.354
+     },
+     {
+      "id": "query-redirects",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 1.584
+     },
+     {
+      "id": "query-cookies",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 3",
+      "seconds": 1.533
+     }
+    ]
+   },
+   "edit": {
+    "file": "src/Client.php",
+    "after_line": 332,
+    "insert": "    private const VERINODA_BENCH_EDIT = 1;"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.291,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 48,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 23.427,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1191,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-transfer",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"transfer\" and f.file = \"src/Client.php\" return f",
+      "--json"
+     ],
+     "seconds": 1.385,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1046,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:sendasync-calls-transfer",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"sendAsync\" and a.file = \"src/Client.php\" and b.name = \"transfer\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.473,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1553,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:send-calls-sendasync",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"send\" and a.file = \"src/Client.php\" and b.name = \"sendAsync\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.429,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1527,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:requestasync-calls-transfer",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"requestAsync\" and a.file = \"src/Client.php\" and b.name = \"transfer\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.362,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1571,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:send-reaches-apply-options",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "src/Client.php::send",
+      "applyOptions",
+      "--json"
+     ],
+     "seconds": 1.396,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1031,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:stack-create-chooses-handler",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"create\" and a.file = \"src/HandlerStack.php\" and b.name = \"chooseHandler\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.35,
+     "exit": 1,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 787,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:stack-create-pushes-redirect",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"create\" and a.file = \"src/HandlerStack.php\" and b.name = \"redirect\" return a, b",
+      "--json"
+     ],
+     "seconds": 1.437,
+     "exit": 1,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 782,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-choose-handler",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"chooseHandler\" return f",
+      "--json"
+     ],
+     "seconds": 1.354,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1027,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-redirects",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are HTTP redirects followed",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.584,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5685,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-cookies",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are cookies stored and added to outgoing requests",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 1.533,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5694,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the client send a request",
+      "--json"
+     ],
+     "seconds": 1.772,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5741,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is the handler stack built",
+      "--json"
+     ],
+     "seconds": 1.572,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5680,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are redirects followed",
+      "--json"
+     ],
+     "seconds": 1.559,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5735,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when Client::request is called",
+      "--json"
+     ],
+     "seconds": 5.075,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 13012,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are request options applied",
+      "--json"
+     ],
+     "seconds": 4.316,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9282,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "src/Client.php::request",
+      "src/Client.php::transfer",
+      "--json"
+     ],
+     "seconds": 1.417,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 850,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 1.342,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1282,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"transfer\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 1.398,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2010,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.543,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 9592,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 2.424,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1234,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 2.995,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 100702,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 1.471,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 1.223,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 491,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 1.371,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 2.739,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10154,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how does the client send a request"
+     ],
+     "seconds": 1.674,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 6171,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when Client::request is called"
+     ],
+     "seconds": 4.977,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10007,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 13.111,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1462,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 4.143,
+     "exit": 3,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 12597,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 10.775,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1209,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [
+    "check: no Python, Java or Kotlin file (check reads only those)"
+   ],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  }
+ ]
+}

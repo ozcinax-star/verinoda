@@ -1,0 +1,954 @@
+{
+ "kind": "verinoda-realworld",
+ "date": "2026-10-02",
+ "environment": {
+  "verinoda_version": "0.3.2",
+  "python": "3.13.14",
+  "verinoda_commit": "a96f60e",
+  "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+  "verinoda_dirty": false,
+  "platform": "Windows-11-10.0.26200-SP0",
+  "cpus": 16
+ },
+ "runs": [
+  {
+   "at": "2026-10-02T02:40:56",
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "repos": [
+    "Graphify-Labs/graphify"
+   ]
+  }
+ ],
+ "paths_sanitized": [
+  "<CORPUS>",
+  "<REPO>",
+  "<HOME>"
+ ],
+ "repos": [
+  {
+   "name": "Graphify-Labs/graphify",
+   "tag": "v0.9.73",
+   "sha": "ef4450d9c28acb2b8cdc22d369c1777b77148eef",
+   "language": "Python",
+   "started": "2026-10-02T02:40:56",
+   "files": 950,
+   "scan_s": 103.578,
+   "update_s": 51.627,
+   "query_median_s": 2.828,
+   "analyze_median_s": 10.269,
+   "crashes": [],
+   "timeouts": [],
+   "max_stdout_bytes": 108994,
+   "gold": {
+    "hits": 10,
+    "total": 10,
+    "v2": {
+     "hits": 0,
+     "total": 0
+    },
+    "facts": [
+     {
+      "id": "def-build-from-json",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 2.347
+     },
+     {
+      "id": "build-calls-build-from-json",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 2.262
+     },
+     {
+      "id": "cluster-calls-partition",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 2.288
+     },
+     {
+      "id": "cluster-reaches-leiden",
+      "v": 1,
+      "kind": "trace",
+      "hit": true,
+      "why": "",
+      "seconds": 2.462
+     },
+     {
+      "id": "cluster-calls-cohesion",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 2.285
+     },
+     {
+      "id": "def-god-nodes",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 2.21
+     },
+     {
+      "id": "def-extract-python",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 2.31
+     },
+     {
+      "id": "main-calls-run-cli",
+      "v": 1,
+      "kind": "q",
+      "hit": true,
+      "why": "",
+      "seconds": 2.352
+     },
+     {
+      "id": "query-communities",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 1",
+      "seconds": 2.641
+     },
+     {
+      "id": "query-god-nodes",
+      "v": 1,
+      "kind": "query",
+      "hit": true,
+      "why": "rank 2",
+      "seconds": 2.728
+     }
+    ]
+   },
+   "edit": {
+    "file": "graphify/cluster.py",
+    "after_line": 363,
+    "insert": "_VERINODA_BENCH_EDIT = 1"
+   },
+   "steps": [
+    {
+     "step": "init",
+     "command": "init",
+     "argv": [
+      "init",
+      "."
+     ],
+     "seconds": 1.285,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 120.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 60,
+     "stderr_bytes": 0,
+     "json_ok": null,
+     "stderr_tail": ""
+    },
+    {
+     "step": "scan",
+     "command": "scan",
+     "argv": [
+      "scan",
+      ".",
+      "--json"
+     ],
+     "seconds": 103.578,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 1800.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2548,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-build-from-json",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"build_from_json\" and f.file = \"graphify/build.py\" return f",
+      "--json"
+     ],
+     "seconds": 2.347,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1060,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:build-calls-build-from-json",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"build\" and a.file = \"graphify/build.py\" and b.name = \"build_from_json\" and b.file = \"graphify/build.py\" return a, b",
+      "--json"
+     ],
+     "seconds": 2.262,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1572,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:cluster-calls-partition",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"cluster\" and a.file = \"graphify/cluster.py\" and b.name = \"_partition\" return a, b",
+      "--json"
+     ],
+     "seconds": 2.288,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1534,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:cluster-reaches-leiden",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "graphify/cluster.py::cluster",
+      "_native_leiden",
+      "--json"
+     ],
+     "seconds": 2.462,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1522,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:cluster-calls-cohesion",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"cluster\" and a.file = \"graphify/cluster.py\" and b.name = \"cohesion_score\" return a, b",
+      "--json"
+     ],
+     "seconds": 2.285,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1560,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-god-nodes",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"god_nodes\" and f.file = \"graphify/analyze.py\" return f",
+      "--json"
+     ],
+     "seconds": 2.21,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1044,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:def-extract-python",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) where f.name = \"extract_python\" return f",
+      "--json"
+     ],
+     "seconds": 2.31,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1029,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:main-calls-run-cli",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where a.name = \"main\" and a.file = \"graphify/__main__.py\" and b.name = \"_run_cli\" return a, b",
+      "--json"
+     ],
+     "seconds": 2.352,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1497,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-communities",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are graph communities detected with leiden or louvain",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 2.641,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5730,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "gold:query-god-nodes",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are the most connected god nodes of the graph found",
+      "--json",
+      "--max-items",
+      "8"
+     ],
+     "seconds": 2.728,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5745,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query1",
+     "command": "query",
+     "argv": [
+      "query",
+      "how is the knowledge graph built from the extractions",
+      "--json"
+     ],
+     "seconds": 2.828,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5733,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query2",
+     "command": "query",
+     "argv": [
+      "query",
+      "how are communities detected in the graph",
+      "--json"
+     ],
+     "seconds": 2.753,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5763,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "query3",
+     "command": "query",
+     "argv": [
+      "query",
+      "how does the extractor read a Python file",
+      "--json"
+     ],
+     "seconds": 3.302,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 5820,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze1",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "what happens when the graphify command runs on a folder",
+      "--json"
+     ],
+     "seconds": 9.651,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11580,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "analyze2",
+     "command": "analyze",
+     "argv": [
+      "analyze",
+      "how are god nodes and surprising connections found",
+      "--json"
+     ],
+     "seconds": 10.887,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 12149,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "trace",
+     "command": "trace",
+     "argv": [
+      "trace",
+      "graphify/build.py::build",
+      "graphify/build.py::build_from_json",
+      "--json"
+     ],
+     "seconds": 2.308,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      2
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 656,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "found"
+    },
+    {
+     "step": "q1",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (f:function) return count(f)",
+      "--json"
+     ],
+     "seconds": 2.206,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1135,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "q2",
+     "command": "q",
+     "argv": [
+      "q",
+      "match (a:function)-[calls]->(b:function) where b.name = \"build_from_json\" return a limit 20",
+      "--json"
+     ],
+     "seconds": 2.167,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 17104,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "check",
+     "command": "check",
+     "argv": [
+      "check",
+      "graphify/cluster.py",
+      "--json"
+     ],
+     "seconds": 6.209,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3,
+      4
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 14095,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": "",
+     "answer_status": "checked"
+    },
+    {
+     "step": "map:dependencies",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dependencies",
+      "--json"
+     ],
+     "seconds": 1.989,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8439,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dataflow",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dataflow",
+      "--json"
+     ],
+     "seconds": 9.334,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 38611,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:dead",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "dead",
+      "--json"
+     ],
+     "seconds": 19.179,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 108994,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "map:hotspots",
+     "command": "map",
+     "argv": [
+      "map",
+      ".",
+      "--view",
+      "hotspots",
+      "--json"
+     ],
+     "seconds": 2.111,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1299,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "routes",
+     "command": "routes",
+     "argv": [
+      "routes",
+      "--json"
+     ],
+     "seconds": 2.013,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2634,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "schema",
+     "command": "schema",
+     "argv": [
+      "schema",
+      "--json"
+     ],
+     "seconds": 2.107,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 713,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "taint",
+     "command": "taint",
+     "argv": [
+      "taint",
+      "--json"
+     ],
+     "seconds": 9.485,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 1289,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "doctor",
+     "command": "doctor",
+     "argv": [
+      "doctor",
+      "--json"
+     ],
+     "seconds": 3.956,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      1
+     ],
+     "timeout": false,
+     "timeout_s": 300.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 10593,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:project_query",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "project_query",
+      "how is the knowledge graph built from the extractions"
+     ],
+     "seconds": 2.302,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 6216,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "mcp:analyze",
+     "command": "mcp",
+     "argv": [
+      "-P",
+      "<REPO>\\benchmarks\\realworld\\mcp_probe.py",
+      "<CORPUS>",
+      "analyze",
+      "what happens when the graphify command runs on a folder"
+     ],
+     "seconds": 8.215,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 8264,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 51.627,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2551,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "review",
+     "command": "review",
+     "argv": [
+      "review",
+      ".",
+      "--json"
+     ],
+     "seconds": 6.311,
+     "exit": 0,
+     "ok_codes": [
+      0,
+      3
+     ],
+     "timeout": false,
+     "timeout_s": 600.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 11878,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    },
+    {
+     "step": "update:revert",
+     "command": "update",
+     "argv": [
+      "update",
+      ".",
+      "--json"
+     ],
+     "seconds": 40.668,
+     "exit": 0,
+     "ok_codes": [
+      0
+     ],
+     "timeout": false,
+     "timeout_s": 900.0,
+     "crash": false,
+     "reason": null,
+     "stdout_bytes": 2550,
+     "stderr_bytes": 0,
+     "json_ok": true,
+     "stderr_tail": ""
+    }
+   ],
+   "environment": {
+    "verinoda_version": "0.3.2",
+    "python": "3.13.14",
+    "verinoda_commit": "a96f60e",
+    "verinoda_code_tree": "39b0789d9874a661904da3b30c032590c4c71bb0",
+    "verinoda_dirty": false,
+    "platform": "Windows-11-10.0.26200-SP0",
+    "cpus": 16
+   },
+   "skipped": [],
+   "notes": [],
+   "config_dir": "isolated (empty, per repository)",
+   "clean_after": true,
+   "dirty_after": []
+  }
+ ]
+}
