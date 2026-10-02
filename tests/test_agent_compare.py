@@ -125,3 +125,13 @@ def test_real_world_pairs_carry_a_bootstrap_interval_of_the_fact_difference_and_
     assert 0 <= lo <= 2 <= hi <= 3  # resampled sums of the per-question differences (1, 0, 1)
     assert p["found_diff_ci95"] == score_rw.paired_against_none(cells, use, "verinoda_first")["found_diff_ci95"]
     assert p["input"]["ratio"] == 0.8 and p["output"]["ratio"] == 1.0 and p["tool_calls"]["ratio"] == 0.8
+
+
+sensitivity_rw = _load("sensitivity_rw")
+
+
+def test_declared_aliases_are_resolved_only_where_the_answer_declares_them():
+    answer = "G = src/core/Gson.java. It calls getAdapter (G:647-649); see also XG:3 and `G:12`."
+    out = sensitivity_rw.resolve_aliases(answer)
+    assert "src/core/Gson.java:647-649" in out and "`src/core/Gson.java:12`" in out and "XG:3" in out
+    assert sensitivity_rw.resolve_aliases("no alias here, Gson.java:4") == "no alias here, Gson.java:4"

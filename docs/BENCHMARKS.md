@@ -28,7 +28,8 @@ Sections: [Update 2026-10-02](#update-2026-10-02-graphify-0973-contextbench-agai
 ## Update 2026-10-02: Graphify 0.9.73, ContextBench again, agents in the loop, `update --fast`
 
 Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-2026-10-02/`,
-`agent-compare-2026-10-02/`, `mod-live-2026-10-02/`, `mod-live-self-quiet-2026-10-02/`. Verinoda at 5999912.
+`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `mod-live-2026-10-02/`,
+`mod-live-self-quiet-2026-10-02/`. Verinoda at 5999912.
 
 - **Eight sets against Graphify** (`compare-2026-10-02/`): query 284/319 at 1,313 tokens per question (2.52 facts per
   1k tokens), analyze 285/319; Graphify's CLI 0.9.73 67/319 (0.53), its vendored renderer 71/319, raw search
@@ -43,6 +44,11 @@ Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-
   searching by hand (212 vs 212) at 0.84x input tokens, 0.78x output tokens and 0.71x tool calls (95 % intervals
   exclude the noise floor of two samples of the agent alone); search results handed over up front cost less but
   found 5-6 facts fewer. The corpora are small enough for the agent alone to reach 98 % of the facts.
+- **Agents on the ten real-world repositories** (`agent-compare-realworld-2026-10-02/`, 51 questions over the 107
+  gold facts, 153 sessions, pre-registered): no measurable difference in facts (the agent alone 107/113, told to
+  start with analyze 109/113, +2 [-4 to +10]; Graphify first 111/113, +4 [-1 to +12]). The first study's
+  input-token saving did not replicate: starting with analyze cost 1.14x input tokens [1.06-1.23] (one more
+  sequential turn per session, the agents still read the cited code) at 0.84x output tokens [0.78-0.91].
 - **`update --fast` on 2,876 files** (`mod-live-self-quiet-2026-10-02/`): 6-7x quicker than a plain update (about
   20 s against 130-155 s), the graph caught up after 2.5-3 min. Two findings, both fixed: a function in a file added
   since the last build lost to similarly named symbols until the graph had it (it now ranks as the symbol will;

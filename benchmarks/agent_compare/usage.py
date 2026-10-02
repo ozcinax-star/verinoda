@@ -75,7 +75,7 @@ def usage(wf_dir: Path) -> dict[str, dict]:
 def main() -> int:
     wf_dir, out = Path(sys.argv[1]), Path(sys.argv[2])
     res = usage(wf_dir)
-    out.write_text(json.dumps(res, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    out.write_bytes((json.dumps(res, indent=1, sort_keys=True) + "\n").encode("utf-8"))  # LF on every platform
     arms = sorted({k.split(":")[1] for k in res})
     for arm in arms:
         rows = [v for k, v in res.items() if k.endswith(":" + arm)]

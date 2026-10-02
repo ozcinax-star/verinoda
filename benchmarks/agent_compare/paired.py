@@ -64,7 +64,7 @@ def main() -> int:
              ("r2:verinoda_first", "r2:graphify_first"), ("r1:verinoda", "r1:none"), ("r1:graphify", "r1:none"),
              ("r3:auto_context", "r2:none"), ("r3:auto_context", "r1:none"), ("r3:auto_context", "r2:verinoda_first")]
     res = {f"{x} vs {y}": compare(cells, x, y) for x, y in pairs if x in cells and y in cells}
-    (results / "paired.json").write_text(json.dumps(res, indent=1) + "\n", encoding="utf-8")
+    (results / "paired.json").write_bytes((json.dumps(res, indent=1) + "\n").encode("utf-8"))  # LF on every platform
     print("| comparison | facts found | pinpointed | input tokens ratio [95% CI] | output tokens ratio [95% CI] "
           "| tool calls ratio [95% CI] |")
     print("|---|---|---|---|---|---|")
