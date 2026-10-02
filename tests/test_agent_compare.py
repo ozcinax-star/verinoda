@@ -359,3 +359,19 @@ def test_big_run_limits_how_many_sessions_run_at_once_per_arm_and_survives_a_cra
 
 def test_big_run_reads_free_memory_where_it_can():
     assert big_run.free_mb() is None or big_run.free_mb() > 0
+
+
+def test_big_extra_pools_runs_by_mean_and_measures_the_noise_of_one_arm_against_itself():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "big_extra", ROOT / "benchmarks" / "results" / "agent-compare-big-2026-10-02" / "extra.py")
+    extra = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = extra
+    spec.loader.exec_module(extra)
+    cell = lambda r: {"recall": r, "solved": 0, "hit1": 0, "precision": 0.0, "named": 1, "turns": 4, "seconds": 10.0,
+                      "cost": 0.1, "input": 100, "output": 10, "tool": 0, "network": 0, "answered": True}
+    r1 = {"t1": {"none": cell(0.0)}, "t2": {"none": cell(1.0)}}
+    r2 = {"t1": {"none": cell(1.0)}, "t2": {"none": cell(1.0)}}
+    assert extra.pool([r1, r2])["t1"]["none"]["recall"] == 0.5
+    n = extra.noise_floor(r1, r2, "none")
+    assert n["n"] == 2 and n["diff"] == -1.0 and (n["wins"], n["ties"], n["losses"]) == (0, 1, 1)
