@@ -3819,6 +3819,10 @@ def cmd_resolve_call(args) -> int:
     repo = _repo(args)
     path, line = _path_line(repo, args.site, "site")
     tpath, tline = _path_line(repo, args.target_at, "--target") if args.target_at else (None, None)
+    if args.lsp:
+        return _resolve_call_lsp(args, repo, path, line, tpath, tline)
+    if args.timeout is not None:
+        raise SystemExit("error: --timeout goes with --lsp")
     st = _store(repo) if db_path(repo).is_file() else None   # the answer cache; optional
     res = precise.resolve_call(repo, path, line, args.target, store=st, target_path=tpath, target_line=tline)
     if res is None:
@@ -3838,6 +3842,139 @@ def cmd_resolve_call(args) -> int:
         return 3
     _emit(args, res, _r_resolution)
     return 0
+
+
+def _lsp_timeout(args) -> float:
+    from verinoda import lsp
+
+    t = getattr(args, "timeout", None)
+    if t is None:
+        return lsp.REQUEST_TIMEOUT_S
+    if not math.isfinite(t) or t <= 0:
+        raise SystemExit("error: --timeout is a positive number of seconds")
+    return t
+
+
+def _resolve_call_lsp(args, repo: Path, path: str, line: int, tpath: str | None, tline: int | None) -> int:
+    from verinoda import lsp
+
+    with lsp.Session(repo, timeout=_lsp_timeout(args)) as s:
+        res = lsp.resolve_call(s, path, line, args.target, target_path=tpath, target_line=tline)
+        servers = list(s.status.values())
+    if res is None or res.get("failed"):
+        out = {"answer": None, "status": "unknown", "site": f"{path}:{line}", "target": args.target,
+               "resolver": (res or {}).get("tool") or "lsp", "why": (res or {}).get("reason") or "budget spent",
+               "next_step": (res or {}).get("next_step") or "see the reason", "servers": servers}
+        _emit(args, out, _r_resolution)
+        return 3
+    _emit(args, {**res, "servers": servers}, _r_resolution)
+    return 0
+
+
+def _lsp_site(repo: Path, spec: str) -> tuple[str, int, int | None]:
+    head, sep, tail = spec.rpartition(":")
+    if not sep or not head or not tail.isdigit():
+        raise SystemExit(f"error: {spec!r} must look like path/to/file.ts:LINE or path/to/file.ts:LINE:COL")
+    h2, sep2, t2 = head.rpartition(":")
+    if sep2 and h2 and t2.isdigit():
+        path, line, col = h2, int(t2), int(tail)
+    else:
+        path, line, col = head, int(tail), None
+    if line < 1 or (col is not None and col < 1):
+        raise SystemExit("error: LINE and COL are 1-based")
+    return _rel_in_repo(repo, path, "FILE"), line, col
+
+
+def _r_lsp(r: dict) -> None:
+    def loc(t: dict) -> str:
+        return f"{t.get('path')}:{t.get('line')}:{t.get('col')}" + ("" if t.get("in_repo", True) else
+                                                                   " (outside the project)")
+
+    head = f"lsp {r['op']} {r['site']}" + (f" {r['token']}" if r.get("token") else "")
+    if r["status"] != "answered":
+        print(f"{head}: unknown - {r.get('reason')}" + (f" ({r['server']})" if r.get("server") else ""))
+        if r.get("next_step"):
+            print(f"  next: {r['next_step']}")
+        return
+    print(f"{head} ({r.get('server')}, {r.get('seconds')} s)")
+    for key in ("definitions", "references", "implementations"):
+        if key in r:
+            print(f"  {key}: {len(r[key])}" + (f" (+{r['more']} more)" if r.get("more") else ""))
+            for t in r[key]:
+                print(f"    {loc(t)}")
+    if "hover" in r:
+        print("  " + (r["hover"] or "(no hover text)").replace("\n", "\n  "))
+    if r["op"] in ("calls", "types"):
+        it = r.get("item")
+        if it is None:
+            print("  (the server names no item here)")
+        else:
+            print(f"  item: {it['name']} at {loc(it)}")
+            for key in ("outgoing", "incoming", "supertypes", "subtypes"):
+                for x in r.get(key) or []:
+                    print(f"  {key}: {x['name']} at {loc(x)}"
+                          + (f" (lines {', '.join(map(str, x['at_lines']))})" if x.get("at_lines") else ""))
+    for d in r.get("diagnostics") or []:
+        print(f"  diagnostic: line {d['line']} {d['severity']}: {d['message']}")
+
+
+def _r_lsp_verify(r: dict) -> None:
+    if r.get("status") == "error":
+        print(f"error: {r['error']}" + (f"\n  next: {r['next_step']}" if r.get("next_step") else ""))
+        return
+    counts = ", ".join(f"{n} {k}" for k, n in sorted(r["claims"].items())) or "no claims"
+    print(f"lsp verify: {r['checked']} of {r['edges']} call edges checked; {counts}; {r['unknown']} unknown "
+          f"({r['seconds']} s)")
+    for sv in r.get("servers") or []:
+        name = f"{sv.get('server')} {sv.get('version') or ''}".strip() + " " if sv.get("server") else ""
+        print(f"  server {sv['language']}: {name}{sv['status']}" + (f" - {sv['reason']}" if sv.get("reason") else "")
+              + (f"\n    next: {sv['next_step']}" if sv.get("next_step") else ""))
+    for x in r.get("results") or []:
+        print(f"  [{x.get('status', 'no claim')}] {x['at']} {x['token']} -> {x['target_at']}: {x.get('kind')}"
+              + (f" {x['verdict']}" if x.get("verdict") else "") + f" ({x.get('server')})")
+        if x.get("verdict") == "refutes":
+            print(f"      the server: {', '.join(x.get('definition') or [])}; the graph: {x['target_at']}")
+        if x.get("shared_with"):
+            print(f"      {x['reason']}")
+        if x.get("uncertainty"):
+            print(f"      ? {x['uncertainty']}")
+    for x in r.get("unanswered") or []:
+        print(f"  [unknown] {x['at']} {x['token']} -> {x['target_at']}: {x['reason']}")
+    for k in ("not_checked", "reason"):
+        if r.get(k):
+            print(f"  {k.replace('_', ' ')}: {r[k]}")
+    if r.get("not_checked_budget"):
+        print(f"  not checked (budget): {r['not_checked_budget']} edges")
+
+
+def cmd_lsp(args) -> int:
+    """An installed language server: one question, or the graph's call edges checked against it."""
+    from verinoda import lsp
+
+    repo = _repo(args)
+    timeout = _lsp_timeout(args)
+    if args.lsp_cmd == "verify":
+        if args.max_edges < 1:
+            raise SystemExit("error: --max-edges is at least 1")
+        paths = [_rel_in_repo(repo, p, "PATH") for p in args.paths or []]
+        st = _store(repo)
+        try:
+            res = lsp.verify_edges(st, repo, paths=paths, max_edges=args.max_edges, timeout=timeout)
+        except FileNotFoundError as exc:
+            res = {"status": "error", "error": str(exc), "next_step": f"run `verinoda scan {repo}`"}
+        finally:
+            st.close()
+        _emit(args, res, _r_lsp_verify)
+        if res.get("status") == "error":
+            return 2
+        if res["claims"].get("contradicted"):
+            return 1
+        return 0 if res["status"] == "done" else 3
+    path, line, col = _lsp_site(repo, args.site)
+    with lsp.Session(repo, timeout=timeout) as s:
+        res = lsp.navigate(s, args.lsp_cmd, path, line, col, args.name)
+    _emit(args, res, _r_lsp)
+    return 0 if res["status"] == "answered" else 3
 
 
 CHECK_UNKNOWN_SHOWN = 20
@@ -5709,6 +5846,33 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("target", metavar="TARGET", help="the called name (label, Class.method or name)")
     sp.add_argument("--target", dest="target_at", metavar="PATH:LINE",
                     help="the definition the graph claims; adds a confirms/refutes/undetermined verdict")
+    sp.add_argument("--lsp", action="store_true",
+                    help="ask the installed language server of the file's language instead (trusted projects "
+                         "only: a server runs third-party code over the project)")
+    sp.add_argument("--timeout", type=float, metavar="SECONDS", help="with --lsp: seconds per question (default 30)")
+    lsp_help = ("an installed language server (opt-in; trusted projects only): definition, references, hover, call "
+                "hierarchy, implementations or type hierarchy at FILE:LINE[:COL], or `verify` the graph's call edges "
+                "against it (exit 3: no answer; verify exit 1: an edge contradicted)")
+    sp = sub.add_parser("lsp", help=lsp_help, description=lsp_help)
+    lsub = sp.add_subparsers(dest="lsp_cmd", required=True)
+    for op, what in (("definition", "where the name at the site is defined"),
+                     ("references", "every reference to the name at the site"),
+                     ("hover", "the server's hover text (type, signature, docs)"),
+                     ("calls", "the call hierarchy: what the function at the site calls and what calls it"),
+                     ("implementations", "the implementations of the interface or method at the site"),
+                     ("types", "the type hierarchy: supertypes and subtypes (when the server offers it)")):
+        c = add(op, cmd_lsp, what, parent=lsub)
+        c.add_argument("site", metavar="FILE:LINE[:COL]", help="the site; COL is 1-based (default: NAME's column, "
+                                                                "else the first name on the line)")
+        c.add_argument("name", metavar="NAME", nargs="?", help="the name on the line to ask about")
+        c.add_argument("--timeout", type=float, metavar="SECONDS", help="seconds per question (default 30)")
+    c = add("verify", cmd_lsp, "check the graph's call edges whose call site is under PATH (default: every file a "
+                               "known server serves) against the language server and record each answered one as "
+                               "a relation claim: confirmed -> statically_verified, bound elsewhere -> "
+                               "contradicted", parent=lsub)
+    c.add_argument("paths", metavar="PATH", nargs="*", help="files or folders (repository-relative)")
+    c.add_argument("--max-edges", type=int, default=100, help="edges checked at most (default 100)")
+    c.add_argument("--timeout", type=float, metavar="SECONDS", help="seconds per question (default 30)")
 
     env_help = ("auto (the project's .venv, venv or env; else the standard library only), a virtual environment "
                 "or interpreter path, or none (standard library only)")

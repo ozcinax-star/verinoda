@@ -218,11 +218,11 @@ def index_vendored(repo: Path) -> bool:
 CONFIG_DIR_ENV = "VERINODA_CONFIG_DIR"
 # Settings a repository's own .verinoda/config.json may set only when the user trusts that repository: what
 # may run and how (experiments.*: the process-isolation allowlist, the container image, timeouts), which MCP
-# tools are served (mcp.profile) and whether reference resolution goes to the network (research.network).
-# A cloned repository can ship that file (force-added past .verinoda/.gitignore); without trust it cannot
-# widen them. None: every key of the section.
+# tools are served (mcp.profile), whether reference resolution goes to the network (research.network) and
+# which language servers are started (lsp.*: a command line). A cloned repository can ship that file
+# (force-added past .verinoda/.gitignore); without trust it cannot widen them. None: every key of the section.
 PROTECTED_SETTINGS: dict[str, tuple[str, ...] | None] = {
-    "experiments": None, "mcp": ("profile",), "research": ("network",)}
+    "experiments": None, "mcp": ("profile",), "research": ("network",), "lsp": None}
 
 
 def user_config_dir() -> Path:
