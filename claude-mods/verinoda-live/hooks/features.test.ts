@@ -94,6 +94,7 @@ describe('pure parts', () => {
     expect(isPersonsPrompt({ kind: 'composer' })).toBe(true)
     expect(isPersonsPrompt({ kind: 'bridge' })).toBe(true)
     expect(isPersonsPrompt({ kind: 'plugin', asUser: true })).toBe(true)
+    expect(isPersonsPrompt({ kind: 'sdk' })).toBe(true) // `claude -p`: the script's own prompt is the person's
     expect(isPersonsPrompt({ kind: 'plugin' })).toBe(false)
     expect(isPersonsPrompt({ kind: "task-notification" })).toBe(false)
     expect(isPersonsPrompt(undefined)).toBe(false)
@@ -219,6 +220,31 @@ describe('auto-context', () => {
     expect((await $.prompt.submit(ask(QUESTION, { kind: 'task-notification' }))).context ?? []).toEqual([])
     expect((await $.prompt.submit(ask(QUESTION, { kind: 'plugin', name: 'other', asUser: true }))).context?.length).toBe(1)
     expect((await $.prompt.submit(ask(QUESTION, { kind: 'bridge' }))).context?.length).toBe(1)
+    expect((await $.prompt.submit(ask(QUESTION, { kind: 'sdk' }))).context?.length).toBe(1)
+  })
+
+  test('the setting starts the mode where nothing was chosen yet', { options: { auto: 'nudge' } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    world(on)
+    await $.session.start(START)
+    expect((await $.prompt.submit(ask(QUESTION, { kind: 'sdk' }))).context?.[0]).toContain('start by running')
+  })
+
+  test('a stored choice wins over the setting', { options: { auto: 'nudge' } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on, { auto: 'off' })
+    world(on)
+    await $.session.start(START)
+    expect((await $.prompt.submit(ask(QUESTION))).context ?? []).toEqual([])
+  })
+
+  test('a setting left out is off', async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    world(on)
+    await $.session.start(START)
+    expect((await $.prompt.submit(ask(QUESTION, { kind: 'sdk' }))).context ?? []).toEqual([])
   })
 
   test('the mode chosen is kept for the next session', async ($, on) => {

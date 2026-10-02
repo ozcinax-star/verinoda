@@ -1,6 +1,6 @@
 {
   "name": "verinoda-live",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Verinoda in Claude Code: keeps the code index fresh while Claude edits, checks each edit for names that do not exist, reviews commits, and shows it all in a Turkish pane with an animated mascot.",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -21,6 +21,13 @@
       "title": "Python with Verinoda",
       "description": "A Python that can import verinoda, to read the graph build's state. Empty: the one beside the CLI, else python on PATH.",
       "default": ""
+    },
+    "auto": {
+      "type": "string",
+      "title": "Code questions at start",
+      "description": "What a code question gets before anything is chosen with /verinoda-auto: off, nudge (the agent is asked to start with Verinoda's analyze) or search (Verinoda's results are attached). A choice made with /verinoda-auto is kept and wins.",
+      "default": "off",
+      "options": ["off", "nudge", "search"]
     },
     "motion": {
       "type": "boolean",

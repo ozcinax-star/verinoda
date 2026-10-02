@@ -78,7 +78,7 @@ const expanded = atom({ plugin: 'verinoda-live', key: 'expanded' } as const, fal
 // Where Verinoda is, settled at session start from the plugin's settings (`userConfig`), else found: the project is
 // the nearest folder at or above the session's with a .verinoda index; the CLI is the project's own .venv one if it
 // has one, else `verinoda` on PATH; the Python beside that CLI reads the graph's state.
-const cfg = { cli: 'verinoda', python: 'python', motion: true }
+const cfg = { cli: 'verinoda', python: 'python', motion: true, auto: 'off' as AutoMode }
 
 // Module state: a reload starts it over, which only forgets edits not yet indexed.
 const live = {
@@ -108,7 +108,9 @@ export function norm(p: string): string {
 // as the person's (`asUser`); never a notification, a peer, a schedule or a plugin speaking for itself.
 export function isPersonsPrompt(origin: { kind: string; asUser?: true } | undefined): boolean {
   if (origin === undefined) return false
-  return origin.kind === 'composer' || origin.kind === 'bridge' || (origin.kind === 'plugin' && origin.asUser === true)
+  // `sdk` is `claude -p` and the Agent SDK: the script's own prompt is the person's, there is no one else it could be
+  return origin.kind === 'composer' || origin.kind === 'bridge' || origin.kind === 'sdk' ||
+    (origin.kind === 'plugin' && origin.asUser === true)
 }
 
 export function looksLikeCodeQuestion(text: string): boolean {
@@ -262,7 +264,9 @@ async function setCheck($: EngineInterface, value: boolean): Promise<void> {
 
 // Auto-context and commit review start off, the check after edits on; what the person chose last is kept in the store.
 async function loadSettings($: EngineInterface): Promise<void> {
-  const mode = asMode(await $.store.get('auto'))
+  // the setting (`userConfig.auto`) is where a session starts that has never been asked; a stored choice wins
+  const stored = await $.store.get('auto')
+  const mode = stored === undefined ? cfg.auto : asMode(stored)
   const isGuard = (await $.store.get('guard')) === true
   const isCheck = (await $.store.get('check')) !== false
   await update($, auto, () => mode)
@@ -706,6 +710,7 @@ export function rowsOf(text: string, columns: number): number {
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     live.cwd = await $.session.cwd()
+    cfg.auto = asMode(options.auto)
     live.root = await findRoot($, typeof options.root === 'string' ? options.root.trim() : '', live.cwd)
     if (live.root !== undefined) await resolveTools($, live.root, options)
     await loadSettings($)
