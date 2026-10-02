@@ -331,8 +331,8 @@ def test_mixed_simple_and_trait_impl_target_fails_closed(tmp_path: Path):
     assert "_rust_impl_key" not in target_impl
 
 
-def test_scoped_self_call_remains_deferred_across_impl_files(tmp_path: Path):
-    """`Self::method()` is a scoped-call form, outside this resolver slice."""
+def test_scoped_self_call_binds_across_impl_files(tmp_path: Path):
+    """`Self::method()` is a scoped-call form; Verinoda patch: it binds across impl files as `self.m()` does."""
     calls, result = _calls(tmp_path, {
         "state.rs": "pub struct Bucket<T> { value: T }\n",
         "method.rs": (
@@ -347,7 +347,8 @@ def test_scoped_self_call_remains_deferred_across_impl_files(tmp_path: Path):
         ),
     })
     caller = _find(result, ".run()", "caller")
-    assert not {target for (source, target) in calls if source == caller}
+    target = _find(result, ".fetch_value()", "method")
+    assert {t for (source, t) in calls if source == caller} == {target}
 
 
 def test_generic_self_call_invalidates_markerless_ast_cache(

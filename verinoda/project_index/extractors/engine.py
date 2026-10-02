@@ -3535,6 +3535,65 @@ def _php_new_class(node, source: bytes) -> str | None:
     return None
 
 
+def _php_namespace_facts(root, source: bytes) -> tuple[str | None, dict[str, str]]:
+    """Verinoda patch: (the namespace of a PHP file, ``use`` alias (lower case) -> class FQN). The namespace is
+    None when the file declares two (its names are then not read)."""
+    namespaces: list[str] = []
+    uses: dict[str, str] = {}
+
+    def clause(c, prefix: str) -> None:
+        target = alias = None
+        for i, part in enumerate(c.children):
+            if part.type in ("function", "const"):
+                return
+            if c.field_name_for_child(i) == "alias":
+                alias = _read_text(part, source)
+            elif part.type in ("qualified_name", "name") and target is None:
+                target = _read_text(part, source)
+        if target:
+            fqn = (f"{prefix}\\{target}" if prefix else target).lstrip("\\")
+            uses.setdefault((alias or fqn.rsplit("\\", 1)[-1]).lower(), fqn)
+
+    for top in root.children:
+        if top.type == "namespace_definition":
+            name = top.child_by_field_name("name")
+            namespaces.append(_read_text(name, source) if name is not None else "")
+        elif top.type == "namespace_use_declaration":
+            if any(c.type in ("function", "const") for c in top.children):
+                continue
+            prefix = ""
+            for c in top.children:
+                if c.type == "namespace_name":
+                    prefix = _read_text(c, source)
+                elif c.type == "namespace_use_clause":
+                    clause(c, "")
+                elif c.type == "namespace_use_group":
+                    for g in c.children:
+                        if g.type == "namespace_use_clause":
+                            clause(g, prefix)
+    if len(set(namespaces)) > 1:
+        return None, uses
+    return (namespaces[0] if namespaces else ""), uses
+
+
+def _php_class_fqn(scope, source: bytes, namespace: str | None, uses: dict[str, str]) -> str | None:
+    """Verinoda patch: the lower-case FQN a written class name (``Utils``, ``Psr7\\Utils``, ``\\A\\B``) means in
+    a file of *namespace* with *uses*; None when it cannot be read."""
+    if scope is None or scope.type not in ("name", "qualified_name") or namespace is None:
+        return None
+    text = _read_text(scope, source).strip()
+    if text.startswith("\\"):
+        return text.lstrip("\\").lower()
+    head, _, rest = text.partition("\\")
+    if head.lower() in uses:
+        fqn = uses[head.lower()] + (f"\\{rest}" if rest else "")
+    elif text.lower().startswith("namespace\\"):
+        fqn = f"{namespace}\\{rest}" if namespace else rest
+    else:
+        fqn = f"{namespace}\\{text}" if namespace else text
+    return fqn.lstrip("\\").lower()
+
+
 _PHP_SCOPE_TYPES = frozenset({"function_definition", "method_declaration", "anonymous_function",
                               "anonymous_function_creation_expression", "arrow_function", "class_declaration"})
 
@@ -6344,6 +6403,30 @@ def _extract_generic(
             return False, None
         return True, _methods_of.get(cls, {}).get(name) or _inherited_method(cls, name)[0]
 
+    def _js_names_function(name: str | None, caller: str, call_node, kind: str) -> bool | None:
+        """Verinoda patch: does JS/TS `name.call(...)` / `.apply` / `.bind` call the function *name*? Yes for
+        a function of the file in scope; no for a class, object or other value of the file. For any other name
+        (an import) `.call` / `.apply` give None: the cross-file pass binds them to a function only. `.bind`
+        then needs a first argument `this`, `null` or `undefined` (`fn.bind(this)`)."""
+        if not name:
+            return False
+        scope, nid = caller, None
+        while scope and nid is None:
+            nid = lexical_nids_by_scope.get(scope, {}).get(name)
+            scope = scope_parents.get(scope)
+        if nid is None:
+            nid = label_to_nid.get(name)
+            if nid in scope_parents:   # a nested function of another scope, or an object's property
+                nid = None
+        if nid is not None and nid_to_sf.get(nid):
+            return str(_node_label.get(nid) or "").endswith("()") and nid not in _methods_of
+        if kind != "bind":
+            return None
+        args = call_node.child_by_field_name("arguments")
+        first = next(iter(args.named_children), None) if args is not None else None
+        return first is not None and (first.type in ("this", "null", "undefined") or (
+            first.type == "identifier" and _read_text(first, source) == "undefined"))
+
     def _php_receiver_class(obj, caller: str) -> str | None:
         if obj is None:
             return None
@@ -6610,6 +6693,9 @@ def _extract_generic(
             own_receiver: bool = False
             js_super_receiver: bool = False   # JS/TS `super.m()`
             php_receiver_node = None          # the object of a PHP `$obj->m()`
+            php_static_scope = None           # the class of a PHP `Foo::m()`
+            php_parent_call = False           # PHP `parent::m()`
+            js_function_only = False          # JS/TS `fn.call()` of an import: binds to a function only
             python_super_class: str | None = None   # C of Python `super(C, obj).m()`
             kotlin_qualified_prefix: str | None = None
             kotlin_object_receiver: str | None = None
@@ -6863,9 +6949,19 @@ def _extract_generic(
                         callee_name = _read_text(func_node, source)
                 elif node.type == "scoped_call_expression":
                     # Static method call: Helper::format() → callee = "Helper"
+                    # Verinoda patch: ... is a call of Helper's `format` (`self::`/`static::` the own class's,
+                    # `parent::` a base's); the class alone only when the method is not found (see the PHP pass)
                     scope_node = node.child_by_field_name("scope")
-                    if scope_node:
-                        callee_name = _read_text(scope_node, source)
+                    name_node = node.child_by_field_name("name")
+                    if scope_node is not None and name_node is not None and name_node.type == "name":
+                        callee_name = _read_text(name_node, source)
+                        is_member_call = True
+                        if scope_node.type == "relative_scope":
+                            rel = _read_text(scope_node, source).lower()
+                            own_receiver = rel in ("self", "static")
+                            php_parent_call = rel == "parent"
+                        elif scope_node.type in ("name", "qualified_name"):
+                            php_static_scope = scope_node
                 else:
                     # member_call_expression: $obj->method()
                     is_member_call = True
@@ -7018,6 +7114,29 @@ def _extract_generic(
                                     if inner_prop is not None:
                                         member_receiver = _read_text(inner_prop, source)
                                         is_this_field_call = True
+                            # Verinoda patch: JS/TS `fn.call(this, ...)` and `fn.apply(this, args)` call `fn`;
+                            # `fn.bind(this)` hands it on, an indirect call as a callback passed by name is. Not
+                            # when `fn` is a parameter or local of the caller (its value is not known) or an
+                            # import from outside the corpus.
+                            # Only for a function (`_js_names_function`): `Rpc.call('x')` on a class with a static
+                            # `call`, or `api.call()` on an object, is that member's call.
+                            _fn_kind = False
+                            if (config.ts_module in ("tree_sitter_javascript", "tree_sitter_typescript")
+                                    and callee_name in ("call", "apply", "bind")
+                                    and obj is not None and obj.type == "identifier"
+                                    and member_receiver not in js_external_imports
+                                    and member_receiver not in (
+                                        local_bound_names.get(caller_nid, frozenset()) | extra_locals)):
+                                _fn_kind = _js_names_function(member_receiver, caller_nid, node, callee_name)
+                            if _fn_kind is not False:
+                                if callee_name == "bind":
+                                    _emit_indirect_ref(
+                                        obj, caller_nid,
+                                        local_bound_names.get(caller_nid, frozenset()) | extra_locals, "bind")
+                                else:
+                                    callee_name, is_member_call, member_receiver = member_receiver, False, None
+                                    # an import: the cross-file pass binds it to a function only
+                                    js_function_only = _fn_kind is None
                     else:
                         # Try reading the node directly (e.g. Java name field is the callee)
                         callee_name = _read_text(func_node, source)
@@ -7076,7 +7195,26 @@ def _extract_generic(
                 # the class is not in the file); an untyped one to the one same-named method of another class of
                 # the file, never to the caller's own class's (M3 of the D65 review).
                 _php_target = None
-                if config.ts_module == "tree_sitter_php" and is_member_call and not own_receiver:
+                _php_static = node.type == "scoped_call_expression"
+                if config.ts_module == "tree_sitter_php" and _php_static and not own_receiver:
+                    # Verinoda patch: `Foo::m()` binds to the m of Foo when this file defines Foo, `parent::m()`
+                    # to a base's m the file defines; otherwise left to the PHP pass (by the class's FQN)
+                    if php_parent_call:
+                        _cls = _enclosing_class(caller_nid)
+                        _php_target = _inherited_method(_cls, callee_name)[0] if _cls else None
+                    elif php_static_scope is not None:
+                        # ... and only when the written name means this file's class: `\B\Utils::make()` in a
+                        # file declaring `A\Utils` is B's, which the PHP pass finds by its FQN
+                        _written = _read_text(php_static_scope, source).strip()
+                        _short = _written.rsplit("\\", 1)[-1]
+                        if php_namespace is not None:
+                            _same_class = _php_class_fqn(php_static_scope, source, php_namespace, php_uses) == (
+                                f"{php_namespace}\\{_short}" if php_namespace else _short).lower()
+                        else:
+                            _same_class = "\\" not in _written and _written.lower() not in php_uses
+                        if _same_class:
+                            _php_target = _class_method(_short, callee_name)[1]
+                elif config.ts_module == "tree_sitter_php" and is_member_call and not own_receiver:
                     _php_class = _php_receiver_class(php_receiver_node, caller_nid)
                     if _php_class:
                         _php_target = _class_method(_php_class, callee_name)[1]
@@ -7149,6 +7287,10 @@ def _extract_generic(
                     if _own_nid is not None:
                         tgt_nid = _own_nid
                         _js_own_method = _own_nid
+                    elif _php_static and config.ts_module == "tree_sitter_php":
+                        # Verinoda patch: `self::m()` / `static::m()` reach the own class and its bases only,
+                        # never another class's method or a function m of the file
+                        tgt_nid = None
                     elif not is_member_call and (
                         config.ts_module == "tree_sitter_python"
                         # Verinoda patch: JS/TS nested functions are scoped too
@@ -7287,6 +7429,14 @@ def _extract_generic(
                         if kotlin_object_receiver:
                             rc_entry["lang"] = "kotlin"
                             rc_entry["kotlin_object_receiver"] = kotlin_object_receiver
+                        if js_function_only:
+                            rc_entry["js_function_only"] = True
+                        # Verinoda patch: `Foo::m()` for the PHP pass (extract._resolve_php_static_calls)
+                        if php_static_scope is not None:
+                            rc_entry["lang"] = "php"
+                            rc_entry["php_static_class"] = _read_text(php_static_scope, source).rsplit("\\", 1)[-1]
+                            rc_entry["php_static_fqn"] = _php_class_fqn(php_static_scope, source, php_namespace,
+                                                                        php_uses)
                         raw_calls.append(rc_entry)
 
             # Indirect dispatch: a function passed BY NAME as a call argument
@@ -7549,7 +7699,28 @@ def _extract_generic(
             ruby_var_types[caller_nid] = _ruby_local_class_bindings(body_node, source)
 
     # Local change (Verinoda): PHP receiver types (see php_var_types)
+    php_namespace: str | None = None
+    php_uses: dict[str, str] = {}
     if config.ts_module == "tree_sitter_php":
+        # Verinoda patch: the namespace and imports of the file, and the FQN of each class it declares
+        # (`_php_fqn`), so `Foo::m()` of another file binds by the class's FQN
+        php_namespace, php_uses = _php_namespace_facts(root, source)
+        if php_namespace is not None:
+            _declared_classes: set[str] = set()
+            _stack = [root]
+            while _stack:
+                _n = _stack.pop()
+                if _n.type in ("class_declaration", "interface_declaration", "trait_declaration",
+                               "enum_declaration"):
+                    _cname = _n.child_by_field_name("name")
+                    if _cname is not None:
+                        _declared_classes.add(_read_text(_cname, source))
+                    continue
+                _stack.extend(_n.named_children)
+            for _node in nodes:
+                if _node.get("source_file") == str_path and _node.get("label") in _declared_classes:
+                    _label = str(_node["label"])
+                    _node["_php_fqn"] = (f"{php_namespace}\\{_label}" if php_namespace else _label).lower()
         for caller_nid, body_node in function_bodies:
             method_node = body_node.parent
             if method_node is None:
