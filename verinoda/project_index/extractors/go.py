@@ -183,18 +183,19 @@ def _go_imported_names(root, source: bytes) -> set[str]:
     return names
 
 
-def _go_chain(expr, source: bytes, scope: dict, imported: set, idx: int = 0):
+def _go_chain(expr, source: bytes, scope: dict, imported: set, idx: int = 0, tparams: frozenset = frozenset()):
     """The chain of an expression (see above), or None when no type of the package can be read from it.
-    *scope* maps the names a function binds to their chain (None: bound, of no known type)."""
+    *scope* maps the names a function binds to their chain (None: bound, of no known type); *tparams* are the
+    function's type parameters (`new(T)` in `func Make[T any]()` is no type of the package)."""
     if expr is None:
         return None
     t = expr.type
     if t == "parenthesized_expression":
-        return _go_chain(next(iter(expr.named_children), None), source, scope, imported, idx)
+        return _go_chain(next(iter(expr.named_children), None), source, scope, imported, idx, tparams)
     if t == "unary_expression":
         if _read_text(expr.child_by_field_name("operator"), source) != "&":
             return None
-        return _go_chain(expr.child_by_field_name("operand"), source, scope, imported, idx)
+        return _go_chain(expr.child_by_field_name("operand"), source, scope, imported, idx, tparams)
     if t == "identifier":
         name = _read_text(expr, source)
         if idx:
@@ -205,7 +206,7 @@ def _go_chain(expr, source: bytes, scope: dict, imported: set, idx: int = 0):
             return None
         return [["g", name]]
     if t in ("composite_literal", "type_assertion_expression"):
-        value = _go_type_value(expr.child_by_field_name("type"), source)
+        value = _go_type_value(expr.child_by_field_name("type"), source, tparams)
         return [["v", value]] if value is not None and not idx else None
     if t == "call_expression":
         fn = expr.child_by_field_name("function")
@@ -215,7 +216,8 @@ def _go_chain(expr, source: bytes, scope: dict, imported: set, idx: int = 0):
             name = _read_text(fn, source)
             if name == "new" and name not in scope:
                 args = expr.child_by_field_name("arguments")
-                value = _go_type_value(next(iter(args.named_children), None) if args is not None else None, source)
+                value = _go_type_value(next(iter(args.named_children), None) if args is not None else None, source,
+                                       tparams)
                 return [["v", value]] if value is not None and not idx else None
             if name in scope or name in imported or name in _GO_PREDECLARED_FUNCS:
                 return None
@@ -228,7 +230,7 @@ def _go_chain(expr, source: bytes, scope: dict, imported: set, idx: int = 0):
             if operand.type == "identifier" and _read_text(operand, source) in imported and \
                     _read_text(operand, source) not in scope:
                 return None   # another package's function
-            base = _go_chain(operand, source, scope, imported)
+            base = _go_chain(operand, source, scope, imported, 0, tparams)
             return base + [["()", _read_text(field, source), idx]] if base else None
         return None
     if idx:
@@ -241,12 +243,18 @@ def _go_chain(expr, source: bytes, scope: dict, imported: set, idx: int = 0):
         if operand.type == "identifier" and _read_text(operand, source) in imported and \
                 _read_text(operand, source) not in scope:
             return None   # another package's variable
-        base = _go_chain(operand, source, scope, imported)
+        base = _go_chain(operand, source, scope, imported, 0, tparams)
         return base + [[".", _read_text(field, source)]] if base else None
     if t == "index_expression":
-        base = _go_chain(expr.child_by_field_name("operand"), source, scope, imported)
+        base = _go_chain(expr.child_by_field_name("operand"), source, scope, imported, 0, tparams)
         return base + [["[]"]] if base else None
     return None
+
+
+# Verinoda patch: the nodes that open a scope inside a Go function body
+_GO_SCOPE_NODES = frozenset({"block", "if_statement", "for_statement", "expression_switch_statement",
+                             "type_switch_statement", "select_statement", "expression_case", "default_case",
+                             "communication_case", "type_case", "func_literal"})
 
 
 def _go_bind(table: dict, name: str, chain) -> None:
@@ -276,9 +284,9 @@ def _go_bind_spec(table: dict, spec, source: bytes, imported: set, tparams: froz
     for i, ident in enumerate(names):
         chain = None
         if len(values) == len(names):
-            chain = _go_chain(values[i], source, table, imported)
+            chain = _go_chain(values[i], source, table, imported, 0, tparams)
         elif len(values) == 1 and values[0].type == "call_expression":
-            chain = _go_chain(values[0], source, table, imported, idx=i)
+            chain = _go_chain(values[0], source, table, imported, i, tparams)
         _go_bind(table, _read_text(ident, source), chain)
 
 
@@ -933,39 +941,71 @@ def extract_go(path: Path) -> dict:
     file_facts = _go_type_facts(root, source)
     local_imports = set(go_imported_pkgs)
     local_types_of: dict[str, dict] = {}
+    local_scopes_of: dict[str, dict] = {}
+    tparams_of: dict[str, frozenset] = {}
 
-    def _collect_locals(n, table: dict, tparams: frozenset) -> None:
+    def _collect_locals(n, table: dict, tparams: frozenset, scopes: dict, scope=None) -> None:
         """Every name the body declares: with its chain, or None (a closure parameter, a select receive, a
-        type switch alias, a range key), so no local falls through to a package variable of its name."""
+        type switch alias, a range key), so no local falls through to a package variable of its name.
+        Verinoda patch: *scopes* records where each binding is visible: None at the function's top level, else
+        the byte range of the nested block (`if`, `for`, `case`, closure, `{}`) that declares it."""
         for child in n.children:
+            bound: list = []
+            own_scope = scope
             if child.type in ("short_var_declaration", "var_spec", "const_spec"):
                 _go_bind_spec(table, child, source, local_imports, tparams)
+                if child.type == "short_var_declaration":
+                    left = child.child_by_field_name("left")
+                    bound = [c for c in (left.named_children if left is not None else ()) if c.type == "identifier"]
+                else:
+                    bound = [c for c in child.children if c.type == "identifier"]
             elif child.type == "range_clause":
                 names = child.child_by_field_name("left")
                 idents = [i for i in (names.named_children if names is not None else ()) if i.type == "identifier"]
-                ranged = _go_chain(child.child_by_field_name("right"), source, table, local_imports)
+                ranged = _go_chain(child.child_by_field_name("right"), source, table, local_imports, 0, tparams)
                 for k, ident in enumerate(idents):
                     # `for i, v := range xs`: v is an element of xs; i (or a lone key) is no type of the package
                     _go_bind(table, _read_text(ident, source),
                              ranged + [["[]"]] if ranged and k == 1 else None)
+                bound = idents
             elif child.type in ("receive_statement", "type_switch_statement"):
                 names = child.child_by_field_name("alias" if child.type == "type_switch_statement" else "left")
                 for ident in (names.named_children if names is not None else ()):
                     if ident.type == "identifier":
                         _go_bind(table, _read_text(ident, source), None)
+                        bound.append(ident)
+                if child.type == "type_switch_statement":
+                    own_scope = child
             elif child.type == "func_literal":
                 params = child.child_by_field_name("parameters")
                 for param in (params.named_children if params is not None else ()):
                     for ident in param.children:
                         if ident.type == "identifier":
                             _go_bind(table, _read_text(ident, source), None)
-            _collect_locals(child, table, tparams)
+                            bound.append(ident)
+                own_scope = child
+            for ident in bound:
+                scopes.setdefault(_read_text(ident, source), []).append(
+                    None if own_scope is None else (own_scope.start_byte, own_scope.end_byte))
+            _collect_locals(child, table, tparams, scopes, child if child.type in _GO_SCOPE_NODES else scope)
 
     for fnid, body in function_bodies:
         # every parameter shadows a package variable of its name; only those of a type of the package carry one
         table: dict = {}
+        scopes: dict = {}
         decl = body.parent
         tparams = _go_type_params(decl, source) if decl is not None else frozenset()
+        # Verinoda patch: a type the body declares (`type T struct{ Inner }`) is no package type either
+        _stack, _local_types = [body], set()
+        while _stack:
+            _n = _stack.pop()
+            if _n.type in ("type_spec", "type_alias"):
+                _tname = _n.child_by_field_name("name")
+                if _tname is not None:
+                    _local_types.add(_read_text(_tname, source))
+            _stack.extend(_n.named_children)
+        if _local_types:
+            tparams = tparams | frozenset(_local_types)
         for field in ("receiver", "parameters", "result"):
             plist = decl.child_by_field_name(field) if decl is not None else None
             if plist is None or plist.type != "parameter_list":
@@ -977,13 +1017,24 @@ def extract_go(path: Path) -> dict:
                 for child in param.children:
                     if child.type == "identifier":
                         table[_read_text(child, source)] = [["v", value]] if value is not None else None
-        _collect_locals(body, table, tparams)
+                        scopes.setdefault(_read_text(child, source), []).append(None)
+        _collect_locals(body, table, tparams, scopes)
         local_types_of[fnid] = table
+        local_scopes_of[fnid] = scopes
+        tparams_of[fnid] = tparams
 
     iface_lead_nids = set(iface_methods_by_type.values())
 
     def _receiver_chain(operand, caller: str):
-        return _go_chain(operand, source, local_types_of.get(caller, {}), local_imports)
+        # Verinoda patch: a name the function binds only in nested blocks that do not hold this call is
+        # not that local here (`if c { y := &B{} }; y.Run()` calls the package variable y)
+        table = local_types_of.get(caller, {})
+        pos = operand.start_byte if operand is not None else 0
+        hidden = {name for name, ranges in local_scopes_of.get(caller, {}).items()
+                  if None not in ranges and not any(a <= pos < b for a, b in ranges)}
+        if hidden:
+            table = {k: v for k, v in table.items() if k not in hidden}
+        return _go_chain(operand, source, table, local_imports, 0, tparams_of.get(caller, frozenset()))
 
     label_to_nid: dict[str, str] = {}
     bare_label_to_nid: dict[str, str] = {}  # without methods: a bare `f()` never calls a method

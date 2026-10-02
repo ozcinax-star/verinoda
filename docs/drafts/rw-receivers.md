@@ -70,21 +70,59 @@ calls that the vendored extractor (`verinoda/project_index/`) left without an ed
   the engine resolves the written name with the file's namespace and `use` imports (`_php_namespace_facts`), and
   each class node carries its own FQN (the new `_php_fqn` marker). So `use GuzzleHttp\Psr7\Utils;
   Utils::streamFor()` in a test no longer binds to the project's `GuzzleHttp\Utils`. When the class is in the corpus
-  but no method of that name is (an external base), the call links the class as before (INFERRED).
-- **JS/TS `fn.call(this, ...)`, `fn.apply(this, args)` are calls of `fn`.** They bind as a bare `fn()` would (in
-  file, nested scopes, then the cross-file pass with its import gate). `fn.bind(this)` hands the function on and
-  becomes an `indirect_call`, as a callback passed by name does. Nothing binds when `fn` is a parameter or local of
-  the caller, or an import from outside the corpus.
+  but the method cannot be picked, the call links the class as before (INFERRED): no method of that name in the
+  corpus, two candidates, or a base on the way that is outside the corpus or a stub.
+- **JS/TS `fn.call(...)`, `fn.apply(...)` are calls of `fn` when `fn` is a function.** They bind as a bare `fn()`
+  would (in file, nested scopes, then the cross-file pass with its import gate), whatever the first argument is
+  (`this`, `null`, `config`). A name the file defines is rewritten only when it is a function, not a class, an object
+  or an instance. An imported name reaches the cross-file pass marked `js_function_only`, and that pass binds it
+  only to a function node. `fn.bind(this)` hands the function on and becomes an `indirect_call`, as a callback passed
+  by name does. For an imported name, `bind` needs a first argument `this`, `null` or `undefined`. Nothing binds when
+  `fn` is a parameter or local of the caller, or an import from outside the corpus.
 - **Incremental builds.** `_rust_returns_self` and `_php_fqn` are added to the persisted marker lists of `cli.py`
   and `watch.py`, as `_rust_impl_key` is. An incremental rebuild of the callers keeps every receiver edge
   (test below).
 - **Vendored code and cache.** All changes in `verinoda/project_index/` are marked "Verinoda patch" (or extend an
   existing "Local change (Verinoda)" block) and listed in docs/UPSTREAM.md ("Modified"). `cache._AST_CACHE_SCHEMA`
-  goes from 12 to 13.
+  goes from 12 to 14 (13 for the change, 14 for its review round).
 - **Tests whose expectation changed.** `tests/test_graph_precision.py`: gin's `b.Bind()` on `b Binding` (an
   interface) now binds to `Binding.Bind`, still never to `Context.Bind`. `tests_upstream/test_php_object_creation.py`:
   `Baz::create()` reaches `.create()`, not the class. `tests_upstream/test_rust_self_member_calls.py`:
   `Self::fetch_value(self)` across impl files now binds (the old test documented that it did not).
+- **Review round.** A review found same-named targets that the first version bound wrongly. All are fixed, each with
+  a regression test:
+  - PHP: a qualified `\B\Utils::make()` in a file that declares `A\Utils` bound to the file's own class, and could
+    make a self-loop. Now the in-file class answers only when the written name's FQN (namespace and `use`) is the
+    class's own FQN. Any other name goes to the PHP pass by its FQN. Real recursion (`Utils::make()` inside
+    `A\Utils::make`) keeps its edge. In a file with two namespaces only an unqualified, unimported name counts as
+    the file's class.
+  - PHP: `self::m()` / `static::m()` with no `m` on the own class or an in-file base fell back to any `m` of the file
+    (another class's method, a function). Now such a call binds nothing in the file.
+  - Rust: a type written as another crate's path (`&std::io::Error`, `io::Error` in `impl From<io::Error> for
+    Error`) bound to the file's own `Error`. The file's impl blocks now answer only for a name the file declares
+    and does not import, or a path through `self::`, `Self` or an inline module of the file. A name declared twice
+    in one file (`mod one { struct T } mod two { struct T }`) binds nothing in the file. The in-file `Type::m()`
+    follows the same rule, so `io::Error::new()` in that file no longer binds to the local `Error::new`.
+  - Rust: `use crate::a::Foo as Bar` is resolved. `Bar::new()`, a local from it and `y: &Bar` bind to `a::Foo`'s
+    methods, never to another type named `Bar`.
+  - Rust: a name only a glob import supplies (`use super::*`, `use crate::m::*`) binds across files only when the
+    glob's module is the file that declares the type: the module path of the declaring file (from the crate root
+    with `lib.rs` / `main.rs`) must equal the glob's path. So an out-of-line test module's `use super::*` that
+    re-exports the parent's `use std::process::Command` no longer reaches the project's own `Command`. A glob
+    whose first segment is not `crate`, `self` or `super` (a crate name, an external path) binds nothing.
+  - Rust: only `<dir>/mod.rs` makes a directory name a module root. Other directory names (`src`, `tests`) no
+    longer count as this crate's roots.
+  - Go: `new(T)`, `x.(T)` and `T{}` inside a generic function now read `T` as the type parameter, as `var y T`
+    already did. A type the function body declares (`type T struct{ Inner }`) is no package type either.
+  - Go: locals are scoped by block for a name the function binds only in nested blocks (`if`, `for`, `case`,
+    closure, `{}`). A call outside those blocks sees the package-level name, so `if c { y := &B{} }; y.Run()` binds to
+    the package variable `y`'s type, in the file and across files. A name bound at the top level and again in a
+    block with another type still has no type.
+  - JS/TS: `Rpc.call('x')` on a class with a static `call`, `api.call(2)` on an object and `service.call(1)` on an
+    imported instance became calls of `Rpc`, `api` and `service`. Now they are rewritten only for a function (see the
+    JS/TS bullet).
+  - The minor points the review raised are fixed except the two listed under Limits (PHP inherited confidence,
+    `namespace\Foo::m()`).
 
 ## Measured
 
@@ -116,6 +154,13 @@ the committed change.
 - Scan times, before and then after, in seconds: guzzle 25.0 and 23.2; bat 35.6 and 36.1; gin 11.2 and 16.0;
   axios 24.9 and 24.3. The gin scan took 12.0 s in an earlier run of the change, so the 16.0 s is load from the
   other agents, not a slowdown. No time difference is claimed.
+
+Review round, after the fixes and the merge of competitor-backlog at 0cdd621. The same benchmark, one repository at
+a time: guzzle 10/10 (scan 23.6 s), bat 10/10 (35.5 s), gin 8/10 and v2 2/2 (11.8 s), axios 9/10 (23.7 s). There
+were 0 crashes, 0 timeouts, and every clone was clean after. `extract()` over the six corpora below gives the same
+call edges as the first version. The only difference is the score of 17 bat `Type::m()` edges: a name a test module
+imports (`use crate::vscreen::{..}`) now binds through the corpus pass, so its edge carries score 1.0. It is still
+EXTRACTED and has the same target. The cases the review found do not occur in these six corpora.
 
 Edge delta: `extract()` over each whole corpus, before (a96f60e) and after. The corpora are copies of the pinned
 clones without `.git`, `vendor`, `node_modules`, `dist`, `build`, `target`, `.min.js` and `.d.ts`. Nodes are
@@ -157,16 +202,22 @@ unchanged on every corpus, and only `calls` / `indirect_call` edges change.
 - Rust: a field's type (`self.printer.print()`), a method's result (`x.f().g()`), `T::f(..)?`, `Option<Self>`
   returns, closures and tuple patterns type nothing. A type declared twice in the corpus (two crates' `Config`)
   never binds across files. A module-file root is accepted by name: an external crate named like a module file of
-  the project (`log` and `src/log.rs`) counts as the project's.
+  the project (`log` and `src/log.rs`) counts as the project's. A glob import binds only a type its own module's file
+  declares: a type that module re-exports, or declares in an inline module, makes no edge. A `src/bin/x.rs` is read
+  as the module `bin::x` of the crate in `src`.
 - Go: a chain that leaves the package (`pkg.NewT()`, a field of another package's type) types nothing. Generic
   instantiations (`NewT[int]()`), function-typed fields, method values, channels and an interface embedded in a
-  struct type nothing. Locals are per function, not per block, so a name rebound in a sibling block with another
-  type loses its type everywhere in the function. The package pass reads the files from disk, so it sees a file
+  struct type nothing. Block scoping applies only to a name the function binds only in nested blocks. A name bound
+  at the top level and again in a block, or in two sibling blocks, with different types has no type anywhere in the
+  function. The package pass reads the files from disk, so it sees a file
   of the directory that the scan excluded (a `.verinodaignore`d sibling).
 - PHP: only static calls and `$this->` / typed receivers in the file (D65) bind. `$x->m()` on a parameter typed with
   another file's class, `parent::m()` of a base in another file, and `$cls::m()` make no edge. A file with two
-  namespaces is read by short class name only, and binds only when the corpus has one class of that name.
-- JS/TS: `fn.call/apply/bind` bind only for a plain identifier `fn`. `obj.method.call(...)`,
+  namespaces is read by short class name only, and binds only when the corpus has one class of that name. A
+  `Foo::m()` whose `m` the file finds on an in-file base stays EXTRACTED, while the PHP pass marks the same inherited
+  case INFERRED (0.85) across files. `namespace\Foo::m()` (a relative name) is not read.
+- JS/TS: `fn.call/apply/bind` bind only for a plain identifier `fn`. A file-wide `api.call()` on an untyped
+  object still binds to the file's one method named `call`, as before this change. `obj.method.call(...)`,
   `Foo.prototype.bar.call(this)` and `adapters.getAdapter(...)` (a method of an imported object literal) make no
   edge. When a function both binds `fn` and calls `fn.call(...)`, it can have an `indirect_call` and a `calls` edge
   to the same target, depending on which comes first.
@@ -176,7 +227,7 @@ unchanged on every corpus, and only `calls` / `indirect_call` edges change.
 
 ## Upgrading note
 
-The first scan or update after upgrading re-extracts every code file once (`cache._AST_CACHE_SCHEMA` 12 -> 13).
+The first scan or update after upgrading re-extracts every code file once (`cache._AST_CACHE_SCHEMA` 12 -> 14).
 Graphs gain `calls` edges:
 - Go calls on receivers typed through other files of the package (INFERRED 0.85), and to interface method
   declarations (INFERRED 0.75).
@@ -191,7 +242,7 @@ on `X -calls-> Utils` should name the method (`Utils.chooseHandler`). Two new no
 
 ## Tests
 
-- New `tests/test_rw_receivers.py`, 12 tests, each on a small fixture:
+- New `tests/test_rw_receivers.py`, 22 tests (12, then 10 from the review round), each on a small fixture:
   - Go: chains across the files of a package (field, slice element, method result, constructor of another file,
     `var x T`, range value). A same-named type in another directory is another type. An interface receiver binds to
     the interface method only, not to its two implementations. A name shadowed by another type binds nothing.
@@ -205,9 +256,20 @@ on `X -calls-> Utils` should name the method (`Utils.chooseHandler`). Two new no
   - JS: `.call`, `.apply`, a nested function's `.call`, a parameter named like the function, and `.bind` alone as an
     `indirect_call`.
   - An incremental build of the callers keeps the Go, Rust and PHP edges.
+  - Review round:
+    - PHP: `\B\Utils::make()` and a `use .. as` alias in a file declaring `A\Utils` reach B's method, never their own
+      class. `self::`/`static::` with no own method bind nothing.
+    - Rust: `&std::io::Error`, `io::Error` and `io::Error::new()` in a file declaring `Error`; `use .. as Bar`; a
+      glob import of a module that does not declare the type (no edge) and of one that does (`super::*`,
+      `crate::m::*`, edges); a type two inline modules declare.
+    - Go: `new(T)` and `v.(T)` with a type parameter `T`, a function-local type. A block-local `y` across files and
+      in one file.
+    - JS/TS: `.call` on a class with a static `call`, on an object, and on an imported instance makes no edge. An
+      imported function's `.call(config, ..)` still binds.
 - Changed: `tests/test_graph_precision.py` (Go interface expectation), `tests_upstream/test_php_object_creation.py`
   and `tests_upstream/test_rust_self_member_calls.py` (see Decisions).
 - Run:
   - `tests/test_rw_receivers.py`, `tests/test_graph_precision.py`, `tests_upstream/test_php_object_creation.py` and
-    `tests_upstream/test_rust_self_member_calls.py`: 66 passed (12 of them new).
+    `tests_upstream/test_rust_self_member_calls.py`: 76 passed (22 of them new). The 10 review-round tests fail on
+    the first version.
   - `tests/test_docs.py`: 19 passed.

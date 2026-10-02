@@ -119,11 +119,11 @@ _RUST_TRAIT_METHOD_BLOCKLIST: frozenset[str] = frozenset({
 _RUST_WRAPPERS = frozenset({"Box", "Rc", "Arc"})
 
 
-def _rust_use_map(root, source: bytes) -> tuple[dict[str, list[str]], list[str]]:
-    """The names a file's `use` declarations bring in (name -> written path segments) and the first segments
-    of its glob imports (`use super::*` -> `super`)."""
+def _rust_use_map(root, source: bytes) -> tuple[dict[str, list[str]], list[list[str]]]:
+    """The names a file's `use` declarations bring in (name -> written path segments) and the paths of its
+    glob imports (`use super::*` -> [`super`], `use crate::a::*` -> [`crate`, `a`])."""
     names: dict[str, list[str]] = {}
-    globs: list[str] = []
+    globs: list[list[str]] = []
 
     def segments(node) -> list[str]:
         text = _read_text(node, source).replace(" ", "")
@@ -144,7 +144,7 @@ def _rust_use_map(root, source: bytes) -> tuple[dict[str, list[str]], list[str]]
             inner = next(iter(node.named_children), None)
             segs = prefix + (segments(inner) if inner is not None else [])
             if segs:
-                globs.append(segs[0])
+                globs.append(segs)
         elif t == "scoped_use_list":
             path = node.child_by_field_name("path")
             lst = node.child_by_field_name("list")
@@ -635,6 +635,8 @@ def extract_rust(path: Path) -> dict:
     # different types, or by a pattern, a closure parameter, a `for`, `match` or `if let`, has none.
     use_names, use_globs = _rust_use_map(root, source)
     declared_here: set[str] = set()
+    declared_twice: set[str] = set()   # `mod one { struct T } mod two { struct T }`: T is not one type here
+    inline_mods: set[str] = set()
     trait_nid_of: dict[str, str] = {}
     returns_self = {n["id"] for n in nodes if n.get("_rust_returns_self")}
 
@@ -643,12 +645,37 @@ def extract_rust(path: Path) -> dict:
             if c.type in ("struct_item", "enum_item", "trait_item", "type_item", "union_item"):
                 name = c.child_by_field_name("name")
                 if name is not None:
+                    if _read_text(name, source) in declared_here:
+                        declared_twice.add(_read_text(name, source))
                     declared_here.add(_read_text(name, source))
                     if c.type == "trait_item":
                         trait_nid_of[_read_text(name, source)] = _make_id(stem, _read_text(name, source))
             elif c.type in ("mod_item", "declaration_list"):
+                if c.type == "mod_item" and c.child_by_field_name("body") is not None:
+                    mod_name = c.child_by_field_name("name")
+                    if mod_name is not None:
+                        inline_mods.add(_read_text(mod_name, source))
                 _declared(c)
     _declared(root)
+
+    def _real_segs(segs: list[str]) -> list[str]:
+        """`Bar` of `use crate::a::Foo as Bar` is `Foo`: the imported path's last segment names the type."""
+        if len(segs) == 1 and segs[0] in use_names:
+            return [*segs[:-1], use_names[segs[0]][-1]]
+        return segs
+
+    def _from_glob(segs: list[str]) -> bool:
+        return len(segs) == 1 and segs[0] not in declared_here and segs[0] not in use_names
+
+    def _in_file(segs: list[str]) -> bool:
+        """The written type is the one this file declares (a single name it declares, or a path through an
+        inline module of the file, `self::` or `Self`), so the file's own impl blocks answer for it."""
+        name = segs[-1] if segs else ""
+        if not name or name in declared_twice or name not in declared_here:
+            return False
+        if len(segs) == 1:
+            return name not in use_names
+        return segs[0] in ("self", "Self") or segs[0] in inline_mods
 
     def _roots(segs: list[str]) -> list[str] | None:
         """Where a type's name comes from: the first segment of its written or imported path; `self` for a type
@@ -662,7 +689,7 @@ def extract_rust(path: Path) -> dict:
             return ["self"]
         if name in use_names:
             return [use_names[name][0]] if len(use_names[name]) >= 2 else None
-        return sorted(set(use_globs)) or None
+        return sorted({g[0] for g in use_globs}) or None
 
     def _pattern_names(pat) -> list[str]:
         out: list[str] = []
@@ -768,24 +795,28 @@ def extract_rust(path: Path) -> dict:
         """Bind (or leave to the corpus pass) `x.callee()` on a receiver of a stated type; False when the
         receiver has none."""
         kind, segs = desc[0], desc[1]
-        name = own if segs[-1] == "Self" and len(segs) == 1 else segs[-1]
-        if not name or name in generic or name == "Self":
+        is_self = segs == ["Self"]
+        name = own if is_self else _real_segs(segs)[-1]
+        if not name or name in generic or name == "Self" or (len(segs) == 1 and segs[0] in generic):
             return False
-        roots = ["self"] if name == own else _roots(segs)
+        # the file's own impl blocks answer only for a type the written name means in this file: not
+        # `std::io::Error` in a file declaring `Error`, not an imported alias of another type
+        in_file = is_self or _in_file(segs)
+        roots = ["self"] if in_file else _roots(segs)
         via, ctor = "local", None
         if kind == "dyn":
-            tgt = methods_by_owner.get((trait_nid_of.get(name, ""), callee))
+            tgt = methods_by_owner.get((trait_nid_of.get(name, ""), callee)) if in_file else None
             if tgt:
                 _call_edge(caller_nid, tgt, node, "INFERRED", 0.75)
                 return True
             via = "dyn"
         elif kind == "ret":
-            ctor_nid = methods_by_owner.get((name, desc[2]))
+            ctor_nid = methods_by_owner.get((name, desc[2])) if in_file else None
             if ctor_nid is None:
                 via, ctor = "ret", desc[2]
             elif ctor_nid not in returns_self:
                 return False
-        if via == "local":
+        if via == "local" and in_file:
             tgt = methods_by_owner.get((name, callee))
             if tgt:
                 _call_edge(caller_nid, tgt, node, "INFERRED", 0.85)
@@ -804,6 +835,8 @@ def extract_rust(path: Path) -> dict:
         }
         if ctor:
             rc_entry["rust_ctor"] = ctor
+        if not in_file and _from_glob(segs):
+            rc_entry["rust_glob_paths"] = use_globs
         raw_calls.append(rc_entry)
         return True
 
@@ -864,7 +897,15 @@ def extract_rust(path: Path) -> dict:
                     own = owner_of.get(caller_nid) or self_type
                     tgt_nid = methods_by_owner.get((own, callee_name)) if is_self_call and own else None
                 elif scope_type is not None:
-                    tgt_nid = methods_by_owner.get((scope_type, callee_name))
+                    # Verinoda patch: not for a path into another module or crate (`io::Error::new()` in a
+                    # file declaring `Error`), an imported alias of another type, or a name two inline
+                    # modules of the file declare
+                    if scope_segs[-1] == "Self" or _in_file(scope_segs) or (
+                            len(scope_segs) == 1 and scope_type not in use_names
+                            and scope_type not in declared_twice):
+                        tgt_nid = methods_by_owner.get((scope_type, callee_name))
+                    else:
+                        tgt_nid = None
                 else:
                     tgt_nid = bare_label_to_nid.get(callee_name)
                 if desc and not tgt_nid:
@@ -879,19 +920,22 @@ def extract_rust(path: Path) -> dict:
                     # Verinoda patch: `Type::m()` of a type another file of this crate defines
                     roots = _roots(scope_segs)
                     if roots:
-                        raw_calls.append({
+                        rc_entry = {
                             "caller_nid": caller_nid,
                             "callee": callee_name,
                             "is_member_call": True,
                             "source_file": str_path,
                             "source_location": f"L{node.start_point[0] + 1}",
-                            "rust_type": scope_type,
+                            # `Bar` of `use crate::a::Foo as Bar` is Foo
+                            "rust_type": _real_segs(scope_segs)[-1],
                             "rust_via": "path",
                             "rust_roots": roots,
                             # only a glob import names the type: INFERRED
-                            "rust_glob": len(scope_segs) == 1 and scope_type not in declared_here
-                            and scope_type not in use_names,
-                        })
+                            "rust_glob": _from_glob(scope_segs),
+                        }
+                        if _from_glob(scope_segs):
+                            rc_entry["rust_glob_paths"] = use_globs
+                        raw_calls.append(rc_entry)
                 elif is_scoped_call and not tgt_nid and scope_segs and scope_segs[-1] == "Self" and self_type:
                     # Verinoda patch: `Self::m()` of an impl block in another file, as `self.m()`
                     rc_entry = {

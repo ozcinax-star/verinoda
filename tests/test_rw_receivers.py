@@ -460,3 +460,275 @@ function chain() {
 '''})
     assert ("a.js:chain", "indirect_call", "dispatch.js:dispatchRequest") in edges
     assert ("a.js:chain", "calls", "dispatch.js:dispatchRequest") not in edges
+
+
+# -- Review round: wrong targets of the same name -----------------------------------------------------------------
+
+
+def test_php_a_qualified_name_of_another_namespace_is_not_the_file_s_own_class(tmp_path):
+    calls = _calls(_edges(tmp_path, {
+        "a/Utils.php": r'''<?php
+namespace A;
+use B\Utils as BU;
+
+class Utils {
+    public static function make() { return \B\Utils::make(); }
+    public static function wrap() { return BU::make(); }
+    public static function again() { return Utils::make(); }
+}
+''',
+        "b/Utils.php": r'''<?php
+namespace B;
+
+class Utils {
+    public static function make() { return 1; }
+}
+''',
+    }))
+    assert ("a/Utils.php:Utils.make", "b/Utils.php:Utils.make") in calls
+    assert ("a/Utils.php:Utils.wrap", "b/Utils.php:Utils.make") in calls
+    assert ("a/Utils.php:Utils.make", "a/Utils.php:Utils.make") not in calls
+    assert ("a/Utils.php:Utils.wrap", "a/Utils.php:Utils.make") not in calls
+    assert ("a/Utils.php:Utils.again", "a/Utils.php:Utils.make") in calls   # its own class, unqualified
+
+
+def test_php_self_without_an_own_method_binds_nothing(tmp_path):
+    calls = _calls(_edges(tmp_path, {
+        "c.php": r'''<?php
+namespace C;
+
+function helper() { return 1; }
+
+class Foo extends \Vendor\Base {
+    public function f() { return self::helper(); }
+    public function g() { return static::other(); }
+}
+class Bar {
+    public static function helper() { return 2; }
+    public static function other() { return 3; }
+}
+''',
+    }))
+    assert not {c for c in calls if c[0].startswith("c.php:Foo.")}, calls
+
+
+def test_rust_a_path_to_another_crate_s_type_is_not_the_file_s_own(tmp_path):
+    calls = _calls(_edges(tmp_path, {
+        "Cargo.toml": '[package]\nname = "demo"\nversion = "0.1.0"\n',
+        "src/error.rs": '''
+use std::io;
+pub struct Error { code: i32 }
+impl Error {
+    pub fn kind(&self) -> i32 { self.code }
+}
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self { e.kind(); Error { code: 1 } }
+}
+pub fn wrap(e: &std::io::Error) -> i32 { e.kind(); 0 }
+pub fn mine(e: &Error) -> i32 { e.kind() }
+pub fn ctor() { let e = io::Error::new(); e.kind(); }
+''',
+    }))
+    assert ("src/error.rs:mine", "src/error.rs:Error.kind") in calls
+    for caller in ("from", "wrap", "ctor"):
+        assert not {c for c in calls if c[0] == f"src/error.rs:{caller}"}, calls
+
+
+def test_rust_an_imported_alias_names_the_imported_type(tmp_path):
+    calls = _calls(_edges(tmp_path, {
+        "Cargo.toml": '[package]\nname = "demo"\nversion = "0.1.0"\n',
+        "src/lib.rs": "pub mod a; pub mod b; pub mod c;\n",
+        "src/a.rs": "pub struct Foo;\nimpl Foo { pub fn new() -> Self { Foo } pub fn go(&self) {} }\n",
+        "src/b.rs": "pub struct Bar;\nimpl Bar { pub fn new() -> Self { Bar } pub fn go(&self) {} }\n",
+        "src/c.rs": '''
+use crate::a::Foo as Bar;
+pub fn run() {
+    let x = Bar::new();
+    x.go();
+}
+pub fn run2(y: &Bar) { y.go(); }
+''',
+    }))
+    assert {("src/c.rs:run", "src/a.rs:Foo.new"), ("src/c.rs:run", "src/a.rs:Foo.go"),
+            ("src/c.rs:run2", "src/a.rs:Foo.go")} <= calls
+    assert not {c for c in calls if c[1].startswith("src/b.rs:")}, calls
+
+
+def test_rust_a_glob_import_binds_only_a_type_its_module_declares(tmp_path):
+    calls = _calls(_edges(tmp_path, {
+        "Cargo.toml": '[package]\nname = "demo"\nversion = "0.1.0"\n',
+        "src/lib.rs": "pub mod cmd; pub mod proc_; pub mod job;\n",
+        "src/cmd.rs": "use std::process::Command;\npub mod tests;\npub fn x() {}\n",
+        "src/cmd/tests.rs": 'use super::*;\npub fn t() { let c = Command::new("ls"); c.status(); }\n',
+        "src/proc_.rs": '''
+pub struct Command;
+impl Command { pub fn new(s: &str) -> Self { Command } pub fn status(&self) {} }
+pub mod tests;
+''',
+        "src/proc_/tests.rs": 'use super::*;\npub fn t2() { let c = Command::new("ls"); c.status(); }\n',
+        "src/job.rs": 'use crate::proc_::*;\npub fn t3() { let c = Command::new("x"); }\n',
+    }))
+    assert not {c for c in calls if c[0] == "src/cmd/tests.rs:t"}, calls
+    assert {("src/proc_/tests.rs:t2", "src/proc_.rs:Command.new"),
+            ("src/proc_/tests.rs:t2", "src/proc_.rs:Command.status"),
+            ("src/job.rs:t3", "src/proc_.rs:Command.new")} <= calls
+
+
+def test_rust_a_type_two_inline_modules_declare_binds_nothing_in_file(tmp_path):
+    calls = _calls(_edges(tmp_path, {
+        "Cargo.toml": '[package]\nname = "demo"\nversion = "0.1.0"\n',
+        "src/lib.rs": '''
+mod one { pub struct T; impl T { pub fn go(&self) {} } }
+mod two { pub struct T; impl T { pub fn go(&self) {} } }
+pub fn f(t: &two::T) { t.go(); }
+''',
+    }))
+    assert not {c for c in calls if c[0] == "src/lib.rs:f"}, calls
+
+
+def test_go_type_parameters_and_local_types_are_no_package_types(tmp_path):
+    calls = _calls(_edges(tmp_path, {
+        "q/types.go": "package q\n\ntype T struct{}\n\nfunc (t *T) Go() {}\n",
+        "q/use.go": '''package q
+
+type Inner struct{}
+
+func (Inner) Go() {}
+
+func Make[T any]() {
+	x := new(T)
+	x.Go()
+}
+
+func Assert[T any](v any) {
+	y := v.(T)
+	y.Go()
+}
+
+func Local() {
+	type T struct{ Inner }
+	z := T{}
+	z.Go()
+}
+
+func Plain() {
+	w := new(T)
+	w.Go()
+}
+''',
+    }))
+    assert ("q/use.go:Plain", "q/types.go:T.Go") in calls
+    for caller in ("Make", "Assert", "Local"):
+        assert ("q/use.go:" + caller, "q/types.go:T.Go") not in calls, caller
+
+
+def test_go_a_block_local_does_not_type_the_package_variable_outside_its_block(tmp_path):
+    fixtures = {
+        "p/types.go": '''package p
+
+type A struct{}
+
+func (a *A) Run() {}
+
+type B struct{}
+
+func (b *B) Run() {}
+
+var y = &A{}
+''',
+        "p/use.go": '''package p
+
+func f() {
+	if true {
+		y := &B{}
+		y.Run()
+	}
+	y.Run()
+}
+''',
+    }
+    edges = _edges(tmp_path, fixtures)
+    at = {(s, t): e.get("source_location") for (s, r, t), e in edges.items() if r == "calls"}
+    assert at.get(("p/use.go:f", "p/types.go:A.Run")) == "L8"
+    assert at.get(("p/use.go:f", "p/types.go:B.Run")) == "L6"
+
+
+def test_go_a_block_local_in_the_same_file_as_the_package_variable(tmp_path):
+    edges = _edges(tmp_path, {"p/all.go": '''package p
+
+type A struct{}
+
+func (a *A) Run() {}
+
+type B struct{}
+
+func (b *B) Run() {}
+
+var y = &A{}
+
+func f() {
+	if true {
+		y := &B{}
+		_ = y
+	}
+	y.Run()
+}
+'''})
+    assert ("p/all.go:f", "p/all.go:A.Run") in _calls(edges)
+    assert ("p/all.go:f", "p/all.go:B.Run") not in _calls(edges)
+
+
+def test_js_call_on_a_class_object_or_instance_is_not_a_call_of_it(tmp_path):
+    edges = _edges(tmp_path, {
+        "a.js": '''
+class Rpc {
+  static call(name) { return name; }
+}
+const api = {
+  call(x) { return x; },
+};
+function handler() {}
+function run() {
+  Rpc.call('x');
+  api.call(2);
+  handler.call(null, 1);
+}
+module.exports = { run, handler, Rpc };
+''',
+        "b.js": '''
+const { Rpc, handler } = require('./a');
+function go() {
+  Rpc.call('y');
+  handler.call(this, 1);
+}
+module.exports = { go };
+''',
+        "c.ts": '''
+export class Service {
+  call(x: number) { return x; }
+}
+export const service = new Service();
+''',
+        "d.ts": '''
+import { service } from './c';
+export function go2() {
+  service.call(1);
+}
+''',
+        "e.js": '''
+import transformData from './f.js';
+export function dispatch(config) {
+  return transformData.call(config, config.data);
+}
+''',
+        "f.js": '''
+export default function transformData(fns) { return fns; }
+''',
+    })
+    calls = _calls(edges)
+    assert ("a.js:run", "a.js:handler") in calls
+    assert ("b.js:go", "a.js:handler") in calls
+    assert ("e.js:dispatch", "f.js:transformData") in calls   # an imported function, any first argument
+    for bad in (("a.js:run", "a.js:Rpc"), ("a.js:run", "a.js:api"), ("b.js:go", "a.js:Rpc"),
+                ("d.ts:go2", "c.ts:service")):
+        assert bad not in calls, bad

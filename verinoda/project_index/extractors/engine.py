@@ -6403,6 +6403,30 @@ def _extract_generic(
             return False, None
         return True, _methods_of.get(cls, {}).get(name) or _inherited_method(cls, name)[0]
 
+    def _js_names_function(name: str | None, caller: str, call_node, kind: str) -> bool | None:
+        """Verinoda patch: does JS/TS `name.call(...)` / `.apply` / `.bind` call the function *name*? Yes for
+        a function of the file in scope; no for a class, object or other value of the file. For any other name
+        (an import) `.call` / `.apply` give None: the cross-file pass binds them to a function only. `.bind`
+        then needs a first argument `this`, `null` or `undefined` (`fn.bind(this)`)."""
+        if not name:
+            return False
+        scope, nid = caller, None
+        while scope and nid is None:
+            nid = lexical_nids_by_scope.get(scope, {}).get(name)
+            scope = scope_parents.get(scope)
+        if nid is None:
+            nid = label_to_nid.get(name)
+            if nid in scope_parents:   # a nested function of another scope, or an object's property
+                nid = None
+        if nid is not None and nid_to_sf.get(nid):
+            return str(_node_label.get(nid) or "").endswith("()") and nid not in _methods_of
+        if kind != "bind":
+            return None
+        args = call_node.child_by_field_name("arguments")
+        first = next(iter(args.named_children), None) if args is not None else None
+        return first is not None and (first.type in ("this", "null", "undefined") or (
+            first.type == "identifier" and _read_text(first, source) == "undefined"))
+
     def _php_receiver_class(obj, caller: str) -> str | None:
         if obj is None:
             return None
@@ -6671,6 +6695,7 @@ def _extract_generic(
             php_receiver_node = None          # the object of a PHP `$obj->m()`
             php_static_scope = None           # the class of a PHP `Foo::m()`
             php_parent_call = False           # PHP `parent::m()`
+            js_function_only = False          # JS/TS `fn.call()` of an import: binds to a function only
             python_super_class: str | None = None   # C of Python `super(C, obj).m()`
             kotlin_qualified_prefix: str | None = None
             kotlin_object_receiver: str | None = None
@@ -7093,18 +7118,25 @@ def _extract_generic(
                             # `fn.bind(this)` hands it on, an indirect call as a callback passed by name is. Not
                             # when `fn` is a parameter or local of the caller (its value is not known) or an
                             # import from outside the corpus.
+                            # Only for a function (`_js_names_function`): `Rpc.call('x')` on a class with a static
+                            # `call`, or `api.call()` on an object, is that member's call.
+                            _fn_kind = False
                             if (config.ts_module in ("tree_sitter_javascript", "tree_sitter_typescript")
                                     and callee_name in ("call", "apply", "bind")
                                     and obj is not None and obj.type == "identifier"
                                     and member_receiver not in js_external_imports
                                     and member_receiver not in (
                                         local_bound_names.get(caller_nid, frozenset()) | extra_locals)):
+                                _fn_kind = _js_names_function(member_receiver, caller_nid, node, callee_name)
+                            if _fn_kind is not False:
                                 if callee_name == "bind":
                                     _emit_indirect_ref(
                                         obj, caller_nid,
                                         local_bound_names.get(caller_nid, frozenset()) | extra_locals, "bind")
                                 else:
                                     callee_name, is_member_call, member_receiver = member_receiver, False, None
+                                    # an import: the cross-file pass binds it to a function only
+                                    js_function_only = _fn_kind is None
                     else:
                         # Try reading the node directly (e.g. Java name field is the callee)
                         callee_name = _read_text(func_node, source)
@@ -7171,8 +7203,17 @@ def _extract_generic(
                         _cls = _enclosing_class(caller_nid)
                         _php_target = _inherited_method(_cls, callee_name)[0] if _cls else None
                     elif php_static_scope is not None:
-                        _php_target = _class_method(
-                            _read_text(php_static_scope, source).rsplit("\\", 1)[-1], callee_name)[1]
+                        # ... and only when the written name means this file's class: `\B\Utils::make()` in a
+                        # file declaring `A\Utils` is B's, which the PHP pass finds by its FQN
+                        _written = _read_text(php_static_scope, source).strip()
+                        _short = _written.rsplit("\\", 1)[-1]
+                        if php_namespace is not None:
+                            _same_class = _php_class_fqn(php_static_scope, source, php_namespace, php_uses) == (
+                                f"{php_namespace}\\{_short}" if php_namespace else _short).lower()
+                        else:
+                            _same_class = "\\" not in _written and _written.lower() not in php_uses
+                        if _same_class:
+                            _php_target = _class_method(_short, callee_name)[1]
                 elif config.ts_module == "tree_sitter_php" and is_member_call and not own_receiver:
                     _php_class = _php_receiver_class(php_receiver_node, caller_nid)
                     if _php_class:
@@ -7246,6 +7287,10 @@ def _extract_generic(
                     if _own_nid is not None:
                         tgt_nid = _own_nid
                         _js_own_method = _own_nid
+                    elif _php_static and config.ts_module == "tree_sitter_php":
+                        # Verinoda patch: `self::m()` / `static::m()` reach the own class and its bases only,
+                        # never another class's method or a function m of the file
+                        tgt_nid = None
                     elif not is_member_call and (
                         config.ts_module == "tree_sitter_python"
                         # Verinoda patch: JS/TS nested functions are scoped too
@@ -7384,6 +7429,8 @@ def _extract_generic(
                         if kotlin_object_receiver:
                             rc_entry["lang"] = "kotlin"
                             rc_entry["kotlin_object_receiver"] = kotlin_object_receiver
+                        if js_function_only:
+                            rc_entry["js_function_only"] = True
                         # Verinoda patch: `Foo::m()` for the PHP pass (extract._resolve_php_static_calls)
                         if php_static_scope is not None:
                             rc_entry["lang"] = "php"

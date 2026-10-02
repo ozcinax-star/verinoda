@@ -5067,12 +5067,62 @@ def _resolve_rust_typed_member_calls(
         return
     rust_nodes = [n for n in all_nodes if str(n.get("source_file") or "").endswith(".rs")]
     files = {str(n.get("source_file")) for n in rust_nodes}
-    internal = {"crate", "self", "super"} | _rust_crate_names(files)
+    crate_names = _rust_crate_names(files)
+    internal = {"crate", "self", "super"} | crate_names
+    rs_paths = {sf.replace("\\", "/") for sf in files}
     for sf in files:
         p = Path(sf.replace("\\", "/"))
-        internal.add(p.stem)
-        if p.parent.name:
-            internal.add(p.parent.name)
+        if p.stem == "mod":   # `a/mod.rs` is the module `a`; any other directory name is not a module
+            if p.parent.name:
+                internal.add(p.parent.name)
+        elif p.stem not in ("lib", "main"):
+            internal.add(p.stem)
+
+    def module_path(sf: str) -> tuple[str, tuple[str, ...]] | None:
+        """(the crate's root directory, the module path) of a Rust file: `src/a/b.rs` under `src/lib.rs` is
+        ("src", (a, b)); None when no `lib.rs` / `main.rs` of the corpus sits above it."""
+        p = Path(sf.replace("\\", "/"))
+        parts = [] if p.stem in ("lib", "main", "mod") else [p.stem]
+        d = p.parent
+        if p.stem == "mod":
+            parts = [d.name]
+            d = d.parent
+        while True:
+            if (d / "lib.rs").as_posix() in rs_paths or (d / "main.rs").as_posix() in rs_paths:
+                return d.as_posix(), tuple(reversed(parts))
+            if d.parent == d or not d.name:
+                return None
+            parts.append(d.name)
+            d = d.parent
+
+    def glob_declares(rc: dict, type_name: str) -> bool:
+        """A name only `use super::*` / `use crate::m::*` supplies is this crate's type only when the glob's
+        module is the file that declares it (`use super::*` of a test module re-exports the parent's
+        `use std::process::Command` as well)."""
+        owners = [nid for nid in by_bare.get(type_name, []) if nid in contains_targets]
+        if len(owners) != 1:
+            return False
+        decl = module_path(str(node_by_id.get(owners[0], {}).get("source_file") or ""))
+        here = module_path(str(rc.get("source_file") or ""))
+        if decl is None or here is None or decl[0] != here[0]:
+            return False
+        for g in rc.get("rust_glob_paths") or []:
+            if g and g[0] == "crate":
+                target = list(g[1:])
+            elif g and g[0] in ("self", "super"):
+                target = list(here[1])
+                rest = list(g)
+                while rest and rest[0] in ("self", "super"):
+                    if rest.pop(0) == "super":
+                        if not target:
+                            break
+                        target.pop()
+                target += rest
+            else:
+                continue
+            if tuple(target) == decl[1]:
+                return True
+        return False
     contains_targets = {e.get("target") for e in all_edges if e.get("relation") == "contains"}
     by_bare: dict[str, list[str]] = {}
     for n in rust_nodes:
@@ -5106,6 +5156,8 @@ def _resolve_rust_typed_member_calls(
         if not roots or any(r not in internal for r in roots):
             continue
         type_name, via, callee = str(rc["rust_type"]), rc.get("rust_via"), str(rc["callee"])
+        if "rust_glob_paths" in rc and not glob_declares(rc, type_name):
+            continue
         if via == "ret":
             ctor = method_of(type_name, str(rc.get("rust_ctor") or ""))
             if ctor is None or not node_by_id.get(ctor, {}).get("_rust_returns_self"):
@@ -8192,6 +8244,9 @@ def extract(
     # of these files with no import evidence is gated below (#1659).
     _JS_TS_CALL_SUFFIXES = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
     _go_module_cache: dict[Path, str | None] = {}
+    _js_function_ids = (  # Verinoda patch: see js_function_only below
+        {n["id"] for n in all_nodes if str(n.get("label") or "").endswith("()")}
+        if any(rc.get("js_function_only") for rc in all_raw_calls) else set())
     for rc in all_raw_calls:
         callee = rc.get("callee", "")
         if not callee:
@@ -8236,6 +8291,10 @@ def extract(
         candidates = global_label_to_nids.get(callee, [])
         if not candidates and _lang_is_case_insensitive(rc.get("source_file")):
             candidates = global_label_to_nids_ci.get(callee.lower(), [])
+        # Verinoda patch: an imported `fn.call(...)` / `fn.apply(...)` calls fn only when fn is a function, not
+        # a class with a static `call` or an object
+        if rc.get("js_function_only"):
+            candidates = [c for c in candidates if c in _js_function_ids]
         if not candidates:
             continue
         # Cross-language guard: never bind a call to a definition in a different
