@@ -309,3 +309,69 @@ def test_big_scores_pair_arms_on_recall_and_leave_network_sessions_out_in_the_se
     d2 = rep["without sessions that looked something up on the network"]["decisions"]["verinoda_mod - none"]
     assert d2["n"] == 2 and d2["diff"] == 0.5
     assert score_big.cell(["c.py", "a.py"], ["a.py", "b.py"]) == {"recall": 0.5, "solved": 0, "hit1": 0, "precision": 0.5, "named": 2}
+
+
+def test_big_status_difference_is_what_a_run_changed_not_what_the_setup_added(tmp_path):
+    import subprocess
+
+    def git(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+
+    git("init", "-q")
+    (tmp_path / "a.py").write_bytes(b"x = 1\n")
+    git("add", "-A")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init")
+    (tmp_path / ".mcp.json").write_bytes(b"{}")  # the setup's file, there before the run
+    before = big_run.status_paths(str(tmp_path))
+    assert before == {"?? .mcp.json"}
+    (tmp_path / "a.py").write_bytes(b"x = 2\n")  # what a run changed
+    assert sorted(big_run.status_paths(str(tmp_path)) ^ before) == [" M a.py"]
+
+
+def test_big_run_limits_how_many_sessions_run_at_once_per_arm_and_survives_a_crashing_one():
+    import threading
+    import time
+    lock, now, peak, seen = threading.Lock(), {}, {}, []
+
+    def work(item):
+        _, arm = item
+        with lock:
+            now[arm] = now.get(arm, 0) + 1
+            peak[arm] = max(peak.get(arm, 0), now[arm])
+        time.sleep(0.05)
+        with lock:
+            now[arm] -= 1
+            seen.append(item)
+
+    todo = [(f"t{i}", arm) for i in range(6) for arm in ("none", "verinoda_mod")]
+    big_run.run_by_arm(todo, {"none": 3, "verinoda_mod": 1}, work)
+    assert sorted(seen) == sorted(todo) and peak["verinoda_mod"] == 1 and 1 < peak["none"] <= 3
+
+    def crashing(item):
+        if item[0] == "t1":
+            raise RuntimeError("boom")
+        seen.append(("ok", *item))
+
+    seen.clear()
+    failed = big_run.run_by_arm([("t0", "none"), ("t1", "none"), ("t2", "none")], {}, crashing)
+    assert [f[0] for f in failed] == [("t1", "none")] and len(seen) == 2
+
+
+def test_big_run_reads_free_memory_where_it_can():
+    assert big_run.free_mb() is None or big_run.free_mb() > 0
+
+
+def test_big_extra_pools_runs_by_mean_and_measures_the_noise_of_one_arm_against_itself():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "big_extra", ROOT / "benchmarks" / "results" / "agent-compare-big-2026-10-02" / "extra.py")
+    extra = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = extra
+    spec.loader.exec_module(extra)
+    cell = lambda r: {"recall": r, "solved": 0, "hit1": 0, "precision": 0.0, "named": 1, "turns": 4, "seconds": 10.0,
+                      "cost": 0.1, "input": 100, "output": 10, "tool": 0, "network": 0, "answered": True}
+    r1 = {"t1": {"none": cell(0.0)}, "t2": {"none": cell(1.0)}}
+    r2 = {"t1": {"none": cell(1.0)}, "t2": {"none": cell(1.0)}}
+    assert extra.pool([r1, r2])["t1"]["none"]["recall"] == 0.5
+    n = extra.noise_floor(r1, r2, "none")
+    assert n["n"] == 2 and n["diff"] == -1.0 and (n["wins"], n["ties"], n["losses"]) == (0, 1, 1)

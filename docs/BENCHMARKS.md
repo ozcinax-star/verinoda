@@ -28,7 +28,7 @@ Sections: [Update 2026-10-02](#update-2026-10-02-graphify-0973-contextbench-agai
 ## Update 2026-10-02: Graphify 0.9.73, ContextBench again, agents in the loop, `update --fast`
 
 Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-2026-10-02/`,
-`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`, `agent-compare-guard-2026-10-02/`,
+`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`, `agent-compare-guard-2026-10-02/`, `agent-compare-big-2026-10-02/`,
 `mod-live-2026-10-02/`,
 `mod-live-self-quiet-2026-10-02/`. Verinoda at 5999912.
 
@@ -63,6 +63,15 @@ Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-
   verinoda-live 0.4.0's check after edits against no plugin. Both arms passed 30/30, no session left a name that
   does not exist, and the check never had anything to report: every session read the code before its first edit
   (a median of 4 reads or searches), so it called the real names. No measurable difference; the same cost.
+- **Three Claude Codes on a 27,078-file repository** (`agent-compare-big-2026-10-02/`, home-assistant/core, 40 real bug
+  reports closed by later pull requests, scored by the files those changed; 160 real headless sessions, pre-registered,
+  then a second run of all 160): original Claude Code, Claude Code with Graphify's own integration, and with Verinoda's
+  setup plus the verinoda-live mod (and Verinoda's setup alone). Recall of the gold files: 35.8, 37.0, 37.3 and 37.8
+  of 40; no decision reaches a claim (the best, mod against none, +1.50 [+0.00 to +4.00]); a second run and the
+  same arm's run-to-run difference (-1.17 [-3.67 to +0.67]) show the differences are chance. The tools were shown to
+  every session and used in 5-18 % of them, with the same recall as `none` on those tasks: every issue names its
+  integration, whose folder holds a median of 8 Python files, so a `grep` finds the file and the repository's size
+  does not matter.
 - **`update --fast` on 2,876 files** (`mod-live-self-quiet-2026-10-02/`): 6-7x quicker than a plain update (about
   20 s against 130-155 s), the graph caught up after 2.5-3 min. Two findings, both fixed: a function in a file added
   since the last build lost to similarly named symbols until the graph had it (it now ranks as the symbol will;

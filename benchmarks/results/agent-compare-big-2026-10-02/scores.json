@@ -1,0 +1,4024 @@
+{
+ "all sessions": {
+  "summary": {
+   "none": {
+    "tasks": 40,
+    "recall": 35.83,
+    "solved": 32,
+    "hit1": 35,
+    "precision": 0.657,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 210,
+    "input_tokens": 3534557,
+    "output_tokens": 37057,
+    "cost_usd": 2.43,
+    "seconds": 970,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "graphify": {
+    "tasks": 40,
+    "recall": 37.0,
+    "solved": 34,
+    "hit1": 36,
+    "precision": 0.677,
+    "sessions_using_tool": 7,
+    "tool_calls": 7,
+    "turns": 201,
+    "input_tokens": 3295309,
+    "output_tokens": 34992,
+    "cost_usd": 2.45,
+    "seconds": 790,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_mod": {
+    "tasks": 40,
+    "recall": 37.33,
+    "solved": 34,
+    "hit1": 38,
+    "precision": 0.675,
+    "sessions_using_tool": 6,
+    "tool_calls": 7,
+    "turns": 212,
+    "input_tokens": 3507425,
+    "output_tokens": 37575,
+    "cost_usd": 2.59,
+    "seconds": 775,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_setup": {
+    "tasks": 40,
+    "recall": 37.83,
+    "solved": 35,
+    "hit1": 37,
+    "precision": 0.7,
+    "sessions_using_tool": 2,
+    "tool_calls": 3,
+    "turns": 216,
+    "input_tokens": 3582612,
+    "output_tokens": 38237,
+    "cost_usd": 2.57,
+    "seconds": 742,
+    "network_sessions": 0,
+    "unanswered": 0
+   }
+  },
+  "decisions": {
+   "verinoda_mod - none": {
+    "n": 40,
+    "diff": 1.5,
+    "ci95": [
+     0.0,
+     4.0
+    ],
+    "wins": 2,
+    "ties": 38,
+    "losses": 0,
+    "input": {
+     "ratio": 0.992,
+     "ci95": [
+      0.907,
+      1.091
+     ]
+    },
+    "output": {
+     "ratio": 1.014,
+     "ci95": [
+      0.914,
+      1.121
+     ]
+    },
+    "turns": {
+     "ratio": 1.01,
+     "ci95": [
+      0.941,
+      1.074
+     ]
+    },
+    "seconds": {
+     "ratio": 0.799,
+     "ci95": [
+      0.533,
+      1.261
+     ]
+    },
+    "cost": {
+     "ratio": 1.067,
+     "ci95": [
+      1.0,
+      1.138
+     ]
+    }
+   },
+   "graphify - none": {
+    "n": 40,
+    "diff": 1.1667,
+    "ci95": [
+     -0.6667,
+     3.6667
+    ],
+    "wins": 2,
+    "ties": 37,
+    "losses": 1,
+    "input": {
+     "ratio": 0.932,
+     "ci95": [
+      0.842,
+      1.034
+     ]
+    },
+    "output": {
+     "ratio": 0.944,
+     "ci95": [
+      0.841,
+      1.058
+     ]
+    },
+    "turns": {
+     "ratio": 0.957,
+     "ci95": [
+      0.881,
+      1.043
+     ]
+    },
+    "seconds": {
+     "ratio": 0.815,
+     "ci95": [
+      0.481,
+      1.444
+     ]
+    },
+    "cost": {
+     "ratio": 1.008,
+     "ci95": [
+      0.938,
+      1.08
+     ]
+    }
+   },
+   "verinoda_mod - graphify": {
+    "n": 40,
+    "diff": 0.3333,
+    "ci95": [
+     -1.1667,
+     2.0
+    ],
+    "wins": 2,
+    "ties": 37,
+    "losses": 1,
+    "input": {
+     "ratio": 1.064,
+     "ci95": [
+      0.972,
+      1.163
+     ]
+    },
+    "output": {
+     "ratio": 1.074,
+     "ci95": [
+      0.993,
+      1.158
+     ]
+    },
+    "turns": {
+     "ratio": 1.055,
+     "ci95": [
+      0.976,
+      1.134
+     ]
+    },
+    "seconds": {
+     "ratio": 0.981,
+     "ci95": [
+      0.729,
+      1.299
+     ]
+    },
+    "cost": {
+     "ratio": 1.059,
+     "ci95": [
+      1.003,
+      1.121
+     ]
+    }
+   }
+  },
+  "secondary": {
+   "verinoda_mod - none": {
+    "recall": {
+     "n": 40,
+     "diff": 1.5,
+     "ci95": [
+      0.0,
+      4.0
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 0.992,
+      "ci95": [
+       0.907,
+       1.091
+      ]
+     },
+     "output": {
+      "ratio": 1.014,
+      "ci95": [
+       0.914,
+       1.121
+      ]
+     },
+     "turns": {
+      "ratio": 1.01,
+      "ci95": [
+       0.941,
+       1.074
+      ]
+     },
+     "seconds": {
+      "ratio": 0.799,
+      "ci95": [
+       0.533,
+       1.261
+      ]
+     },
+     "cost": {
+      "ratio": 1.067,
+      "ci95": [
+       1.0,
+       1.138
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": 2,
+     "ci95": [
+      0,
+      5
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 0.992,
+      "ci95": [
+       0.907,
+       1.091
+      ]
+     },
+     "output": {
+      "ratio": 1.014,
+      "ci95": [
+       0.914,
+       1.121
+      ]
+     },
+     "turns": {
+      "ratio": 1.01,
+      "ci95": [
+       0.941,
+       1.074
+      ]
+     },
+     "seconds": {
+      "ratio": 0.799,
+      "ci95": [
+       0.533,
+       1.261
+      ]
+     },
+     "cost": {
+      "ratio": 1.067,
+      "ci95": [
+       1.0,
+       1.138
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 3,
+     "ci95": [
+      0,
+      7
+     ],
+     "wins": 3,
+     "ties": 37,
+     "losses": 0,
+     "input": {
+      "ratio": 0.992,
+      "ci95": [
+       0.907,
+       1.091
+      ]
+     },
+     "output": {
+      "ratio": 1.014,
+      "ci95": [
+       0.914,
+       1.121
+      ]
+     },
+     "turns": {
+      "ratio": 1.01,
+      "ci95": [
+       0.941,
+       1.074
+      ]
+     },
+     "seconds": {
+      "ratio": 0.799,
+      "ci95": [
+       0.533,
+       1.261
+      ]
+     },
+     "cost": {
+      "ratio": 1.067,
+      "ci95": [
+       1.0,
+       1.138
+      ]
+     }
+    }
+   },
+   "graphify - none": {
+    "recall": {
+     "n": 40,
+     "diff": 1.1667,
+     "ci95": [
+      -0.6667,
+      3.6667
+     ],
+     "wins": 2,
+     "ties": 37,
+     "losses": 1,
+     "input": {
+      "ratio": 0.932,
+      "ci95": [
+       0.842,
+       1.034
+      ]
+     },
+     "output": {
+      "ratio": 0.944,
+      "ci95": [
+       0.841,
+       1.058
+      ]
+     },
+     "turns": {
+      "ratio": 0.957,
+      "ci95": [
+       0.881,
+       1.043
+      ]
+     },
+     "seconds": {
+      "ratio": 0.815,
+      "ci95": [
+       0.481,
+       1.444
+      ]
+     },
+     "cost": {
+      "ratio": 1.008,
+      "ci95": [
+       0.938,
+       1.08
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": 2,
+     "ci95": [
+      0,
+      5
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 0.932,
+      "ci95": [
+       0.842,
+       1.034
+      ]
+     },
+     "output": {
+      "ratio": 0.944,
+      "ci95": [
+       0.841,
+       1.058
+      ]
+     },
+     "turns": {
+      "ratio": 0.957,
+      "ci95": [
+       0.881,
+       1.043
+      ]
+     },
+     "seconds": {
+      "ratio": 0.815,
+      "ci95": [
+       0.481,
+       1.444
+      ]
+     },
+     "cost": {
+      "ratio": 1.008,
+      "ci95": [
+       0.938,
+       1.08
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 1,
+     "ci95": [
+      -3,
+      6
+     ],
+     "wins": 3,
+     "ties": 35,
+     "losses": 2,
+     "input": {
+      "ratio": 0.932,
+      "ci95": [
+       0.842,
+       1.034
+      ]
+     },
+     "output": {
+      "ratio": 0.944,
+      "ci95": [
+       0.841,
+       1.058
+      ]
+     },
+     "turns": {
+      "ratio": 0.957,
+      "ci95": [
+       0.881,
+       1.043
+      ]
+     },
+     "seconds": {
+      "ratio": 0.815,
+      "ci95": [
+       0.481,
+       1.444
+      ]
+     },
+     "cost": {
+      "ratio": 1.008,
+      "ci95": [
+       0.938,
+       1.08
+      ]
+     }
+    }
+   },
+   "verinoda_mod - graphify": {
+    "recall": {
+     "n": 40,
+     "diff": 0.3333,
+     "ci95": [
+      -1.1667,
+      2.0
+     ],
+     "wins": 2,
+     "ties": 37,
+     "losses": 1,
+     "input": {
+      "ratio": 1.064,
+      "ci95": [
+       0.972,
+       1.163
+      ]
+     },
+     "output": {
+      "ratio": 1.074,
+      "ci95": [
+       0.993,
+       1.158
+      ]
+     },
+     "turns": {
+      "ratio": 1.055,
+      "ci95": [
+       0.976,
+       1.134
+      ]
+     },
+     "seconds": {
+      "ratio": 0.981,
+      "ci95": [
+       0.729,
+       1.299
+      ]
+     },
+     "cost": {
+      "ratio": 1.059,
+      "ci95": [
+       1.003,
+       1.121
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": 0,
+     "ci95": [
+      -3,
+      3
+     ],
+     "wins": 1,
+     "ties": 38,
+     "losses": 1,
+     "input": {
+      "ratio": 1.064,
+      "ci95": [
+       0.972,
+       1.163
+      ]
+     },
+     "output": {
+      "ratio": 1.074,
+      "ci95": [
+       0.993,
+       1.158
+      ]
+     },
+     "turns": {
+      "ratio": 1.055,
+      "ci95": [
+       0.976,
+       1.134
+      ]
+     },
+     "seconds": {
+      "ratio": 0.981,
+      "ci95": [
+       0.729,
+       1.299
+      ]
+     },
+     "cost": {
+      "ratio": 1.059,
+      "ci95": [
+       1.003,
+       1.121
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 2,
+     "ci95": [
+      0,
+      5
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 1.064,
+      "ci95": [
+       0.972,
+       1.163
+      ]
+     },
+     "output": {
+      "ratio": 1.074,
+      "ci95": [
+       0.993,
+       1.158
+      ]
+     },
+     "turns": {
+      "ratio": 1.055,
+      "ci95": [
+       0.976,
+       1.134
+      ]
+     },
+     "seconds": {
+      "ratio": 0.981,
+      "ci95": [
+       0.729,
+       1.299
+      ]
+     },
+     "cost": {
+      "ratio": 1.059,
+      "ci95": [
+       1.003,
+       1.121
+      ]
+     }
+    }
+   },
+   "verinoda_mod - verinoda_setup": {
+    "recall": {
+     "n": 40,
+     "diff": -0.5,
+     "ci95": [
+      -1.5,
+      0.0
+     ],
+     "wins": 0,
+     "ties": 39,
+     "losses": 1,
+     "input": {
+      "ratio": 0.979,
+      "ci95": [
+       0.895,
+       1.071
+      ]
+     },
+     "output": {
+      "ratio": 0.983,
+      "ci95": [
+       0.894,
+       1.074
+      ]
+     },
+     "turns": {
+      "ratio": 0.981,
+      "ci95": [
+       0.92,
+       1.042
+      ]
+     },
+     "seconds": {
+      "ratio": 1.046,
+      "ci95": [
+       0.976,
+       1.11
+      ]
+     },
+     "cost": {
+      "ratio": 1.006,
+      "ci95": [
+       0.956,
+       1.061
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": -1,
+     "ci95": [
+      -3,
+      0
+     ],
+     "wins": 0,
+     "ties": 39,
+     "losses": 1,
+     "input": {
+      "ratio": 0.979,
+      "ci95": [
+       0.895,
+       1.071
+      ]
+     },
+     "output": {
+      "ratio": 0.983,
+      "ci95": [
+       0.894,
+       1.074
+      ]
+     },
+     "turns": {
+      "ratio": 0.981,
+      "ci95": [
+       0.92,
+       1.042
+      ]
+     },
+     "seconds": {
+      "ratio": 1.046,
+      "ci95": [
+       0.976,
+       1.11
+      ]
+     },
+     "cost": {
+      "ratio": 1.006,
+      "ci95": [
+       0.956,
+       1.061
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 1,
+     "ci95": [
+      0,
+      3
+     ],
+     "wins": 1,
+     "ties": 39,
+     "losses": 0,
+     "input": {
+      "ratio": 0.979,
+      "ci95": [
+       0.895,
+       1.071
+      ]
+     },
+     "output": {
+      "ratio": 0.983,
+      "ci95": [
+       0.894,
+       1.074
+      ]
+     },
+     "turns": {
+      "ratio": 0.981,
+      "ci95": [
+       0.92,
+       1.042
+      ]
+     },
+     "seconds": {
+      "ratio": 1.046,
+      "ci95": [
+       0.976,
+       1.11
+      ]
+     },
+     "cost": {
+      "ratio": 1.006,
+      "ci95": [
+       0.956,
+       1.061
+      ]
+     }
+    }
+   }
+  }
+ },
+ "without sessions that looked something up on the network": {
+  "summary": {
+   "none": {
+    "tasks": 40,
+    "recall": 35.83,
+    "solved": 32,
+    "hit1": 35,
+    "precision": 0.657,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 210,
+    "input_tokens": 3534557,
+    "output_tokens": 37057,
+    "cost_usd": 2.43,
+    "seconds": 970,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "graphify": {
+    "tasks": 40,
+    "recall": 37.0,
+    "solved": 34,
+    "hit1": 36,
+    "precision": 0.677,
+    "sessions_using_tool": 7,
+    "tool_calls": 7,
+    "turns": 201,
+    "input_tokens": 3295309,
+    "output_tokens": 34992,
+    "cost_usd": 2.45,
+    "seconds": 790,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_mod": {
+    "tasks": 40,
+    "recall": 37.33,
+    "solved": 34,
+    "hit1": 38,
+    "precision": 0.675,
+    "sessions_using_tool": 6,
+    "tool_calls": 7,
+    "turns": 212,
+    "input_tokens": 3507425,
+    "output_tokens": 37575,
+    "cost_usd": 2.59,
+    "seconds": 775,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_setup": {
+    "tasks": 40,
+    "recall": 37.83,
+    "solved": 35,
+    "hit1": 37,
+    "precision": 0.7,
+    "sessions_using_tool": 2,
+    "tool_calls": 3,
+    "turns": 216,
+    "input_tokens": 3582612,
+    "output_tokens": 38237,
+    "cost_usd": 2.57,
+    "seconds": 742,
+    "network_sessions": 0,
+    "unanswered": 0
+   }
+  },
+  "decisions": {
+   "verinoda_mod - none": {
+    "n": 40,
+    "diff": 1.5,
+    "ci95": [
+     0.0,
+     4.0
+    ],
+    "wins": 2,
+    "ties": 38,
+    "losses": 0,
+    "input": {
+     "ratio": 0.992,
+     "ci95": [
+      0.907,
+      1.091
+     ]
+    },
+    "output": {
+     "ratio": 1.014,
+     "ci95": [
+      0.914,
+      1.121
+     ]
+    },
+    "turns": {
+     "ratio": 1.01,
+     "ci95": [
+      0.941,
+      1.074
+     ]
+    },
+    "seconds": {
+     "ratio": 0.799,
+     "ci95": [
+      0.533,
+      1.261
+     ]
+    },
+    "cost": {
+     "ratio": 1.067,
+     "ci95": [
+      1.0,
+      1.138
+     ]
+    }
+   },
+   "graphify - none": {
+    "n": 40,
+    "diff": 1.1667,
+    "ci95": [
+     -0.6667,
+     3.6667
+    ],
+    "wins": 2,
+    "ties": 37,
+    "losses": 1,
+    "input": {
+     "ratio": 0.932,
+     "ci95": [
+      0.842,
+      1.034
+     ]
+    },
+    "output": {
+     "ratio": 0.944,
+     "ci95": [
+      0.841,
+      1.058
+     ]
+    },
+    "turns": {
+     "ratio": 0.957,
+     "ci95": [
+      0.881,
+      1.043
+     ]
+    },
+    "seconds": {
+     "ratio": 0.815,
+     "ci95": [
+      0.481,
+      1.444
+     ]
+    },
+    "cost": {
+     "ratio": 1.008,
+     "ci95": [
+      0.938,
+      1.08
+     ]
+    }
+   },
+   "verinoda_mod - graphify": {
+    "n": 40,
+    "diff": 0.3333,
+    "ci95": [
+     -1.1667,
+     2.0
+    ],
+    "wins": 2,
+    "ties": 37,
+    "losses": 1,
+    "input": {
+     "ratio": 1.064,
+     "ci95": [
+      0.972,
+      1.163
+     ]
+    },
+    "output": {
+     "ratio": 1.074,
+     "ci95": [
+      0.993,
+      1.158
+     ]
+    },
+    "turns": {
+     "ratio": 1.055,
+     "ci95": [
+      0.976,
+      1.134
+     ]
+    },
+    "seconds": {
+     "ratio": 0.981,
+     "ci95": [
+      0.729,
+      1.299
+     ]
+    },
+    "cost": {
+     "ratio": 1.059,
+     "ci95": [
+      1.003,
+      1.121
+     ]
+    }
+   }
+  },
+  "secondary": {
+   "verinoda_mod - none": {
+    "recall": {
+     "n": 40,
+     "diff": 1.5,
+     "ci95": [
+      0.0,
+      4.0
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 0.992,
+      "ci95": [
+       0.907,
+       1.091
+      ]
+     },
+     "output": {
+      "ratio": 1.014,
+      "ci95": [
+       0.914,
+       1.121
+      ]
+     },
+     "turns": {
+      "ratio": 1.01,
+      "ci95": [
+       0.941,
+       1.074
+      ]
+     },
+     "seconds": {
+      "ratio": 0.799,
+      "ci95": [
+       0.533,
+       1.261
+      ]
+     },
+     "cost": {
+      "ratio": 1.067,
+      "ci95": [
+       1.0,
+       1.138
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": 2,
+     "ci95": [
+      0,
+      5
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 0.992,
+      "ci95": [
+       0.907,
+       1.091
+      ]
+     },
+     "output": {
+      "ratio": 1.014,
+      "ci95": [
+       0.914,
+       1.121
+      ]
+     },
+     "turns": {
+      "ratio": 1.01,
+      "ci95": [
+       0.941,
+       1.074
+      ]
+     },
+     "seconds": {
+      "ratio": 0.799,
+      "ci95": [
+       0.533,
+       1.261
+      ]
+     },
+     "cost": {
+      "ratio": 1.067,
+      "ci95": [
+       1.0,
+       1.138
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 3,
+     "ci95": [
+      0,
+      7
+     ],
+     "wins": 3,
+     "ties": 37,
+     "losses": 0,
+     "input": {
+      "ratio": 0.992,
+      "ci95": [
+       0.907,
+       1.091
+      ]
+     },
+     "output": {
+      "ratio": 1.014,
+      "ci95": [
+       0.914,
+       1.121
+      ]
+     },
+     "turns": {
+      "ratio": 1.01,
+      "ci95": [
+       0.941,
+       1.074
+      ]
+     },
+     "seconds": {
+      "ratio": 0.799,
+      "ci95": [
+       0.533,
+       1.261
+      ]
+     },
+     "cost": {
+      "ratio": 1.067,
+      "ci95": [
+       1.0,
+       1.138
+      ]
+     }
+    }
+   },
+   "graphify - none": {
+    "recall": {
+     "n": 40,
+     "diff": 1.1667,
+     "ci95": [
+      -0.6667,
+      3.6667
+     ],
+     "wins": 2,
+     "ties": 37,
+     "losses": 1,
+     "input": {
+      "ratio": 0.932,
+      "ci95": [
+       0.842,
+       1.034
+      ]
+     },
+     "output": {
+      "ratio": 0.944,
+      "ci95": [
+       0.841,
+       1.058
+      ]
+     },
+     "turns": {
+      "ratio": 0.957,
+      "ci95": [
+       0.881,
+       1.043
+      ]
+     },
+     "seconds": {
+      "ratio": 0.815,
+      "ci95": [
+       0.481,
+       1.444
+      ]
+     },
+     "cost": {
+      "ratio": 1.008,
+      "ci95": [
+       0.938,
+       1.08
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": 2,
+     "ci95": [
+      0,
+      5
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 0.932,
+      "ci95": [
+       0.842,
+       1.034
+      ]
+     },
+     "output": {
+      "ratio": 0.944,
+      "ci95": [
+       0.841,
+       1.058
+      ]
+     },
+     "turns": {
+      "ratio": 0.957,
+      "ci95": [
+       0.881,
+       1.043
+      ]
+     },
+     "seconds": {
+      "ratio": 0.815,
+      "ci95": [
+       0.481,
+       1.444
+      ]
+     },
+     "cost": {
+      "ratio": 1.008,
+      "ci95": [
+       0.938,
+       1.08
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 1,
+     "ci95": [
+      -3,
+      6
+     ],
+     "wins": 3,
+     "ties": 35,
+     "losses": 2,
+     "input": {
+      "ratio": 0.932,
+      "ci95": [
+       0.842,
+       1.034
+      ]
+     },
+     "output": {
+      "ratio": 0.944,
+      "ci95": [
+       0.841,
+       1.058
+      ]
+     },
+     "turns": {
+      "ratio": 0.957,
+      "ci95": [
+       0.881,
+       1.043
+      ]
+     },
+     "seconds": {
+      "ratio": 0.815,
+      "ci95": [
+       0.481,
+       1.444
+      ]
+     },
+     "cost": {
+      "ratio": 1.008,
+      "ci95": [
+       0.938,
+       1.08
+      ]
+     }
+    }
+   },
+   "verinoda_mod - graphify": {
+    "recall": {
+     "n": 40,
+     "diff": 0.3333,
+     "ci95": [
+      -1.1667,
+      2.0
+     ],
+     "wins": 2,
+     "ties": 37,
+     "losses": 1,
+     "input": {
+      "ratio": 1.064,
+      "ci95": [
+       0.972,
+       1.163
+      ]
+     },
+     "output": {
+      "ratio": 1.074,
+      "ci95": [
+       0.993,
+       1.158
+      ]
+     },
+     "turns": {
+      "ratio": 1.055,
+      "ci95": [
+       0.976,
+       1.134
+      ]
+     },
+     "seconds": {
+      "ratio": 0.981,
+      "ci95": [
+       0.729,
+       1.299
+      ]
+     },
+     "cost": {
+      "ratio": 1.059,
+      "ci95": [
+       1.003,
+       1.121
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": 0,
+     "ci95": [
+      -3,
+      3
+     ],
+     "wins": 1,
+     "ties": 38,
+     "losses": 1,
+     "input": {
+      "ratio": 1.064,
+      "ci95": [
+       0.972,
+       1.163
+      ]
+     },
+     "output": {
+      "ratio": 1.074,
+      "ci95": [
+       0.993,
+       1.158
+      ]
+     },
+     "turns": {
+      "ratio": 1.055,
+      "ci95": [
+       0.976,
+       1.134
+      ]
+     },
+     "seconds": {
+      "ratio": 0.981,
+      "ci95": [
+       0.729,
+       1.299
+      ]
+     },
+     "cost": {
+      "ratio": 1.059,
+      "ci95": [
+       1.003,
+       1.121
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 2,
+     "ci95": [
+      0,
+      5
+     ],
+     "wins": 2,
+     "ties": 38,
+     "losses": 0,
+     "input": {
+      "ratio": 1.064,
+      "ci95": [
+       0.972,
+       1.163
+      ]
+     },
+     "output": {
+      "ratio": 1.074,
+      "ci95": [
+       0.993,
+       1.158
+      ]
+     },
+     "turns": {
+      "ratio": 1.055,
+      "ci95": [
+       0.976,
+       1.134
+      ]
+     },
+     "seconds": {
+      "ratio": 0.981,
+      "ci95": [
+       0.729,
+       1.299
+      ]
+     },
+     "cost": {
+      "ratio": 1.059,
+      "ci95": [
+       1.003,
+       1.121
+      ]
+     }
+    }
+   },
+   "verinoda_mod - verinoda_setup": {
+    "recall": {
+     "n": 40,
+     "diff": -0.5,
+     "ci95": [
+      -1.5,
+      0.0
+     ],
+     "wins": 0,
+     "ties": 39,
+     "losses": 1,
+     "input": {
+      "ratio": 0.979,
+      "ci95": [
+       0.895,
+       1.071
+      ]
+     },
+     "output": {
+      "ratio": 0.983,
+      "ci95": [
+       0.894,
+       1.074
+      ]
+     },
+     "turns": {
+      "ratio": 0.981,
+      "ci95": [
+       0.92,
+       1.042
+      ]
+     },
+     "seconds": {
+      "ratio": 1.046,
+      "ci95": [
+       0.976,
+       1.11
+      ]
+     },
+     "cost": {
+      "ratio": 1.006,
+      "ci95": [
+       0.956,
+       1.061
+      ]
+     }
+    },
+    "solved": {
+     "n": 40,
+     "diff": -1,
+     "ci95": [
+      -3,
+      0
+     ],
+     "wins": 0,
+     "ties": 39,
+     "losses": 1,
+     "input": {
+      "ratio": 0.979,
+      "ci95": [
+       0.895,
+       1.071
+      ]
+     },
+     "output": {
+      "ratio": 0.983,
+      "ci95": [
+       0.894,
+       1.074
+      ]
+     },
+     "turns": {
+      "ratio": 0.981,
+      "ci95": [
+       0.92,
+       1.042
+      ]
+     },
+     "seconds": {
+      "ratio": 1.046,
+      "ci95": [
+       0.976,
+       1.11
+      ]
+     },
+     "cost": {
+      "ratio": 1.006,
+      "ci95": [
+       0.956,
+       1.061
+      ]
+     }
+    },
+    "hit1": {
+     "n": 40,
+     "diff": 1,
+     "ci95": [
+      0,
+      3
+     ],
+     "wins": 1,
+     "ties": 39,
+     "losses": 0,
+     "input": {
+      "ratio": 0.979,
+      "ci95": [
+       0.895,
+       1.071
+      ]
+     },
+     "output": {
+      "ratio": 0.983,
+      "ci95": [
+       0.894,
+       1.074
+      ]
+     },
+     "turns": {
+      "ratio": 0.981,
+      "ci95": [
+       0.92,
+       1.042
+      ]
+     },
+     "seconds": {
+      "ratio": 1.046,
+      "ci95": [
+       0.976,
+       1.11
+      ]
+     },
+     "cost": {
+      "ratio": 1.006,
+      "ci95": [
+       0.956,
+       1.061
+      ]
+     }
+    }
+   }
+  }
+ },
+ "per_task": {
+  "pr179120": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 3,
+    "seconds": 12.2,
+    "cost": 0.0339816,
+    "input": 45877,
+    "output": 388,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 3,
+    "seconds": 15.4,
+    "cost": 0.0385452,
+    "input": 47215,
+    "output": 430,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 3,
+    "seconds": 16.1,
+    "cost": 0.0404042,
+    "input": 48154,
+    "output": 436,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 19.7,
+    "cost": 0.047113,
+    "input": 72984,
+    "output": 521,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180408": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 13.5,
+    "cost": 0.042906,
+    "input": 47760,
+    "output": 680,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 10.5,
+    "cost": 0.0440056,
+    "input": 48422,
+    "output": 646,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 14.4,
+    "cost": 0.0521358,
+    "input": 74208,
+    "output": 767,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 18.4,
+    "cost": 0.0418072,
+    "input": 48696,
+    "output": 597,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180505": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 10.1,
+    "cost": 0.0446486,
+    "input": 70622,
+    "output": 508,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 12.5,
+    "cost": 0.047780800000000005,
+    "input": 72186,
+    "output": 481,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 14.0,
+    "cost": 0.0499714,
+    "input": 73552,
+    "output": 512,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 19.1,
+    "cost": 0.0510958,
+    "input": 74245,
+    "output": 500,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr173270": {
+   "none": {
+    "recall": 0.6666666666666666,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 0.6666666666666666,
+    "named": 3,
+    "turns": 5,
+    "seconds": 23.9,
+    "cost": 0.07718939999999999,
+    "input": 105687,
+    "output": 1469,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 0.6666666666666666,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 0.6666666666666666,
+    "named": 3,
+    "turns": 8,
+    "seconds": 18.2,
+    "cost": 0.0828322,
+    "input": 106914,
+    "output": 1232,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 0.6666666666666666,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 8,
+    "seconds": 18.4,
+    "cost": 0.08201040000000001,
+    "input": 107450,
+    "output": 1217,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 0.6666666666666666,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 0.6666666666666666,
+    "named": 3,
+    "turns": 5,
+    "seconds": 18.9,
+    "cost": 0.0716204,
+    "input": 104165,
+    "output": 1074,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr179351": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 15.0,
+    "cost": 0.050299800000000006,
+    "input": 72578,
+    "output": 749,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 17.5,
+    "cost": 0.051912,
+    "input": 73691,
+    "output": 739,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 19.6,
+    "cost": 0.06015480000000001,
+    "input": 100630,
+    "output": 890,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 22.1,
+    "cost": 0.0633916,
+    "input": 102306,
+    "output": 921,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180472": {
+   "none": {
+    "recall": 0.0,
+    "solved": 0,
+    "hit1": 0,
+    "precision": 0.0,
+    "named": 3,
+    "turns": 9,
+    "seconds": 31.8,
+    "cost": 0.1154024,
+    "input": 197781,
+    "output": 1884,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 9,
+    "seconds": 34.3,
+    "cost": 0.1304834,
+    "input": 207879,
+    "output": 2353,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.25,
+    "named": 4,
+    "turns": 12,
+    "seconds": 37.5,
+    "cost": 0.1384206,
+    "input": 213975,
+    "output": 2736,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.25,
+    "named": 4,
+    "turns": 11,
+    "seconds": 38.4,
+    "cost": 0.121979,
+    "input": 173127,
+    "output": 2695,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr166748": {
+   "none": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 17.0,
+    "cost": 0.055054000000000006,
+    "input": 50083,
+    "output": 958,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 5,
+    "seconds": 23.4,
+    "cost": 0.077571,
+    "input": 108038,
+    "output": 1166,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 6,
+    "seconds": 22.9,
+    "cost": 0.07855720000000001,
+    "input": 104672,
+    "output": 1536,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 20.0,
+    "cost": 0.0581312,
+    "input": 52268,
+    "output": 793,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180559": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 10.7,
+    "cost": 0.050297,
+    "input": 72351,
+    "output": 534,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 5,
+    "seconds": 12.2,
+    "cost": 0.056423,
+    "input": 73856,
+    "output": 670,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 14.2,
+    "cost": 0.0514996,
+    "input": 73926,
+    "output": 508,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 16.9,
+    "cost": 0.0527008,
+    "input": 74595,
+    "output": 530,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr172657": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 20.6,
+    "cost": 0.07908399999999999,
+    "input": 126976,
+    "output": 1276,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 22.1,
+    "cost": 0.07132060000000001,
+    "input": 98755,
+    "output": 1506,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 24.2,
+    "cost": 0.0809948,
+    "input": 105171,
+    "output": 1283,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 8,
+    "seconds": 25.0,
+    "cost": 0.1052772,
+    "input": 168686,
+    "output": 1852,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr179239": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 17.4,
+    "cost": 0.06748019999999999,
+    "input": 76547,
+    "output": 1454,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 18.4,
+    "cost": 0.06474579999999999,
+    "input": 75513,
+    "output": 1487,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 23.6,
+    "cost": 0.07194880000000001,
+    "input": 104783,
+    "output": 1153,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 8,
+    "seconds": 22.3,
+    "cost": 0.0711452,
+    "input": 77361,
+    "output": 1759,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr182747": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 11.7,
+    "cost": 0.0361712,
+    "input": 46335,
+    "output": 499,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 10.5,
+    "cost": 0.0384448,
+    "input": 47343,
+    "output": 444,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 13.5,
+    "cost": 0.0409538,
+    "input": 48127,
+    "output": 577,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 17.0,
+    "cost": 0.041664400000000004,
+    "input": 48764,
+    "output": 478,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr177416": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 12.2,
+    "cost": 0.042386,
+    "input": 70110,
+    "output": 550,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 12.0,
+    "cost": 0.04991399999999999,
+    "input": 72330,
+    "output": 677,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 14.9,
+    "cost": 0.05128740000000001,
+    "input": 73548,
+    "output": 687,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 19.5,
+    "cost": 0.048813999999999996,
+    "input": 73601,
+    "output": 659,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr182949": {
+   "none": {
+    "recall": 0.6666666666666666,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 5,
+    "seconds": 15.2,
+    "cost": 0.0517038,
+    "input": 72303,
+    "output": 798,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 0.3333333333333333,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 13.3,
+    "cost": 0.054979,
+    "input": 74204,
+    "output": 641,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 0.6666666666666666,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 4,
+    "seconds": 15.4,
+    "cost": 0.0559698,
+    "input": 75226,
+    "output": 690,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 0.6666666666666666,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 5,
+    "seconds": 17.9,
+    "cost": 0.06664300000000001,
+    "input": 103604,
+    "output": 855,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr178471": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 3,
+    "turns": 5,
+    "seconds": 13.8,
+    "cost": 0.063786,
+    "input": 74715,
+    "output": 810,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 3,
+    "turns": 5,
+    "seconds": 13.0,
+    "cost": 0.07678120000000001,
+    "input": 81210,
+    "output": 821,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 3,
+    "turns": 3,
+    "seconds": 14.2,
+    "cost": 0.050872,
+    "input": 50525,
+    "output": 629,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 3,
+    "turns": 5,
+    "seconds": 19.1,
+    "cost": 0.074644,
+    "input": 81673,
+    "output": 948,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180226": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 11.0,
+    "cost": 0.042157599999999996,
+    "input": 69967,
+    "output": 462,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 10.8,
+    "cost": 0.047495800000000005,
+    "input": 72672,
+    "output": 469,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 13.7,
+    "cost": 0.046029600000000004,
+    "input": 72474,
+    "output": 481,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 17.5,
+    "cost": 0.040939,
+    "input": 48985,
+    "output": 322,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180420": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 9.4,
+    "cost": 0.0469464,
+    "input": 50109,
+    "output": 415,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 12.3,
+    "cost": 0.0551198,
+    "input": 75746,
+    "output": 587,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 12.9,
+    "cost": 0.051431,
+    "input": 51769,
+    "output": 516,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 17.2,
+    "cost": 0.0530996,
+    "input": 52218,
+    "output": 588,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr176774": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 8.6,
+    "cost": 0.0363114,
+    "input": 47205,
+    "output": 344,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 13.5,
+    "cost": 0.048933000000000004,
+    "input": 73361,
+    "output": 480,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 14.2,
+    "cost": 0.0510696,
+    "input": 74741,
+    "output": 500,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 16.2,
+    "cost": 0.0405726,
+    "input": 49261,
+    "output": 349,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr177499": {
+   "none": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 0,
+    "precision": 0.25,
+    "named": 4,
+    "turns": 3,
+    "seconds": 13.6,
+    "cost": 0.049971,
+    "input": 49631,
+    "output": 754,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 0,
+    "precision": 0.25,
+    "named": 4,
+    "turns": 3,
+    "seconds": 16.8,
+    "cost": 0.05422060000000001,
+    "input": 50603,
+    "output": 911,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 0,
+    "precision": 0.25,
+    "named": 4,
+    "turns": 4,
+    "seconds": 19.3,
+    "cost": 0.0659098,
+    "input": 79494,
+    "output": 1102,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 0,
+    "precision": 0.25,
+    "named": 4,
+    "turns": 3,
+    "seconds": 18.9,
+    "cost": 0.0559902,
+    "input": 52009,
+    "output": 806,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr177519": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 18.3,
+    "cost": 0.072755,
+    "input": 104405,
+    "output": 1112,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 20.2,
+    "cost": 0.0723762,
+    "input": 106416,
+    "output": 834,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 23.6,
+    "cost": 0.0692372,
+    "input": 80796,
+    "output": 939,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 102.9,
+    "cost": 0.07711760000000001,
+    "input": 107311,
+    "output": 759,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180357": {
+   "none": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 13.7,
+    "cost": 0.0573994,
+    "input": 73992,
+    "output": 904,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 16.7,
+    "cost": 0.0729328,
+    "input": 104122,
+    "output": 1075,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 6,
+    "seconds": 17.4,
+    "cost": 0.070838,
+    "input": 104526,
+    "output": 1071,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 2,
+    "turns": 6,
+    "seconds": 20.4,
+    "cost": 0.07353200000000001,
+    "input": 104582,
+    "output": 1261,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr181538": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 10.6,
+    "cost": 0.0373232,
+    "input": 46498,
+    "output": 549,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 9.0,
+    "cost": 0.0398548,
+    "input": 47308,
+    "output": 599,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 12.8,
+    "cost": 0.040267800000000006,
+    "input": 47978,
+    "output": 568,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 16.0,
+    "cost": 0.040754399999999996,
+    "input": 48424,
+    "output": 523,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr181869": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.6666666666666666,
+    "named": 3,
+    "turns": 4,
+    "seconds": 15.9,
+    "cost": 0.043603199999999995,
+    "input": 70579,
+    "output": 589,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.6666666666666666,
+    "named": 3,
+    "turns": 4,
+    "seconds": 12.7,
+    "cost": 0.046359,
+    "input": 48843,
+    "output": 651,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.6666666666666666,
+    "named": 3,
+    "turns": 4,
+    "seconds": 16.2,
+    "cost": 0.046204,
+    "input": 49341,
+    "output": 632,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.6666666666666666,
+    "named": 3,
+    "turns": 4,
+    "seconds": 16.1,
+    "cost": 0.0473846,
+    "input": 49768,
+    "output": 664,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180353": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 11.4,
+    "cost": 0.0497148,
+    "input": 71721,
+    "output": 697,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 11.3,
+    "cost": 0.039407,
+    "input": 47347,
+    "output": 539,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 15.6,
+    "cost": 0.042962,
+    "input": 48805,
+    "output": 507,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 17.9,
+    "cost": 0.060325000000000004,
+    "input": 75950,
+    "output": 747,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr178490": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 11.1,
+    "cost": 0.049233200000000005,
+    "input": 72247,
+    "output": 538,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 18.6,
+    "cost": 0.0551784,
+    "input": 74746,
+    "output": 766,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 13.0,
+    "cost": 0.0517618,
+    "input": 73536,
+    "output": 550,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 17.6,
+    "cost": 0.0539496,
+    "input": 75415,
+    "output": 545,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr182734": {
+   "graphify": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 17.7,
+    "cost": 0.06612119999999999,
+    "input": 99611,
+    "output": 1021,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 27.5,
+    "cost": 0.0643514,
+    "input": 99199,
+    "output": 1108,
+    "tool": 2,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 7,
+    "seconds": 25.2,
+    "cost": 0.07514420000000001,
+    "input": 126594,
+    "output": 1400,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   },
+   "none": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 8,
+    "seconds": 207.8,
+    "cost": 0.07641080000000001,
+    "input": 124318,
+    "output": 1492,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr180024": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 3,
+    "seconds": 10.3,
+    "cost": 0.035363,
+    "input": 47085,
+    "output": 323,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 14.0,
+    "cost": 0.0473856,
+    "input": 73866,
+    "output": 436,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 10.6,
+    "cost": 0.046521,
+    "input": 72749,
+    "output": 438,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 15.8,
+    "cost": 0.04871880000000001,
+    "input": 74628,
+    "output": 434,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr171908": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 7,
+    "seconds": 19.0,
+    "cost": 0.10248539999999999,
+    "input": 141828,
+    "output": 1383,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 17.9,
+    "cost": 0.0704626,
+    "input": 102213,
+    "output": 1139,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 17.2,
+    "cost": 0.06525020000000001,
+    "input": 100518,
+    "output": 1067,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 7,
+    "seconds": 105.7,
+    "cost": 0.07854359999999999,
+    "input": 125156,
+    "output": 1383,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr172278": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 5,
+    "seconds": 13.5,
+    "cost": 0.062005199999999996,
+    "input": 76137,
+    "output": 852,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 6,
+    "seconds": 18.4,
+    "cost": 0.066645,
+    "input": 100824,
+    "output": 1135,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 5,
+    "seconds": 15.8,
+    "cost": 0.06142700000000001,
+    "input": 100875,
+    "output": 760,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 5,
+    "seconds": 19.1,
+    "cost": 0.062744,
+    "input": 76984,
+    "output": 866,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr182851": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 7,
+    "seconds": 20.8,
+    "cost": 0.08011919999999999,
+    "input": 156783,
+    "output": 1076,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 20.4,
+    "cost": 0.0762328,
+    "input": 128521,
+    "output": 1237,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 5,
+    "seconds": 26.4,
+    "cost": 0.063855,
+    "input": 100776,
+    "output": 860,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 18.6,
+    "cost": 0.0795692,
+    "input": 107028,
+    "output": 1223,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr179219": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 6,
+    "seconds": 15.2,
+    "cost": 0.061340200000000004,
+    "input": 98764,
+    "output": 857,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 8,
+    "seconds": 20.1,
+    "cost": 0.07028,
+    "input": 100159,
+    "output": 1223,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 8,
+    "seconds": 19.4,
+    "cost": 0.0759374,
+    "input": 103126,
+    "output": 1224,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 16.0,
+    "cost": 0.07818340000000001,
+    "input": 82489,
+    "output": 1020,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr183498": {
+   "none": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 6,
+    "seconds": 13.9,
+    "cost": 0.0670366,
+    "input": 102385,
+    "output": 891,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 5,
+    "seconds": 15.2,
+    "cost": 0.0608188,
+    "input": 78766,
+    "output": 650,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 6,
+    "seconds": 18.2,
+    "cost": 0.08451840000000001,
+    "input": 113191,
+    "output": 813,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 0.5,
+    "solved": 0,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 6,
+    "seconds": 13.9,
+    "cost": 0.06979500000000001,
+    "input": 104010,
+    "output": 852,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr182952": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 0,
+    "precision": 0.2,
+    "named": 5,
+    "turns": 6,
+    "seconds": 16.6,
+    "cost": 0.0514162,
+    "input": 70624,
+    "output": 1225,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 7,
+    "seconds": 19.6,
+    "cost": 0.0801766,
+    "input": 129990,
+    "output": 1279,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 17.4,
+    "cost": 0.07146580000000001,
+    "input": 103946,
+    "output": 1107,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 14.7,
+    "cost": 0.0484234,
+    "input": 72618,
+    "output": 556,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr182756": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 10.8,
+    "cost": 0.0368838,
+    "input": 46501,
+    "output": 505,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 15.3,
+    "cost": 0.0413684,
+    "input": 48161,
+    "output": 606,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 15.6,
+    "cost": 0.042145,
+    "input": 48682,
+    "output": 560,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 11.4,
+    "cost": 0.039989399999999994,
+    "input": 47312,
+    "output": 612,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr179564": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 18.5,
+    "cost": 0.0815388,
+    "input": 107984,
+    "output": 1223,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 20.1,
+    "cost": 0.09653540000000001,
+    "input": 137661,
+    "output": 1387,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 20.5,
+    "cost": 0.08602399999999999,
+    "input": 110695,
+    "output": 1395,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 0,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 17.9,
+    "cost": 0.0853732,
+    "input": 81424,
+    "output": 1720,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr173899": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 12.1,
+    "cost": 0.0687356,
+    "input": 78078,
+    "output": 681,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 15.3,
+    "cost": 0.0681832,
+    "input": 78467,
+    "output": 895,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 16.4,
+    "cost": 0.0690998,
+    "input": 79110,
+    "output": 894,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 1.0,
+    "named": 1,
+    "turns": 4,
+    "seconds": 13.6,
+    "cost": 0.062278599999999996,
+    "input": 76679,
+    "output": 878,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr177417": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 10.1,
+    "cost": 0.0411498,
+    "input": 47395,
+    "output": 574,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 20.0,
+    "cost": 0.06518779999999999,
+    "input": 77238,
+    "output": 845,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 16.0,
+    "cost": 0.066375,
+    "input": 79266,
+    "output": 664,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 11.4,
+    "cost": 0.061339199999999997,
+    "input": 75507,
+    "output": 779,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr181042": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 34.5,
+    "cost": 0.044543,
+    "input": 70436,
+    "output": 679,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 14.8,
+    "cost": 0.0575152,
+    "input": 74769,
+    "output": 897,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 5,
+    "seconds": 15.6,
+    "cost": 0.0545236,
+    "input": 74689,
+    "output": 699,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 9.3,
+    "cost": 0.0381992,
+    "input": 47128,
+    "output": 510,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr181645": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 6,
+    "seconds": 18.5,
+    "cost": 0.0571332,
+    "input": 96304,
+    "output": 875,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 14.4,
+    "cost": 0.045325000000000004,
+    "input": 49413,
+    "output": 578,
+    "tool": 1,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 14.2,
+    "cost": 0.0440276,
+    "input": 49243,
+    "output": 601,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 4,
+    "seconds": 9.3,
+    "cost": 0.042552,
+    "input": 48173,
+    "output": 601,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr182630": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 13,
+    "seconds": 40.0,
+    "cost": 0.1277628,
+    "input": 224041,
+    "output": 2900,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 8,
+    "seconds": 41.4,
+    "cost": 0.11977840000000001,
+    "input": 201427,
+    "output": 2577,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 8,
+    "seconds": 23.5,
+    "cost": 0.0977502,
+    "input": 140494,
+    "output": 1665,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.3333333333333333,
+    "named": 3,
+    "turns": 8,
+    "seconds": 21.1,
+    "cost": 0.100093,
+    "input": 166192,
+    "output": 1654,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   }
+  },
+  "pr183942": {
+   "none": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 11,
+    "seconds": 159.6,
+    "cost": 0.1368648,
+    "input": 259815,
+    "output": 2600,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_setup": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 8,
+    "seconds": 23.4,
+    "cost": 0.0954536,
+    "input": 137701,
+    "output": 1647,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "graphify": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 7,
+    "seconds": 19.9,
+    "cost": 0.0825788,
+    "input": 130096,
+    "output": 1329,
+    "tool": 0,
+    "network": 0,
+    "answered": true
+   },
+   "verinoda_mod": {
+    "recall": 1.0,
+    "solved": 1,
+    "hit1": 1,
+    "precision": 0.5,
+    "named": 2,
+    "turns": 10,
+    "seconds": 30.3,
+    "cost": 0.11598420000000001,
+    "input": 201857,
+    "output": 2143,
+    "tool": 2,
+    "network": 0,
+    "answered": true
+   }
+  }
+ }
+}
