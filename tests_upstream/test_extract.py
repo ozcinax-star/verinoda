@@ -1094,9 +1094,12 @@ def test_extract_js_arbitrary_member_assignment_not_captured(tmp_path):
         "const obj = {};\n"
         "obj.whatever = () => 1;\n"
     )
-    labels = [n["label"] for n in extract_js(f)["nodes"]]
+    nodes = extract_js(f)["nodes"]
+    labels = [n["label"] for n in nodes]
     assert "whatever()" not in labels
-    assert ".whatever()" not in labels
+    # Verinoda patch: a function assigned to an object's property is a symbol (express `res.send = function ...`),
+    # but it never takes a bare name, so it cannot become a phantom god node bound from other files
+    assert all(n.get("_no_bare_name") for n in nodes if n["label"] == ".whatever()")
 
 
 def test_extract_js_nested_function_declarations(tmp_path):

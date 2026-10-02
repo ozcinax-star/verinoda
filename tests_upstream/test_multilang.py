@@ -310,9 +310,14 @@ def test_rust_emits_calls():
 
 def test_rust_calls_are_extracted():
     r = extract_rust(FIXTURES / "sample.rs")
+    labels = {n["id"]: n["label"] for n in r["nodes"]}
     for e in r["edges"]:
         if e["relation"] == "calls":
-            assert e["confidence"] == "EXTRACTED"
+            # Verinoda patch: a method call on a local of a stated type is INFERRED (receivers of a stated type)
+            if labels.get(e["target"], "").startswith("."):
+                assert e["confidence"] in ("EXTRACTED", "INFERRED")
+            else:
+                assert e["confidence"] == "EXTRACTED"
 
 
 def test_rust_finds_static_and_const_items():
