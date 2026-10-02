@@ -1,0 +1,1433 @@
+[
+ {
+  "repo": "axios__axios",
+  "qid": "q1",
+  "question": "When I build an instance with a default timeoutErrorMessage and then pass a different one on a single request, which merge strategy does mergeConfig apply to that key?",
+  "change_kind": "renamed",
+  "what_changed": "OLD mergeConfig's mergeMap listed a non-existent key `timeoutMessage` with defaultToConfig2, so the real `timeoutErrorMessage` option fell through to the generic mergeDeepProperties fallback. NEW renames the mergeMap entry to `timeoutErrorMessage`, so it is now merged with defaultToConfig2.",
+  "facts": [
+   {
+    "id": "mergeconfig-timeouterrormessage-defaulttoconfig2",
+    "fact": "mergeConfig's mergeMap has an explicit `timeoutErrorMessage: defaultToConfig2` entry, so the request-level value overrides the default and the default is used only when the request leaves it undefined.",
+    "source": "lib/core/mergeConfig.js:127"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "timeoutMessage",
+    "kind": "identifier",
+    "old_source": "lib/core/mergeConfig.js:89"
+   }
+  ]
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q2",
+  "question": "What does interceptors.request.use() return, and can I treat that number as an index into interceptors.request.handlers when ejecting or inspecting interceptors?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD use() pushed the handler and returned `this.handlers.length - 1` (the array index), and eject(id) just nulled handlers[id]. NEW use() returns a monotonically increasing ID from a private counter, mapped to {handler, index} in an internal Map. eject() looks the ID up, ignores IDs made stale by clear() or by replacing handlers, and trims trailing null slots unless a forEach is in progress.",
+  "facts": [
+   {
+    "id": "interceptor-use-returns-counter-id",
+    "fact": "use() returns an ID taken from an internal incrementing counter (internals.nextId++), not the handler's array index; the ID is stored in an internal Map together with the handler and its index.",
+    "source": "lib/core/InterceptorManager.js:82"
+   },
+   {
+    "id": "interceptor-eject-ignores-stale-ids",
+    "fact": "eject() resolves the ID through the internal Map and does nothing if the handler at the recorded index is no longer the same object, for example after clear() or after handlers was replaced.",
+    "source": "lib/core/InterceptorManager.js:112"
+   },
+   {
+    "id": "interceptor-eject-trims-trailing-nulls",
+    "fact": "After ejecting outside a forEach iteration, trailing null entries are popped off the handlers array (trimHandlers), so handlers.length can shrink.",
+    "source": "lib/core/InterceptorManager.js:120"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q3",
+  "question": "With all request interceptors registered as synchronous, what happens to the request when one interceptor's fulfilled handler throws: is the request still sent, and what does the returned promise do?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD called onRejected(error) unconditionally, which crashed if it was missing, and then always dispatched the request with the last good config, swallowing the error. NEW rejects with the error when there is no onRejected, rejects with onRejected's own error if it throws, waits for a thenable returned by onRejected before dispatching, and otherwise dispatches with the last config.",
+  "facts": [
+   {
+    "id": "sync-interceptor-no-onrejected-rejects",
+    "fact": "If a synchronous request interceptor throws and it has no onRejected, the request promise is set to Promise.reject(error) and the request is not dispatched.",
+    "source": "lib/core/Axios.js:219"
+   },
+   {
+    "id": "sync-interceptor-thenable-onrejected-delays-dispatch",
+    "fact": "If onRejected returns a thenable, dispatchRequest runs only after that thenable resolves. If onRejected itself throws, the promise rejects with that error.",
+    "source": "lib/core/Axios.js:227"
+   },
+   {
+    "id": "sync-interceptor-dispatch-only-if-no-promise",
+    "fact": "dispatchRequest is called directly, with the last good config, only when the interceptor error handling has not already set a promise. A missing onRejected, or one that throws, therefore prevents the request from being sent.",
+    "source": "lib/core/Axios.js:240"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q4",
+  "question": "In the Node http adapter, when no proxy option is configured but HTTP_PROXY/HTTPS_PROXY are set in the environment, does axios itself route the request through that proxy? How does this interact with httpVersion: 2?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD setProxy always resolved environment proxies via getProxyForUrl when config.proxy was unset, and HTTP/2 requests silently used the http2 transport, ignoring any proxy. NEW setProxy skips its own env-proxy resolution when the selected agent has Node-native `proxyEnv` set on a supporting Node version (22.21+, 24.5+, >24). The env proxy is disabled for HTTP/2. setProxy now returns whether a proxy applies, and an HTTP/2 request with a proxy is rejected with ERR_NOT_SUPPORT.",
+  "facts": [
+   {
+    "id": "setproxy-defers-env-proxy-to-node",
+    "fact": "setProxy only reads the environment proxy (getProxyForUrl) when allowEnvProxy is true and isNodeEnvProxyEnabled(agent) is false, so it defers to Node when the chosen http/https agent (or global agent) has a non-null own `proxyEnv` option.",
+    "source": "lib/adapters/http.js:269"
+   },
+   {
+    "id": "node-native-env-proxy-versions",
+    "fact": "Node-native env proxy support counts as available for Node 22.21+, 24.5+ and any major version above 24.",
+    "source": "lib/adapters/http.js:93"
+   },
+   {
+    "id": "http2-env-proxy-disabled",
+    "fact": "The adapter calls setProxy with allowEnvProxy = !isHttp2, so environment proxies are not applied to HTTP/2 requests, and setProxy's boolean result is stored as proxyApplied.",
+    "source": "lib/adapters/http.js:1008"
+   },
+   {
+    "id": "http2-proxy-rejected",
+    "fact": "When httpVersion is 2 and a proxy applies, the adapter rejects with AxiosError 'HTTP/2 requests with a proxy are not supported' (ERR_NOT_SUPPORT).",
+    "source": "lib/adapters/http.js:1036"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q5",
+  "question": "Which HTTP methods get their own per-method bucket under defaults.headers (like defaults.headers.post), and which buckets does Axios strip out when it flattens headers for a request?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD hard-coded ['delete','get','head','post','put','patch','query'] in defaults/index.js and the same list plus 'common' in Axios._request. NEW adds a shared frozen methodList module that also includes options, purge, link and unlink. defaults/index.js and Axios.js both iterate over it.",
+  "facts": [
+   {
+    "id": "methodlist-shared-module",
+    "fact": "A shared frozen methodList defines the methods get, delete, head, options, post, put, patch, purge, link, unlink and query.",
+    "source": "lib/core/methodList.js:3"
+   },
+   {
+    "id": "defaults-headers-from-methodlist",
+    "fact": "defaults.headers gets an empty per-method object for every entry in methodList, so options/purge/link/unlink now have their own default header buckets.",
+    "source": "lib/defaults/index.js:174"
+   },
+   {
+    "id": "axios-flatten-strips-methodlist",
+    "fact": "When flattening headers, Axios._request deletes every methodList key plus 'common' from the merged headers object.",
+    "source": "lib/core/Axios.js:158"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q1",
+  "question": "Where does Express get the list of HTTP verbs that it turns into app.get, app.post, app.patch and so on (and that app.all loops over)?",
+  "change_kind": "call_path",
+  "what_changed": "OLD required the external `methods` npm package in lib/application.js and iterated it to define app[verb]. NEW drops that dependency: lib/utils.js builds `exports.methods` from Node's built-in http.METHODS (lowercased), and application.js takes the list from ./utils.",
+  "facts": [
+   {
+    "id": "utils-methods-from-node-http",
+    "fact": "The verb list is computed in lib/utils.js as METHODS from 'node:http' mapped to lowercase and exported as utils.methods.",
+    "source": "lib/utils.js:29"
+   },
+   {
+    "id": "app-methods-from-utils",
+    "fact": "lib/application.js obtains `methods` from require('./utils').methods rather than from an external package.",
+    "source": "lib/application.js:20"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q2",
+  "question": "If I disable the app's 'etag' setting, does res.sendFile still send an ETag header, and what happens if I pass an etag option to res.sendFile directly?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD passed the caller's options straight to send(), so the application 'etag' setting had no effect on sendFile (send's own default applied, or the caller's opts.etag). NEW overwrites opts.etag with this.app.enabled('etag') before calling send, so the app setting decides and a per-call etag option is overridden.",
+  "facts": [
+   {
+    "id": "sendfile-etag-from-app-setting",
+    "fact": "res.sendFile sets opts.etag = this.app.enabled('etag') right before creating the send stream, so the application's 'etag' setting controls whether ETags are generated.",
+    "source": "lib/response.js:407"
+   },
+   {
+    "id": "sendfile-send-call",
+    "fact": "The send() stream is created with those modified options, so any etag value the caller supplied in options is replaced.",
+    "source": "lib/response.js:408"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q3",
+  "question": "What does res.redirect do if it is called with no URL, a non-string URL, or a status that is not a number?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD res.redirect performed no argument validation and silently proceeded. NEW emits depd deprecation warnings ('Provide a url argument', 'Url must be a string', 'Status must be a number') before setting the Location header; lib/response.js now requires depd for this.",
+  "facts": [
+   {
+    "id": "response-requires-depd",
+    "fact": "lib/response.js now creates a deprecate function with require('depd')('express').",
+    "source": "lib/response.js:17"
+   },
+   {
+    "id": "redirect-deprecate-missing-url",
+    "fact": "res.redirect calls deprecate('Provide a url argument') when the address is falsy.",
+    "source": "lib/response.js:831"
+   },
+   {
+    "id": "redirect-deprecate-nonstring-url",
+    "fact": "res.redirect calls deprecate('Url must be a string') when the address is not a string.",
+    "source": "lib/response.js:835"
+   },
+   {
+    "id": "redirect-deprecate-nonnumber-status",
+    "fact": "res.redirect calls deprecate('Status must be a number') when the status is not a number; it still proceeds with the redirect afterwards.",
+    "source": "lib/response.js:839"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q4",
+  "question": "How do I emit several Link header entries that share the same rel (for example multiple rel=\"pages\" URLs) with res.links?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD res.links mapped each rel to exactly one `<url>; rel=\"rel\"` entry, so an array value was stringified into a single bogus URL. NEW checks Array.isArray(links[rel]) and emits one entry per URL for that rel, joined with ', '.",
+  "facts": [
+   {
+    "id": "links-array-multiple-rel",
+    "fact": "res.links accepts an array as the value for a rel and emits a separate `<url>; rel=\"rel\"` entry for each element, joined by ', '.",
+    "source": "lib/response.js:102"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q5",
+  "question": "If I pass a Uint8Array (or another typed array) to res.send, is it sent as binary or serialized as JSON?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD res.send only treated Node Buffers as binary (Buffer.isBuffer) and sent any other object, including plain Uint8Arrays, through res.json. NEW uses ArrayBuffer.isView, so any typed array or DataView is sent as a binary body with Content-Type defaulting to application/octet-stream ('bin').",
+  "facts": [
+   {
+    "id": "send-arraybuffer-view-binary",
+    "fact": "In res.send's object branch the binary check is ArrayBuffer.isView(chunk), so typed arrays and DataViews are treated as binary and get type 'bin' if no Content-Type is set; other objects go to res.json.",
+    "source": "lib/response.js:146"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q1",
+  "question": "How does the backend work out which Postgres database to connect to, both for the SQLModel engine and for Alembic migrations, and what format does that setting have to be in?",
+  "change_kind": "renamed",
+  "what_changed": "OLD built the connection URI in a computed property SQLALCHEMY_DATABASE_URI from separate POSTGRES_SERVER/PORT/USER/PASSWORD/DB settings. NEW has a single required DATABASE_URL (PostgresDsn) setting. A before-validator rewrites postgres:// or postgresql:// to postgresql+psycopg://, and db.py and alembic env.py read settings.DATABASE_URL.",
+  "facts": [
+   {
+    "id": "fsft-database-url-setting",
+    "fact": "Settings has a single required DATABASE_URL field of type PostgresDsn; there are no separate host/user/port/db fields any more.",
+    "source": "backend/app/core/config.py:31"
+   },
+   {
+    "id": "fsft-psycopg-scheme-rewrite",
+    "fact": "A field_validator (_use_psycopg_driver, mode=before) rewrites a postgres:// or postgresql:// prefix to postgresql+psycopg:// before validation.",
+    "source": "backend/app/core/config.py:33"
+   },
+   {
+    "id": "fsft-engine-uses-database-url",
+    "fact": "The SQLModel engine is created with create_engine(str(settings.DATABASE_URL)).",
+    "source": "backend/app/core/db.py:7"
+   },
+   {
+    "id": "fsft-alembic-get-url-database-url",
+    "fact": "Alembic's get_url() returns str(settings.DATABASE_URL).",
+    "source": "backend/app/alembic/env.py:34"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "SQLALCHEMY_DATABASE_URI",
+    "kind": "identifier",
+    "old_source": "backend/app/core/config.py:60"
+   },
+   {
+    "text": "POSTGRES_SERVER",
+    "kind": "identifier",
+    "old_source": "backend/app/core/config.py:52"
+   },
+   {
+    "text": "POSTGRES_USER",
+    "kind": "identifier",
+    "old_source": "backend/app/core/config.py:54"
+   }
+  ]
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q2",
+  "question": "Which origins does the API allow for CORS, and how do I add an extra allowed origin through configuration?",
+  "change_kind": "removed",
+  "what_changed": "OLD had a BACKEND_CORS_ORIGINS setting (parsed by parse_cors from a comma-separated string or list) and an all_cors_origins computed property that combined it with FRONTEND_HOST. The middleware was added only if that list was non-empty. NEW removes all of that: CORSMiddleware is always added and allows only [settings.FRONTEND_HOST].",
+  "facts": [
+   {
+    "id": "fsft-cors-only-frontend-host",
+    "fact": "CORSMiddleware is added unconditionally with allow_origins=[settings.FRONTEND_HOST]. FRONTEND_HOST is the only origin source, so a separate CORS-origins list setting no longer exists.",
+    "source": "backend/app/main.py:27"
+   },
+   {
+    "id": "fsft-frontend-host-default",
+    "fact": "FRONTEND_HOST (default http://localhost:5173) is now the only CORS-related setting in Settings. There is no separate list setting for extra CORS origins, so the only way to change the allowed origin through configuration is to set FRONTEND_HOST.",
+    "source": "backend/app/core/config.py:26"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "BACKEND_CORS_ORIGINS",
+    "kind": "identifier",
+    "old_source": "backend/app/core/config.py:39"
+   },
+   {
+    "text": "all_cors_origins",
+    "kind": "identifier",
+    "old_source": "backend/app/core/config.py:45"
+   }
+  ]
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q3",
+  "question": "What setting decides whether the app runs in local development mode, so that the private user-creation routes get mounted, the 'changethis' secrets only produce a warning, and Sentry is skipped? And what happens if SECRET_KEY is not set?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD used ENVIRONMENT: Literal['local','staging','production'] = 'local', so local mode was the default, and SECRET_KEY defaulted to a random secrets.token_urlsafe(32). NEW uses FASTAPI_ENV: Literal['development'] | None = None, so development mode is opt-in and the default is production-like. SECRET_KEY no longer has a default, so it must be set.",
+  "facts": [
+   {
+    "id": "fsft-fastapi-env-setting",
+    "fact": "Development mode is controlled by FASTAPI_ENV, typed Literal['development'] | None with default None, so it is off unless explicitly set.",
+    "source": "backend/app/core/config.py:27"
+   },
+   {
+    "id": "fsft-private-router-dev-only",
+    "fact": "The private router is included only when settings.FASTAPI_ENV == 'development'.",
+    "source": "backend/app/api/main.py:13"
+   },
+   {
+    "id": "fsft-changethis-warn-in-dev",
+    "fact": "A secret equal to 'changethis' only warns when FASTAPI_ENV == 'development'; otherwise it raises ValueError. This now includes the password inside DATABASE_URL.",
+    "source": "backend/app/core/config.py:74"
+   },
+   {
+    "id": "fsft-secret-key-required",
+    "fact": "SECRET_KEY is declared without a default, so Settings fails validation if it is not provided.",
+    "source": "backend/app/core/config.py:23"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "ENVIRONMENT",
+    "kind": "identifier",
+    "old_source": "backend/app/core/config.py:37"
+   }
+  ]
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q4",
+  "question": "In the React frontend, where are the API base URL and the bearer token configured for the generated client, and how does the global error handler recognise a 401/403 to log the user out?",
+  "change_kind": "call_path",
+  "what_changed": "OLD used the legacy hey-api axios client: main.tsx set OpenAPI.BASE and OpenAPI.TOKEN and checked `error instanceof ApiError` with error.status. Service methods took requestBody/formData and returned the data directly. NEW uses @hey-api/client-axios: main.tsx calls client.setConfig({baseURL, auth}) on the client from client/client.gen.ts and checks `error instanceof AxiosError` with error.response?.status. Service calls take body/query and return an axios response whose .data must be read.",
+  "facts": [
+   {
+    "id": "fsft-client-setconfig",
+    "fact": "main.tsx configures the generated client with client.setConfig({ baseURL: import.meta.env.VITE_API_URL ?? \"\", auth: () => localStorage access_token }).",
+    "source": "frontend/src/main.tsx:17"
+   },
+   {
+    "id": "fsft-client-gen-throw-on-error",
+    "fact": "The shared client instance is created in src/client/client.gen.ts with createClient(createConfig({ throwOnError: true })).",
+    "source": "frontend/src/client/client.gen.ts:16"
+   },
+   {
+    "id": "fsft-handle-api-error-axios",
+    "fact": "handleApiError logs out when the error is an AxiosError whose response?.status is 401 or 403.",
+    "source": "frontend/src/main.tsx:23"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "ApiError",
+    "kind": "identifier",
+    "old_source": "frontend/src/client/core/ApiError.ts:4"
+   },
+   {
+    "text": "CancelablePromise",
+    "kind": "identifier",
+    "old_source": "frontend/src/client/core/CancelablePromise.ts:20"
+   },
+   {
+    "text": "frontend/src/client/core/OpenAPI.ts",
+    "kind": "path",
+    "old_source": "frontend/src/client/core/OpenAPI.ts:43"
+   },
+   {
+    "text": "frontend/src/client/core/request.ts",
+    "kind": "path",
+    "old_source": "frontend/src/client/core/request.ts:1"
+   }
+  ]
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q5",
+  "question": "How is the built React frontend served in a deployed stack? Which process serves the static files, and where does the build output end up?",
+  "change_kind": "moved",
+  "what_changed": "OLD built the frontend into frontend/dist and served it from a separate nginx container (frontend/Dockerfile with frontend/nginx.conf, and a 'frontend' service in compose.yml). NEW has Vite write the build to backend/app/frontend. The backend Dockerfile has a bun frontend-build stage that copies the build into the backend image, and FastAPI serves it with app.frontend('/', directory=FRONTEND_DIR). The frontend Dockerfile, the nginx configs and the compose frontend service are gone.",
+  "facts": [
+   {
+    "id": "fsft-app-frontend-mount",
+    "fact": "The FastAPI app serves the SPA itself via app.frontend(\"/\", directory=FRONTEND_DIR), where FRONTEND_DIR is backend/app/frontend.",
+    "source": "backend/app/main.py:36"
+   },
+   {
+    "id": "fsft-vite-outdir-backend",
+    "fact": "Vite's build.outDir is ../backend/app/frontend (with emptyOutDir: true).",
+    "source": "frontend/vite.config.ts:10"
+   },
+   {
+    "id": "fsft-backend-dockerfile-frontend-stage",
+    "fact": "The backend Dockerfile starts with a bun 'frontend-build' stage that runs bun run build.",
+    "source": "backend/Dockerfile:1"
+   },
+   {
+    "id": "fsft-backend-dockerfile-copy-frontend",
+    "fact": "The backend Dockerfile copies the built frontend from that stage into /app/backend/app/frontend.",
+    "source": "backend/Dockerfile:54"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "frontend/Dockerfile",
+    "kind": "path",
+    "old_source": "frontend/Dockerfile:21"
+   },
+   {
+    "text": "frontend/nginx.conf",
+    "kind": "path",
+    "old_source": "frontend/nginx.conf:1"
+   },
+   {
+    "text": "frontend/nginx-backend-not-found.conf",
+    "kind": "path",
+    "old_source": "frontend/Dockerfile:26"
+   }
+  ]
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q1",
+  "question": "When I declare a plain `datetime` field on a table model, what SQLAlchemy column type does SQLModel generate, and what happens if I save a naive datetime into it or read values back?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD mapped any datetime annotation to plain sqlalchemy DateTime (naive, no conversion). NEW maps datetime/AwareDatetime to a new UTCDateTime TypeDecorator (timezone=True) that rejects naive values on bind and returns UTC-aware values, while NaiveDatetime maps to DateTime(timezone=False). Nothing was removed (an addition plus a default change), so there are no stale traps.",
+  "facts": [
+   {
+    "id": "sqlm-datetime-utc-default",
+    "fact": "get_sqlalchemy_type returns UTCDateTime() for datetime/AwareDatetime annotations and DateTime(timezone=False) only for NaiveDatetime.",
+    "source": "sqlmodel/main.py:757"
+   },
+   {
+    "id": "sqlm-utcdatetime-rejects-naive",
+    "fact": "UTCDateTime.process_bind_param raises ValueError for a datetime without timezone info and converts aware values to UTC.",
+    "source": "sqlmodel/sql/sqltypes.py:33"
+   },
+   {
+    "id": "sqlm-utcdatetime-result-utc",
+    "fact": "UTCDateTime.process_result_value attaches timezone.utc to offset-less values read from databases without timezone support, otherwise converts to UTC.",
+    "source": "sqlmodel/sql/sqltypes.py:46"
+   },
+   {
+    "id": "sqlm-annotated-naive-meta",
+    "fact": "get_sa_type_from_type_annotation inspects Annotated metadata and applies the last AwareDatetime/NaiveDatetime marker, so Annotated[datetime, NaiveDatetime] selects naive storage.",
+    "source": "sqlmodel/_compat.py:186"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q2",
+  "question": "How does SQLModel make type checkers treat model classes like dataclasses with keyword-only `__init__` parameters? Where does the decorator on the metaclass come from?",
+  "change_kind": "renamed",
+  "what_changed": "OLD defined a local no-op shim `__dataclass_transform__` in sqlmodel/main.py and decorated SQLModelMetaclass with it using `field_descriptors=`. NEW removes the shim and uses typing_extensions.dataclass_transform with `field_specifiers=(Field, FieldInfo)`.",
+  "facts": [
+   {
+    "id": "sqlm-dataclass-transform-import",
+    "fact": "dataclass_transform is imported from typing_extensions in sqlmodel/main.py.",
+    "source": "sqlmodel/main.py:55"
+   },
+   {
+    "id": "sqlm-metaclass-field-specifiers",
+    "fact": "SQLModelMetaclass is decorated with @dataclass_transform(kw_only_default=True, field_specifiers=(Field, FieldInfo)).",
+    "source": "sqlmodel/main.py:557"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "__dataclass_transform__",
+    "kind": "identifier",
+    "old_source": "sqlmodel/main.py:93"
+   },
+   {
+    "text": "field_descriptors",
+    "kind": "identifier",
+    "old_source": "sqlmodel/main.py:520"
+   }
+  ]
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q3",
+  "question": "What does `Field()` do with the `min_items` and `max_items` arguments? Are they passed through to Pydantic?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD passed min_items/max_items straight into the Pydantic FieldInfo kwargs. NEW marks them deprecated, emits a DeprecationWarning, and copies them into min_length/max_length (when those are not given) instead of passing min_items/max_items on. The parameters still exist, so there are no removed identifiers to use as traps.",
+  "facts": [
+   {
+    "id": "sqlm-min-items-deprecated-msg",
+    "fact": "MIN_ITEMS_DEPRECATION_MSG/MAX_ITEMS_DEPRECATION_MSG say to use min_length/max_length, and the Field overloads annotate min_items/max_items with deprecated(...).",
+    "source": "sqlmodel/main.py:95"
+   },
+   {
+    "id": "sqlm-min-items-warn-map",
+    "fact": "Field warns with DeprecationWarning when min_items is passed and sets min_length = min_items if min_length is None.",
+    "source": "sqlmodel/main.py:437"
+   },
+   {
+    "id": "sqlm-max-items-warn-map",
+    "fact": "Field warns with DeprecationWarning when max_items is passed and sets max_length = max_items if max_length is None.",
+    "source": "sqlmodel/main.py:441"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q4",
+  "question": "How do I give a SQLModel field a custom SQLAlchemy column type, e.g. a configured type instance like `String(50)`? Can I pass it through `sa_column_kwargs` instead, and how is the type handed to `Column`?",
+  "change_kind": "call_path",
+  "what_changed": "OLD typed sa_type as type[Any] and built the column as Column(sa_type, *args, **kwargs), with no check on sa_column_kwargs. NEW accepts TypeEngine instances or classes (SaTypeOrInstance), passes the type as the keyword argument type_=sa_type, and raises RuntimeError if sa_column_kwargs contains 'type_'. Nothing was removed (sa_type and get_column_from_field remain), so there are no stale traps.",
+  "facts": [
+   {
+    "id": "sqlm-satype-instance-alias",
+    "fact": "sa_type is typed as SaTypeOrInstance = TypeEngine[Any] | type[TypeEngine[Any]], so both type classes and type instances are accepted.",
+    "source": "sqlmodel/main.py:92"
+   },
+   {
+    "id": "sqlm-reject-type-in-kwargs",
+    "fact": "FieldInfo raises RuntimeError when sa_column_kwargs contains 'type_', telling the user to use sa_type instead.",
+    "source": "sqlmodel/main.py:155"
+   },
+   {
+    "id": "sqlm-column-type-kwarg",
+    "fact": "get_column_from_field builds the column with Column(*args, type_=sa_type, **kwargs).",
+    "source": "sqlmodel/main.py:835"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q5",
+  "question": "What tool does the project's docs script use to serve and build the documentation locally, and is there a custom nav hook that renames sections after their index page?",
+  "change_kind": "removed",
+  "what_changed": "OLD scripts/docs.py ran `mkdocs serve`/`mkdocs build` and used mkdocs.utils.yaml_load, and mkdocs.yml registered a hook scripts/mkdocs_hooks.py (on_nav / generate_renamed_section_items) that retitled sections. NEW runs `zensical serve`/`zensical build`, loads YAML with yaml.safe_load, and the hooks file is deleted.",
+  "facts": [
+   {
+    "id": "sqlm-docs-live-zensical",
+    "fact": "The docs `live` command runs ['zensical', 'serve', '--dev-addr', '127.0.0.1:8008'].",
+    "source": "scripts/docs.py:105"
+   },
+   {
+    "id": "sqlm-docs-build-zensical",
+    "fact": "The docs `build` command runs ['zensical', 'build'].",
+    "source": "scripts/docs.py:117"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "scripts/mkdocs_hooks.py",
+    "kind": "path",
+    "old_source": "mkdocs.yml:219"
+   },
+   {
+    "text": "generate_renamed_section_items",
+    "kind": "identifier",
+    "old_source": "scripts/mkdocs_hooks.py:9"
+   }
+  ]
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q1",
+  "question": "When a handler panics because the client connection went away, how does the Recovery middleware decide it's a broken connection rather than a real panic, and what does it do in that case?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD type-asserted the recovered value to *net.OpError, unwrapped an *os.SyscallError and matched the lowercase strings \"broken pipe\" / \"connection reset by peer\". NEW asserts the recovered value is an error and uses errors.Is against syscall.EPIPE, syscall.ECONNRESET and also http.ErrAbortHandler, so panic(http.ErrAbortHandler) is now treated as a broken connection (logged without stack, c.Error + c.Abort instead of the 500 handler).",
+  "facts": [
+   {
+    "id": "gin-recovery-errors-is-epipe-econnreset",
+    "fact": "Broken-connection detection uses errors.Is on the recovered error against syscall.EPIPE and syscall.ECONNRESET instead of string matching on a net.OpError's syscall error text.",
+    "source": "recovery.go:66"
+   },
+   {
+    "id": "gin-recovery-erraborthandler-suppressed",
+    "fact": "A panic with http.ErrAbortHandler is also classified as a broken connection, so it is not passed to the recovery handle func.",
+    "source": "recovery.go:68"
+   },
+   {
+    "id": "gin-recovery-brokenpipe-abort",
+    "fact": "For a broken connection the middleware records the error with c.Error(err) and calls c.Abort() without writing a status; otherwise it calls handle(c, rec).",
+    "source": "recovery.go:83"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "brokenPipe",
+    "kind": "identifier",
+    "old_source": "recovery.go:60"
+   },
+   {
+    "text": "dunnoBytes",
+    "kind": "identifier",
+    "old_source": "recovery.go:26"
+   }
+  ]
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q2",
+  "question": "When RedirectTrailingSlash kicks in and the request carries an X-Forwarded-Prefix header, how is that prefix cleaned up before it's put into the redirect Location?",
+  "change_kind": "call_path",
+  "what_changed": "OLD sanitized the prefix with two package-level compiled regexps in gin.go (one stripping chars outside [a-zA-Z0-9/-], one collapsing /{2,}). NEW drops the regexp import and uses a strings.Map-based helper in gin.go plus a hand-written repeated-character collapser in path.go.",
+  "facts": [
+   {
+    "id": "gin-redirect-prefix-sanitize-helper",
+    "fact": "redirectTrailingSlash passes the cleaned X-Forwarded-Prefix through sanitizePathChars, which uses strings.Map to keep only ASCII letters, digits, '/' and '-'.",
+    "source": "gin.go:785"
+   },
+   {
+    "id": "gin-sanitizepathchars-def",
+    "fact": "sanitizePathChars is defined in gin.go as a strings.Map filter (no regular expression).",
+    "source": "gin.go:799"
+   },
+   {
+    "id": "gin-removerepeatedchar-path-go",
+    "fact": "Consecutive slashes in the prefix are collapsed by removeRepeatedChar(prefix, '/'), a buffer-based function defined in path.go.",
+    "source": "path.go:155"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "regSafePrefix",
+    "kind": "identifier",
+    "old_source": "gin.go:49"
+   },
+   {
+    "text": "regRemoveRepeatedChar",
+    "kind": "identifier",
+    "old_source": "gin.go:50"
+   }
+  ]
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q3",
+  "question": "How does Context.ClientIP decide whether to trust X-Forwarded-For / X-Real-IP, and what happens when a request contains the X-Forwarded-For header more than once?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD always parsed RemoteIP and checked it against trusted proxies, and read each RemoteIPHeaders entry via c.requestHeader (Header.Get, so only the first header line). NEW first trusts the connection unconditionally if the server's local address is a unix socket, and joins all values of the header with commas before validating it. Nothing was removed (requestHeader still exists and is used elsewhere).",
+  "facts": [
+   {
+    "id": "gin-clientip-unix-socket-trusted",
+    "fact": "If the request's http.LocalAddrContextKey address has a network starting with \"unix\", ClientIP treats the peer as trusted without parsing RemoteIP or consulting the trusted-proxy CIDRs.",
+    "source": "context.go:998"
+   },
+   {
+    "id": "gin-clientip-joins-multiple-header-values",
+    "fact": "For each RemoteIPHeaders entry, ClientIP joins all occurrences of the header with \",\" (Header.Values) before passing it to validateHeader, so repeated X-Forwarded-For headers are all considered.",
+    "source": "context.go:1016"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q4",
+  "question": "If I use the gin engine directly as an http.Handler (e.g. engine.Handler() in my own http.Server or httptest) instead of calling Run, are routes containing an escaped literal colon like /foo\\:bar fixed up, and where does that happen?",
+  "change_kind": "call_path",
+  "what_changed": "OLD only called updateRouteTrees (which rewrites escaped colons in the route tree) from Engine.Run, so serving via Handler()/ServeHTTP left literal-colon routes broken. NEW adds a sync.Once field on Engine and ServeHTTP runs updateRouteTrees once on the first request. Addition only; no identifier removed.",
+  "facts": [
+   {
+    "id": "gin-engine-routetreesupdated-once",
+    "fact": "Engine has a routeTreesUpdated sync.Once field guarding the one-time route tree update.",
+    "source": "gin.go:97"
+   },
+   {
+    "id": "gin-servehttp-updates-route-trees",
+    "fact": "Engine.ServeHTTP calls engine.updateRouteTrees() via routeTreesUpdated.Do on the first request, so any path that serves through ServeHTTP (Handler(), RunListener, custom servers, tests) gets escaped colons rewritten.",
+    "source": "gin.go:663"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q5",
+  "question": "For query/form/uri binding, can I make a custom struct field type be populated through its UnmarshalText method, and how is that selected in the binding code?",
+  "change_kind": "added",
+  "what_changed": "OLD form mapping only supported the BindUnmarshaler hook (trySetCustom) and built-in kinds. NEW adds a `parser` option in the form tag (e.g. parser=encoding.TextUnmarshaler) stored in setOptions, and a trySetUsingParser step tried before trySetCustom for slices, arrays, scalars and nested elements. Addition only; nothing removed.",
+  "facts": [
+   {
+    "id": "gin-form-setoptions-parser",
+    "fact": "setOptions has a parser field, filled from a `parser=` option in the form/uri/query tag.",
+    "source": "binding/form_mapping.go:174"
+   },
+   {
+    "id": "gin-form-trysetusingparser-textunmarshaler",
+    "fact": "trySetUsingParser supports the value \"encoding.TextUnmarshaler\" and calls UnmarshalText on the field's address when it implements encoding.TextUnmarshaler.",
+    "source": "binding/form_mapping.go:203"
+   },
+   {
+    "id": "gin-form-parser-before-custom",
+    "fact": "setByForm tries trySetUsingParser before trySetCustom (BindUnmarshaler) when setting a scalar field.",
+    "source": "binding/form_mapping.go:314"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q1",
+  "question": "When I call `new Gson()` or `GsonBuilder.create()`, where is the ordered list of built-in TypeAdapterFactory instances put together, and is that list rebuilt for every default Gson instance?",
+  "change_kind": "moved",
+  "what_changed": "OLD: Gson had a 21-argument package-private constructor that built the factory list itself (and GsonBuilder.create() passed every setting to it, adding date adapters through the private static GsonBuilder.addTypeAdaptersForDate). NEW: Gson(GsonBuilder) copies the builder's fields, and the list is built by GsonBuilder.createFactories(...). The default `new Gson()` reuses a precomputed static list, ConstructorConstructor and JsonAdapter factory held on GsonBuilder.DEFAULT.",
+  "facts": [
+   {
+    "id": "gson-ctor-takes-builder-default",
+    "fact": "The no-arg Gson constructor delegates to a package-private Gson(GsonBuilder) constructor with the static GsonBuilder.DEFAULT instance.",
+    "source": "gson/src/main/java/com/google/gson/Gson.java:223"
+   },
+   {
+    "id": "gson-default-reuses-factories",
+    "fact": "If the builder is GsonBuilder.DEFAULT, Gson reuses the precomputed GsonBuilder.DEFAULT_TYPE_ADAPTER_FACTORIES (plus the shared default ConstructorConstructor and JsonAdapterAnnotationTypeAdapterFactory). Otherwise it calls builder.createFactories(...).",
+    "source": "gson/src/main/java/com/google/gson/Gson.java:247"
+   },
+   {
+    "id": "gsonbuilder-createfactories",
+    "fact": "GsonBuilder.createFactories(ConstructorConstructor, JsonAdapterAnnotationTypeAdapterFactory) builds the factory list: JsonElement/Object factories, the excluder, user adapters, date adapters, built-in platform types, then collection/map/JsonAdapter/enum/reflective factories.",
+    "source": "gson/src/main/java/com/google/gson/GsonBuilder.java:925"
+   },
+   {
+    "id": "gsonbuilder-default-factories-static",
+    "fact": "GsonBuilder holds a static DEFAULT_TYPE_ADAPTER_FACTORIES list, computed once from GsonBuilder.DEFAULT.createFactories(...).",
+    "source": "gson/src/main/java/com/google/gson/GsonBuilder.java:124"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "addTypeAdaptersForDate",
+    "kind": "identifier",
+    "old_source": "gson/src/main/java/com/google/gson/GsonBuilder.java:922"
+   }
+  ]
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q2",
+  "question": "With default settings, which type adapter serializes double/float values and rejects NaN or Infinity, and which adapter does LongSerializationPolicy.STRING end up using for long values?",
+  "change_kind": "moved",
+  "what_changed": "OLD: Gson had private helpers (doubleAdapter, floatAdapter, longAdapter, atomicLongAdapter, atomicLongArrayAdapter, and a static checkValidFloatingPoint) that created anonymous strict adapters inside Gson. NEW: the strict adapters are TypeAdapters.DOUBLE_STRICT/FLOAT_STRICT (DoubleAdapter/FloatAdapter with a strict flag), and the NaN check is a private method in TypeAdapters. LongSerializationPolicy has an internal typeAdapter() that returns TypeAdapters.LONG or the new TypeAdapters.LONG_AS_STRING. The AtomicLong adapters are public static methods on TypeAdapters. No identifier was removed from the repository: the old names still exist elsewhere, so there are no stale traps.",
+  "facts": [
+   {
+    "id": "double-strict-adapter-selection",
+    "fact": "GsonBuilder.doubleAdapter() returns TypeAdapters.DOUBLE_STRICT unless serializeSpecialFloatingPointValues is set; floatAdapter() likewise picks FLOAT_STRICT.",
+    "source": "gson/src/main/java/com/google/gson/GsonBuilder.java:1020"
+   },
+   {
+    "id": "typeadapters-double-strict",
+    "fact": "TypeAdapters.DOUBLE_STRICT is a DoubleAdapter constructed with strict=true.",
+    "source": "gson/src/main/java/com/google/gson/internal/bind/TypeAdapters.java:526"
+   },
+   {
+    "id": "typeadapters-check-valid-fp",
+    "fact": "The NaN/Infinity check (checkValidFloatingPoint) is a private static method in TypeAdapters, called by the strict Float/Double adapters.",
+    "source": "gson/src/main/java/com/google/gson/internal/bind/TypeAdapters.java:513"
+   },
+   {
+    "id": "long-policy-string-adapter",
+    "fact": "LongSerializationPolicy.STRING.typeAdapter() returns TypeAdapters.LONG_AS_STRING, which GsonBuilder.createFactories uses for long/Long and for the AtomicLong/AtomicLongArray adapters.",
+    "source": "gson/src/main/java/com/google/gson/LongSerializationPolicy.java:68"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q3",
+  "question": "When deserializing a Map<String, String> from JSON such as {\"a\": null, \"a\": \"x\"}, does Gson detect the repeated key and throw, or does the later value silently win?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD: MapTypeAdapterFactory's adapter detected duplicates with `map.put(key, value) != null`, so a duplicate was missed when the first value was null and the later value replaced it. NEW: it checks map.containsKey(key) before putting and throws JsonSyntaxException(\"duplicate key: ...\") even when the earlier value was null. This is a behaviour change with nothing removed, so there are no stale traps.",
+  "facts": [
+   {
+    "id": "map-dup-key-containskey-array",
+    "fact": "In the array-of-entries (complex map key) form, the Map adapter checks map.containsKey(key) and throws JsonSyntaxException \"duplicate key\" before calling put.",
+    "source": "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java:191"
+   },
+   {
+    "id": "map-dup-key-containskey-object",
+    "fact": "In the JSON-object form, the Map adapter also checks map.containsKey(key) before put, so a duplicate key is rejected even if the first occurrence had a null value.",
+    "source": "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java:204"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q4",
+  "question": "How does Gson serialize java.time types such as Instant, Duration or LocalDate by default? Does it still reflect over the JDK classes' private fields?",
+  "change_kind": "added",
+  "what_changed": "OLD: Gson had no built-in java.time adapters, so these types went through ReflectiveTypeAdapterFactory (reflecting over JDK-private fields, which needs --add-opens on recent JDKs). NEW: a JavaTimeTypeAdapters class supplies a factory with explicit, non-reflective adapters that freeze the JDK 21 reflective JSON shape. TypeAdapters.javaTimeTypeAdapterFactory() loads it reflectively, and it is registered in the default factory list. Nothing was removed (this is an addition), so there are no stale traps.",
+  "facts": [
+   {
+    "id": "javatime-adapters-class",
+    "fact": "JavaTimeTypeAdapters (implementing TypeAdapters.FactorySupplier) provides java.time adapters that reproduce the reflective field-based representation of JDK 21 without using reflection.",
+    "source": "gson/src/main/java/com/google/gson/internal/bind/JavaTimeTypeAdapters.java:44"
+   },
+   {
+    "id": "javatime-instant-seconds-nanos",
+    "fact": "Instant is written as an object with integer fields \"seconds\" and \"nanos\", using the shared IntegerFieldsTypeAdapter.",
+    "source": "gson/src/main/java/com/google/gson/internal/bind/JavaTimeTypeAdapters.java:66"
+   },
+   {
+    "id": "javatime-factory-reflective-load",
+    "fact": "TypeAdapters.javaTimeTypeAdapterFactory() loads com.google.gson.internal.bind.JavaTimeTypeAdapters via Class.forName and returns null if this fails (ReflectiveOperationException or LinkageError).",
+    "source": "gson/src/main/java/com/google/gson/internal/bind/TypeAdapters.java:949"
+   },
+   {
+    "id": "javatime-factory-registered",
+    "fact": "GsonBuilder.createFactories adds the java.time factory, when it is available, after the Calendar factory and before the SQL type factories.",
+    "source": "gson/src/main/java/com/google/gson/GsonBuilder.java:979"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q5",
+  "question": "If a quoted JSON string holding non-ASCII digits (for example Arabic-Indic or full-width digits) is read with JsonReader.nextInt() or nextLong(), is it parsed as a number?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD: nextInt()/nextLong() passed a quoted string straight to Integer.parseInt/Long.parseLong, which accept Unicode digits, so non-ASCII digit strings were parsed as numbers. NEW: the string is first checked by a new private validateAscii helper, which throws MalformedJsonException (\"String contains non-ASCII characters\") for any char above 127. Nothing was removed (a new check), so there are no stale traps.",
+  "facts": [
+   {
+    "id": "jsonreader-nextlong-validate-ascii",
+    "fact": "nextLong() calls validateAscii(peekedString) on a quoted string before Long.parseLong.",
+    "source": "gson/src/main/java/com/google/gson/stream/JsonReader.java:1093"
+   },
+   {
+    "id": "jsonreader-nextint-validate-ascii",
+    "fact": "nextInt() calls validateAscii(peekedString) on a quoted string before Integer.parseInt.",
+    "source": "gson/src/main/java/com/google/gson/stream/JsonReader.java:1336"
+   },
+   {
+    "id": "jsonreader-validate-ascii-throws",
+    "fact": "validateAscii throws a syntax error (MalformedJsonException) \"String contains non-ASCII characters\" if any char is greater than 127.",
+    "source": "gson/src/main/java/com/google/gson/stream/JsonReader.java:1858"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q1",
+  "question": "After I upgrade the graphify package (pip install -U / uv tool upgrade), what happens to the skill files I previously installed for various agent platforms the next time I run any graphify command? Do I still need to reinstall each one by hand?",
+  "change_kind": "added",
+  "what_changed": "OLD only warned on each CLI run that installed skill copies were older than the package (the user had to reinstall each platform manually). NEW's _run_cli first calls a refresh routine that re-copies every user-scope skill whose .graphify_version stamp is older than the running package (skipping newer stamps and directories shared by multiple installers), under a per-directory OS lock, with a GRAPHIFY_NO_AUTO_REFRESH opt-out. Pure addition, so no stale identifiers.",
+  "facts": [
+   {
+    "id": "cli-auto-refresh-stale-skills",
+    "fact": "Before the stale-skill version check, the CLI entry point calls _refresh_stale_skills() for every command except install/uninstall/hook-check/hook-guard, re-copying user-scope skills whose version stamp is older than the package.",
+    "source": "graphify/__main__.py:726"
+   },
+   {
+    "id": "auto-refresh-opt-out-env",
+    "fact": "Setting GRAPHIFY_NO_AUTO_REFRESH to 1/true/yes disables the automatic skill refresh.",
+    "source": "graphify/__main__.py:289"
+   },
+   {
+    "id": "auto-refresh-skips-newer-or-shared",
+    "fact": "A copy is only refreshed if its stamp is older than the package (a newer or equal stamp is left alone), and directories written by more than one installer (or the vscode variant) are skipped.",
+    "source": "graphify/__main__.py:317"
+   },
+   {
+    "id": "skill-dir-os-lock",
+    "fact": "Install, uninstall and refresh serialize writes to a skill directory through _skill_lock, an flock/msvcrt lock on a file under ~/.cache/graphify/skill-locks/; the refresh takes it with wait=False and skips a directory another process holds.",
+    "source": "graphify/install.py:98"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q2",
+  "question": "When the LLM community-labelling step sends a batch of communities and the response can't be fully parsed, how are the batch's sub-batches retried, and what happens to names already obtained if one retried half still fails to parse?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD split-retried inside the try block: on a parse error it re-split the whole batch into left/right halves and returned left|right, so a half that still failed to parse propagated the exception and discarded names the other half (and any salvaged partial parse) had obtained. NEW sets parsed = {} on a parse error, then retries only the missing ids in two halves outside the try, catching each half's parse error, keeping everything named, and re-raising only if nothing at all was labeled.",
+  "facts": [
+   {
+    "id": "label-retry-parse-fail-empty",
+    "fact": "On a JSON/Value parse error that can still be split, _label_batch_with_retry sets parsed to an empty dict and falls through to the shared missing-ids retry path instead of recursing inside the except block.",
+    "source": "graphify/llm.py:3381"
+   },
+   {
+    "id": "label-retry-halves-catch",
+    "fact": "Each half of the missing ids is retried in its own try; a half's parse error is recorded in `failure` rather than propagated, so names from the batch and the other half are kept.",
+    "source": "graphify/llm.py:3406"
+   },
+   {
+    "id": "label-retry-raise-only-if-none",
+    "fact": "The batch re-raises the recorded parse error only when no community in it was labeled at all.",
+    "source": "graphify/llm.py:3410"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q3",
+  "question": "On Windows, does the watch/rebuild path actually prevent two rebuilds of the same repo from running concurrently, and how is the .rebuild.lock file locked there?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD _rebuild_lock imported fcntl and, on ImportError (Windows), just yielded True — no locking at all on Windows. NEW falls back to msvcrt.locking on Windows, locking one byte at offset 4096 (so the PID at byte 0 stays readable), polling every 50 ms when blocking, and only no-ops when neither fcntl nor msvcrt is available.",
+  "facts": [
+   {
+    "id": "rebuild-lock-msvcrt-fallback",
+    "fact": "_rebuild_lock imports msvcrt as a fallback and only yields a no-op True when neither fcntl nor msvcrt is available.",
+    "source": "graphify/watch.py:191"
+   },
+   {
+    "id": "rebuild-lock-win-offset",
+    "fact": "On Windows the lock is a 1-byte msvcrt.locking(LK_NBLCK) region at byte offset 4096, so external readers can still read the PID payload at byte 0.",
+    "source": "graphify/watch.py:204"
+   },
+   {
+    "id": "rebuild-lock-win-blocking-poll",
+    "fact": "A blocking acquire on Windows retries msvcrt.locking in a loop with a 0.05 s sleep; a non-blocking one yields False when the lock is held.",
+    "source": "graphify/watch.py:218"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q4",
+  "question": "In GRAPH_REPORT.md, which nodes are counted and listed under each community's \"Nodes (N): ...\" line, and which are filtered out?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD filtered only file nodes from community listings and counts (via a local alias _ifn of analyze._is_file_node), so concept and rationale nodes appeared in 'Nodes (N)' and inflated N; the stricter file/concept/rationale filter was used only for the isolated-node gap list. NEW defines one _real_node predicate (not file, not concept, file_type != 'rationale') used for community listings, counts, the non-empty check, isolated nodes and thin communities.",
+  "facts": [
+   {
+    "id": "report-real-node-predicate",
+    "fact": "generate() defines a single _real_node predicate excluding file nodes, concept nodes and nodes with file_type 'rationale'.",
+    "source": "graphify/report.py:158"
+   },
+   {
+    "id": "report-community-list-real-nodes",
+    "fact": "The per-community listing renders only nodes passing _real_node, so concept/rationale nodes no longer appear in or count toward 'Nodes (N)'.",
+    "source": "graphify/report.py:301"
+   },
+   {
+    "id": "report-thin-uses-real-count",
+    "fact": "Thin communities in the Gaps section are counted with _real_count (the same predicate), not a file-node-only filter.",
+    "source": "graphify/report.py:336"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "_ifn",
+    "kind": "identifier",
+    "old_source": "graphify/report.py:156"
+   }
+  ]
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q5",
+  "question": "How does the surprising-connections scoring decide that an edge \"connects across different repos/directories\"? What happens for two files that both sit at the root of the scan, or for nodes from different repos in a merged graph?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD _top_level_dir returned the whole path when it had no '/', so two different root-level files looked like different top-level dirs and got the +2 cross-repo bonus; it also ignored the node's repo tag. NEW normalises backslashes and leading './', returns '.' for root-level files, and compares (repo, top-level-dir) tuples so merged multi-repo graphs are distinguished by the repo attribute.",
+  "facts": [
+   {
+    "id": "top-level-dir-root-dot",
+    "fact": "_top_level_dir normalises backslashes and leading './' and returns '.' for a path with no '/', so root-level files share the same top-level directory.",
+    "source": "graphify/analyze.py:229"
+   },
+   {
+    "id": "surprise-cross-repo-key-includes-repo",
+    "fact": "The cross-repo bonus in _surprise_score compares (node 'repo' attribute, top-level dir) tuples for the two endpoints rather than the top-level dir alone.",
+    "source": "graphify/analyze.py:280"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q1",
+  "question": "When a client is configured with idn_conversion, which helper normalizes that option and converts an internationalized host to ASCII, both for the initial request URI and when following a redirect?",
+  "change_kind": "moved",
+  "what_changed": "OLD kept the IDN helpers as internal static methods on GuzzleHttp\\Utils (normalizeIdnConversionOption, idnUriConvert). NEW moves them to a dedicated internal class GuzzleHttp\\Idn (normalizeConversionOption, convertUri), and Client and RedirectMiddleware call that class.",
+  "facts": [
+   {
+    "id": "idn-class-normalize-option",
+    "fact": "The idn_conversion option is normalized by Idn::normalizeConversionOption(), which maps true to IDNA_DEFAULT, null/false to null, accepts an int bitmask and otherwise throws.",
+    "source": "src/Idn.php:22"
+   },
+   {
+    "id": "idn-class-convert-uri",
+    "fact": "Host conversion to ASCII is done by Idn::convertUri() in the GuzzleHttp\\Idn class, using idn_to_ascii with INTL_IDNA_VARIANT_UTS46.",
+    "source": "src/Idn.php:42"
+   },
+   {
+    "id": "idn-client-call",
+    "fact": "Client builds the request URI by calling Idn::normalizeConversionOption() on the idn_conversion config and then Idn::convertUri().",
+    "source": "src/Client.php:689"
+   },
+   {
+    "id": "idn-redirect-call",
+    "fact": "RedirectMiddleware converts the redirect target host by calling Idn::normalizeConversionOption() and Idn::convertUri().",
+    "source": "src/RedirectMiddleware.php:231"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "idnUriConvert",
+    "kind": "identifier",
+    "old_source": "src/Utils.php:391"
+   },
+   {
+    "text": "normalizeIdnConversionOption",
+    "kind": "identifier",
+    "old_source": "src/Utils.php:369"
+   }
+  ]
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q2",
+  "question": "How do the cURL and stream handlers turn timeout, connect_timeout and read_timeout values into milliseconds and validate them, and which clock do they use to measure elapsed time and deadlines?",
+  "change_kind": "moved",
+  "what_changed": "OLD used Utils::timeoutToMilliseconds() and Utils::currentTime() (hrtime or microtime fallback) on the public Utils class. NEW uses two internal Handler classes: Handler\\Timeout::toMilliseconds() and Handler\\Clock::now(), which always uses hrtime.",
+  "facts": [
+   {
+    "id": "timeout-to-ms-class",
+    "fact": "Timeout option conversion and validation now happen in GuzzleHttp\\Handler\\Timeout::toMilliseconds(), which rejects non-numeric, negative, non-finite or sub-millisecond positive values.",
+    "source": "src/Handler/Timeout.php:23"
+   },
+   {
+    "id": "clock-now-hrtime",
+    "fact": "Handler timing uses GuzzleHttp\\Handler\\Clock::now(), which returns hrtime(true)/1e9 with no microtime fallback.",
+    "source": "src/Handler/Clock.php:21"
+   },
+   {
+    "id": "curlfactory-timeout-call",
+    "fact": "CurlFactory converts the timeout option by calling Timeout::toMilliseconds($options['timeout'], 'timeout').",
+    "source": "src/Handler/CurlFactory.php:2685"
+   },
+   {
+    "id": "streamhandler-clock-stats",
+    "fact": "StreamHandler measures on_stats transfer time by starting with Clock::now().",
+    "source": "src/Handler/StreamHandler.php:219"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "timeoutToMilliseconds",
+    "kind": "identifier",
+    "old_source": "src/Utils.php:345"
+   }
+  ]
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q3",
+  "question": "Which class do the cURL and stream handlers use to resolve the effective proxy for a request, applying the proxy option and falling back to the HTTP_PROXY/HTTPS_PROXY/NO_PROXY environment variables?",
+  "change_kind": "renamed",
+  "what_changed": "OLD had the internal class GuzzleHttp\\Handler\\ProxyEnvironment in src/Handler/ProxyEnvironment.php. NEW renames it to GuzzleHttp\\Handler\\ProxyEnv in src/Handler/ProxyEnv.php, and CurlFactory and StreamHandler call ProxyEnv::resolveProxySelection().",
+  "facts": [
+   {
+    "id": "proxyenv-class",
+    "fact": "Proxy environment resolution lives in the internal final class GuzzleHttp\\Handler\\ProxyEnv.",
+    "source": "src/Handler/ProxyEnv.php:20"
+   },
+   {
+    "id": "proxyenv-resolve-selection",
+    "fact": "ProxyEnv::resolveProxySelection(UriInterface $uri, $proxyOption) is the entry point that applies the proxy option and then falls back to the proxy environment variables.",
+    "source": "src/Handler/ProxyEnv.php:36"
+   },
+   {
+    "id": "curlfactory-proxyenv-call",
+    "fact": "CurlFactory resolves the proxy via ProxyEnv::resolveProxySelection().",
+    "source": "src/Handler/CurlFactory.php:2715"
+   },
+   {
+    "id": "streamhandler-proxyenv-call",
+    "fact": "StreamHandler resolves the proxy via ProxyEnv::resolveProxySelection().",
+    "source": "src/Handler/StreamHandler.php:1760"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "ProxyEnvironment",
+    "kind": "identifier",
+    "old_source": "src/Handler/ProxyEnvironment.php:20"
+   },
+   {
+    "text": "src/Handler/ProxyEnvironment.php",
+    "kind": "path",
+    "old_source": "src/Handler/ProxyEnvironment.php:20"
+   }
+  ]
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q4",
+  "question": "When I pass the json request option, or when FileCookieJar saves and loads cookies, which function does the JSON encoding and decoding, and what error comes out when encoding fails?",
+  "change_kind": "removed",
+  "what_changed": "OLD encoded the json option and cookie files through GuzzleHttp\\Utils::jsonEncode()/jsonDecode(). NEW removes those helpers from Utils, and Client, FileCookieJar and SessionCookieJar call native json_encode/json_decode with JSON_THROW_ON_ERROR directly. Client wraps a JsonException in an InvalidArgumentException.",
+  "facts": [
+   {
+    "id": "client-json-native-encode",
+    "fact": "Client encodes the json option with native \\json_encode($options['json'], \\JSON_THROW_ON_ERROR) and wraps a JsonException in an InvalidArgumentException prefixed 'json_encode error: '.",
+    "source": "src/Client.php:1571"
+   },
+   {
+    "id": "filecookiejar-native-encode",
+    "fact": "FileCookieJar::save encodes with native \\json_encode using JSON_HEX_TAG | JSON_THROW_ON_ERROR.",
+    "source": "src/Cookie/FileCookieJar.php:104"
+   },
+   {
+    "id": "filecookiejar-native-decode",
+    "fact": "FileCookieJar::load decodes with native \\json_decode($json, true, 512, \\JSON_THROW_ON_ERROR).",
+    "source": "src/Cookie/FileCookieJar.php:141"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q5",
+  "question": "What does CookieJar::extractCookies do with a Set-Cookie header that arrives on a plain http:// response, and are cookie name prefixes such as __Secure- and __Host- enforced?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD accepted any Set-Cookie whose domain matched the request host and stored it with setCookie(). NEW skips Secure cookies, and cookies that would overlay a stored Secure cookie, when the response is not https. It enforces the __Secure-/__Host- prefix rules, drops overlong Set-Cookie fields and stops after 50 accepted cookies. This is an addition, so no removed identifiers exist to use as traps.",
+  "facts": [
+   {
+    "id": "cookiejar-insecure-response-guard",
+    "fact": "On a non-https request, extractCookies skips a cookie that has the Secure flag or that would overlay a stored, unexpired Secure cookie with the same name and an overlapping domain and path.",
+    "source": "src/Cookie/CookieJar.php:283"
+   },
+   {
+    "id": "cookiejar-secure-prefix",
+    "fact": "A cookie whose name starts with __Secure- (case-insensitive) is rejected unless it has the Secure flag.",
+    "source": "src/Cookie/CookieJar.php:287"
+   },
+   {
+    "id": "cookiejar-host-prefix",
+    "fact": "A cookie whose name starts with __Host- is rejected unless it is Secure, host-only, has path '/' and the header explicitly carried a Path attribute.",
+    "source": "src/Cookie/CookieJar.php:290"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q1",
+  "question": "When the fuzzy query is only one or two ASCII characters long and the candidate line is plain ASCII, does FuzzyMatchV2 still build the full score and consecutive-bonus matrices, or does it handle that case some other way?",
+  "change_kind": "added",
+  "what_changed": "OLD sent every pattern length through the general Phase 1-4 matrix algorithm of FuzzyMatchV2. NEW dispatches one-character ASCII patterns on byte input to a dedicated single-pass routine that jumps between occurrences without allocating arrays, and two-character ASCII patterns to a fused routine that keeps rows 0 and 1 as scalar running state (storing rows only for the backtrace). This is an addition; nothing was removed or renamed.",
+  "facts": [
+   {
+    "id": "fzf-v2-single-char-dispatch",
+    "fact": "FuzzyMatchV2 returns early through fuzzyMatchV2Single when the pattern has length 1, the input is held as bytes and the pattern rune is ASCII, before the asciiFuzzyIndex prefilter runs.",
+    "source": "src/algo/algo.go:746"
+   },
+   {
+    "id": "fzf-v2-single-char-routine",
+    "fact": "fuzzyMatchV2Single uses trySkip to jump to each occurrence of the character, scores it as scoreMatch + bonus*bonusFirstCharMultiplier, and in forward mode stops at the first occurrence with a boundary bonus; it allocates no score arrays.",
+    "source": "src/algo/algo.go:514"
+   },
+   {
+    "id": "fzf-v2-two-char-dispatch",
+    "fact": "After the asciiFuzzyIndex scope is computed, a two-character all-ASCII pattern on byte input is handled by fuzzyMatchV2Two instead of the general score-matrix code.",
+    "source": "src/algo/algo.go:760"
+   },
+   {
+    "id": "fzf-v2-two-char-routine",
+    "fact": "fuzzyMatchV2Two replicates Phase 2 (row 0) and Phase 3 (row 1) in a single pass with scalar state, allocating the H/C rows from the slab only when match positions are requested, and runs a two-row backtrace for positions.",
+    "source": "src/algo/algo.go:562"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q2",
+  "question": "For items that contain non-ASCII text (so they are stored as rune arrays), does the Phase 1 pre-scan of the fuzzy matcher narrow the search range, or does it just hand the whole item to the scoring phase?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD asciiFuzzyIndex returned the full range (0, input.Length()) for any input not stored as bytes ('Can't determine'). NEW scans the rune array with runeFuzzyIndex to reject non-matching items and trim the range, whenever runePrefilterable says case folding and normalization cannot make the scan miss a match; Chars now carries a may-fold-to-ASCII flag computed from a bitmap of foldable rune ranges.",
+  "facts": [
+   {
+    "id": "fzf-rune-prefilter-entry",
+    "fact": "For rune-mode input, asciiFuzzyIndex now calls runeFuzzyIndex to find the first/last match bounds, falling back to the full range only when runePrefilterable rejects the item/pattern pair.",
+    "source": "src/algo/algo.go:433"
+   },
+   {
+    "id": "fzf-rune-fuzzy-index",
+    "fact": "runeFuzzyIndex walks the pattern through the rune array (indexAsciiRune for ASCII pattern runes, indexRune otherwise), returns -1,-1 if any rune is missing, and limits the end to the last occurrence of the final pattern rune.",
+    "source": "src/algo/algo.go:382"
+   },
+   {
+    "id": "fzf-rune-prefilterable",
+    "fact": "runePrefilterable refuses the scan when the item may fold to ASCII and the pattern has ASCII runes, or (case-insensitive) when a non-ASCII pattern rune is cased or itself foldable.",
+    "source": "src/algo/algo.go:354"
+   },
+   {
+    "id": "fzf-chars-may-fold-flag",
+    "fact": "Chars exposes MayFoldToAscii(), backed by a flagMayFold bit set at conversion time from the foldableRanges bitmap, which also replaces the old 0x00C0-0xFF61 range check in normalizeRune.",
+    "source": "src/util/chars.go:187"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q3",
+  "question": "When fzf is started with --popup (or --tmux) inside a tmux session, which tmux mechanism does it use to show itself, and how does the outer process learn fzf's exit status?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD runTmux always used 'tmux display-popup -E', which blocks and propagates the exit status. NEW first probes (from within a pane, via TMUX_PANE) whether the tmux server has the new-pane command (tmux 3.7+); when the native border is used it opens a floating pane with new-pane instead, blocks on a 'tmux wait-for' channel signalled by the pane (or a has-session watchdog), and reads the exit status from a pre-created '<temp>.code' file. display-popup remains as the fallback.",
+  "facts": [
+   {
+    "id": "fzf-tmux-floating-pane-dispatch",
+    "fact": "runTmux calls tmuxFloatingPaneInfo when the native border applies and, if it succeeds, sets opts.Tmux.border and delegates to runTmuxFloatingPane instead of display-popup.",
+    "source": "src/tmux.go:225"
+   },
+   {
+    "id": "fzf-tmux-floating-pane-probe",
+    "fact": "tmuxFloatingPaneInfo requires TMUX_PANE and runs one tmux invocation that prints the window size and 'list-commands new-pane', checking the output for 'new-pane' rather than the exit status.",
+    "source": "src/tmux.go:34"
+   },
+   {
+    "id": "fzf-tmux-floating-pane-exit-code",
+    "fact": "The pane command writes '$?' to a temp '.code' file (pre-created with O_EXCL) and signals 'tmux wait-for -S'; the wrapper script waits on that channel and exits with the file's code, or 130 if the file is empty.",
+    "source": "src/tmux.go:167"
+   },
+   {
+    "id": "fzf-tmux-floating-pane-new-pane",
+    "fact": "The floating pane is created with 'new-pane -P -F #{pane_id}' sized width-2 by height-2 at a computed -X/-Y, after unzooming the window with resize-pane -Z if it is zoomed.",
+    "source": "src/tmux.go:174"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q4",
+  "question": "How does fzf notice that the terminal window was resized when it runs on Windows with the light renderer, and how is the resize notification torn down on each platform (Windows and Unix) when the main loop finishes?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD notifyOnResize(resizeChan) on Windows was an empty TODO, so resizes were never reported there, and the Unix version registered SIGWINCH without ever unregistering. NEW notifyOnResize takes a context: on Windows it opens CONOUT$ and polls the console screen buffer window size every 100ms, sending a resize signal on change; on Unix it calls signal.Stop when the context is cancelled.",
+  "facts": [
+   {
+    "id": "fzf-win-resize-poll",
+    "fact": "On Windows, notifyOnResize opens CONOUT$ and a goroutine polls GetConsoleScreenBufferInfo on a ticker, pushing a resizeSignal into the channel (non-blocking) when the window width or height changes.",
+    "source": "src/terminal_windows.go:23"
+   },
+   {
+    "id": "fzf-win-resize-interval",
+    "fact": "The Windows resize polling interval is resizePollInterval = 100ms.",
+    "source": "src/terminal_windows.go:14"
+   },
+   {
+    "id": "fzf-resize-ctx-param",
+    "fact": "Terminal.Loop passes its context to notifyOnResize(ctx, resizeChan), so the watcher stops when the loop's context is cancelled.",
+    "source": "src/terminal.go:6331"
+   },
+   {
+    "id": "fzf-unix-resize-stop",
+    "fact": "On Unix, notifyOnResize starts a goroutine that calls signal.Stop(resizeChan) once ctx is done.",
+    "source": "src/terminal_unix.go:14"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q5",
+  "question": "In the light (non-fullscreen) renderer, what state does fzf leave the terminal's bracketed paste mode in when it exits, and how does it find out what that state should be?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD disableModes always sent CSI ?2004l, forcing bracketed paste off on exit, and Init only queried the cursor position (findOffset with CSI 6n). NEW Init issues a batch of startup queries (cursor position, DECRQM ?2004$p, cursor position again) in one round trip via queryStartup, records whether bracketed paste was already set, and disableModes restores it (?2004h) when it was set, disabling only otherwise or when the terminal did not answer.",
+  "facts": [
+   {
+    "id": "fzf-light-paste-restore",
+    "fact": "disableModes re-enables bracketed paste with CSI ?2004h when r.pasteWasSet reports it was on before fzf started, and sends ?2004l otherwise.",
+    "source": "src/tui/light.go:1123"
+   },
+   {
+    "id": "fzf-light-startup-queries",
+    "fact": "startupQueries sends a cursor-position query, the DECRQM bracketed-paste query and a second cursor-position query, in that order.",
+    "source": "src/tui/light.go:63"
+   },
+   {
+    "id": "fzf-light-init-query-startup",
+    "fact": "Init calls r.queryStartup() for every mode (fullscreen too) and stores the returned pasteWasSet on the renderer.",
+    "source": "src/tui/light.go:270"
+   },
+   {
+    "id": "fzf-light-query-startup-parse",
+    "fact": "queryStartup treats DECRPM value 1 or 3 as set, leaves pasteWasSet nil when the reply is missing or 0, and erases stray characters with backspaces if the cursor moved right between the two position replies.",
+    "source": "src/tui/light_unix.go:184"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q1",
+  "question": "Can bat page its output without an external pager program, and if so, how is that pager chosen, started and written to?",
+  "change_kind": "added",
+  "what_changed": "OLD always spawned an external pager process (OutputType::Pager(Child)) and had no built-in pager. NEW recognises the pager value 'builtin' as PagerKind::Builtin and pages through the embedded 'minus' crate. A new OutputType::BuiltinPager variant runs minus::dynamic_paging on a background thread, receives fmt-writes, and joins the thread on drop.",
+  "facts": [
+   {
+    "id": "bat-pagerkind-builtin",
+    "fact": "PagerKind::from_bin returns the new PagerKind::Builtin variant when the pager binary string is exactly \"builtin\".",
+    "source": "src/pager.rs:46"
+   },
+   {
+    "id": "bat-output-builtinpager-variant",
+    "fact": "OutputType::from_mode/try_pager returns OutputType::BuiltinPager(BuiltinPager::new()) for a Builtin pager kind, before any binary resolution or less-argument handling.",
+    "source": "src/output.rs:101"
+   },
+   {
+    "id": "bat-builtinpager-minus-thread",
+    "fact": "BuiltinPager::new clones a minus::Pager and spawns a thread running minus::dynamic_paging; OutputType::handle hands out OutputHandle::FmtWrite on that minus pager, and Drop joins the thread.",
+    "source": "src/output.rs:29"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q2",
+  "question": "If I pass my own output handle to Controller::run, does the controller still set up its own pager/stdout output, and how does `bat --list-themes` get its colored theme previews to the pager?",
+  "change_kind": "call_path",
+  "what_changed": "OLD Controller::run took Option<OutputHandle> by value and always built an OutputType (possibly spawning a pager), using it to decide attached_to_pager even when a handle was given. list_themes opened the pager first and ran each preview straight into it via OutputHandle::IoWrite. NEW run takes Option<&mut OutputHandle> and builds an OutputType only when no handle is given. A supplied handle counts as attached to a pager. list_themes writes headers and previews into a String through OutputHandle::FmtWrite, and only afterwards creates the OutputType and writes the whole buffer in one go.",
+  "facts": [
+   {
+    "id": "bat-controller-run-mut-handle",
+    "fact": "Controller::run and run_with_error_handler take the output handle as Option<&mut OutputHandle<'_>>.",
+    "source": "src/controller.rs:42"
+   },
+   {
+    "id": "bat-controller-outputtype-only-if-none",
+    "fact": "run_with_error_handler creates its own OutputType (pager or stdout) only when output_handle is None, keeping it in an Option.",
+    "source": "src/controller.rs:58"
+   },
+   {
+    "id": "bat-controller-attached-when-handle",
+    "fact": "attached_to_pager is true whenever a caller-supplied handle is present, and otherwise comes from the created OutputType's is_pager().",
+    "source": "src/controller.rs:91"
+   },
+   {
+    "id": "bat-list-themes-buffer",
+    "fact": "list_themes renders every theme into a String through OutputHandle::FmtWrite, and only after the loop calls OutputType::from_mode and writes the buffered text to that output.",
+    "source": "src/bin/bat/main.rs:211"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q3",
+  "question": "What formats does the --line-range argument accept, and how does it handle a line with surrounding context lines?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD LineRange parsing accepted only 'N', 'N:M' (plus +/- offsets) and rejected any value with two colons. NEW accepts three-part values: 'N::C' gives lines N-C..N+C and 'N:M:C' gives N-C..M+C, using saturating arithmetic.",
+  "facts": [
+   {
+    "id": "bat-linerange-three-parts",
+    "fact": "LineRange parsing has a branch for three colon-separated parts; an empty middle part means the N::C single-line-with-context form.",
+    "source": "src/line_range.rs:101"
+   },
+   {
+    "id": "bat-linerange-n-c-bounds",
+    "fact": "For N::C the bounds are Absolute(N.saturating_sub(C)) to Absolute(N.saturating_add(C)).",
+    "source": "src/line_range.rs:110"
+   },
+   {
+    "id": "bat-linerange-n-m-c-bounds",
+    "fact": "For N:M:C the bounds are Absolute(N.saturating_sub(C)) to Absolute(M.saturating_add(C)).",
+    "source": "src/line_range.rs:121"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q4",
+  "question": "How does bat produce its -h / --help output, and does it read the config file when showing help or version information?",
+  "change_kind": "behaviour",
+  "what_changed": "OLD left -h/--help and -V/--version to clap's automatic flags and always read the config file, except for 'cache' or --no-config. NEW disables clap's help and version flags and defines its own 'help' and 'version' args. When help is requested, App::new renders the help text and displays it through bat's Controller: highlighted as 'help', in the configured theme, paged with QuitIfOneScreen. It then exits. NEW skips the config file for -V/--version/--diagnostic and tolerates invalid config when help is requested.",
+  "facts": [
+   {
+    "id": "bat-clap-disable-help-version",
+    "fact": "build_app calls disable_help_flag(true) and disable_version_flag(true), and adds explicit 'help' (-h/--help, SetTrue) and 'version' (-V/--version, ArgAction::Version) args.",
+    "source": "src/bin/bat/clap_app.rs:37"
+   },
+   {
+    "id": "bat-app-help-display",
+    "fact": "App::new checks matches.get_flag(\"help\") and calls display_help, which renders help text (long when --help was given), then calls std::process::exit(0).",
+    "source": "src/bin/bat/app.rs:95"
+   },
+   {
+    "id": "bat-help-config-highlight",
+    "fact": "display_help runs the help text through Controller with a Config that uses language \"help\" when colored, the user's theme options, and PagingMode::QuitIfOneScreen unless paging is disabled.",
+    "source": "src/bin/bat/app.rs:175"
+   },
+   {
+    "id": "bat-skip-config-version-diag",
+    "fact": "App::matches skips config-file arguments when -V, --version, --diagnostic or --diagnostics is present. For -h/--help it ignores config parse errors and falls back to env+CLI args if clap rejects the config args.",
+    "source": "src/bin/bat/app.rs:206"
+   }
+  ],
+  "stale_traps": []
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q5",
+  "question": "When bat auto-detects whether the terminal has a dark or light background, which terminal_colorsaurus call does it make and how does it map the result to bat's ColorScheme?",
+  "change_kind": "renamed",
+  "what_changed": "OLD TerminalColorSchemeDetector::detect imported terminal_colorsaurus::color_scheme and its ColorScheme enum (aliased ColorsaurusScheme), matching ColorsaurusScheme::Dark/Light. NEW calls theme_mode(QueryOptions::default()) and matches ThemeMode::Dark/Light.",
+  "facts": [
+   {
+    "id": "bat-detect-theme-mode",
+    "fact": "TerminalColorSchemeDetector::detect calls terminal_colorsaurus::theme_mode(QueryOptions::default()) and maps ThemeMode::Dark to ColorScheme::Dark and ThemeMode::Light to ColorScheme::Light.",
+    "source": "src/theme.rs:270"
+   }
+  ],
+  "stale_traps": [
+   {
+    "text": "ColorsaurusScheme",
+    "kind": "identifier",
+    "old_source": "src/theme.rs:269"
+   }
+  ]
+ }
+]
