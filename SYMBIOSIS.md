@@ -16,6 +16,10 @@ Measured with a model in the loop, pre-registered:
   repositories (`benchmarks/results/agent-compare-realworld-2026-10-02/`) at 14 % *more* input tokens and 16 %
   fewer output tokens. Neither study found more facts with it.
 - **Handed search results up front**, it found a few facts fewer: leads anchor it.
+- **After the code moved on** (`benchmarks/results/agent-compare-stale-2026-10-02/`): a fresh index and a stale
+  one found the same facts, and no stale index made the agent describe removed code. Freshness paid off in cost,
+  and only on projects too large for `analyze` to refresh itself (300+ files): there a stale index cost about a
+  fifth more input tokens than none, and the fresh index the mod keeps removed that (in one of two runs).
 
 ## What verinoda-live does
 
@@ -54,6 +58,7 @@ Verinoda Symbiosis, Verinoda ile Claude Code'u birlikte çalıştırır. **verin
 
 - Claude dosya düzenledikçe indeksi tazeler.
 - İstenirse ajanı önce `analyze` çalıştırmaya yönlendirir. İki ölçümde de aynı olguları buldu; küçük projelerde %16 daha az, gerçek depolarda ise %14 daha fazla girdi token'ı harcadı (çıktı %16 daha az).
+- Kod değiştikten sonra sorulan 50 soruda taze ve bayat indeks aynı olguları buldu; bayat indeks ajanı silinmiş kodu anlatmaya yöneltmedi. Tazeliğin faydası maliyette ve yalnızca büyük projelerde (300+ dosya) görüldü: bayat indeks indekssiz çalışmaya göre ~%20 daha fazla girdi token'ı harcattı, taze indeks bunu bir çalışmada geri aldı.
 - Commit'leri inceler.
 - Bunların hepsini hareketli mor maskotlu, Türkçe bir panelde gösterir.
 

@@ -28,6 +28,12 @@ Two pre-registered studies with a model in the loop:
   **1.14x** input tokens and 0.84x output tokens: one more turn per session, the agent still reading the cited code.
   The input saving of the small corpora did not replicate.
 
+And what freshness itself is worth (`benchmarks/results/agent-compare-stale-2026-10-02/`, 50 questions about code
+that changed after the index was built): the fresh index the mod keeps and a stale one found the same facts, and no
+stale index led the agent into describing removed code (it reads the files on disk). On projects under 300 files
+`analyze` refreshes a stale index by itself, so there the mod adds nothing; on the larger ones a stale index cost
+about a fifth more input tokens than no index, and the fresh one brought that back (significant in one of two runs).
+
 So neither mode is a measured win on real code: **nudge** trades input tokens for output tokens at the same facts,
 **search** costs facts. Both stay off until the person turns one on. What the mod adds regardless of the mode is
 an index that stays fresh while Claude edits, and commit reviews.
