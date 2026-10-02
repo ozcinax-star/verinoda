@@ -1,0 +1,35 @@
+{
+  "name": "verinoda-live",
+  "version": "0.3.0",
+  "description": "Verinoda in Claude Code: keeps the code index fresh while Claude edits, nudges the agent to use it, reviews commits, and shows it all in a Turkish pane with an animated mascot.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "root": {
+      "type": "string",
+      "title": "Project folder",
+      "description": "The folder with the .verinoda index. Empty: the nearest folder at or above the one the session starts in.",
+      "default": ""
+    },
+    "cli": {
+      "type": "string",
+      "title": "Verinoda CLI",
+      "description": "Path to the verinoda program. Empty: the project's .venv one if it has one, else verinoda on PATH.",
+      "default": ""
+    },
+    "python": {
+      "type": "string",
+      "title": "Python with Verinoda",
+      "description": "A Python that can import verinoda, to read the graph build's state. Empty: the one beside the CLI, else python on PATH.",
+      "default": ""
+    },
+    "motion": {
+      "type": "boolean",
+      "title": "Animated mascot",
+      "description": "Let the pane's mascot blink and move. Off: it stands still.",
+      "default": true
+    }
+  },
+  "author": {
+    "name": "ozcinax-star"
+  }
+}

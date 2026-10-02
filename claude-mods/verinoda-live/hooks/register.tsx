@@ -1,0 +1,856 @@
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
+
+import type { AutoMode, ContextInfo, IndexKind, IndexState, Notice, ReviewInfo } from '../types'
+import { frameRows, MASCOT_HEIGHT, MASCOT_WIDTH } from './mascot'
+import type { MascotProps, Mood } from './mascot'
+
+const PANE = 'verinoda'
+const GRAPH_POLL_MS = 1_000
+const GRAPH_WAIT_MS = 10 * 60_000
+// Unlocked yet behind this long: no build is coming (files changed outside Claude's edit tools).
+const GRAPH_STALL_MS = 15_000
+// Auto-context runs `query` (median 2.2 s, at most 4.5 s on the agent study's corpora), not `analyze` (up to 55 s
+// on this repository): it runs before the prompt is sent, so it must be quick.
+const CONTEXT_TIMEOUT_MS = 15_000
+const CONTEXT_MAX_CHARS = 12_000
+const REVIEW_TIMEOUT_MS = 3 * 60_000
+// The host's longest wait for a process (10 min). `verinoda update` itself waits up to 600 s for the build lock, so
+// the mod never starts one while its own background build holds it (reindex defers to the watcher instead).
+const UPDATE_TIMEOUT_MS = 600_000
+const NOTICE_MS = 6_000
+
+// `update --fast` takes the text in at once and rebuilds the graph in a background `verinoda update`.
+// The graph has caught up when no build holds the lock and no file changed since the latest snapshot
+// (the background build records it); the lock alone misses a build that has not taken it yet.
+const GRAPH_STATE =
+  'import json, sys; from pathlib import Path; from verinoda import buildlock, freshness; ' +
+  "r = Path(sys.argv[1]); print(json.dumps({'locked': buildlock.is_locked(r), " +
+  "'behind': freshness.check(r).get('count', 0)}))"
+const EDIT_TOOLS = ['Edit', 'Write', 'NotebookEdit'] as const
+const SHELL_TOOLS = ['Bash', 'PowerShell'] as const
+
+// A prompt worth a code search: a question by its mark, its first word or a Turkish question particle. Boundaries
+// are spelled out because \b is ASCII-only and Turkish words end in letters it does not know.
+const END = String.raw`(?=[\s?.,!:;]|$)`
+const QUESTION_START = new RegExp(
+  String.raw`^(how|why|where|what|which|who|when|does|do|is|are|can|could|should|explain|show|find|list|trace|` +
+    String.raw`nasıl|neden|niye|niçin|nerede|nereden|nereye|ne|neler|hangi|kim|kimler|açıkla|göster|bul|listele)` + END,
+  'i',
+)
+const QUESTION_PARTICLE = new RegExp(String.raw`\s(mi|mı|mu|mü|misin|mısın|mudur|müdür)` + END, 'i')
+// Turkish puts its question word anywhere ("Kor Ocağı her tickte ne yapıyor"); so do English how/why/where/which.
+const QUESTION_ANYWHERE = new RegExp(
+  String.raw`(?:^|[\s"'(])(nasıl|neden|niye|niçin|nerede|nereden|nereye|ne|neler|hangi|hangisi|kim|kimler|how|why|where|which)` + END,
+  'i',
+)
+// A shell command that may move HEAD; whether it did is read from HEAD itself, before and after.
+const GIT_WORD = /\bgit\b/
+
+const CHECKING: IndexState = { kind: 'checking', n: 0, waiting: false, since: null, at: null, error: '' }
+
+// Session state the drawing reads (declared in ../types); settings are also kept in $.store across sessions.
+const status = atom({ plugin: 'verinoda-live', key: 'status' } as const, '')
+const idx = atom({ plugin: 'verinoda-live', key: 'idx' } as const, CHECKING)
+const notice = atom({ plugin: 'verinoda-live', key: 'notice' } as const, null as Notice | null)
+const auto = atom({ plugin: 'verinoda-live', key: 'auto' } as const, 'off' as AutoMode)
+const guard = atom({ plugin: 'verinoda-live', key: 'guard' } as const, false)
+const lastContext = atom({ plugin: 'verinoda-live', key: 'lastContext' } as const, null as ContextInfo | null)
+const lastReview = atom({ plugin: 'verinoda-live', key: 'lastReview' } as const, null as ReviewInfo | null)
+const reviewing = atom({ plugin: 'verinoda-live', key: 'reviewing' } as const, null as string | null)
+const expanded = atom({ plugin: 'verinoda-live', key: 'expanded' } as const, false)
+
+// Where Verinoda is, settled at session start from the plugin's settings (`userConfig`), else found: the project is
+// the nearest folder at or above the session's with a .verinoda index; the CLI is the project's own .venv one if it
+// has one, else `verinoda` on PATH; the Python beside that CLI reads the graph's state.
+const cfg = { cli: 'verinoda', python: 'python', motion: true }
+
+// Module state: a reload starts it over, which only forgets edits not yet indexed.
+const live = {
+  root: undefined as string | undefined,
+  cwd: '',
+  pending: new Set<string>(),
+  isChecking: true, // the session-start look at the graph has not answered yet
+  isRunning: false,
+  runningCount: 0,
+  isGraphBehind: false,
+  graphSince: null as number | null,
+  graphFiles: 0,
+  stalledBehind: 0, // files the graph is behind on with no build coming; /verinoda-update takes them in
+  isSlow: false,
+  isUnknown: false,
+  failed: null as { n: number; error: string } | null,
+  freshAt: null as number | null,
+  isReviewing: false,
+  reviewAgain: false, // a commit landed while a review ran: review once more when it ends
+}
+
+export function norm(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+// The person's own words: typed at the composer, sent through the Remote Control bridge, or submitted by a plugin
+// as the person's (`asUser`); never a notification, a peer, a schedule or a plugin speaking for itself.
+export function isPersonsPrompt(origin: { kind: string; asUser?: true } | undefined): boolean {
+  if (origin === undefined) return false
+  return origin.kind === 'composer' || origin.kind === 'bridge' || (origin.kind === 'plugin' && origin.asUser === true)
+}
+
+export function looksLikeCodeQuestion(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 12 || t.length > 2_000 || /^[/!#]/.test(t)) return false
+  return t.includes('?') || QUESTION_START.test(t) || QUESTION_PARTICLE.test(t) || QUESTION_ANYWHERE.test(t)
+}
+
+// The nudge is round 2's `verinoda_first` instruction of the agent comparison (benchmarks/agent_compare): with it the
+// agent found the same facts as searching by hand at 16 % fewer input and 29 % fewer tool calls. Nothing runs first.
+export function nudgeBlock(root: string, verinoda: string): string {
+  // the path has no spaces, so it runs unquoted in bash and PowerShell alike
+  return (
+    `[Verinoda auto-context] This project has a Verinoda code index (${root}). For this question, start by running ` +
+    `Verinoda's analyze on it before any other search: ${verinoda} analyze "<the question>" --repo ${root} ` +
+    `(and ${verinoda} query "<names it surfaces>" --repo ${root}); then verify and complete with your own reading ` +
+    'as needed. Use this CLI with --repo: a Verinoda MCP server, if one is connected, may index another folder. ' +
+    'Its claims carry file:line evidence and a status; never state an inference or unknown as fact.'
+  )
+}
+
+// `verinoda query` reads filters in its question (path: file: lang: symbol: is:, /regex/, AND OR NOT); a prompt is
+// plain text, so those spellings are taken apart before it is passed on.
+export function plainQuery(prompt: string): string {
+  return prompt
+    .replace(/(^|[\s(])(-?)(path|file|lang|language|symbol|is):(?=\S)/gi, '$1$2$3 ')
+    .replace(/(^|\s)\/([^/\s][^/]*)\/(?=\s|$)/g, '$1$2')
+    .replace(/(^|\s)(AND|OR|NOT)(?=\s|$)/g, (_, pre: string, op: string) => pre + op.toLowerCase())
+    .replace(/[()]/g, ' ')
+}
+
+export function contextBlock(root: string, retrieved: string): string {
+  const body = retrieved.length > CONTEXT_MAX_CHARS ? `${retrieved.slice(0, CONTEXT_MAX_CHARS)}\n[cut]` : retrieved
+  return (
+    `[Verinoda auto-context] Ranked code passages Verinoda retrieved for this prompt from its index of ${root} ` +
+    '(the index can be behind the working tree). They are leads with file:line locations, not verified answers: ' +
+    'use what helps, check what you rely on.\n\n' +
+    body
+  )
+}
+
+// Work left running after a hook returns (a re-index, the graph watcher, a review): a reload or the end of the
+// session aborts its $ calls, which is no error of the person's, so the rejection is dropped here.
+function background(work: Promise<unknown>): void {
+  work.catch(() => undefined)
+}
+
+function plural(n: number): string {
+  return `${n} file${n === 1 ? '' : 's'}`
+}
+
+function seconds(fromMs: number, toMs: number): number {
+  return Math.round((toMs - fromMs) / 100) / 10
+}
+
+function isInside(path: string, root: string): boolean {
+  const p = norm(path)
+  const r = norm(root)
+  return p === r || p.startsWith(`${r}/`)
+}
+
+// The index state from the module's fields, as the pane reads it and as the status line says it (in English, as the
+// slash commands do). The first matching rule wins: a running update over a failure, a failure over waiting edits.
+export function indexState(): { state: IndexState; line: string } {
+  const base = { waiting: false, since: null, at: live.freshAt, error: '' }
+  const at = (kind: IndexKind, n: number, line: string, extra: Partial<IndexState> = {}) =>
+    ({ state: { ...base, kind, n, ...extra }, line })
+  if (live.root === undefined) return at('noindex', 0, `no .verinoda index at or above ${live.cwd}`)
+  if (live.isRunning) return at('updating', live.runningCount, `updating (${plural(live.runningCount)})…`)
+  if (live.failed !== null) {
+    return at('failed', live.failed.n, `update failed · ${plural(live.failed.n)} kept for /verinoda-update`, { error: live.failed.error })
+  }
+  if (live.pending.size > 0) return at('pending', live.pending.size, `${plural(live.pending.size)} pending`, { waiting: live.isGraphBehind })
+  if (live.isGraphBehind) return at('graph', live.graphFiles, 'text fresh · graph pending…', { since: live.graphSince })
+  if (live.stalledBehind > 0) return at('behind', live.stalledBehind, `graph behind ${plural(live.stalledBehind)} · /verinoda-update`)
+  if (live.isSlow) return at('slow', 0, 'graph build still running (10 min+)')
+  if (live.isUnknown) return at('unknown', 0, 'graph state unknown')
+  if (live.isChecking) return at('checking', 0, 'checking…')
+  return at('fresh', 0, 'fresh ✓')
+}
+
+function publish($: EngineInterface): void {
+  const { state, line } = indexState()
+  $.ui.status(live.root === undefined ? undefined : `Verinoda: ${line}`)
+  // the pane's copy is best effort: a write refused after the module unloaded is dropped
+  update($, status, () => line).catch(() => undefined)
+  update($, idx, () => state).catch(() => undefined)
+}
+
+const MODES: readonly AutoMode[] = ['off', 'nudge', 'search']
+
+export function asMode(value: unknown): AutoMode {
+  if (value === true) return 'nudge' // 0.2.0-dev stored a boolean
+  return MODES.includes(value as AutoMode) ? (value as AutoMode) : 'off'
+}
+
+async function setAuto($: EngineInterface, mode: AutoMode): Promise<void> {
+  await update($, auto, () => mode)
+  await $.store.set('auto', mode)
+}
+
+async function setGuard($: EngineInterface, value: boolean): Promise<void> {
+  await update($, guard, () => value)
+  await $.store.set('guard', value)
+}
+
+// Both settings start off; what the person chose last is kept in the store.
+async function loadSettings($: EngineInterface): Promise<void> {
+  const mode = asMode(await $.store.get('auto'))
+  const isGuard = (await $.store.get('guard')) === true
+  await update($, auto, () => mode)
+  await update($, guard, () => isGuard)
+}
+
+type GraphState = { locked: boolean; behind: number }
+
+async function graphState($: EngineInterface, root: string): Promise<GraphState | undefined> {
+  try {
+    const { exitCode, stdout } = await $.process.run([cfg.python, '-c', GRAPH_STATE, root], { cwd: root })
+    if (exitCode !== 0) return undefined
+    const d = JSON.parse(stdout) as Partial<GraphState>
+    return typeof d.locked === 'boolean' && typeof d.behind === 'number' ? { locked: d.locked, behind: d.behind } : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// One look at the graph (session start, or the pane's "check again"): fresh, a build to watch, or behind.
+async function checkGraph($: EngineInterface): Promise<void> {
+  const root = live.root
+  if (root === undefined || live.isRunning || live.isGraphBehind) return
+  live.isChecking = true
+  live.isUnknown = false
+  live.isSlow = false
+  publish($)
+  const state = await graphState($, root)
+  live.isChecking = false
+  if (state === undefined) live.isUnknown = true
+  else if (state.locked) background(watchGraph($, root, state.behind))
+  else if (state.behind > 0) live.stalledBehind = state.behind
+  else live.freshAt = await $.clock.now()
+  publish($)
+}
+
+// One watcher at a time; a later update while it runs only keeps it going.
+async function watchGraph($: EngineInterface, root: string, files: number): Promise<void> {
+  if (live.isGraphBehind) return
+  live.isGraphBehind = true
+  live.graphFiles = files
+  live.stalledBehind = 0
+  live.isSlow = false
+  live.isUnknown = false
+  const started = await $.clock.now()
+  live.graphSince = started
+  publish($)
+  let idleSince: number | undefined // first poll that saw no build running while behind
+  try {
+    while ((await $.clock.now()) - started < GRAPH_WAIT_MS) {
+      await $.clock.sleep(GRAPH_POLL_MS)
+      if (live.isRunning) {
+        idleSince = undefined
+        continue
+      }
+      const state = await graphState($, root)
+      if (state === undefined) {
+        live.isUnknown = true
+        return
+      }
+      const now = await $.clock.now()
+      if (state.locked || state.behind === 0) idleSince = undefined
+      else idleSince ??= now
+      const isStalled = idleSince !== undefined && now - idleSince >= GRAPH_STALL_MS
+      if (state.behind === 0 || isStalled) {
+        live.stalledBehind = isStalled ? state.behind : 0
+        if (!isStalled) live.freshAt = now
+        return
+      }
+    }
+    live.isSlow = true
+  } finally {
+    live.isGraphBehind = false
+    live.graphSince = null
+    publish($)
+    if (live.pending.size > 0 && !live.isRunning) background(reindex($)) // edits made while the build ran
+  }
+}
+
+async function exists($: EngineInterface, path: string): Promise<boolean> {
+  return (await $.fs.stat(path).catch(() => undefined)) !== undefined
+}
+
+// The project: the folder the settings name, else the nearest one at or above the session's with a .verinoda index.
+async function findRoot($: EngineInterface, named: string, cwd: string): Promise<string | undefined> {
+  // slashes made forward, case kept: a case-sensitive file system finds the folder only as it is spelled
+  const slashes = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (named !== '') return (await exists($, `${slashes(named)}/.verinoda`)) ? slashes(named) : undefined
+  // a home folder or a drive root is never taken for a project unless the settings name it (Verinoda's own first
+  // scan refuses them too): every edit anywhere under it would re-index it
+  const homes = new Set<string>()
+  const profile = await $.env.get('USERPROFILE').catch(() => undefined)
+  const home = await $.env.get('HOME').catch(() => undefined)
+  for (const h of [profile, home]) if (h) homes.add(norm(h))
+  let dir = slashes(cwd)
+  for (let i = 0; i < 40 && dir !== ''; i++) {
+    const isTooWide = homes.has(norm(dir)) || /^[A-Za-z]:$/.test(dir) || dir === ''
+    if (!isTooWide && (await exists($, `${dir}/.verinoda`))) return dir
+    const up = dir.replace(/\/[^/]*$/, '')
+    if (up === dir || /^[A-Za-z]:$/.test(dir)) break
+    dir = up
+  }
+  return undefined
+}
+
+// The CLI and its Python: the settings' when given; else the project's .venv; else what PATH finds.
+async function resolveTools($: EngineInterface, root: string, options: Record<string, unknown>): Promise<void> {
+  const given = (k: string) => (typeof options[k] === 'string' ? (options[k] as string).trim() : '')
+  const venv = [`${root}/.venv/Scripts/verinoda.exe`, `${root}/.venv/bin/verinoda`]
+  let cli = given('cli')
+  if (cli === '') {
+    for (const c of venv) if (await exists($, c)) { cli = c; break }
+  }
+  cfg.cli = cli || 'verinoda'
+  let python = given('python')
+  if (python === '' && /[/\\]/.test(cfg.cli)) {
+    const dir = cfg.cli.replace(/\\/g, '/').replace(/\/[^/]*$/, '')
+    for (const c of [`${dir}/python.exe`, `${dir}/python`]) if (await exists($, c)) { python = c; break }
+  }
+  cfg.python = python || 'python'
+  cfg.motion = options.motion !== false
+}
+
+// What a re-index came to: `text` is the command's answer (English, as before); `code` lets the pane say it.
+type Outcome = {
+  code: 'noindex' | 'running' | 'graph-fresh' | 'fresh' | 'waiting' | 'updated' | 'failed'
+  n: number
+  text: string
+}
+
+async function reindex($: EngineInterface): Promise<Outcome> {
+  const { root, pending } = live
+  if (root === undefined) return { code: 'noindex', n: 0, text: `no .verinoda index at or above ${live.cwd}` }
+  if (live.isRunning) return { code: 'running', n: live.runningCount, text: 'an update is already running' }
+  if (pending.size === 0 && live.isGraphBehind) {
+    return { code: 'graph-fresh', n: 0, text: 'text index fresh; the graph is still being rebuilt' }
+  }
+  if (pending.size === 0 && live.stalledBehind === 0 && live.failed === null) return { code: 'fresh', n: 0, text: 'index already fresh' }
+  if (live.isGraphBehind) {
+    // the background build holds the lock; `update` would wait for it, so the files wait instead
+    publish($)
+    return { code: 'waiting', n: pending.size, text: `waiting for the graph build; ${plural(pending.size)} will be indexed when it ends` }
+  }
+
+  live.isRunning = true
+  const files = [...pending]
+  const stalled = live.stalledBehind
+  const count = files.length || stalled || live.failed?.n || 0
+  live.runningCount = count
+  pending.clear()
+  live.stalledBehind = 0
+  live.failed = null
+  live.isSlow = false
+  live.isUnknown = false
+  const fail = (error: string) => {
+    files.forEach(f => live.pending.add(f))
+    live.stalledBehind = Math.max(live.stalledBehind, stalled)
+    live.failed = { n: count, error }
+  }
+  publish($)
+  try {
+    const { exitCode, stderr } = await $.process.run(
+      [cfg.cli, 'update', '--fast', '--repo', root],
+      { cwd: root, timeoutMs: UPDATE_TIMEOUT_MS },
+    )
+    if (exitCode !== 0) {
+      fail(`çıkış ${exitCode}: ${stderr.trim().split('\n').pop()?.slice(0, 160) ?? ''}`)
+      return { code: 'failed', n: count, text: `update failed (exit ${exitCode}): ${stderr.slice(0, 300)}` }
+    }
+    live.isRunning = false
+    background(watchGraph($, root, count))
+    return { code: 'updated', n: count, text: `text index updated (${plural(count)}); the graph is rebuilt in the background` }
+  } catch (err) {
+    fail(String(err).slice(0, 160))
+    return { code: 'failed', n: count, text: `update failed: ${String(err)}` }
+  } finally {
+    live.isRunning = false
+    publish($)
+  }
+}
+
+const NOTICE_TEXT: Record<Outcome['code'], (n: number) => Notice> = {
+  noindex: () => ({ text: 'Bu projede index yok', tone: 'err' }),
+  running: n => ({ text: `Zaten güncelleniyor (${n} dosya)`, tone: 'ok' }),
+  'graph-fresh': () => ({ text: 'Metin güncel · graph hâlâ kuruluyor', tone: 'ok' }),
+  fresh: () => ({ text: 'Index zaten güncel', tone: 'ok' }),
+  waiting: n => ({ text: `Graph bitince ${n} dosya eklenecek`, tone: 'ok' }),
+  updated: n => ({ text: `Güncellendi (${n} dosya) · graph arka planda kuruluyor`, tone: 'ok' }),
+  failed: () => ({ text: 'Güncelleme başarısız · ayrıntı yukarıda', tone: 'err' }),
+}
+
+// The pane's update button: run it, and say what happened under the button for a few seconds.
+async function updateFromPane($: EngineInterface): Promise<void> {
+  const outcome = await reindex($)
+  const said = NOTICE_TEXT[outcome.code](outcome.n)
+  await update($, notice, () => said)
+  await $.clock.sleep(NOTICE_MS)
+  await update($, notice, n => (n === said ? null : n))
+}
+
+async function recheckFromPane($: EngineInterface): Promise<void> {
+  await update($, notice, () => ({ text: 'Kontrol ediliyor…', tone: 'ok' }))
+  await checkGraph($)
+  await update($, notice, () => null)
+}
+
+// Verinoda's query on the prompt, as one context block; undefined (with the reason recorded) when nothing is attached.
+async function retrieve($: EngineInterface, prompt: string): Promise<string | undefined> {
+  const root = live.root
+  if (root === undefined) return undefined
+  const t0 = await $.clock.now()
+  const record = (info: Pick<ContextInfo, 'ok' | 'chars' | 'note'>, t1: number) =>
+    update($, lastContext, () => ({ prompt: prompt.trim().slice(0, 80), seconds: seconds(t0, t1), mode: 'search' as const, at: t1, ...info }))
+  try {
+    const { exitCode, stdout, stderr } = await $.process.run(
+      [cfg.cli, 'query', plainQuery(prompt), '--repo', root, '--max-chars', '6000'],
+      { cwd: root, timeoutMs: CONTEXT_TIMEOUT_MS },
+    )
+    const t1 = await $.clock.now()
+    if (exitCode !== 0 || stdout.trim() === '') {
+      await record({ ok: false, chars: 0, note: exitCode !== 0 ? `query exit ${exitCode}: ${stderr.slice(0, 120)}` : 'nothing found' }, t1)
+      return undefined
+    }
+    const block = contextBlock(root, stdout.trim())
+    await record({ ok: true, chars: block.length, note: '' }, t1) // shown in the pane, not over the index state
+    return block
+  } catch (err) {
+    await record({ ok: false, chars: 0, note: `query failed: ${String(err).slice(0, 120)}` }, await $.clock.now())
+    return undefined
+  }
+}
+
+// What the last commit changed, by concern: Verinoda's review of the working tree against the commit's parent.
+async function reviewCommit($: EngineInterface, sha: string): Promise<void> {
+  const root = live.root
+  if (root === undefined) return
+  if (live.isReviewing) {
+    live.reviewAgain = true
+    return
+  }
+  live.isReviewing = true
+  const short = sha.slice(0, 7)
+  await update($, reviewing, () => short)
+  const t0 = await $.clock.now()
+  const failedInfo = (summary: string, t1: number): ReviewInfo =>
+    ({ ok: false, risk: '', score: null, of: 100, band: '', findings: 0, summary, seconds: seconds(t0, t1), sha: short, at: t1 })
+  try {
+    const { exitCode, stdout } = await $.process.run(
+      [cfg.cli, 'review', '--json', '--repo', root, '--base', 'HEAD~1', '--max-chars', '4000'],
+      { cwd: root, timeoutMs: REVIEW_TIMEOUT_MS },
+    )
+    const t1 = await $.clock.now()
+    if (exitCode !== 0 && exitCode !== 3) {  // 3: findings or unknowns to report, an answer
+      await update($, lastReview, () => failedInfo(`çıkış ${exitCode}`, t1))
+      return
+    }
+    const d = JSON.parse(stdout) as {
+      summary?: string
+      risk?: { score?: number; of?: number; band?: string }
+      counts?: { findings?: number }
+    }
+    const score = d.risk?.score ?? null
+    const of = d.risk?.of ?? 100
+    const band = d.risk?.band ?? ''
+    const risk = score === null ? '' : `${score}/${of} (${band || '?'})`
+    const info: ReviewInfo = {
+      ok: true, risk, score, of, band, findings: d.counts?.findings ?? 0, summary: (d.summary ?? '').slice(0, 600),
+      seconds: seconds(t0, t1), sha: short, at: t1,
+    }
+    await update($, lastReview, () => info)
+    await update($, expanded, () => false)
+    $.ui.toast(`Verinoda review of the commit: risk ${risk || 'n/a'}, ${info.findings} finding(s) · /verinoda-panel`)
+  } catch (err) {
+    await update($, lastReview, () => failedInfo(String(err).slice(0, 200), 0))
+  } finally {
+    live.isReviewing = false
+    await update($, reviewing, () => null).catch(() => undefined)
+    if (live.reviewAgain) {
+      live.reviewAgain = false
+      const head = await gitHead($, root)
+      background(reviewCommit($, head ?? sha))
+    }
+  }
+}
+
+async function gitHead($: EngineInterface, root: string): Promise<string | undefined> {
+  try {
+    const { exitCode, stdout } = await $.process.run(['git', '-C', root, 'rev-parse', 'HEAD'], { cwd: root, timeoutMs: 10_000 })
+    return exitCode === 0 ? stdout.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function modeCommand(arg: string, current: AutoMode): AutoMode | undefined {
+  const a = arg.trim().toLowerCase()
+  if (a === '') return current === 'off' ? 'nudge' : 'off'
+  if (a === 'on' || a === 'açık' || a === 'aç') return 'nudge'
+  if (a === 'kapalı' || a === 'kapat') return 'off'
+  return MODES.includes(a as AutoMode) ? (a as AutoMode) : undefined
+}
+
+export function settingCommand(arg: string, current: boolean): boolean | undefined {
+  const a = arg.trim().toLowerCase()
+  if (a === '') return !current
+  if (a === 'on' || a === 'açık' || a === 'ac' || a === 'aç') return true
+  if (a === 'off' || a === 'kapalı' || a === 'kapat') return false
+  return undefined
+}
+
+// ---- the pane's words, pictures and layout (pure: tested without the engine) ----------------------------------
+
+export function hhmm(ms: number | null): string {
+  if (ms === null) return '--:--'
+  const d = new Date(ms)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+export type Tone = 'ok' | 'busy' | 'warn' | 'err' | 'idle'
+export const TONE_COLOR: Record<Tone, string> = { ok: 'green', busy: 'cyan', warn: 'yellow', err: 'red', idle: 'gray' }
+export type Action = 'update' | 'retry' | 'recheck'
+
+// Every state as a glyph, words and a tone; the glyph and words carry the meaning, the colour only reinforces it.
+export function describeIndex(s: IndexState): { head: string; tone: Tone; details: string[]; action: Action | null } {
+  switch (s.kind) {
+    case 'checking': return { head: '◌ Kontrol ediliyor…', tone: 'idle', details: [], action: null }
+    case 'fresh': return { head: '✓ Index güncel', tone: 'ok', details: [s.at === null ? 'bu oturumda değişiklik yok' : `son kontrol ${hhmm(s.at)}`], action: null }
+    case 'pending':
+      return s.waiting
+        ? { head: `● ${s.n} dosya bekliyor`, tone: 'warn', details: ['graph bitince eklenecek'], action: null }
+        : { head: `● ${s.n} dosya bekliyor`, tone: 'warn', details: ['tur bitince kendiliğinden güncellenir'], action: 'update' }
+    case 'updating': return { head: `◐ Güncelleniyor · ${s.n} dosya`, tone: 'busy', details: [], action: null }
+    case 'graph':
+      return { head: s.n > 0 ? `◐ Graph kuruluyor · ${s.n} dosya` : '◐ Graph kuruluyor', tone: 'busy',
+        details: [`${hhmm(s.since)}'den beri · genelde 2-4 dk`, 'Metin araması şimdiden güncel'], action: null }
+    case 'behind': return { head: `▲ Graph ${s.n} dosya geride`, tone: 'warn', details: ["Claude'un dışında değişen dosyalar"], action: 'update' }
+    case 'slow': return { head: "▲ Graph kurulumu 10 dk'yı geçti", tone: 'warn', details: [], action: 'recheck' }
+    case 'failed': return { head: `✗ Güncelleme başarısız · ${s.n} dosya bekletiliyor`, tone: 'err', details: [s.error], action: 'retry' }
+    case 'unknown': return { head: '? Graph durumu okunamadı', tone: 'idle', details: [], action: 'recheck' }
+    case 'noindex': return { head: "? Bu projede Verinoda index'i yok", tone: 'idle', details: ['Proje klasöründe çalıştır:', 'verinoda init, sonra verinoda update'], action: null }
+  }
+}
+
+export const ACTION_LABEL: Record<Action, string> = { update: 'Şimdi güncelle', retry: 'Tekrar dene', recheck: 'Tekrar kontrol et' }
+
+export function describeReview(r: ReviewInfo | null, sha: string | null): { head: string; tone: Tone; meta: string } | null {
+  if (sha !== null) return { head: `◐ İnceleniyor · ${sha}…`, tone: 'busy', meta: '' }
+  if (r === null) return null
+  const meta = `${r.sha} · ${hhmm(r.at)}`
+  if (!r.ok) return { head: `✗ İnceleme başarısız (${r.summary})`, tone: 'err', meta }
+  const tail = `${r.findings} bulgu`
+  if (r.score === null) return { head: `? Risk yok · ${tail}`, tone: 'idle', meta }
+  const score = `${r.score}/${r.of}`
+  if (r.band === 'high') return { head: `▲ Yüksek risk ${score} · ${tail}`, tone: 'err', meta }
+  if (r.band === 'medium') return { head: `● Orta risk ${score} · ${tail}`, tone: 'warn', meta }
+  return { head: `✓ Düşük risk ${score} · ${tail}`, tone: 'ok', meta }
+}
+
+export const MODE_LABEL: Record<AutoMode, string> = { off: 'Kapalı', nudge: 'Yönlendir', search: 'Arama' }
+export const MODE_HINT: Record<AutoMode, string> = {
+  off: 'Sorulara bağlam eklenmez',
+  nudge: 'Önerilen · Claude önce analyze çalıştırır',
+  search: 'Arama sonuçları eklenir · ölçümde daha zayıf',
+}
+export const OUTSIDE_HINT = '▲ Oturum proje dışında başladı; bağlam eklenmez'
+export const GUARD_HINT = 'Commit sonrası risk ve bulgular bildirilir'
+
+export function contextLine(c: ContextInfo | null): { text: string; tone: Tone } | null {
+  if (c === null) return null
+  const head = `"${c.prompt.slice(0, 40)}${c.prompt.length > 40 ? '…' : ''}"`
+  if (c.mode === 'nudge') return { text: `Son ${hhmm(c.at)} · yönlendirildi · ${head}`, tone: 'idle' }
+  if (c.ok) return { text: `Son ${hhmm(c.at)} · ${c.chars.toLocaleString('tr')} karakter eklendi (${c.seconds.toLocaleString('tr')} sn) · ${head}`, tone: 'idle' }
+  return { text: `Son ${hhmm(c.at)} · eklenmedi: ${c.note === 'nothing found' ? 'sonuç yok' : 'arama hatası'} · ${head}`, tone: 'warn' }
+}
+
+// The mascot (./mascot.tsx) is drawn by the surface as a `Client`, animated there; a surface without `Client`
+// (VS Code, mobile) gets its first frame, still.
+const ANIMATED_SURFACES = ['terminal', 'desktop']
+const MOOD: Record<Tone, Mood> = { ok: 'idle', idle: 'idle', busy: 'busy', warn: 'warn', err: 'err' }
+
+export function mascotCaption(s: IndexState, r: ReviewInfo | null, sha: string | null): { text: string; tone: Tone } {
+  if (s.kind === 'failed' || (r !== null && !r.ok)) return { text: 'Bir şey ters gitti', tone: 'err' }
+  if (r !== null && r.ok && r.band === 'high' && sha === null) return { text: "Commit'e bir bak", tone: 'err' }
+  if (s.kind === 'pending' || s.kind === 'behind' || s.kind === 'slow') return { text: 'Güncelleme bekliyor', tone: 'warn' }
+  if (s.kind === 'updating' || s.kind === 'graph' || s.kind === 'checking' || sha !== null) return { text: 'Kodu okuyorum…', tone: 'busy' }
+  if (s.kind === 'noindex') return { text: 'Index yok', tone: 'idle' }
+  return { text: 'Her şey güncel', tone: 'idle' }
+}
+
+// Rows a line takes at this width (a wrapped line may take several).
+export function rowsOf(text: string, columns: number): number {
+  return Math.max(1, Math.ceil(text.length / Math.max(1, columns)))
+}
+
+export const register: Register = (on, options) => {
+  on('session.start', async ($, e, next) => {
+    live.cwd = await $.session.cwd()
+    live.root = await findRoot($, typeof options.root === 'string' ? options.root.trim() : '', live.cwd)
+    if (live.root !== undefined) await resolveTools($, live.root, options)
+    await loadSettings($)
+    await $.command.register({ name: 'verinoda-update', description: 'Re-index the files edited this session now.' })
+    await $.command.register({ name: 'verinoda-auto', description: 'Code questions: nudge (start with Verinoda analyze), search (attach results) or off.' })
+    await $.command.register({ name: 'verinoda-guard', description: 'Review each commit with Verinoda afterwards: on, off, or toggle.' })
+    // not plain `verinoda`: the Verinoda agent skill of that name takes `/verinoda` first
+    await $.command.register({ name: 'verinoda-panel', description: 'Open the Verinoda pane: index state, settings, last context and review.' })
+    publish($)
+    background(checkGraph($))
+    return next(e)
+  })
+
+  on('tool.call', { tool: EDIT_TOOLS }, async ($, e, next) => {
+    const ran = await next(e)
+    if (live.root === undefined || ran.deny !== undefined || ran.isError === true) return ran
+
+    const path = e.tool === 'NotebookEdit' ? e.notebook_path : e.tool === 'Edit' || e.tool === 'Write' ? e.file_path : undefined
+    const file = path === undefined ? '' : norm(path)
+    if (file.startsWith(`${norm(live.root)}/`) && !file.includes('/.verinoda/')) {
+      live.pending.add(file)
+      publish($)
+    }
+    return ran
+  })
+
+  // After a command that moved the project's HEAD (a commit, an amend, an alias of either), review what it changed;
+  // HEAD is read before and after, so a git command that made no commit there is never reviewed.
+  on('tool.call', { tool: SHELL_TOOLS }, async ($, e, next) => {
+    const root = live.root
+    if (root === undefined || !GIT_WORD.test(e.command) || !(await read($, guard))) return next(e)
+    const before = await gitHead($, root)
+    const ran = await next(e)
+    const after = await gitHead($, root)
+    if (ran.deny === undefined && before !== undefined && after !== undefined && after !== before) background(reviewCommit($, after))
+    return ran
+  })
+
+  // A code question typed in the project gets the nudge (or, in search mode, Verinoda's results) as context.
+  on('prompt.submit', async ($, e, next) => {
+    const isUser = isPersonsPrompt(e.origin)
+    if (live.root === undefined || !isUser || !isInside(live.cwd, live.root) || !looksLikeCodeQuestion(e.text)) return next(e)
+    const mode = await read($, auto)
+    if (mode === 'off') return next(e)
+    let block: string | undefined
+    if (mode === 'nudge') {
+      const nudge = nudgeBlock(live.root, cfg.cli)
+      block = nudge
+      const at = await $.clock.now()
+      await update($, lastContext, () => ({ prompt: e.text.trim().slice(0, 80), mode, ok: true, chars: nudge.length, seconds: 0, note: '', at }))
+    } else {
+      block = await retrieve($, e.text)
+    }
+    return next(block === undefined ? e : { ...e, context: [...(e.context ?? []), block] })
+  })
+
+  // One re-index per turn, not per edit; left running so the turn ends at once.
+  on('turn.complete', ($, e, next) => {
+    if (e.agentId === undefined && live.pending.size > 0 && !live.isRunning) background(reindex($))
+    return next(e)
+  })
+
+  on('command.run', { command: 'verinoda-update' }, async $ => ({ text: (await reindex($)).text }))
+
+  on('command.run', { command: 'verinoda-auto' }, async ($, e) => {
+    const mode = modeCommand(e.args, await read($, auto))
+    if (mode === undefined) return { text: 'usage: /verinoda-auto [nudge|search|off] (no argument toggles nudge/off)' }
+    await setAuto($, mode)
+    const where = mode !== 'off' && live.root !== undefined && !isInside(live.cwd, live.root) ? ` (only for sessions started in ${live.root})` : ''
+    return { text: `auto-context: ${mode}${where}` }
+  })
+
+  on('command.run', { command: 'verinoda-guard' }, async ($, e) => {
+    const value = settingCommand(e.args, await read($, guard))
+    if (value === undefined) return { text: 'usage: /verinoda-guard [on|off]' }
+    await setGuard($, value)
+    return { text: `review after commits ${value ? 'on' : 'off'}` }
+  })
+
+  on('command.run', { command: 'verinoda-panel' }, async $ => {
+    await $.ui.open({ id: PANE, title: 'Verinoda', focus: true })
+    return { text: 'Verinoda pane opened.' }
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const s = await read($, idx)
+    const said = await read($, notice)
+    const mode = await read($, auto)
+    const isGuard = await read($, guard)
+    const ctx = await read($, lastContext)
+    const rev = await read($, lastReview)
+    const sha = await read($, reviewing)
+    const isExpanded = await read($, expanded)
+
+    const columns = Math.max(20, e.props.bodyColumns ?? 48)
+    const isInline = e.props.placement === 'inline'
+    const bodyRows = e.props.scroll?.bodyRows ?? 0
+    const tone = (t: Tone) => TONE_COLOR[t]
+    let used = 0 // rows the content takes, counted while the tree is built, to know what is left for the mascot
+    const count = (text: string) => { used += rowsOf(text, columns) }
+
+    // 1 · the index
+    const ix = describeIndex(s)
+    const action = ix.action
+    const indexBlock = (
+      <Box key="index" flexDirection="column">
+        <Text bold color={tone(ix.tone)} wrap="wrap">{ix.head}</Text>
+        {!isInline && ix.details.map((d, i) => <Text key={`d${i}`} dimColor wrap="truncate">{`  ${d}`}</Text>)}
+        {action !== null && (
+          <Button key="update" label={ACTION_LABEL[action]} hotkey="u" variant={action === 'recheck' ? 'secondary' : 'primary'}
+            onPress={() => background(action === 'recheck' ? recheckFromPane($) : updateFromPane($))} />
+        )}
+        {said !== null && (
+          <Text key="notice" color={said.tone === 'err' ? 'red' : said.tone === 'warn' ? 'yellow' : undefined}
+            dimColor={said.tone === 'ok'} wrap="truncate">{`  ${said.text}`}</Text>
+        )}
+      </Box>
+    )
+    count(ix.head)
+    if (!isInline) used += ix.details.length
+    if (action !== null) used += 1
+    if (said !== null) used += 1
+
+    if (s.kind === 'noindex') return <Box flexDirection="column">{indexBlock}</Box>
+
+    // 2 · the last commit
+    const rv = describeReview(rev, sha)
+    const showReview = rv !== null || isGuard
+    const summary = rev !== null && rev.ok && rev.findings > 0 && sha === null ? rev.summary : ''
+    const clamp = columns * 2 - 3
+    const isCut = summary.length > clamp
+    const shown = isExpanded || !isCut ? summary : `${summary.slice(0, clamp)}…`
+    const emptyReview = 'Henüz commit incelenmedi'
+    const reviewBlock = !showReview ? null : (
+      <Box key="review" flexDirection="column">
+        {!isInline && <Text bold>Son commit</Text>}
+        {rv === null
+          ? <Text dimColor wrap="truncate">{emptyReview}</Text>
+          : <Text bold={rv.tone === 'err'} color={tone(rv.tone)} wrap="wrap">{isInline ? `Son commit: ${rv.head}` : rv.head}</Text>}
+        {!isInline && rv !== null && rv.meta !== '' && <Text dimColor wrap="truncate">{`  ${rv.meta}`}</Text>}
+        {!isInline && shown !== '' && <Text wrap="wrap">{shown}</Text>}
+        {!isInline && isCut && (
+          <Button key="review-more" label={isExpanded ? 'Kısalt' : 'Ayrıntı'} hotkey="d" variant="secondary"
+            onPress={() => update($, expanded, x => !x)} />
+        )}
+      </Box>
+    )
+    if (reviewBlock !== null) {
+      if (!isInline) used += 2 // the title and the gap above it
+      count(rv === null ? emptyReview : rv.head)
+      if (!isInline && rv !== null && rv.meta !== '') used += 1
+      if (!isInline && shown !== '') count(shown)
+      if (!isInline && isCut) used += 1
+    }
+
+    // 3 · auto-context: all three modes in a fixed order, the selected one primary and marked
+    const outside = mode !== 'off' && live.root !== undefined && !isInside(live.cwd, live.root)
+    const last = mode === 'off' ? null : contextLine(ctx)
+    const isNarrow = columns < 36
+    const contextEl = (
+      <Box key="context" flexDirection="column">
+        {!isInline && <Text bold>Otomatik bağlam</Text>}
+        <Box flexDirection={isNarrow ? 'column' : 'row'} columnGap={1}>
+          {isInline && <Text>Bağlam</Text>}
+          {MODES.map((m, i) => (
+            <Button key={`auto-${m}`} label={`${m === mode ? '● ' : ''}${MODE_LABEL[m]}`} hotkey={String(i + 1)}
+              variant={m === mode ? 'primary' : 'secondary'} onPress={() => (m === mode ? undefined : setAuto($, m))} />
+          ))}
+        </Box>
+        {!isInline && (outside
+          ? <Text color="yellow" wrap="wrap">{OUTSIDE_HINT}</Text>
+          : <Text dimColor wrap="wrap">{MODE_HINT[mode]}</Text>)}
+        {!isInline && last !== null && (
+          <Text dimColor={last.tone === 'idle'} color={last.tone === 'warn' ? 'yellow' : undefined} wrap="truncate">{last.text}</Text>
+        )}
+      </Box>
+    )
+    if (!isInline) {
+      used += 2 // the title and the gap above it
+      used += isNarrow ? MODES.length : 1
+      count(outside ? OUTSIDE_HINT : MODE_HINT[mode])
+      if (last !== null) used += 1
+    }
+
+    // 4 · review after commits: the same two-option control; r always flips it
+    const guardEl = (
+      <Box key="guard" flexDirection="column">
+        <Box flexDirection={columns < 40 ? 'column' : 'row'} columnGap={1}>
+          <Text bold={!isInline}>{isInline ? 'İnceleme' : 'Commit incelemesi'}</Text>
+          <Button key="guard-on" label={isGuard ? '● Açık' : 'Açık'} hotkey={isGuard ? undefined : 'r'}
+            variant={isGuard ? 'primary' : 'secondary'} onPress={() => (isGuard ? undefined : setGuard($, true))} />
+          <Button key="guard-off" label={isGuard ? 'Kapalı' : '● Kapalı'} hotkey={isGuard ? 'r' : undefined}
+            variant={isGuard ? 'secondary' : 'primary'} onPress={() => (isGuard ? setGuard($, false) : undefined)} />
+        </Box>
+        {!isInline && <Text dimColor wrap="wrap">{GUARD_HINT}</Text>}
+      </Box>
+    )
+    if (!isInline) {
+      used += 2 + (columns < 40 ? 2 : 0) // the row (stacked when narrow) and the gap above it
+      count(GUARD_HINT)
+    }
+
+    if (isInline) {
+      return (
+        <Box flexDirection="column">
+          {indexBlock}
+          {reviewBlock}
+          <Box flexDirection="row" columnGap={2} flexWrap="wrap">{contextEl}{guardEl}</Box>
+        </Box>
+      )
+    }
+
+    // 5 · footer: only the keys that exist in this drawing
+    const keys = [action !== null ? 'u güncelle' : '', '1-3 bağlam', 'r inceleme', isCut ? 'd ayrıntı' : ''].filter(Boolean)
+    const footer = e.props.isFocused ? keys.join(' · ') : 'Kısayollar için ctrl+x tab'
+    used += 2 // the footer and the gap above it
+
+    // 6 · the mascot, only in the room left over: never cropped, never pushing content
+    const spare = bodyRows - used
+    const caption = mascotCaption(s, rev, sha)
+    const showMascot = columns >= 24 && !isExpanded && spare >= MASCOT_HEIGHT + 3
+    const mascotProps: MascotProps = {
+      mood: MOOD[caption.tone], caption: caption.text, captionColor: tone(caption.tone), captionDim: caption.tone === 'idle',
+    }
+    const { Client } = $.ui.resolve(e) as { Client?: (props: Record<string, unknown>) => JSX.Element }
+    const mascot = !showMascot ? null : (
+      <Box key="mascot" flexDirection="column" alignItems="center" marginTop={Math.max(0, spare - MASCOT_HEIGHT - 3)}>
+        {Client !== undefined && cfg.motion && ANIMATED_SURFACES.includes(e.surface)
+          ? <Client key="mascot-client" module="./mascot.tsx" props={mascotProps} width={MASCOT_WIDTH} height={MASCOT_HEIGHT + 1} />
+          : (
+            <Box flexDirection="column" width={MASCOT_WIDTH}>
+              {frameRows(0, mascotProps.mood).map((row, i) => (
+                <Text key={`m${i}`} wrap="truncate">
+                  {row.map(([text, c], j) => (c === null ? text : <Text key={`m${i}-${j}`} color={c}>{text}</Text>))}
+                </Text>
+              ))}
+              <Text color={mascotProps.captionColor} dimColor={mascotProps.captionDim} wrap="truncate">{caption.text}</Text>
+            </Box>
+          )}
+      </Box>
+    )
+
+    return (
+      <Box flexDirection="column" rowGap={1}>
+        {indexBlock}
+        {reviewBlock}
+        {contextEl}
+        {guardEl}
+        {mascot}
+        <Text dimColor wrap="truncate">{footer}</Text>
+      </Box>
+    )
+  })
+}

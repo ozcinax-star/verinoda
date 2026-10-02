@@ -1,0 +1,49 @@
+# verinoda-live: a Claude Code mod for Verinoda
+
+A function-hooks plugin ("mod") for Claude Code that keeps a Verinoda index fresh while Claude edits, helps the agent
+use it, and reviews commits. It finds the project (the nearest folder at or above the session's with a `.verinoda` index; never a home
+folder or a drive root unless the settings name it) and the CLI (the project's `.venv` one, else `verinoda` on
+PATH) by itself; `/config` overrides both (`root`, `cli`, `python`) and turns the mascot's motion off (`motion`).
+
+## What it does
+
+| feature | how | default |
+|---|---|---|
+| Re-index after edits | Edit / Write / NotebookEdit inside `ROOT` mark the file; at the end of the main loop's turn one `verinoda update --fast` runs (subagent turns do not start one). A failed update keeps its files for `/verinoda-update`. | on |
+| Graph state | After `--fast` the graph is rebuilt in the background; the status line says `text fresh · graph pending…` until no build holds the lock and no file changed since the latest snapshot, then `fresh ✓`. A graph left behind with no build coming (files changed outside Claude's edit tools) is named, and `/verinoda-update` takes it in. Edits made while the build runs wait for it and are indexed when it ends. | on |
+| Auto-context (`/verinoda-auto nudge\|search\|off`) | On a code question the person types in a session started inside `ROOT`: **nudge** attaches an instruction to start with `verinoda analyze` (nothing runs before the prompt); **search** runs `verinoda query` on the prompt (filter syntax taken apart) and attaches its passages. | off |
+| Review after commits (`/verinoda-guard on\|off`) | When a Bash or PowerShell command moved the project's `HEAD` (read before and after), `verinoda review --base HEAD~1` runs in the background and a toast gives its risk and findings; a commit made while one runs is reviewed after it. | off |
+| `/verinoda-panel` pane | In Turkish (technical nouns kept): the index state as glyph + words + colour with the one action that applies (`u`), the last commit review with its risk band and a 2-line summary (`d` for the rest), auto-context as a fixed three-way control (`1`-`3`) and commit review as a two-way control (`r`), and a purple Claude mascot with glasses in the room left over, animated like Claude Code's own (it blinks and shuffles its feet; while Verinoda works it reads, a glint sweeping its lenses; `hooks/mascot.tsx`, drawn by the surface as a `Client`, so frames repaint only its region; still on surfaces without `Client`) (hidden inline, below 24 columns or when the content needs the rows). | - |
+
+## Why nudge and not search
+
+Measured on 57 questions with a model in the loop (`benchmarks/results/agent-compare-2026-10-02/`):
+
+- offered Verinoda, the agent called it in 6 of 57 sessions (adoption, not accuracy, is the problem);
+- told to start with `analyze` (what **nudge** says), it found the same facts as searching by hand at 16 % fewer
+  input tokens, 22 % fewer output tokens and 29 % fewer tool calls (intervals exclude the noise floor);
+- handed `query` results up front (what **search** does), it used fewer input tokens but found 5-6 facts fewer:
+  ranked leads anchor it.
+
+Both stay off until the person turns one on; the measured recommendation is `/verinoda-auto nudge`.
+
+## Developing it
+
+The live copy Claude Code hot-reloads is the session's dev-mods folder; this folder is its versioned source. Load it
+from here in a terminal with `claude --plugin-dir <this repository>/claude-mods/verinoda-live`.
+
+- `claude plugin validate <folder>`: what the module hooks and calls, and anything the engine would refuse.
+- `claude plugin test <folder>`: `hooks/register.test.ts` (re-index and graph watcher) and `hooks/features.test.ts`
+  (question heuristic, prompt origins, the three modes, commit review, robustness, the pane on terminal and desktop).
+- Type-check: after the engine has loaded the mod once it writes `.claude-plugin/types/` and a `tsconfig.json`;
+  then `tsc -p <folder>`. Both are generated and not kept here.
+
+The 2026-10-02 version was reviewed by three independent lenses (API, state and failure paths, Windows and real-use
+edge cases) with two skeptics per finding; the 13 upheld findings are fixed and covered by tests.
+
+Note: the pane's command is `/verinoda-panel`, not `/verinoda`: the Verinoda agent skill (`~/.claude/skills/verinoda`,
+installed by `verinoda install`) owns `/verinoda`, and a skill of that name takes the slash before a plugin command.
+
+The pane was redesigned from a user-eyes evaluation (a first-time Turkish speaker, an all-day user, a terminal and
+accessibility specialist), two mascot designs and one synthesized spec; the tests mount it on the terminal and
+desktop surfaces, check every state's words, the hotkeys shown, and when the mascot appears.
