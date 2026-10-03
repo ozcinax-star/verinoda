@@ -17105,6 +17105,41 @@ Oracle fuzz (`tools/incremental_fuzz.py`, each update compared with a fresh copy
   unchanged. Run together with `tests/test_incremental.py`: 66 passed (17 in
   test_incremental.py, 7 of them new this round; 49 in the other four). The whole suite was not run.
 
+## 147. `locate`, `coupled` and the locate daemon (D174, 2026-10-03)
+
+### 147.1 Why
+
+Two agent studies (`benchmarks/results/agent-compare-big-2026-10-02/`, `agent-compare-sel4-2026-10-02/`) found an
+agent alone at the ceiling on single-file tasks and losing nearly all its recall on multi-file ones: what it misses
+are the siblings of the files it found (the header of a source, the same function in another architecture, the
+file edited in the same commits). An offline oracle (`benchmarks/results/signal-oracle-2026-10-03/`) asked which
+signal would have listed the missed files: the git history of the named file, its imports and includes, its
+same-stem partner, its same-name twins, and retrieval on the report's text; together a list of 13-15 files covered
+15 of 28 missed files on seL4 and 12 of 15 on Home Assistant. Verinoda's own co-change reading (the last 1,000
+commits of HEAD) covered 2 and 0: on a busy repository the files of one task are in a handful of those commits.
+
+### 147.2 Decisions
+
+- `locate()` is the retrieval the other commands already have (`likely`, 2-3 files) followed by `coupled()` on the
+  likely files and on any `--anchor` files; `coupled()` reads the history path-limited to each anchor (its own last
+  300 commits, the whole file lists of exactly those commits, commits over 30 files left out, a file counts at 2
+  shared commits and 15 % of the anchor's), then imports/includes, pairs and twins (`verinoda/locate.py`).
+- The answer is short on purpose: plain text of at most 1,800 characters by default, files dropped from the end
+  to fit; `--json` adds the same text as `text`.
+- A daemon (`verinoda/locate_daemon.py`) because the graph takes 3 s (seL4) to 30 s (Home Assistant) to load and a
+  hook that adds the answer to a prompt, a file read or a search cannot wait that long; loopback only, a token per
+  daemon, one request at a time, ends when idle.
+
+### 147.3 Not done
+
+No ranking weights were fitted: the order is the signals' strength (cochange, neighbour, pair, twin). `locate` is
+not in `CORE_DIRECT`: listing it would add standing context to every request.
+
+### 147.4 Tests
+
+`tests/test_locate.py` (signals on temporary git repositories, the command line, the worker) and
+`tests/test_locate_daemon.py` (routes, token, idle end, a real detached start and stop).
+
 ## Sources
 
 - **Retrieval:**

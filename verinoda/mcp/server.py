@@ -76,6 +76,8 @@ from verinoda.paths import ATLAS_DIRNAME, atlas_dir, graph_path, receiver_calls_
 
 TOOL_NAMES: tuple[str, ...] = (
     "project_query",
+    "locate",
+    "coupled",
     "node_inspect",
     "relation_trace",
     "tq",
@@ -569,6 +571,7 @@ class AtlasTools:
         self._span_noted = 0                              # entries of g._spans already noted
         self._lex_cache: tuple[Any, Any] | None = None
         self._query_memo: OrderedDict[tuple, tuple[tuple, Any]] = OrderedDict()
+        self._locate_cache: dict = {}   # what `coupled` read from git at one commit (verinoda.locate)
         # the passages project_query printed in this session: file -> (its stat then, [(a, b), ...])
         self._session_seen: dict[str, tuple[tuple | None, list[tuple[int, int]]]] = {}
         self._background: subprocess.Popen | None = None  # a `verinoda update` started after a slow analyze
@@ -872,6 +875,39 @@ class AtlasTools:
                 self._note_returned(returned)
             return {"format": "text", "question": q, "text": text}
         return self._run("project_query", go, need="graph")
+
+    def locate(self, text: str, anchors: list[str] | None = None, max_files: int = 8, max_chars: int = 1800,
+               format: str = "text") -> dict:
+        def go():
+            from verinoda import locate as loc
+
+            q = _text(text, "text")
+            n = _clamp(max_files, 1, 20, "max_files")
+            chars = _clamp(max_chars, 400, 6000, "max_chars")
+            fmt = _choice(format, QUERY_FORMATS, "format")
+            g = self._graph()
+            res = loc.locate(lambda: g, self.repo, q, anchors=_str_list(anchors, "anchors"), max_files=n,
+                             max_chars=chars, cache=self._locate_cache)
+            if fmt == "json":
+                return _jsonable(res)
+            return {"format": "text", "question": q, "text": loc.render(res, chars)}
+        return self._run("locate", go, need="graph")
+
+    def coupled(self, files: list[str], max_files: int = 8, format: str = "text") -> dict:
+        def go():
+            from verinoda import locate as loc
+
+            names = _str_list(files, "files")
+            if not names:
+                raise ToolFailure("invalid_argument", "files must name at least one file",
+                                  "pass repository-relative paths, e.g. ['src/kernel/boot.c']")
+            n = _clamp(max_files, 1, 20, "max_files")
+            fmt = _choice(format, QUERY_FORMATS, "format")
+            res = loc.coupled(self.repo, names, max_files=n, cache=self._locate_cache)
+            if fmt == "json":
+                return _jsonable(res)
+            return {"format": "text", "text": loc.render(res, 1800, kind="coupled")}
+        return self._run("coupled", go, need="none")
 
     def _stat_key(self, rel: str) -> tuple | None:
         try:
@@ -2143,7 +2179,7 @@ def _error_hint(exc: BaseException, repo: Path) -> str:
 # re-index; every other family (question plans, references, feedback, decisions, the debug ledger,
 # experiments, runtime tracing, claim re-checks) is served with `--profile full` (or config mcp.profile)
 CORE_TOOLS: tuple[str, ...] = (
-    "project_query", "analyze", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
+    "project_query", "locate", "coupled", "analyze", "node_inspect", "relation_trace", "map_view", "claim_inspect", "claim_list",
     "evidence_inspect", "index_update", "code_check", "decision_check", "dependency_ask", "change_review",
     "history_search", "tq",
 )
@@ -2168,6 +2204,8 @@ GATEWAY_CATALOG: dict[str, str] = {
     "dependency_ask": "dependency_ask {source, target}: may source import it",
     "history_search": "history_search {text|symbol|message|base, ...}: when text came/went, commits, compare",
     "tq": "tq {questions}: typed questions (calls, reaches, callers, which...), many per call",
+    "locate": "locate {text, anchors?}: files an issue touches and what changes with them; "
+              "coupled {files}: what changes with files",
     # behind run_tool only in a server over several projects (the single-project core menu has no room for them)
     "list_projects": "list_projects {}: the projects served",
     "index_status": "index_status {}: a project's index state and stale files",
@@ -2192,6 +2230,8 @@ References the user gives (links, repos, packages, versions, commits, PR/issue n
 reference_resolve first; report each as <name> @ <pin> (basis: <basis>) with its mismatches; never substitute
 the default branch for a named version; ask only questions_for_user. reference_research(resolution_id,
 reference_id) inspects one at its pin; reference_compare compares a mechanism.
+- locate / coupled: the files an issue text touches and the files that change together with given files
+  (git history, imports, partners, twins); leads, not claims.
 - plan_audit: re-judge an analysis later. lexicon_show: the code words the repository ties to a word.
 - run_when: when a method runs - the event or caller that starts it and the conditions on the way (not evaluated).
 - tq: several closed facts (calls, reaches, callers, exists...) in one call; a no is an absence, ? names next.
@@ -2287,7 +2327,8 @@ def gateway_description(behind: list[str]) -> str:
     """run_tool's description: the tools behind it, with their arguments."""
     parts, said = [], set()
     for n in behind:
-        key = "claim_list" if n in ("claim_list", "claim_inspect", "evidence_inspect") else n
+        key = ("claim_list" if n in ("claim_list", "claim_inspect", "evidence_inspect")
+               else "locate" if n in ("locate", "coupled") else n)
         if key in GATEWAY_CATALOG and key not in said:
             said.add(key)
             parts.append(GATEWAY_CATALOG[key])
@@ -2297,6 +2338,14 @@ def gateway_description(behind: list[str]) -> str:
 INSTRUCTIONS = instructions("full")
 
 DESCRIPTIONS: dict[str, str] = {
+    "locate": (
+        "The files an issue or bug text probably touches: the likely ones (ranked as project_query ranks) and the "
+        "ones that change together with them (the git history of each file, imports, .c/.h partners, same-name "
+        "twins). Plain text, at most max_chars; format='json' for programs. Leads, not verified claims."),
+    "coupled": (
+        "The files that usually change together with the given files, without loading the graph: the git history "
+        "of each file (its own commits), relative imports and includes, .c/.h partners, same-name twins. "
+        "Leads, not verified claims; the result says what history could not be read."),
     "project_query": (
         "Where is X / what handles Y: ranked code locations as plain text (path:lines headers, call outlines, "
         "numbered source lines; up to 6000 chars, truncation stated). format='json' for programs. Hits are "
@@ -2506,7 +2555,7 @@ DESCRIPTIONS: dict[str, str] = {
         "processes or change global state (allow_side_effects is the user's decision). Never edits code."),
 }
 
-_READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
+_READ_ONLY = {"project_query", "locate", "coupled", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
               "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
               "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq",
               "list_projects", "index_status", "group_view"}
@@ -2722,6 +2771,25 @@ def build_server(repo: Path | str | None, tools: AtlasTools | None = None, *, pr
         = "text",
     ) -> dict[str, Any]:
         return emit(t.project_query(question, max_items=max_items, format=format))
+
+    @register("locate")
+    def locate(
+        text: Annotated[str, Field(description="The issue, bug report or question text.")],
+        anchors: Annotated[list[str] | None, Field(description="Files already known to matter (repository-"
+                                                               "relative): what changes with them is listed too.")]
+        = None,
+        max_files: Annotated[int, Field(description="Files listed at most (1-20).")] = 8,
+        format: Annotated[Literal["text", "json"], Field(description="'text' (default) or 'json'.")] = "text",
+    ) -> dict[str, Any]:
+        return emit(t.locate(text, anchors=anchors, max_files=max_files, format=format))
+
+    @register("coupled")
+    def coupled(
+        files: Annotated[list[str], Field(description="Repository-relative files (1-12).")],
+        max_files: Annotated[int, Field(description="Files listed at most (1-20).")] = 8,
+        format: Annotated[Literal["text", "json"], Field(description="'text' (default) or 'json'.")] = "text",
+    ) -> dict[str, Any]:
+        return emit(t.coupled(files, max_files=max_files, format=format))
 
     @register("node_inspect")
     def node_inspect(

@@ -1352,6 +1352,68 @@ def cmd_query(args) -> int:
     return 0
 
 
+def _files_text_budget(args) -> int:
+    return max(200, int(args.max_chars)) if getattr(args, "max_chars", None) else 1800
+
+
+def cmd_locate(args) -> int:
+    """The files an issue text probably touches: likely (retrieval) and coupled (change together). ``--serve``: a
+    worker answering JSON requests, one per line, with the graph loaded once."""
+    from verinoda import locate
+
+    repo = _repo(args)
+    if args.daemon or args.serve_http:
+        from verinoda import locate_daemon
+
+        idle = locate_daemon.IDLE_TIMEOUT if args.idle_timeout is None else args.idle_timeout
+        if args.serve_http:
+            _need_graph(repo)
+            return locate_daemon.run(repo, idle_timeout=idle)
+        if args.daemon == "start":
+            _need_graph(repo)
+        res = (locate_daemon.start(repo, idle_timeout=idle) if args.daemon == "start"
+               else locate_daemon.stop(repo) if args.daemon == "stop" else locate_daemon.status(repo))
+        _write(_dump(res) if args.json else locate_daemon.render(res))
+        return 0 if args.daemon != "start" or res.get("running") else 1
+    if not args.serve and not args.text:
+        raise SystemExit("error: locate needs the issue text (or --serve or --daemon)")
+    _need_graph(repo)
+    if args.serve:
+        for stream in (sys.stdin, sys.stdout):
+            try:
+                stream.reconfigure(encoding="utf-8", newline="\n")  # type: ignore[attr-defined]
+            except (AttributeError, ValueError):
+                pass
+        return locate.serve(repo)
+    budget = _files_text_budget(args)
+    try:
+        res = locate.locate(locate.GraphKeeper(repo), repo, args.text, anchors=args.anchor or (),
+                            max_files=args.max_files, max_chars=budget, history=not args.no_history)
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from None
+    if args.json:
+        _write(_dump({**res, "text": locate.render(res, budget)}))  # `text`: what a model reads, as without --json
+    else:
+        _write(locate.render(res, budget))
+    return 0
+
+
+def cmd_coupled(args) -> int:
+    """The files that change together with the given files (git history path-limited to each file, imports,
+    includes, same-stem partners, same-name twins); the graph is not loaded."""
+    from verinoda import locate
+
+    repo = _repo(args)
+    if not repo.is_dir():
+        raise SystemExit(f"error: {repo} is not a directory")
+    res = locate.coupled(repo, args.files, max_files=args.max_files, history=not args.no_history)
+    if args.json:
+        _write(_dump({**res, "text": locate.render(res, 1800, kind="coupled")}))
+    else:
+        _write(locate.render(res, 1800, kind="coupled"))
+    return 0
+
+
 def cmd_diagram(args) -> int:
     from verinoda import diagrams, freshness, index
 
@@ -5005,6 +5067,35 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-chars", type=int, default=None,
                     help="character budget (default 6000; with query.shape_budget on, 4800 for a single-clause "
                          "question)")
+    sp = add("locate", cmd_locate, "the files an issue text probably touches: the likely ones (retrieval) and the ones "
+                                   "that change together with them (git history of each file, imports, includes, "
+                                   "same-stem partners, same-name twins); --serve: a worker for many questions")
+    sp.add_argument("text", nargs="?", help="the issue or question text (not needed with --serve)")
+    sp.add_argument("--max-files", type=int, default=8, help="files listed at most (default 8)")
+    sp.add_argument("--max-chars", type=int, default=None, help="character budget of the text (default 1800)")
+    sp.add_argument("--anchor", action="append", metavar="FILE",
+                    help="a file already known to matter; files that change together with it are listed too "
+                         "(repeatable)")
+    sp.add_argument("--no-history", action="store_true", help="do not read the git history")
+    sp.add_argument("--serve", action="store_true",
+                    help="a worker: load the graph once, print {\"ready\": true, \"seconds\": s}, then read one JSON "
+                         "request per line from stdin ({\"id\": 1, \"op\": \"locate\", \"text\": \"...\", \"anchors\": [], "
+                         "\"max_chars\": 1800} or {\"id\": 2, \"op\": \"coupled\", \"files\": [\"a.c\"]}) and answer one JSON "
+                         "line each ({\"id\", \"ok\", \"result\" | \"error\"}); it ends at end of input")
+    sp.add_argument("--daemon", choices=["start", "stop", "status"],
+                    help="a daemon for this repository that keeps the graph loaded: `start` (in the background, waits "
+                         "until it listens), `stop`, `status`; --json prints {\"running\", \"url\", \"token\", "
+                         "\"pid\"}; programs POST to <url>/locate and /coupled with the header X-Verinoda-Token "
+                         "(docs: verinoda/locate_daemon.py); it ends by itself after --idle-timeout seconds idle")
+    sp.add_argument("--idle-timeout", type=float, default=None, metavar="SECONDS",
+                    help="with --daemon start: seconds without a request after which the daemon ends (default 600)")
+    sp.add_argument("--serve-http", action="store_true", help=argparse.SUPPRESS)  # what `--daemon start` runs
+    sp = add("coupled", cmd_coupled, "the files that change together with the given files, without loading the graph "
+                                     "(the git history of each file, imports, includes, same-stem partners, "
+                                     "same-name twins)")
+    sp.add_argument("files", nargs="+", metavar="FILE", help="repository-relative paths")
+    sp.add_argument("--max-files", type=int, default=8, help="files listed at most (default 8)")
+    sp.add_argument("--no-history", action="store_true", help="do not read the git history")
     sp = add("trace", cmd_trace, "directed paths between two symbols/files with edge locations")
     sp.add_argument("source")
     sp.add_argument("target")

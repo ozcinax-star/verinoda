@@ -46,6 +46,8 @@ GOLD_DISCOUNT_TESTS = ["tests/test_pricing.py::test_compute_total",
 
 EXPECTED_PARAMS = {
     "project_query": ({"question", "max_items", "format"}, {"question"}),
+    "locate": ({"text", "anchors", "max_files", "format"}, {"text"}),
+    "coupled": ({"files", "max_files", "format"}, {"files"}),
     "grep_context": ({"pattern", "path", "command"}, set()),
     "read_context": ({"file_path"}, {"file_path"}),
     "node_inspect": ({"name"}, {"name"}),
@@ -101,7 +103,7 @@ EXPECTED_PARAMS = {
     "change_probe": ({"symbol", "base", "no_base", "changed", "inputs", "seed", "properties", "examples", "scaling",
                       "allow_side_effects", "emit_test"}, set()),
 }
-READ_ONLY = {"project_query", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
+READ_ONLY = {"project_query", "locate", "coupled", "node_inspect", "relation_trace", "run_when", "history_search", "map_view",
              "claim_inspect", "claim_list", "evidence_inspect", "question_plan_draft", "lexicon_show", "resolve_call",
              "code_check", "api_members", "debug_status", "grep_context", "dependency_ask", "read_context", "tq",
              "list_projects", "index_status", "group_view"}
@@ -238,6 +240,8 @@ def _all_calls(t: AtlasTools) -> dict:
     """One plausible call per tool (used for the not-initialised checks)."""
     return {
         "project_query": lambda: t.project_query("where is the order saved?"),
+        "locate": lambda: t.locate("the order is not saved"),
+        "coupled": lambda: t.coupled(["app.py"]),
         "node_inspect": lambda: t.node_inspect("place_order"),
         "tq": lambda: t.tq(["exists place_order"]),
         "relation_trace": lambda: t.relation_trace("a", "b"),
@@ -346,7 +350,7 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
                 for t in anyio.run(srv.list_tools)]
 
     core = listing(mcp_server.build_server(repo))
-    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 15
+    assert sorted(t["name"] for t in core) == sorted([*CORE_DIRECT, GATEWAY]) and len(CORE_TOOLS) == 17
     assert set(CORE_TOOLS) <= set(TOOL_NAMES) and GATEWAY not in TOOL_NAMES
     gate = next(t for t in core if t["name"] == GATEWAY)
     behind = set(gate["inputSchema"]["properties"]["name"]["enum"])
@@ -361,12 +365,16 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     wire = json.dumps(core, separators=(",", ":"))
     # 50,029 chars for the 33 tools before (2026-09-25); 11,999 for 12 on 2026-09-26; 8,905 for 11 (D60);
     # D82's deps argument and D84's dead view kept under the limit by shorter wording; tq's catalog line paid for by
-    # shorter history_search and run_tool.arguments texts: 4,449 -> 4,426 (the records menu 4,598 -> 4,575)
-    assert len(wire) < 4500
+    # shorter history_search and run_tool.arguments texts: 4,449 -> 4,426 (the records menu 4,598 -> 4,575);
+    # locate and coupled (one catalog line for both) take it to 4,563 (the records menu to about 4,712): the two
+    # limits are raised on purpose, by 100 and 150
+    assert len(wire) < 4600
     assert '"title"' not in wire and "outputSchema" not in wire
     text = instructions("core")
-    # tq is named in run_tool's catalog only: a sentence for it in the instructions waits for a measured gain
-    assert all(n in text for n in CORE_TOOLS if n != "tq") and "tq" not in text
+    # tq, locate and coupled are named in run_tool's catalog only: a sentence for them in the instructions waits
+    # for a measured gain
+    assert all(n in text for n in CORE_TOOLS if n not in ("tq", "locate", "coupled")) and "tq" not in text
+    assert "locate" not in text and "coupled" not in text
     assert "--profile full" in text and "question_plan_draft" not in text
     assert len(text) < len(instructions("full")) and len(text) < 1400
     assert "decision_check" not in instructions("core", decisions=False)
@@ -379,7 +387,7 @@ def test_the_default_profile_serves_the_core_tools_in_a_small_menu(repo, tmp_pat
     gate = next(t for t in with_records if t["name"] == GATEWAY)
     assert {"decision_check", "dependency_ask"} <= set(gate["inputSchema"]["properties"]["name"]["enum"])
     # decision_check's line already took this menu to 4,598 characters; dependency_ask's line did not add to it
-    assert len(json.dumps(with_records, separators=(",", ":"))) < 4600
+    assert len(json.dumps(with_records, separators=(",", ":"))) < 4750
     assert "dependency_ask {source, target}" in gate["description"]
     full = mcp_server.build_server(repo, profile="full")
     assert full.verinoda_profile == "full" and len(listing(full)) == len(TOOL_NAMES)
@@ -1420,6 +1428,10 @@ def test_unscanned_repo_returns_structured_error_for_every_tool(tmp_path):
             res = fn()
             row = res["projects"][0] if name == "list_projects" else res
             assert "error" not in res and row["state"] == "not_scanned" and not row["graph_loaded"], res
+            continue
+        if name == "coupled":  # reads files and git, never the graph: it answers in a folder nobody scanned
+            res = fn()
+            assert "error" not in res and res["text"].startswith("verinoda coupled:"), res
             continue
         if name == "group_view":  # about a group of projects, not this one: no such group here
             res = fn()

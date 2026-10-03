@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D173)
+## Upgrading from 0.4.0 (D137-D174)
 
 ### D137: Trigram regex index
 
@@ -297,8 +297,8 @@ accepts `lang:cobol`, `lang:erlang`, `lang:r`, `lang:solidity` and `lang:vbnet`.
 Nothing to migrate; no member index changes and nothing is written into a member. New commands `verinoda group
 create NAME A B ... [--links-dir DIR]`, `group list|show|remove|link`, `group trace NAME SOURCE TARGET` and
 `group query NAME QUESTION`. The user config folder gains `groups.json` and `groups/<name>.links.json` (or the
-links file in `--links-dir`). One new MCP tool, `group_view` (show, trace, query), in the full profile only:
-44 tools; the core menu is unchanged (4,426 characters on examples/orders_app). It answers only in a server that
+links file in `--links-dir`). One new MCP tool, `group_view` (show, trace, query), in the full profile only
+(the server then had forty-four tools); the core menu is unchanged (4,426 characters on examples/orders_app). It answers only in a server that
 serves every member of the group (`mcp serve --profile full --projects A,B`). `AtlasTools` gains
 `group_view()`, `ProjectHub` gains `group_view()`.
 
@@ -443,7 +443,7 @@ to a function a hook returns and the caller destructures (`const { logout } = us
 Nothing to migrate; no member index changes and nothing is written into a member. New commands `verinoda group
 create NAME A B ... [--links-dir DIR]`, `group list|show|remove|link`, `group trace NAME SOURCE TARGET` and
 `group query NAME QUESTION`. The user config folder gains `groups.json` and `groups/<name>.links.json` (or the
-links file in `--links-dir`). One new MCP tool, `group_view`, in the full profile only: 44 tools; the core menu is
+links file in `--links-dir`). One new MCP tool, `group_view`, in the full profile only (the server then had forty-four tools); the core menu is
 unchanged. `AtlasTools.group_view()` and `ProjectHub.group_view()` are new. No change to `tq.py`, `index.py` or
 `project_index/`, so `tests/test_tq_measured.py` needs no `benchmark tq-audit` rerun for this change.
 
@@ -486,6 +486,17 @@ Nothing changes by default. `VERINODA_INCREMENTAL=1` (or `"index": {"incremental
 next full build (a `scan`, or an `update` that needs one) writes the ledger under `.verinoda/index/incremental/`,
 and later updates say in `incremental` whether they patched and, if not, why. `tools/graph_equal.py` ignores
 `community_name` as it ignores `community`.
+
+### D174: `locate`, `coupled` and the locate daemon
+
+New commands `verinoda locate "<issue text>"` and `verinoda coupled FILE...` (`verinoda/locate.py`): the files a
+change touches besides the first one an agent finds. Two new MCP tools, `locate` and `coupled`, in the core profile
+behind `run_tool` (46 tools; the core menu grew from 4,426 to 4,563 characters on examples/orders_app). No schema
+change. `locate` needs the graph (`verinoda update`); `coupled` does not. `locate --daemon start|stop|status` runs a
+per-repository background process (`verinoda/locate_daemon.py`) that keeps the graph loaded: it listens on
+127.0.0.1 only, asks for a random token kept in `.verinoda/locate-daemon.json` (with `.verinoda/locate-daemon.log`;
+both disposable), and ends by itself after 10 minutes without a request. `--json` carries the compact text a model
+reads as `text`.
 
 ## Upgrading from 0.3.2 (D60-D136)
 
