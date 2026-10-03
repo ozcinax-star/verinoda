@@ -455,3 +455,27 @@ describe('assist: /verinoda-assist', () => {
     expect(w.registered).toEqual(['locate', 'coupled'])
   })
 })
+
+describe('a scripted session takes its settings as given', () => {
+  const SCRIPTED = { cwd: ROOT, surface: 'terminal', isInteractive: false } as never
+
+  test('a stored choice is the person\'s at the keyboard: `claude -p` does not read it', { options: { assist: 'inject', auto: 'off' } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on, { auto: 'nudge', assist: 'off', guard: true })
+    const w = world(on)
+    await $.session.start(SCRIPTED)
+    const r = contextOf(await $.prompt.submit(ask(REPORT)))
+    expect(r.join('\n')).not.toContain('[Verinoda auto-context]') // the stored nudge is not in this session
+    expect(r[0]?.startsWith('[Verinoda locate]')).toBe(true) // the setting's assist (inject), not the stored off
+    expect(w.cli('locate').length).toBe(1)
+  })
+
+  test('an interactive session still lets the stored choice win over the setting', { options: { assist: 'inject' } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on, { assist: 'off' })
+    const w = world(on)
+    await $.session.start(START)
+    expect(contextOf(await $.prompt.submit(ask(REPORT)))).toEqual([])
+    expect(w.cli('locate').length).toBe(0)
+  })
+})

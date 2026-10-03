@@ -299,13 +299,18 @@ async function features($: EngineInterface): Promise<Features> {
 }
 
 // Auto-context and commit review start off, the check after edits on; what the person chose last is kept in the store.
-async function loadSettings($: EngineInterface): Promise<void> {
+// A scripted session (`claude -p`, the Agent SDK) has nobody at the keyboard, so what was chosen there is not read: it
+// takes the settings (`pluginConfigs`) as they are given. (The store is shared by every session that loads the mod and
+// rewritten by each at its end: a choice made once in a terminal would otherwise reach the arms of a study that never
+// asked for it, and did.)
+async function loadSettings($: EngineInterface, isInteractive: boolean): Promise<void> {
   // the setting (`userConfig.auto`) is where a session starts that has never been asked; a stored choice wins
-  const stored = await $.store.get('auto')
+  const storedChoice = (key: string) => (isInteractive ? $.store.get(key) : Promise.resolve(undefined))
+  const stored = await storedChoice('auto')
   const mode = stored === undefined ? cfg.auto : asMode(stored)
-  const isGuard = (await $.store.get('guard')) === true
-  const isCheck = (await $.store.get('check')) !== false
-  const storedAssist = await $.store.get('assist')
+  const isGuard = (await storedChoice('guard')) === true
+  const isCheck = (await storedChoice('check')) !== false
+  const storedAssist = await storedChoice('assist')
   await update($, auto, () => mode)
   await update($, guard, () => isGuard)
   await update($, check, () => isCheck)
@@ -859,7 +864,7 @@ export const register: Register = (on, options) => {
     cfg.assist = typeof options.assist === 'string' ? options.assist : 'off'
     live.root = await findRoot($, typeof options.root === 'string' ? options.root.trim() : '', live.cwd)
     if (live.root !== undefined) await resolveTools($, live.root, options)
-    await loadSettings($)
+    await loadSettings($, e.isInteractive !== false)
     await $.command.register({ name: 'verinoda-update', description: 'Re-index the files edited this session now.' })
     await $.command.register({ name: 'verinoda-assist', description: 'Where a change belongs: locate files, what changes together, a tool and the first search (off, inject, tool, full, strict).' })
     await $.command.register({ name: 'verinoda-auto', description: 'Code questions: nudge (start with Verinoda analyze), search (attach results) or off.' })

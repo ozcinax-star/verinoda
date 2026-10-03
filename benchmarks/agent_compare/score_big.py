@@ -154,13 +154,13 @@ def main_pooled(paths: list[str], tasks: list[dict], out: Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "scores.json").write_bytes((json.dumps(rep, indent=1) + "\n").encode("utf-8"))
     s = rep["pooled"]["summary"]
-    head = ("| arm | recall | solved | hit@1 | precision | tasks where the tool was used | turns | input tokens "
-            "| output tokens | cost USD |")
-    lines = [f"## the mean of {len(runs)} runs", "", head, "|---|---|---|---|---|---|---|---|---|---|"]
+    head = ("| arm | recall | solved | hit@1 | precision | tasks where the tool was used | tasks where the mod put something in "
+            "front of the model / called its tool | turns | input tokens | output tokens | cost USD | seconds |")
+    lines = [f"## the mean of {len(runs)} runs", "", head, "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for a, v in s.items():
         lines.append(f"| {a} | {v['recall']}/{v['tasks']} | {v['solved']:.1f} | {v['hit1']:.1f} | {v['precision']} | "
-                     f"{v['sessions_using_tool']}/{v['tasks']} | {v['turns']:.0f} | {v['input_tokens']:,.0f} | "
-                     f"{v['output_tokens']:,.0f} | {v['cost_usd']} |")
+                     f"{v['sessions_using_tool']}/{v['tasks']} | {v['sessions_assist_shown']} / {v['sessions_assist_called']} | "
+                     f"{v['turns']:.0f} | {v['input_tokens']:,.0f} | {v['output_tokens']:,.0f} | {v['cost_usd']} | {v['seconds']} |")
     lines += ["", "| decision (recall, summed over tasks, mean of the runs) | difference [95% CI] | W/T/L |", "|---|---|---|"]
     for k, v in rep["pooled"]["decisions"].items():
         lines.append(f"| {k} | {v['diff']:+.2f} [{v['ci95'][0]:+.2f} to {v['ci95'][1]:+.2f}] | "
