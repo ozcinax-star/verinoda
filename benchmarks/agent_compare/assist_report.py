@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from score_big import arms_of, cells, paired, pool
+from score_big import arms_of, cells, decisions_for, paired, pool, secondary_for
 
 STRATA = (("1 gold file", lambda n: n == 1), ("2 gold files", lambda n: n == 2), ("3 or more gold files", lambda n: n >= 3))
 
@@ -29,6 +29,29 @@ def by_gold_count(tasks: list[dict], runs: list[list[dict]]) -> dict[str, dict[s
         arms = {a for t in ids for a in pooled[t]}
         out[name] = {a: statistics.mean(pooled[t][a]["recall"] for t in ids if a in pooled[t]) for a in sorted(arms)}
     return {k: v for k, v in out.items() if v}
+
+
+def by_language(tasks: list[dict], runs: list[list[dict]]) -> dict[str, dict[str, float]]:
+    """Per language of the task (when the tasks have one), each arm's mean recall (a task's mean over its runs)."""
+    pooled = pool([cells(r, tasks) for r in runs])
+    lang = {t["id"]: t["lang"] for t in tasks if t.get("lang")}
+    out: dict[str, dict[str, float]] = {}
+    for name in sorted(set(lang.values())):
+        ids = [t for t in pooled if lang.get(t) == name]
+        arms = {a for t in ids for a in pooled[t]}
+        out[name] = {a: statistics.mean(pooled[t][a]["recall"] for t in ids if a in pooled[t]) for a in sorted(arms)}
+    return out
+
+
+def pair_table(pooled: dict, arms: tuple[str, ...], heading: str) -> list[str]:
+    pairs = [(x, y) for x, y in (*decisions_for(arms), *secondary_for(arms)) if any(x in v and y in v for v in pooled.values())]
+    if not pairs:
+        return []
+    lines = ["", heading, "", "| pair (recall, summed over tasks) | difference [95 % CI] | W/T/L |", "|---|---|---|"]
+    for x, y in dict.fromkeys(pairs):
+        d = paired(pooled, x, y, "recall")
+        lines.append(f"| {x} - {y} | {d['diff']:+.2f} [{d['ci95'][0]:+.2f} to {d['ci95'][1]:+.2f}] | {d['wins']}/{d['ties']}/{d['losses']} |")
+    return lines
 
 
 def report(tasks: list[dict], runs: list[list[dict]], title: str) -> str:
@@ -61,12 +84,26 @@ def report(tasks: list[dict], runs: list[list[dict]], title: str) -> str:
         lines.append(f"| {arm} | {recall:.2f}/{len(have)} | {gain} | {wtl} | {sum(c['solved'] for c in have):.1f} | "
                      f"{sum(c['hit1'] for c in have):.1f} | {shown}/{len(mine)} | {called}/{len(mine)} | {searched}/{len(mine)} | "
                      f"{secs[len(secs) // 2]:.0f} | ${cost:.3f} |" if secs else f"| {arm} | - |")
+    lines += pair_table(pooled, arms, "Pairs:")
+    quiet = pool([cells(r, tasks, skip_network=True) for r in runs])
+    if any(row.get("network") for row in rows):
+        lines += pair_table(quiet, arms_of(quiet), "The same pairs without the sessions that looked something up on the network:")
+    faults = sum(bool((row.get("assist") or {}).get("nudge")) for row in rows)
+    if faults:
+        lines += ["", (f"**{faults} session{'s' if faults != 1 else ''} of the data shows the mod's nudge although no arm asks for it** "
+                       "(a harness fault: `drop_faults.py` sets such sessions aside for a rerun).")]
     strata = by_gold_count(tasks, runs)
     if strata:
         names = [a for a in arms if any(a in v for v in strata.values())]
         lines += ["", "Mean recall by the number of gold files (what is left for a tool to add is where `none` is low):", "",
                   "| tasks | " + " | ".join(names) + " |", "|---" * (1 + len(names)) + "|"]
         for name, v in strata.items():
+            lines.append(f"| {name} | " + " | ".join(f"{v[a]:.2f}" if a in v else "-" for a in names) + " |")
+    langs = by_language(tasks, runs)
+    if langs:
+        names = [a for a in arms if any(a in v for v in langs.values())]
+        lines += ["", "Mean recall by language:", "", "| language | " + " | ".join(names) + " |", "|---" * (1 + len(names)) + "|"]
+        for name, v in langs.items():
             lines.append(f"| {name} | " + " | ".join(f"{v[a]:.2f}" if a in v else "-" for a in names) + " |")
     return "\n".join(lines) + "\n"
 

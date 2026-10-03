@@ -52,7 +52,11 @@ _SUB = (r"(?:query|analyze|trace|map|plan|resolve|verify|challenge|doctor|api|re
         r"ui|tq|explain|impact|search|index|mcp|debug|history|path|affected|god-nodes|cluster-only|label|extract|watch|hook)")
 VERINODA_CMD = re.compile(r"""(?:(?<![\w./-])verinoda|/verinoda\.exe)["']?\s+""" + _SUB + r"\b")
 GRAPHIFY_CMD = re.compile(r"""(?:(?<![\w./-])graphify|/graphify\.exe)["']?\s+""" + _SUB + r"\b")
-NETWORK = re.compile(r"\b(curl|wget|Invoke-WebRequest|iwr|WebFetch|WebSearch)\b|github\.com|(^|[\s;&|])gh\s", re.IGNORECASE)
+# a lookup is a command that fetches (curl, wget, gh, git clone/fetch/pull) or a URL of GitHub; a bare `github.com/x/y` is the
+# Go import path a repository search is full of
+NETWORK = re.compile(r"\b(curl|wget|Invoke-WebRequest|iwr|WebFetch|WebSearch)\b|(^|[\s;&|])gh\s|\bgit\s+(clone|fetch|pull)\b|"
+                     r"https?://[\w.-]*github(usercontent)?\.com", re.IGNORECASE)
+_CLAUDE_VERSION: str | None = None
 BUILTIN_ARMS = {"none": {"kind": "none"}, "graphify": {"kind": "graphify"}, "verinoda_setup": {"kind": "verinoda"},
                 "verinoda_mod": {"kind": "verinoda", "plugin": True}}
 # what the mod's assist features put in front of the model: hook context, or the text of a refused search
@@ -61,6 +65,19 @@ ASSIST_MARKS = {"inject": "[Verinoda locate]", "coupled_notes": "[Verinoda coupl
 _SESSION_SLOTS: threading.Semaphore | None = None
 _COPY_LOCKS: dict[str, threading.Lock] = {}
 _COPY_LOCKS_GUARD = threading.Lock()
+
+
+def claude_version() -> str:
+    """The version of the `claude` CLI the sessions run, read once and kept with every session's row."""
+    global _CLAUDE_VERSION
+    if _CLAUDE_VERSION is None:
+        try:
+            p = subprocess.run(["claude", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=60, check=False)
+            _CLAUDE_VERSION = p.stdout.strip() or "unknown"
+        except (OSError, subprocess.SubprocessError):
+            _CLAUDE_VERSION = "unknown"
+    return _CLAUDE_VERSION
 
 
 def arm_def(cfg: dict, arm: str) -> dict:
@@ -270,7 +287,7 @@ def one(cfg: dict, task: dict, arm: str) -> dict:
     answer = extract_answer(rep)
     usage = rep.get("usage") or {}
     st = session_stats(find_transcript(rep.get("session_id", "")))
-    return {"id": task["id"], "arm": arm, "model": d.get("model", cfg["model"]), "exit": rc, "seconds": secs, "files": files_named(answer, copy),
+    return {"id": task["id"], "arm": arm, "model": d.get("model", cfg["model"]), "claude": claude_version(), "exit": rc, "seconds": secs, "files": files_named(answer, copy),
             "answered": answer is not None, "is_error": rep.get("is_error"), "subtype": rep.get("subtype"),
             "session_id": rep.get("session_id"), "num_turns": rep.get("num_turns"), "cost_usd": rep.get("total_cost_usd"),
             "input_tokens": sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_creation_input_tokens",

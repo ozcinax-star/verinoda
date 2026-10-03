@@ -59,6 +59,7 @@ def one(cfg: dict, task: dict) -> dict:
         return {"id": task["id"], "skipped": f"fewer than {cfg.get('ahead', 100)} commits after the base"}
     if not (Path(stale) / ".git").exists():
         shutil.copytree(fresh, stale, ignore=shutil.ignore_patterns("locate-daemon.*"), dirs_exist_ok=False)
+    if git(stale, "rev-parse", "HEAD") != target:  # a copy whose checkout never ran (a rerun after a crash) is not stale
         git(stale, "fetch", "-q", cfg["full"], target)
         git(stale, "checkout", "-q", "-f", target)
     text = f"{task['title']}\n{task['body']}"[:3000]

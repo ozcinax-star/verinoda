@@ -572,9 +572,13 @@ def test_big_scores_take_any_arm_in_the_data_and_decide_each_new_one_against_non
           row("t1", "none", ["x.py"]), row("t1", "assist_full", ["c.py"], assist), row("t1", "verinoda_setup", ["x.py"])]
     r2 = [row("t0", "none", ["a.py", "b.py"]), row("t0", "assist_full", ["a.py", "b.py"]), row("t0", "verinoda_setup", ["a.py"]),
           row("t1", "none", ["c.py"]), row("t1", "assist_full", ["c.py"]), row("t1", "verinoda_setup", ["x.py"])]
+    # Graphify joins: each added arm is also decided against it (the pre-registered second decision of the assist study)
+    r1 += [row("t0", "graphify", ["a.py"]), row("t1", "graphify", ["x.py"])]
+    r2 += [row("t0", "graphify", ["a.py"]), row("t1", "graphify", ["c.py"])]
     rep = score_big.report_pooled([r1, r2], tasks)
     s = rep["pooled"]["summary"]
-    assert list(s) == ["none", "verinoda_setup", "assist_full"]  # the known arms in their order, the others after
+    assert list(s) == ["none", "graphify", "verinoda_setup", "assist_full"]  # the known arms in their order, the others after
+    assert "assist_full - graphify" in rep["pooled"]["decisions"]
     # pooled over runs, a task counts once if any of its runs had the feature show or the tool called
     assert s["assist_full"]["recall"] == 2.0 and s["assist_full"]["sessions_assist_shown"] == 2
     assert s["assist_full"]["sessions_assist_called"] == 2 and s["none"]["sessions_assist_shown"] == 0
@@ -742,6 +746,7 @@ def test_the_assist_report_gives_each_arm_its_gain_over_none_and_its_recall_by_n
     assert by["1 gold file"]["none"] == 1.0 and by["2 gold files"]["inject"] == 1.0
     assert round(by["3 or more gold files"]["none"], 3) == 0.333 and round(by["3 or more gold files"]["inject"], 3) == 0.667
     assert "| 3 or more gold files |" in md
+    assert "| inject - none | +0.83 [" in md  # the pairs the decisions name, in a table of their own
 
 
 def test_the_project_sentence_may_name_the_tasks_own_repository(tmp_path):
@@ -794,3 +799,80 @@ def test_the_funnel_counts_gold_files_the_mod_showed_and_the_agent_named(tmp_pat
     assert out["inject"] == {"sessions": 1, "gold": 4, "shown": 2, "named": 2, "shown_and_named": 1, "shown_not_named": 1,
                              "named_not_shown": 1, "neither": 1}
     assert out["none"]["shown"] == 0 and out["none"]["named"] == 1 and out["none"]["neither"] == 3
+
+
+def test_a_search_of_the_repository_for_a_github_import_path_is_not_a_network_lookup(tmp_path):
+    def use(**inp):
+        return {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash", "input": inp}]}}
+    lines = [use(command='grep -rn "github.com/spf13/cobra" --include=*.go .'), use(command="rg github.com/cli/cli pkg"),
+             use(command="curl -s https://api.github.com/repos/cli/cli/pulls/5698"), use(command="gh pr view 5698"),
+             use(command="git clone https://github.com/cli/cli.git /tmp/x"), use(command="wget -qO- https://example.org/x"),
+             use(command="git log --oneline -5"), use(command="git fetch origin")]
+    t = tmp_path / "s.jsonl"
+    t.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    s = big_run.session_stats(t)
+    assert [n.split()[0] for n in s["network"]] == ["curl", "gh", "git", "wget", "git"]
+
+
+def test_the_version_of_claude_is_read_once_and_kept_with_every_session(tmp_path, monkeypatch):
+    calls = []
+
+    def fake(argv, **kw):
+        calls.append(argv)
+        import subprocess
+        return subprocess.CompletedProcess(argv, 0, stdout="2.9.9 (Claude Code)\n", stderr="")
+    monkeypatch.setattr(big_run.subprocess, "run", fake)
+    monkeypatch.setattr(big_run, "_CLAUDE_VERSION", None)
+    assert big_run.claude_version() == "2.9.9 (Claude Code)" and big_run.claude_version() == "2.9.9 (Claude Code)"
+    assert calls == [["claude", "--version"]]
+    monkeypatch.undo()
+    monkeypatch.setattr(big_run, "_CLAUDE_VERSION", "2.9.9 (Claude Code)")
+    monkeypatch.setattr(big_run, "run", lambda argv, cwd, env, timeout: (0, json.dumps({"session_id": "s", "usage": {}, "result": "{}"}), "", 0.1))
+    monkeypatch.setattr(big_run, "find_transcript", lambda sid: None)
+    row = big_run.one({"model": "m", "copy_pattern": str(tmp_path / "{task}" / "{arm}")}, {"id": "t", "title": "T", "body": "B"}, "none")
+    assert row["claude"] == "2.9.9 (Claude Code)"
+
+
+def test_the_arm_choice_counts_only_tasks_every_candidate_has_so_no_arm_gains_by_missing_a_task():
+    tasks = [{"id": "a1", "gold": ["x", "y"]}, {"id": "a2", "gold": ["x", "y"]}]
+    a = {"a1": {"none": [["x"]], "strict": [["x"]], "inject": [["x", "y"]]},
+         "a2": {"none": [["x"]], "strict": [["x", "y"]]}}  # inject has no session for a2 (it failed)
+    res = choose_arm.choose([(tasks, _dev_rows(a))])
+    assert res["n_tasks"] == 1 and res["excluded_tasks"] == ["a2"]
+    assert res["totals"] == {"inject": 0.5, "strict": 0.0}  # a2's gain of strict is not counted: inject cannot have it
+
+
+drop_faults = _load("drop_faults")
+
+
+def test_sessions_that_got_the_nudge_are_set_aside_for_a_rerun_and_kept_for_the_record(tmp_path):
+    ok = {"id": "t1", "arm": "inject", "files": [], "assist": {"nudge": 0}}
+    bad = {"id": "t2", "arm": "inject", "files": [], "assist": {"nudge": 1}}
+    old = {"id": "t3", "arm": "none", "files": []}  # a result written before the counters existed
+    f = tmp_path / "r.jsonl"
+    f.write_text("\n".join(json.dumps(x) for x in (ok, bad, old)) + "\n", encoding="utf-8")
+    assert drop_faults.main(["--count", str(f)]) == 1 and len(f.read_text(encoding="utf-8").splitlines()) == 3  # counting moves nothing
+    assert drop_faults.main([str(f)]) == 0
+    assert [json.loads(x)["id"] for x in f.read_text(encoding="utf-8").splitlines()] == ["t1", "t3"]
+    aside = tmp_path / "r.jsonl.nudged"
+    assert [json.loads(x)["id"] for x in aside.read_text(encoding="utf-8").splitlines()] == ["t2"]
+    assert drop_faults.main(["--count", str(f)]) == 0
+    assert drop_faults.main([str(tmp_path / "missing.jsonl")]) == 0
+
+
+def test_the_assist_report_adds_the_languages_the_network_free_pairs_and_any_harness_fault():
+    tasks = [{"id": "t0", "gold": ["a.py", "b.py"], "lang": "python"}, {"id": "t1", "gold": ["a.go", "b.go"], "lang": "go"}]
+    zero = {"inject": 0, "coupled_notes": 0, "gate": 0, "nudge": 0, "locate_calls": 0, "coupled_calls": 0, "tool_search": 0}
+
+    def row(t, arm, files, nudge=0, net=()):
+        return {"id": t, "arm": arm, "files": files, "num_turns": 4, "seconds": 10.0, "cost_usd": 0.1, "input_tokens": 100,
+                "output_tokens": 10, "verinoda_calls": 0, "graphify_calls": 0, "network": list(net), "answered": True,
+                "assist": {**zero, "nudge": nudge}}
+    runs = [[row("t0", "none", ["a.py"]), row("t0", "inject", ["a.py", "b.py"], nudge=1),
+             row("t1", "none", ["a.go"]), row("t1", "inject", ["a.go", "b.go"], net=["curl x"])]]
+    md = assist_report.report(tasks, runs, title="langs")
+    assert "| python |" in md and "| go |" in md  # the mean recall by language
+    assert "without the sessions that looked something up on the network" in md
+    assert "1 session of the data shows the mod's nudge" in md  # a fault is said, not hidden
+    clean = assist_report.report(tasks, [[row("t0", "none", ["a.py"]), row("t0", "inject", ["a.py"])]], title="clean")
+    assert "nudge" not in clean

@@ -1,10 +1,10 @@
 {
  "tasks": "<BENCH>/cbtasks/main/tasks.json",
  "work": "<BENCH>/assist/cb/work",
- "history_depth": 3000,
+ "history_depth": 1000000,
  "arms": {"none": {"kind": "none"}, "graphify": {"kind": "graphify"}, "verinoda_mod": {"kind": "verinoda"}, "verinoda_setup": {"kind": "verinoda"}},
  "graphify": "<BENCH>/agentbench/envs/graphify/Scripts/graphify.exe",
  "verinoda_dir": "<REPO>/.venv/Scripts",
- "workers": 1,
+ "workers": 2,
  "git_config": {"core.autocrlf": "false"}
 }

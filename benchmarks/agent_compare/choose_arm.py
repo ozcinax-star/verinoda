@@ -24,30 +24,32 @@ TIE = 1.0
 
 
 def choose(sets: list[tuple[list[dict], list[list[dict]]]]) -> dict:
-    """``sets``: per development set its tasks and its runs (each a list of result rows)."""
-    totals: dict[str, float] = {}
-    ran: list[set[str]] = []
-    n_tasks = 0
-    for tasks, runs in sets:
-        pooled = pool([cells(r, tasks) for r in runs])
-        n_tasks += len(pooled)
-        ran.append({a for v in pooled.values() for a in v} - NOT_CANDIDATES)
-        for v in pooled.values():
-            if "none" not in v:
-                continue
-            for arm, cell in v.items():
-                if arm not in NOT_CANDIDATES:
-                    totals[arm] = totals.get(arm, 0.0) + cell["recall"] - v["none"]["recall"]
+    """``sets``: per development set its tasks and its runs (each a list of result rows). Only tasks that `none` and every
+    candidate arm have a session for are counted (an arm with a failed session is not helped by having fewer tasks)."""
+    pooled_sets = [pool([cells(r, tasks) for r in runs]) for tasks, runs in sets]
+    ran = [{a for v in pooled.values() for a in v} - NOT_CANDIDATES for pooled in pooled_sets]
     eligible = set.intersection(*ran) if ran else set()
-    totals = {a: round(totals[a], 4) for a in sorted(eligible)}
-    ranking = [{"arm": a, "gain": g, "features": FEATURES.get(a)} for a, g in sorted(totals.items(), key=lambda kv: (-kv[1], FEATURES.get(kv[0], 9), kv[0]))]
+    totals = dict.fromkeys(sorted(eligible), 0.0)
+    n_tasks = 0
+    excluded: list[str] = []
+    for pooled in pooled_sets:
+        for task, v in pooled.items():
+            if "none" not in v or not eligible <= set(v):
+                excluded.append(task)
+                continue
+            n_tasks += 1
+            for arm in eligible:
+                totals[arm] += v[arm]["recall"] - v["none"]["recall"]
+    totals = {a: round(g, 4) for a, g in totals.items()}
+    ranking = [{"arm": a, "gain": g, "features": FEATURES.get(a)}
+               for a, g in sorted(totals.items(), key=lambda kv: (-kv[1], FEATURES.get(kv[0], 9), kv[0]))]
     best = ranking[0]["arm"] if ranking else None
     second = ranking[1]["arm"] if len(ranking) > 1 else None
     swapped = False
     if best and second and ranking[0]["gain"] - ranking[1]["gain"] < TIE and FEATURES[second] < FEATURES[best]:
         best, second, swapped = second, best, True
     return {"totals": totals, "ranking": ranking, "mod_best": best, "mod_second": second, "swapped": swapped,
-            "within": TIE, "n_tasks": n_tasks}
+            "within": TIE, "n_tasks": n_tasks, "excluded_tasks": sorted(excluded)}
 
 
 def main() -> int:

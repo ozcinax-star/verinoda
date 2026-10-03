@@ -412,3 +412,19 @@ def test_a_long_instance_id_becomes_a_short_stable_task_id_so_a_working_copy_pat
     assert tasks[0]["id"] == a and tasks[0]["orig_id"] == long_ and tasks[0]["ref"] == f"Set__{long_}"
     tasks, _ = cbt.select({"want": 5}, [row(short, repo="sveltejs/svelte")], {"sveltejs/svelte": 1000})
     assert tasks[0]["id"] == short and tasks[0]["orig_id"] == short
+
+
+def test_a_statement_that_names_a_gold_path_with_backslashes_leaks_it_too():
+    """A Windows traceback or a path pasted from Explorer names the file as well as a forward-slash one does."""
+    rows = [row("fwd", statement=STATEMENT + " see pkg/a.py"), row("back", statement=STATEMENT + r" see pkg\a.py"),
+            row("deep", files=("src/lib/foo.js", "src/lib/bar.js"), statement=STATEMENT + r" in C:\work\src\lib\foo.js line 3"),
+            row("clean")]
+    tasks, info = cbt.select({"want": 10}, rows, lambda r: 1)
+    assert [t["id"] for t in tasks] == ["clean"]
+    assert info["dropped"]["statement names a gold file's path"] == 3
+
+
+def test_a_modified_file_is_kept_when_a_quoted_path_of_the_next_header_is_a_new_file():
+    patch = ("diff --git a/pkg/mod.py b/pkg/mod.py\nindex 1..2 100644\n--- a/pkg/mod.py\n+++ b/pkg/mod.py\n@@ -1 +1 @@\n-a\n+b\n"
+             'diff --git "a/pkg/caf\303\251.py" "b/pkg/caf\303\251.py"\nnew file mode 100644\n--- /dev/null\n+++ "b/pkg/caf\303\251.py"\n@@ -0,0 +1 @@\n+a\n')
+    assert cbt.patch_files(patch) == ["pkg/mod.py"]

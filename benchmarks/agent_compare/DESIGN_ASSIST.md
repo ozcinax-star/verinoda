@@ -141,3 +141,62 @@ so seL4 results are the optimistic ones.
 the results. The gold is the files one change touched, so a right file the change did not touch counts as a miss. The mod's
 `locate` answer is built from the index at the base commit and the repository's history up to it; no later commit exists in
 a copy. Graphify's graph is the AST one. Results are published whatever they are, development sets first.
+
+## Amendments of 2026-10-04 (before any session of the confirmatory set; none rests on a development result)
+
+The text above stays as it was written. Eleven things in it were wrong or too loose; an independent review of the code and of
+this text (five lenses, each finding checked by a second reader) found most of them, and the development runs found two. The
+seL4 development runs had finished and Home Assistant's were running when these were written.
+
+1. **A choice stored by the mod reached sessions that had not asked for it.** Emptying the mod's store before a run was not
+   enough: the store is shared by every session that loads the mod and each session writes back what it loaded, so the
+   terminal session the study is run from restored `auto: nudge` and sessions that had loaded it carried it on (26 of the 231
+   first-run seL4 sessions show the nudge). Those 26 were set aside (`dev_r1.jsonl.nudged`, kept) and run again; the mod now
+   takes the settings as given in a session with nobody at the keyboard (0.5.0). A session of a mod arm whose transcript
+   shows the nudge is set aside for a rerun by `drop_faults.py`, and `assist_report.py` says how many there are.
+2. **The confirmatory copies hold the whole history up to the base commit, not 3,000 commits.** A repository with more
+   ancestors than the depth ended as a shallow clone, and `locate` then reports "history unavailable: shallow clone" and drops
+   the signal the study is about (6 of the first 26 copies; they were rebuilt). The check that no commit after the base is
+   reachable is unchanged.
+3. **The confirmatory set is 72 tasks, not 73.** A statement that names a gold file with backslashes (a Windows path) is a
+   leak as much as one with slashes, and the rule read only slashes: `sympy__sympy-17318` named both its gold files.
+   Everything else of the selection is as written: 1,136 candidates, 33 repositories (python 16, go 10, java 9, javascript 9,
+   rust 9, cpp 7, typescript 6, c 6), gold files 2: 28 tasks, 3: 10, 4: 11, 5: 13, 6: 10. Ten tasks have six gold files and an
+   answer names at most five, so recall cannot reach 1 on them and `solved` is zero by construction.
+4. **The confirmatory prompt** is the one of `DESIGN_BIG.md` with the project sentence "the {repo} repository at {c} (a git
+   checkout at the commit before the fix)", written in the run configs; the harness's default sentence names Home Assistant
+   and is not used there.
+5. **What `locate` is given.** `inject` and the gate pass the whole prompt (its first 4,000 characters) to `locate`, not the bug
+   report alone, so the harness's own words ("repository", "files", "fix") are part of the query in every mod arm. The `tool` arms
+   pass what the model chooses to give it.
+6. **Decisions.** The decisions are the three named above and the Haiku comparison, each with the rule "a claim only if the 95 %
+   interval excludes zero"; `score_big.py` prints every pair under `decisions`, and a claim on any other pair (for example
+   `mod_second` - `none`) is exploratory. No correction is made for the several pairs.
+7. **Reporting.** `assist_report.py` gives the pairs without the sessions that looked something up on the network, the recall by
+   language and by number of gold files, and how often the mod reached the model; `answer_checks.py`, `delivery_funnel.py`
+   and `score_big.py`'s noise floor give the rest. "The same on the tasks `none` does not solve in every run" is dropped: that
+   subset is chosen on `none`'s own noise, so the contrast would be biased upward.
+8. **The `claude` CLI version** is recorded in every session's row (2.1.288 at the time of writing).
+9. **Corrections to what is written above.** The nudge was in the mod arms' sessions; the MCP server and the skill were in all 286.
+   The neighbour and pair signals exist for Python (relative imports) and the C family (includes, `.c`/`.h`) only; the other
+   signals are language-free. The answer takes 0.2 to 1.3 s on seL4 and 10 to 18 s on Home Assistant (measured with other jobs running
+   on the machine; the two sentences above that say otherwise are wrong; Home Assistant's own sessions ran with other jobs
+   too, so their seconds are not an idle machine's). The Home Assistant development copies contain the objects of commits after the pinned one, copied
+   from a clone that had them, but no ref reaches them (`git rev-list --all` equals the 114,657 ancestors of HEAD); an agent
+   would have to run `git fsck` to see one. The signals' parameters were set looking at Home Assistant's missed files as well
+   as seL4's, so both development sets are optimistic ones.
+10. **`choose_arm.py`** counts only the tasks that `none` and every candidate arm have a session for, so an arm with a failed
+    session is not helped by having fewer tasks; the tie rule is as written (the best two).
+11. **The development sets are weak ground to choose on.** 45 of their 61 tasks have one gold file, where nothing can differ
+    (the agent alone is at the ceiling), and in seL4 only 7 of the 21 tasks differ between any two arms: the choice rests on a
+    handful of tasks. The confirmatory set, where every task has two to six gold files, is where a claim can be made.
+
+Bug fixes made after the development runs and before `selection.json` (none changes what an answer lists in those runs): the
+daemon's `status` checks that the server that answers is this repository's daemon (the `repo` and `pid` it reports) and
+never takes a host from the state file, `stop` checks the answer to its request, two `start`s at once leave one daemon, a
+slow answer does not delete the state file of a live daemon, and a request in flight is not ended by the idle timeout; the
+git deadline of `locate` ends the whole process tree on Windows; the mod applies its project test to the tools, the
+system-prompt line and the gate as to the prompt, forgets the files read when a new task starts, spends its note budget on
+source files only once each, and sends nothing but to 127.0.0.1. One known fault is left as it is: `locate` reads the history of
+all anchors in one walk limited to 300 commits per anchor in all, so a quiet anchor next to a busy one may get fewer
+commits than its own 300; the answer says "history read" all the same. It is the same in every arm and every set.

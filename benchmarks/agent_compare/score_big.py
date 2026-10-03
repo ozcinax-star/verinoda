@@ -31,8 +31,9 @@ def arms_of(c: dict[str, dict[str, dict]]) -> tuple[str, ...]:
 
 
 def decisions_for(arms: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
-    """The pre-registered decisions, and each arm added through `arm_defs` against `none`."""
-    return (*DECISIONS, *((a, "none") for a in arms if a not in ARMS and "none" in arms))
+    """The pre-registered decisions, and each arm added through `arm_defs` against `none` and against `graphify`."""
+    added = [a for a in arms if a not in ARMS]
+    return (*DECISIONS, *((a, "none") for a in added if "none" in arms), *((a, "graphify") for a in added if "graphify" in arms))
 
 
 def secondary_for(arms: tuple[str, ...]) -> tuple[tuple[str, str], ...]:

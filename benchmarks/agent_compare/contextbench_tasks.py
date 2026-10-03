@@ -123,15 +123,17 @@ DIFF_HEADER = re.compile(r"^diff --git a/(.+?) b/(.+)$")
 
 def patch_files(patch: str | None) -> list[str]:
     """The files a unified diff changes that exist before it, in order: modified, deleted and renamed ones (by the old
-    path); a file the diff adds is not one. A path in quotes (an unusual character) is not read."""
-    files: list[list] = []  # [old path, is new]
+    path); a file the diff adds is not one. A path in quotes (an unusual character) is not read, and never mistaken for the file before it."""
+    files: list[list] = []  # [old path (None: in quotes, not read), is new]
     for line in (patch or "").splitlines():
         m = DIFF_HEADER.match(line)
         if m:
             files.append([m.group(1), False])
+        elif line.startswith("diff --git "):
+            files.append([None, False])  # a header with quoted paths: its own entry, so what follows is not another file's
         elif files and line.startswith("new file mode"):
             files[-1][1] = True
-    return [path for path, is_new in files if not is_new]
+    return [path for path, is_new in files if path is not None and not is_new]
 
 
 def gold_files(row: dict) -> list[str]:
@@ -198,7 +200,7 @@ def select(cfg: dict, rows: list[dict], size_kb: Mapping[str, int | None] | Call
             drop(r_gold, row)
         elif not c["statement_min"] <= len(text) <= c["statement_max"]:
             drop(r_len, row)
-        elif leaks(text, gold):
+        elif leaks(text, gold) or leaks(text.replace("\\", "/"), gold):  # a path pasted from Windows names the file too
             drop(r_leak, row)
         else:
             cheap.append((row, gold, text))
