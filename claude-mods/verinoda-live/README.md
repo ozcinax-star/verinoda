@@ -43,8 +43,12 @@ told), it costs about nothing, and it is on by default as a safety net; it did n
 And on a 27,078-file repository (`benchmarks/results/agent-compare-big-2026-10-02/`, 40 real Home Assistant bug reports,
 160 real sessions, twice): the agent with the mod and its nudge, with Graphify's own integration and with nothing found
 the same files (recall 37.3, 37.0 and 35.8 of 40; no decision reaches a claim, and a second run shows the differences
-are chance). The nudge reached every session; the agent used Verinoda in 6 to 7 of 40, and scored what it scored
-without it on those tasks. The mod added nothing to Verinoda's own setup there.
+are chance). The nudge reached every session and the agent never used Verinoda (0 of 80 sessions there, and 0 of 126 on seL4,
+the C microkernel, `benchmarks/results/agent-compare-sel4-2026-10-02/`, where an index was most likely to matter: 21 real
+bug reports, each session run three times, recall of 21 = 17.67 with nothing, 17.78 with the mod, no claim). The tools work
+(a probe asked the agent to use them and they did). An instruction at the moment of the first `grep`, Graphify's hook, was
+followed by use of its tool in a third of the seL4 sessions; the nudge, given with the prompt, in none. The mod added nothing
+to Verinoda's own setup in either study.
 
 So neither mode is a measured win on real code: **nudge** trades input tokens for output tokens at the same facts,
 **search** costs facts. Both stay off until the person turns one on. What the mod adds regardless of the mode is

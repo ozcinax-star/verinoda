@@ -20,11 +20,12 @@ Measured with a model in the loop, pre-registered:
   tests): with the check and without it the agent passed every test and wrote no name that does not exist; it read
   the code before every edit, so the check had nothing to catch. It stays on as a cheap safety net.
 - **On a 27,078-file repository** (`benchmarks/results/agent-compare-big-2026-10-02/`, home-assistant/core, 40 real bug
-  reports, 160 real sessions, run twice): the agent with the mod, with Graphify's own integration and with nothing
-  found the same files (recall 37.3, 37.0 and 35.8 of 40; no claim, the differences are chance). Every session was told
-  about its tool and used it in 5-18 % of them, with the same result as without: the issues name the integration, whose
-  folder holds a median of 8 files, so a `grep` is enough. The case an index should win, a report that names no
-  component, was not tested.
+  reports, 160 real sessions, run twice) **and on seL4** (`agent-compare-sel4-2026-10-02/`, the C microkernel, 21 bug
+  reports, each session run three times): the agent with the mod, with Graphify's own integration and with nothing found the
+  same files (no claim; the differences are chance). In none of the 286 sessions with Verinoda did the agent call it,
+  though the mod's nudge, the MCP server and the skill were in every one and a probe showed they work. Graphify's hook, which
+  speaks when the agent starts to `grep`, was followed by use of its tool in 5 of 80 Home Assistant and 21 of 63 seL4
+  sessions. The case an index should win, a report that names no component, was not tested.
 - **After the code moved on** (`benchmarks/results/agent-compare-stale-2026-10-02/`): a fresh index and a stale
   one found the same facts, and no stale index made the agent describe removed code. Freshness paid off in cost,
   and only on projects too large for `analyze` to refresh itself (300+ files): there a stale index cost about a
@@ -69,7 +70,7 @@ Verinoda Symbiosis, Verinoda ile Claude Code'u birlikte çalıştırır. **verin
 - İstenirse ajanı önce `analyze` çalıştırmaya yönlendirir. İki ölçümde de aynı olguları buldu; küçük projelerde %16 daha az, gerçek depolarda ise %14 daha fazla girdi token'ı harcadı (çıktı %16 daha az).
 - Kod değiştikten sonra sorulan 50 soruda taze ve bayat indeks aynı olguları buldu; bayat indeks ajanı silinmiş kodu anlatmaya yöneltmedi. Tazeliğin faydası maliyette ve yalnızca büyük projelerde (300+ dosya) görüldü: bayat indeks indekssiz çalışmaya göre ~%20 daha fazla girdi token'ı harcattı, taze indeks bunu bir çalışmada geri aldı.
 - Claude'un her Python/Java/Kotlin düzenlemesini kontrol edip var olmayan isimleri söyler. 60 gerçek kodlama oturumunda modlu ve modsuz ajan bütün gizli testleri geçti; ajan her düzenlemeden önce kodu okuduğu için kontrolün yakalayacağı bir şey çıkmadı.
-- 27 bin dosyalık Home Assistant'ta 40 gerçek hata raporunda (160 gerçek oturum, iki kez): modlu, Graphify'lı ve araçsız Claude Code aynı dosyaları buldu (recall 37,3 / 37,0 / 35,8 / 40, fark yok, ikinci koşu farkın şans olduğunu gösterdi). Araçlar her oturumda gösterildi ama oturumların %5-18'inde kullanıldı: issue'lar entegrasyonun adını veriyor, klasörde medyan 8 dosya var, `grep` yetiyor. Adını vermeyen raporlar denenmedi.
+- 27 bin dosyalık Home Assistant'ta (40 gerçek hata raporu) ve seL4 çekirdeğinde (21 rapor, her oturum üç kez): modlu, Graphify'lı ve araçsız Claude Code aynı dosyaları buldu, fark yok (şans). Verinoda'lı 286 oturumun hiçbirinde ajan Verinoda'yı çağırmadı, oysa nudge, MCP ve beceri her birinde vardı ve yoklama aracın çalıştığını gösterdi. Graphify'ın `grep` anında konuşan kancası HA'da 80 oturumun 5'inde, seL4'te 63'ün 21'inde aracın kullanılmasına yol açtı. Bileşen adı vermeyen raporlar denenmedi.
 - Commit'leri inceler.
 - Bunların hepsini hareketli mor maskotlu, Türkçe bir panelde gösterir.
 
