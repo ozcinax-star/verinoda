@@ -1,0 +1,10 @@
+{
+ "repo": "seL4/seL4",
+ "clone": "<SEL4>/full",
+ "seed": 20261002,
+ "want": 40,
+ "gold_max": 6,
+ "changed_max": 12,
+ "issue_min": 150,
+ "issue_max": 4000
+}

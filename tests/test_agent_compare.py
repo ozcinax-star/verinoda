@@ -375,3 +375,86 @@ def test_big_extra_pools_runs_by_mean_and_measures_the_noise_of_one_arm_against_
     assert extra.pool([r1, r2])["t1"]["none"]["recall"] == 0.5
     n = extra.noise_floor(r1, r2, "none")
     assert n["n"] == 2 and n["diff"] == -1.0 and (n["wins"], n["ties"], n["losses"]) == (0, 1, 1)
+
+
+commit_tasks = _load("commit_tasks")
+
+
+def test_commit_tasks_gold_paths_are_code_and_build_files_not_tests_docs_or_ci():
+    for good in ("src/arch/arm/kernel/boot.c", "include/arch/x86/arch/machine.h", "CMakeLists.txt", "tools/dts.py",
+                 "libsel4/arch_include/arm/sel4/arch/types.bf", "src/plat/tx1/overlay-tx1.dts", "src/arch/riscv/head.S"):
+        assert commit_tasks.is_gold_path(good), good
+    for bad in ("manual/parts/threads.tex", "README.md", "docs/design.md", ".github/workflows/x.yml", "tests/a.c",
+                "libsel4/tests/b.c", "LICENSE", "src/x.png"):
+        assert not commit_tasks.is_gold_path(bad), bad
+
+
+def test_commit_tasks_closing_keywords_include_the_cross_repository_spelling():
+    f = commit_tasks.CLOSES.findall
+    assert f("Fixes #12") == ["12"] and f("closes seL4/seL4#34") == ["34"] and f("Resolves: https://github.com/seL4/seL4/issues/56") == ["56"]
+    assert f("see #7, related to #8") == []
+
+
+def test_commit_tasks_selection_applies_the_filters_at_the_base_commit(tmp_path):
+    import subprocess
+
+    def git(*a):
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True)
+
+    git("init", "-q")
+    for name in ("src/a.c", "src/b.c", "README.md"):
+        (tmp_path / name).parent.mkdir(exist_ok=True)
+        (tmp_path / name).write_bytes(b"x = 1")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    sha = subprocess.run(["git", "-C", str(tmp_path), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    body = "The kernel hangs when the scheduler is preempted twice in a row on SMP. " * 4
+
+    def cand(issue, files, text=body, created="2023-01-01T00:00:00Z"):
+        return {"issue": issue, "title": "hang", "body": text, "created": created, "labels": [], "via": "commit", "ref": "r",
+                "base_sha": sha, "fix_at": "2024-01-01T00:00:00Z", "files": files}
+
+    cands = [cand(1, [("src/a.c", "modified")]),                                           # kept
+             cand(2, [("src/a.c", "modified"), ("src/new.c", "added")]),                   # kept: the added file is not gold
+             cand(3, [("README.md", "modified")]),                                         # docs only
+             cand(4, [("src/gone.c", "modified")]),                                        # not at the base commit
+             cand(5, [("src/b.c", "modified")], text="short"),                             # body too short
+             cand(6, [("src/a.c", "modified")], text=body + " see src/a.c"),               # names the gold file
+             cand(7, [("src/a.c", "modified")], created="2025-01-01T00:00:00Z")]           # newer than the fix
+    cfg = {"clone": str(tmp_path), "seed": 1, "want": 10, "gold_max": 6}
+    tasks, info = commit_tasks.select(cfg, cands)
+    assert sorted(t["issue"] for t in tasks) == [1, 2] and tasks[0]["base_sha"] == sha
+    assert info["passed_filters"] == 2 and sum(info["dropped"].values()) == 5
+    assert commit_tasks.select({**cfg, "want": 1}, cands)[0].__len__() == 1
+
+
+def test_big_prompt_takes_the_project_from_the_config_and_defaults_to_home_assistant(tmp_path):
+    task = {"id": "i1", "title": "T", "body": "B"}
+    assert big_run.prompt_for(task, tmp_path).startswith("You are working in the Home Assistant Core repository at ")
+    p = big_run.prompt_for(task, tmp_path, "the seL4 microkernel repository at {c} (a git checkout of it)")
+    assert p.startswith("You are working in the seL4 microkernel repository at ") and "Home Assistant" not in p
+    assert "verinoda" not in p.lower() and "graphify" not in p.lower()
+
+
+def test_big_copy_of_is_one_per_task_when_the_config_has_a_pattern():
+    assert big_run.copy_of({"copies": {"none": "/w/none"}}, {"id": "t1"}, "none").as_posix() == "/w/none"
+    assert big_run.copy_of({"copy_pattern": "/w/{task}/{arm}"}, {"id": "t1"}, "graphify").as_posix() == "/w/t1/graphify"
+
+
+def test_big_pooled_report_averages_the_runs_per_task_and_arm_and_pairs_the_runs_for_the_noise_floor():
+    tasks = [{"id": "t0", "gold": ["a.py", "b.py"]}, {"id": "t1", "gold": ["c.py"]}]
+
+    def row(i, arm, files):
+        return {"id": i, "arm": arm, "files": files, "num_turns": 4, "seconds": 10.0, "cost_usd": 0.1, "input_tokens": 100,
+                "output_tokens": 10, "verinoda_calls": 0, "graphify_calls": 0, "network": [], "answered": True}
+    r1 = [row("t0", "none", ["a.py"]), row("t0", "verinoda_mod", ["a.py", "b.py"]), row("t1", "none", ["x.py"]), row("t1", "verinoda_mod", ["c.py"])]
+    r2 = [row("t0", "none", ["a.py", "b.py"]), row("t0", "verinoda_mod", ["a.py", "b.py"]), row("t1", "none", ["c.py"]), row("t1", "verinoda_mod", ["c.py"])]
+    rep = score_big.report_pooled([r1, r2], tasks)
+    s = rep["pooled"]["summary"]
+    assert s["none"]["recall"] == 1.25 and s["verinoda_mod"]["recall"] == 2.0
+    d = rep["pooled"]["decisions"]["verinoda_mod - none"]
+    assert d["n"] == 2 and d["diff"] == 0.75
+    assert len(rep["runs"]) == 2 and rep["runs"][0]["summary"]["none"]["recall"] == 0.5
+    n = rep["noise_floor"]["none"]
+    assert len(n) == 1 and n[0]["runs"] == [1, 2] and n[0]["diff"] == -1.5
+    assert rep["noise_floor"]["verinoda_mod"][0]["diff"] == 0.0

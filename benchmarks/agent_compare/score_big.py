@@ -5,6 +5,7 @@ Per task and arm: recall (gold files named / gold files), solved (all of them), 
 percentile bootstrap over tasks (10,000 resamples, seed 20261002). Cost and tool use are reported, not decided on.
 
     python benchmarks/agent_compare/score_big.py RESULTS.jsonl TASKS.json OUT_DIR
+    python benchmarks/agent_compare/score_big.py RESULTS_1.jsonl,RESULTS_2.jsonl TASKS.json OUT_DIR  (mean of runs)
 """
 
 from __future__ import annotations
@@ -91,10 +92,74 @@ def report(results: list[dict], tasks: list[dict]) -> dict:
     return out
 
 
+def pool(runs: list[dict[str, dict[str, dict]]]) -> dict[str, dict[str, dict]]:
+    """Per task and arm the mean of every number over the runs that have the cell."""
+    out: dict[str, dict[str, dict]] = {}
+    for task in sorted(set().union(*[set(r) for r in runs])):
+        for arm in ARMS:
+            cs = [r[task][arm] for r in runs if task in r and arm in r[task]]
+            if cs:
+                out.setdefault(task, {})[arm] = {k: sum(float(c[k]) for c in cs) / len(cs) for k in cs[0]}
+    return out
+
+
+def report_pooled(runs: list[list[dict]], tasks: list[dict]) -> dict:
+    """The decisions on the mean of several runs of the same sessions, each run's own summary, and, per arm, the
+    run-to-run difference of every pair of runs (the noise floor)."""
+    per_run = [cells(r, tasks) for r in runs]
+    pooled = pool(per_run)
+    noise: dict[str, list] = {}
+    for arm in ARMS:
+        for i in range(len(per_run)):
+            for j in range(i + 1, len(per_run)):
+                c = {t: {"a": per_run[i][t][arm], "b": per_run[j][t][arm]} for t in per_run[i]
+                     if t in per_run[j] and arm in per_run[i][t] and arm in per_run[j][t]}
+                if c:
+                    noise.setdefault(arm, []).append({"runs": [i + 1, j + 1], **paired(c, "a", "b", "recall")})
+    has = lambda x, y: any(x in v and y in v for v in pooled.values())
+    return {"pooled": {"summary": summary(pooled, tasks),
+                       "decisions": {f"{x} - {y}": paired(pooled, x, y, "recall") for x, y in DECISIONS if has(x, y)},
+                       "secondary": {f"{x} - {y}": {m: paired(pooled, x, y, m) for m in ("recall", "solved", "hit1")}
+                                     for x, y in (*DECISIONS, *SECONDARY) if has(x, y)}},
+            "runs": [{"summary": summary(c, tasks)} for c in per_run], "noise_floor": noise}
+
+
+def main_pooled(paths: list[str], tasks: list[dict], out: Path) -> int:
+    runs = [[json.loads(x) for x in Path(p).read_text(encoding="utf-8").splitlines() if x.strip()] for p in paths]
+    rep = report_pooled(runs, tasks)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "scores.json").write_bytes((json.dumps(rep, indent=1) + "\n").encode("utf-8"))
+    s = rep["pooled"]["summary"]
+    head = ("| arm | recall | solved | hit@1 | precision | tasks where the tool was used | turns | input tokens "
+            "| output tokens | cost USD |")
+    lines = [f"## the mean of {len(runs)} runs", "", head, "|---|---|---|---|---|---|---|---|---|---|"]
+    for a, v in s.items():
+        lines.append(f"| {a} | {v['recall']}/{v['tasks']} | {v['solved']:.1f} | {v['hit1']:.1f} | {v['precision']} | "
+                     f"{v['sessions_using_tool']}/{v['tasks']} | {v['turns']:.0f} | {v['input_tokens']:,.0f} | "
+                     f"{v['output_tokens']:,.0f} | {v['cost_usd']} |")
+    lines += ["", "| decision (recall, summed over tasks, mean of the runs) | difference [95% CI] | W/T/L |", "|---|---|---|"]
+    for k, v in rep["pooled"]["decisions"].items():
+        lines.append(f"| {k} | {v['diff']:+.2f} [{v['ci95'][0]:+.2f} to {v['ci95'][1]:+.2f}] | "
+                     f"{v['wins']}/{v['ties']}/{v['losses']} |")
+    lines += ["", "| each run: recall / sessions that used the tool | " + " | ".join(s) + " |", "|---" * (1 + len(s)) + "|"]
+    for i, r in enumerate(rep["runs"], 1):
+        lines.append(f"| run {i} | " + " | ".join(f"{v['recall']} / {v['sessions_using_tool']}" for v in r["summary"].values()) + " |")
+    lines += ["", "| noise floor: the same arm, run i - run j | difference [95% CI] |", "|---|---|"]
+    for a, lst in rep["noise_floor"].items():
+        lines += [f"| {a}, runs {x['runs'][0]}-{x['runs'][1]} | {x['diff']:+.2f} [{x['ci95'][0]:+.2f} to {x['ci95'][1]:+.2f}] |"
+                  for x in lst]
+    text = "\n".join(lines) + "\n"
+    (out / "summary.md").write_bytes(text.encode("utf-8"))
+    print(text)
+    return 0
+
+
 def main() -> int:
-    res = [json.loads(x) for x in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines() if x.strip()]
     tasks = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))["tasks"]
     out = Path(sys.argv[3])
+    if "," in sys.argv[1]:  # several runs of the same sessions: RESULTS_1,RESULTS_2,...
+        return main_pooled(sys.argv[1].split(","), tasks, out)
+    res = [json.loads(x) for x in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines() if x.strip()]
     rep = report(res, tasks)
     out.mkdir(parents=True, exist_ok=True)
     (out / "scores.json").write_bytes((json.dumps(rep, indent=1) + "\n").encode("utf-8"))
