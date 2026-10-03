@@ -6,7 +6,8 @@ changed (score_big.py).
 
 CONFIG: {"tasks": tasks.json, "copies": {arm: working copy} or "copy_pattern": ".../{task}/{arm}", "project": "the ... repository at {c} (...)", "out": results.jsonl, "model": "claude-sonnet-5-5",
 "plugin_dir": the mod, "mod_options": {"auto": "nudge"}, "path_dirs": {arm: [dirs put on PATH]}, "drop_path": ["...\\.local\\bin"],
-"arms": [...], "arm_defs": {arm: {...}}, "arm_workers": {arm: n}, "workers": default n, "timeout_s": s, "max_turns": n}.
+"arms": [...], "arm_defs": {arm: {...}}, "arm_workers": {arm: n}, "workers": default n, "max_concurrent": n over all arms,
+"timeout_s": s, "max_turns": n}.
 Resumable: a task and arm already in `out` is skipped.
 
 The arms `none`, `graphify`, `verinoda_setup` and `verinoda_mod` are built in. `arm_defs` adds arms (or changes one): {"kind": "none" |
@@ -57,6 +58,7 @@ BUILTIN_ARMS = {"none": {"kind": "none"}, "graphify": {"kind": "graphify"}, "ver
 # what the mod's assist features put in front of the model: hook context, or the text of a refused search
 ASSIST_MARKS = {"inject": "[Verinoda locate]", "coupled_notes": "[Verinoda coupled]", "gate": "[Verinoda] This search was not run",
                 "nudge": "[Verinoda auto-context]"}
+_SESSION_SLOTS: threading.Semaphore | None = None
 _COPY_LOCKS: dict[str, threading.Lock] = {}
 _COPY_LOCKS_GUARD = threading.Lock()
 
@@ -93,6 +95,12 @@ def isolated_plugin_store(folder: Path | None = None):
             if backup.exists():
                 f.write_bytes(backup.read_bytes())
                 backup.unlink()
+
+
+def set_session_limit(n: int | None) -> None:
+    """At most ``n`` sessions run at once, over all arms (None: no cap beyond the arms' own pools)."""
+    global _SESSION_SLOTS
+    _SESSION_SLOTS = None if n is None else threading.Semaphore(n)
 
 
 def copy_lock(copy: str | Path) -> threading.Lock:
@@ -252,7 +260,7 @@ def one(cfg: dict, task: dict, arm: str) -> dict:
     copy = copy_of(cfg, task, arm)
     d = arm_def(cfg, arm)
     argv = session_argv(prompt_for(task, copy, cfg.get("project"), d.get("prompt_suffix", "")), arm, copy, cfg)
-    with copy_lock(copy):
+    with copy_lock(copy), _SESSION_SLOTS or contextlib.nullcontext():
         rc, out, err, secs = run(argv, copy, session_env(arm, cfg), timeout=cfg.get("timeout_s", 1800))
     try:
         rep = json.loads(out)
@@ -320,6 +328,7 @@ def main() -> int:
 
 
 def run_study(cfg: dict) -> int:
+    set_session_limit(cfg.get("max_concurrent"))
     tasks = json.loads(Path(cfg["tasks"]).read_text(encoding="utf-8"))["tasks"]
     out = Path(cfg["out"])
     done = set()

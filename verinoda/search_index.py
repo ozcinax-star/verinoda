@@ -1977,6 +1977,26 @@ def _near(seq: list[str], a: frozenset, b: frozenset, gap: int = PROX_GAP) -> bo
     return False
 
 
+def _pair_pids(acc: dict, pairs: list) -> set:
+    """The ids of ``acc`` (id -> {token: ...}) with a token of both sets of some pair, and two distinct question tokens
+    at least: what testing every passage against every pair finds, walked the other way round (the passages of each
+    token, then a union and an intersection per pair). The pair test on every passage made a long question (a bug
+    report) on a big repository slow: 419,000 passages by 130 pairs took 36 s."""
+    if not pairs:
+        return set()
+    want = set().union(*(a | b for a, b in pairs))
+    by_token: dict[str, set] = {}
+    for pid, tokens_of in acc.items():
+        for t in want & tokens_of.keys():
+            by_token.setdefault(t, set()).add(pid)
+    found: set = set()
+    for a, b in pairs:
+        side_a = set().union(*(by_token.get(t, ()) for t in a))
+        if side_a:
+            found |= side_a & set().union(*(by_token.get(t, ()) for t in b))
+    return {pid for pid in found if len(want & acc[pid].keys()) >= 2}
+
+
 def _proximity(g, conn: sqlite3.Connection, h: "Handle", q: "QueryTerms",
                acc: dict[int, dict[str, float]], name_tf: dict[int, dict[str, int]],
                qw: dict[str, float]) -> tuple[set[int], set[int]]:
@@ -1988,12 +2008,7 @@ def _proximity(g, conn: sqlite3.Connection, h: "Handle", q: "QueryTerms",
     pairs = _query_pairs(q.words)
     if not pairs:
         return set(), set()
-    want = set().union(*(a | b for a, b in pairs))
-
-    def has_pair(keys) -> bool:
-        return any(keys & a and keys & b for a, b in pairs)
-
-    cand = [pid for pid, a_p in acc.items() if len(want & a_p.keys()) >= 2 and has_pair(a_p.keys())]
+    cand = list(_pair_pids(acc, pairs))
     cand.sort(key=lambda pid: (-sum(qw.get(t, 0.0) for t in acc[pid]), pid))
     cand = cand[:PROX_CANDIDATES]
     hit_p: set[int] = set()
@@ -2017,8 +2032,8 @@ def _proximity(g, conn: sqlite3.Connection, h: "Handle", q: "QueryTerms",
             if any(_near(seq, x, y) for x, y in pairs):
                 hit_p.add(pid)
     hit_u: set[int] = set()
-    for uid, ntf in name_tf.items():
-        if has_pair(ntf.keys()) and uid in h.units:
+    for uid in sorted(_pair_pids(name_tf, pairs)):
+        if uid in h.units:
             seq = tokens(h.units[uid][3] or "")
             if any(_near(seq, x, y) for x, y in pairs):
                 hit_u.add(uid)

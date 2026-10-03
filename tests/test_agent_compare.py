@@ -613,3 +613,41 @@ def test_a_choice_the_mod_stored_is_emptied_for_the_run_and_put_back_after_it(tm
     assert json.loads(mine.read_text(encoding="utf-8")) == {"auto": "search"}
     with big_run.isolated_plugin_store(tmp_path / "no-such-folder"):  # nothing stored yet is fine
         pass
+
+
+def test_a_study_may_cap_the_sessions_running_at_once_whatever_the_arms(tmp_path, monkeypatch):
+    """Every arm has its own pool, and a Verinoda session holds a daemon and a `claude` process: a cap over all arms."""
+    import threading
+    import time
+    state = {"now": 0, "peak": 0}
+    guard = threading.Lock()
+
+    def fake_run(argv, cwd, env, timeout):
+        with guard:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.05)
+        with guard:
+            state["now"] -= 1
+        return 0, json.dumps({"session_id": "s", "usage": {}, "result": "{}"}), "", 0.1
+    monkeypatch.setattr(big_run, "run", fake_run)
+    monkeypatch.setattr(big_run, "find_transcript", lambda sid: None)
+    cfg = {"model": "m", "copy_pattern": str(tmp_path / "{task}" / "{arm}"), "arms": ["none", "verinoda_setup"]}
+    tasks = [{"id": f"t{i}", "title": "T", "body": "B", "gold": ["a.py"]} for i in range(8)]
+    big_run.set_session_limit(2)
+    try:
+        threads = [threading.Thread(target=big_run.one, args=(cfg, t, a)) for t in tasks for a in cfg["arms"]]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(30)
+    finally:
+        big_run.set_session_limit(None)
+    assert state["peak"] == 2
+    state.update(now=0, peak=0)
+    threads = [threading.Thread(target=big_run.one, args=(cfg, t, "none")) for t in tasks]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(30)
+    assert state["peak"] > 2  # without a cap they run together

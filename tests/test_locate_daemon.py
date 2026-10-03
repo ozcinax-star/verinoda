@@ -194,3 +194,40 @@ def test_start_without_an_index_is_an_error_not_a_hang(tmp_path, capsys):
     with pytest.raises(SystemExit):
         cli.main(["locate", "--daemon", "start", "--repo", str(repo), "--json"])
     assert time.monotonic() - started < 20
+
+
+# -- a graph that takes a long time to load ---------------------------------------------------------------------
+
+def test_the_daemon_listens_before_the_graph_is_loaded_and_coupled_answers_meanwhile(orders, monkeypatch):
+    """Home Assistant's graph takes 30 s or more to load: `start` must not wait for it, and what needs no graph
+    (`coupled`) is answered meanwhile; `locate` waits for it."""
+    gate = threading.Event()
+    real = locate_daemon.locate.GraphKeeper.__call__
+
+    def slow(self):
+        gate.wait(60)
+        return real(self)
+    monkeypatch.setattr(locate_daemon.locate.GraphKeeper, "__call__", slow)
+    d = locate_daemon.Daemon(orders, token="t" * 40, idle_timeout=600)
+    t = threading.Thread(target=d.serve_forever, daemon=True)
+    t.start()
+    try:
+        assert d.ready.wait(10) and not d.loaded.is_set()
+        code, st = call(d.url, "/status", d.token)
+        assert code == 200 and st["graph_loaded"] is False and st["loading"] is True
+        code, res = call(d.url, "/coupled", d.token, {"files": ["orders/pricing.py"]})
+        assert code == 200 and res["files"][0]["path"] == "tests/test_pricing.py"
+        answers = []
+        asker = threading.Thread(target=lambda: answers.append(call(d.url, "/locate", d.token, {"text": TEXT})))
+        asker.start()
+        asker.join(1.0)
+        assert asker.is_alive() and not answers  # locate waits for the graph
+        gate.set()
+        asker.join(60)
+        assert answers and answers[0][0] == 200 and answers[0][1]["files"][0]["path"] == "orders/pricing.py"
+        code, st = call(d.url, "/status", d.token)
+        assert st["graph_loaded"] is True and st["loading"] is False
+    finally:
+        gate.set()
+        d.shutdown()
+        t.join(10)

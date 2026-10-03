@@ -11,6 +11,8 @@ tens of milliseconds to about a second, which is what a prompt hook or the first
   "max_files", "history"}`` answer what the command's ``--json`` prints, plus ``text``: the compact text a model reads.
   ``GET /status``; ``POST /shutdown`` (what ``stop`` uses, so a stop never signals a process id that may have been
   reused). Requests are answered one after another (git and the graph are shared).
+* It listens at once and loads the graph in the background: ``start`` returns when it listens, ``/coupled`` is answered
+  meanwhile and ``/locate`` waits for the graph (``/status`` says ``loading``).
 * It ends by itself after ``IDLE_TIMEOUT`` seconds without a request, and ``start`` finds one that is running by the
   state file and a status request, never by a process id.
 """
@@ -38,7 +40,8 @@ STATE_NAME = "locate-daemon.json"
 LOG_NAME = "locate-daemon.log"
 HOST = "127.0.0.1"
 IDLE_TIMEOUT = 600.0
-START_WAIT = 150.0  # seconds `start` waits for the daemon to load the graph and listen
+START_WAIT = 150.0  # seconds `start` waits for the daemon to listen (not for the graph: that loads meanwhile)
+LOAD_WAIT = 900.0  # seconds a `locate` request waits for the graph to load
 STOP_WAIT = 20.0
 TOKEN_HEADER = "X-Verinoda-Token"
 MAX_BODY = 1_000_000
@@ -145,7 +148,9 @@ class _Handler(BaseHTTPRequestHandler):
 
 class Daemon:
     """The graph kept loaded behind a loopback HTTP server. ``serve_forever`` runs until ``shutdown``, a ``/shutdown``
-    request or ``idle_timeout`` seconds without a request; ``ready`` is set once it listens (the graph loaded first)."""
+    request or ``idle_timeout`` seconds without a request. ``ready`` is set once it listens; the graph loads in the
+    background (30 s or more on a big repository) and ``loaded`` is set when it has: ``/coupled`` needs no graph and is
+    answered meanwhile, ``/locate`` waits for it."""
 
     def __init__(self, repo: Path | str, *, token: str | None = None, idle_timeout: float = IDLE_TIMEOUT,
                  state_file: bool = False) -> None:
@@ -157,6 +162,7 @@ class Daemon:
         self.requests = 0
         self.warm = False
         self.ready = threading.Event()
+        self.loaded = threading.Event()
         self.stopped = threading.Event()
         self._lock = threading.Lock()
         self._serving = threading.Event()
@@ -179,11 +185,13 @@ class Daemon:
 
     def status(self) -> dict:
         return {"ok": True, "pid": os.getpid(), "repo": str(self.repo), "graph_loaded": self.warm,
-                "requests": self.requests, "idle_timeout": self.idle_timeout,
+                "loading": not self.loaded.is_set(), "requests": self.requests, "idle_timeout": self.idle_timeout,
                 "uptime_s": round(time.monotonic() - self._started, 1)}
 
     def answer(self, kind: str, body: dict) -> tuple[int, dict]:
         """One locate or coupled request: (HTTP status, JSON). Errors are answers; the daemon serves the next."""
+        if kind == "locate" and not self.loaded.wait(LOAD_WAIT):
+            return 503, {"error": "the graph is still loading"}
         with self._lock:
             self.requests += 1
             try:
@@ -209,20 +217,26 @@ class Daemon:
         if self._serving.is_set():
             self.httpd.shutdown()
 
+    def _load(self) -> None:
+        try:
+            self.keeper()
+            self.warm = True
+        except Exception as exc:  # noqa: BLE001 - coupled needs no graph: the daemon still serves it
+            print(f"verinoda locate daemon: the graph could not be loaded ({exc}); locate will fail",
+                  file=sys.stderr, flush=True)
+        finally:
+            self.touch()
+            self.loaded.set()
+
     def serve_forever(self) -> None:
         try:
-            try:
-                self.keeper()  # the graph is loaded before the first request: the first one is not the slow one
-                self.warm = True
-            except Exception as exc:  # noqa: BLE001 - coupled needs no graph: the daemon still serves it
-                print(f"verinoda locate daemon: the graph could not be loaded ({exc}); locate will fail",
-                      file=sys.stderr, flush=True)
             if self._write:
                 _write_state(self.repo, {"pid": os.getpid(), "url": self.url, "host": HOST, "port": self.port,
                                          "token": self.token, "repo": str(self.repo), "idle_timeout": self.idle_timeout,
                                          "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
             self.touch()
             threading.Thread(target=self._watch, daemon=True).start()
+            threading.Thread(target=self._load, daemon=True).start()
             self.ready.set()
             if not self._stop_asked:
                 self._serving.set()
@@ -275,7 +289,7 @@ def status(repo: Path | str) -> dict:
         _remove_state(repo, state.get("pid"))
         return {"running": False}
     return {"running": True, "url": state.get("url"), "token": state["token"], "pid": data.get("pid", state.get("pid")),
-            "graph_loaded": data.get("graph_loaded"), "requests": data.get("requests"),
+            "graph_loaded": data.get("graph_loaded"), "loading": data.get("loading"), "requests": data.get("requests"),
             "idle_timeout": data.get("idle_timeout"), "uptime_s": data.get("uptime_s")}
 
 
@@ -346,6 +360,6 @@ def render(res: dict) -> str:
     if not res.get("running"):
         tail = f"\n{res['log_tail']}" if res.get("log_tail") else ""
         return "locate daemon: not running" + tail
-    loaded = "graph loaded" if res.get("graph_loaded") else "graph not loaded"
+    loaded = "graph loaded" if res.get("graph_loaded") else "graph loading" if res.get("loading") else "graph not loaded"
     return (f"locate daemon: running at {res.get('url')} (pid {res.get('pid')}, {loaded}, {res.get('requests') or 0} "
             f"requests, ends after {res.get('idle_timeout')} s idle)")
