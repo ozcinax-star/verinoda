@@ -749,3 +749,48 @@ def test_the_project_sentence_may_name_the_tasks_own_repository(tmp_path):
     p = big_run.prompt_for(task, tmp_path, "the {repo} repository at {c} (a git checkout at the commit before the fix)")
     assert p.startswith("You are working in the fmtlib/fmt repository at ") and "(a git checkout at the commit before the fix)" in p
     assert big_run.prompt_for({"id": "x", "title": "T", "body": "B"}, tmp_path, "the repository at {c}").startswith("You are working in the repository at ")
+
+
+stale_locate = _load("stale_locate")
+
+
+def test_the_stale_experiment_walks_k_commits_on_from_the_base_and_reads_the_listed_paths(tmp_path):
+    import subprocess
+
+    def git(*a):
+        return subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True,
+                              capture_output=True, text=True).stdout.strip()
+    git("init", "-q")
+    shas = []
+    for i in range(6):
+        (tmp_path / "f.txt").write_bytes(f"{i}\n".encode())
+        git("add", "-A")
+        git("commit", "-qm", f"c{i}")
+        shas.append(git("rev-parse", "HEAD"))
+    assert stale_locate.descendant(str(tmp_path), shas[1], 1) == shas[2]
+    assert stale_locate.descendant(str(tmp_path), shas[1], 4) == shas[5]
+    assert stale_locate.descendant(str(tmp_path), shas[1], 5) is None  # only four commits come after it
+    assert stale_locate.listed({"files": [{"path": "a.c"}, {"path": "b.h"}]}) == ["a.c", "b.h"] and stale_locate.listed({}) == []
+
+
+delivery_funnel = _load("delivery_funnel")
+
+
+def test_the_funnel_counts_gold_files_the_mod_showed_and_the_agent_named(tmp_path):
+    text = ("verinoda locate: 3 files (history: 9 commits read)\nlikely\n  src/kernel/boot.c:581-597 clock_sync_test  - matches: clock\n"
+            "also check (change together with the above)\n  include/kernel/boot.h  - changed together in 3 of 4 commits\n")
+    lines = [{"type": "attachment", "attachment": {"type": "hook_additional_context", "hookName": "prompt.submit",
+                                                   "content": ["[Verinoda locate] Files Verinoda points to.\n\n" + text]}},
+             {"type": "attachment", "attachment": {"type": "hook_additional_context", "hookName": "tool.call", "content": [
+                 "[Verinoda coupled] src/a.c is usually changed together with these files:\n- src/b.c: changed together in 2 of 3 commits"]}},
+             {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "content": "nothing to do with it"}]}}]
+    t = tmp_path / "s.jsonl"
+    t.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    assert delivery_funnel.shown_paths(t) == {"src/kernel/boot.c", "include/kernel/boot.h", "src/b.c"}
+    tasks = [{"id": "t", "gold": ["src/kernel/boot.c", "include/kernel/boot.h", "src/arch/x86/machine.h", "src/c.c"]}]
+    rows = [{"id": "t", "arm": "inject", "files": ["src/kernel/boot.c", "src/arch/x86/machine.h"]},
+            {"id": "t", "arm": "none", "files": ["src/c.c"]}]
+    out = delivery_funnel.funnel(tasks, rows, lambda r: t if r["arm"] == "inject" else None)
+    assert out["inject"] == {"sessions": 1, "gold": 4, "shown": 2, "named": 2, "shown_and_named": 1, "shown_not_named": 1,
+                             "named_not_shown": 1, "neither": 1}
+    assert out["none"]["shown"] == 0 and out["none"]["named"] == 1 and out["none"]["neither"] == 3

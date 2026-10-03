@@ -1,0 +1,725 @@
+{
+ "summary": {
+  "tasks": 21,
+  "skipped": 0,
+  "ahead": 100,
+  "mean_overlap": 0.934,
+  "listed_files": 156,
+  "gone_from_the_tree": 0,
+  "tasks_saying_behind": 21,
+  "gold": 34,
+  "gold_listed_fresh": 18,
+  "gold_listed_stale": 16
+ },
+ "rows": [
+  {
+   "id": "i1566",
+   "ahead": 100,
+   "changed_files": 157,
+   "fresh": [
+    "src/kernel/boot.c",
+    "src/arch/x86/kernel/smp_sys.c",
+    "src/arch/riscv/kernel/boot.c",
+    "src/arch/x86/kernel/boot_sys.c",
+    "src/arch/arm/kernel/boot.c",
+    "include/arch/x86/arch/model/smp.h",
+    "src/arch/x86/32/c_traps.c",
+    "include/arch/x86/arch/machine.h"
+   ],
+   "stale": [
+    "src/kernel/boot.c",
+    "src/arch/x86/kernel/smp_sys.c",
+    "src/arch/riscv/kernel/boot.c",
+    "src/arch/x86/kernel/boot_sys.c",
+    "src/arch/arm/kernel/boot.c",
+    "include/arch/x86/arch/model/smp.h",
+    "src/arch/x86/32/c_traps.c",
+    "include/arch/x86/arch/machine.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 1023,
+   "gold_fresh": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "gold_stale": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "gold": 2
+  },
+  {
+   "id": "i1311",
+   "ahead": 100,
+   "changed_files": 157,
+   "fresh": [
+    "src/object/notification.c",
+    "src/object/tcb.c",
+    "src/object/schedcontext.c",
+    "src/kernel/thread.c",
+    "src/object/endpoint.c",
+    "include/object/tcb.h",
+    "include/object/notification.h",
+    "src/fastpath/fastpath.c"
+   ],
+   "stale": [
+    "src/object/notification.c",
+    "src/object/schedcontext.c",
+    "src/object/tcb.c",
+    "src/kernel/thread.c",
+    "src/object/endpoint.c",
+    "include/object/tcb.h",
+    "include/object/notification.h",
+    "src/fastpath/fastpath.c"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 990,
+   "gold_fresh": [
+    "src/object/tcb.c"
+   ],
+   "gold_stale": [
+    "src/object/tcb.c"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i749",
+   "ahead": 100,
+   "changed_files": 153,
+   "fresh": [
+    ".github/workflows/sel4test-sim.yml",
+    ".github/workflows/sel4test-deploy.yml",
+    ".github/workflows/sel4test-hw.yml",
+    ".github/workflows/proof.yml"
+   ],
+   "stale": [
+    ".github/workflows/sel4test-sim.yml",
+    ".github/workflows/sel4test-deploy.yml",
+    ".github/workflows/sel4test-hw.yml",
+    ".github/workflows/proof.yml"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 929,
+   "gold_fresh": [],
+   "gold_stale": [],
+   "gold": 1
+  },
+  {
+   "id": "i991",
+   "ahead": 100,
+   "changed_files": 234,
+   "fresh": [
+    "src/api/syscall.c",
+    ".github/workflows/proof.yml",
+    "src/model/preemption.c",
+    "include/kernel/thread.h",
+    "libsel4/include/api/syscall.xml",
+    "libsel4/sel4_arch_include/ia32/sel4/sel4_arch/syscalls.h",
+    ".github/workflows/sel4test-deploy.yml",
+    ".github/workflows/sel4test-hw.yml"
+   ],
+   "stale": [
+    "src/api/syscall.c",
+    ".github/workflows/proof.yml",
+    "src/model/preemption.c",
+    "include/kernel/thread.h",
+    "libsel4/include/api/syscall.xml",
+    "libsel4/sel4_arch_include/ia32/sel4/sel4_arch/syscalls.h",
+    ".github/workflows/sel4test-deploy.yml",
+    ".github/workflows/sel4test-hw.yml"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 934,
+   "gold_fresh": [
+    "src/api/syscall.c"
+   ],
+   "gold_stale": [
+    "src/api/syscall.c"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i1004",
+   "ahead": 100,
+   "changed_files": 234,
+   "fresh": [
+    "tools/hardware/memory.py",
+    "src/kernel/boot.c",
+    "src/arch/arm/kernel/boot.c",
+    "tools/hardware/utils/memory.py",
+    "tools/hardware/config.py",
+    "tools/hardware/outputs/c_header.py",
+    "tools/hardware/outputs/compat_strings.py",
+    "tools/hardware/outputs/yaml.py"
+   ],
+   "stale": [
+    "src/kernel/boot.c",
+    "tools/hardware/memory.py",
+    "tools/hardware/utils/memory.py",
+    "tools/hardware/config.py",
+    "tools/hardware/outputs/c_header.py",
+    "tools/hardware/outputs/compat_strings.py",
+    "tools/hardware/outputs/yaml.py",
+    "tools/hardware/utils/rule.py"
+   ],
+   "overlap": 0.778,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 936,
+   "gold_fresh": [
+    "src/kernel/boot.c"
+   ],
+   "gold_stale": [
+    "src/kernel/boot.c"
+   ],
+   "gold": 2
+  },
+  {
+   "id": "i1015",
+   "ahead": 100,
+   "changed_files": 120,
+   "fresh": [
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "src/arch/arm/object/vcpu.c",
+    "CHANGES",
+    "libsel4/sel4_arch_include/ia32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/x86_64/sel4/sel4_arch/constants.h"
+   ],
+   "stale": [
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "src/arch/riscv/kernel/thread.c",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/x86_64/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/ia32/sel4/sel4_arch/constants.h",
+    "src/arch/arm/32/kernel/thread.c",
+    "include/arch/riscv/arch/fastpath/fastpath.h"
+   ],
+   "overlap": 0.455,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 961,
+   "gold_fresh": [
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "gold_stale": [
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "gold": 6
+  },
+  {
+   "id": "i1209",
+   "ahead": 100,
+   "changed_files": 119,
+   "fresh": [
+    "src/plat/qemu-arm-virt/config.cmake",
+    "libsel4/sel4_plat_include/allwinnerA20/sel4/plat/api/constants.h",
+    "libsel4/sel4_plat_include/qemu-arm-virt/sel4/plat/api/constants.h",
+    "include/arch/arm/arch/32/mode/machine/registerset.h",
+    "include/arch/arm/arch/machine/debug.h",
+    "libsel4/sel4_plat_include/am335x/sel4/plat/api/constants.h",
+    "libsel4/sel4_plat_include/apq8064/sel4/plat/api/constants.h",
+    "libsel4/sel4_plat_include/bcm2837/sel4/plat/api/constants.h"
+   ],
+   "stale": [
+    "src/plat/qemu-arm-virt/config.cmake",
+    "libsel4/sel4_plat_include/allwinnerA20/sel4/plat/api/constants.h",
+    "libsel4/sel4_plat_include/qemu-arm-virt/sel4/plat/api/constants.h",
+    "include/arch/arm/arch/32/mode/machine/registerset.h",
+    "include/arch/arm/arch/machine/debug.h",
+    "libsel4/sel4_plat_include/am335x/sel4/plat/api/constants.h",
+    "libsel4/sel4_plat_include/apq8064/sel4/plat/api/constants.h",
+    "libsel4/sel4_plat_include/bcm2837/sel4/plat/api/constants.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 961,
+   "gold_fresh": [
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "gold_stale": [
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i1104",
+   "ahead": 100,
+   "changed_files": 159,
+   "fresh": [
+    "src/object/tcb.c",
+    "src/kernel/thread.c",
+    "src/arch/arm/object/vcpu.c",
+    "include/kernel/thread.h",
+    "include/object/tcb.h",
+    "src/api/syscall.c",
+    "src/object/endpoint.c",
+    "include/arch/arm/arch/object/vcpu.h"
+   ],
+   "stale": [
+    "src/object/tcb.c",
+    "src/kernel/thread.c",
+    "src/arch/arm/object/vcpu.c",
+    "include/kernel/thread.h",
+    "include/object/tcb.h",
+    "include/arch/arm/arch/object/vcpu.h",
+    "src/api/syscall.c",
+    "src/object/endpoint.c"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 991,
+   "gold_fresh": [
+    "src/arch/arm/object/vcpu.c"
+   ],
+   "gold_stale": [
+    "src/arch/arm/object/vcpu.c"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i28",
+   "ahead": 100,
+   "changed_files": 152,
+   "fresh": [
+    "src/plat/pc99/machine/pci.c",
+    "src/arch/x86/kernel/cmdline.c",
+    "src/plat/pc99/machine/hardware.c",
+    "src/arch/x86/kernel/boot_sys.c",
+    "src/plat/pc99/machine/acpi.c",
+    "src/plat/pc99/machine/intel-vtd.c",
+    "src/arch/x86/kernel/boot.c",
+    "src/arch/x86/api/faults.c"
+   ],
+   "stale": [
+    "src/plat/pc99/machine/pci.c",
+    "src/arch/x86/kernel/cmdline.c",
+    "src/plat/pc99/machine/hardware.c",
+    "src/arch/x86/kernel/boot_sys.c",
+    "src/plat/pc99/machine/acpi.c",
+    "src/plat/pc99/machine/intel-vtd.c",
+    "src/arch/x86/kernel/boot.c",
+    "src/arch/x86/api/faults.c"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 655,
+   "gold_fresh": [
+    "src/arch/x86/kernel/cmdline.c"
+   ],
+   "gold_stale": [
+    "src/arch/x86/kernel/cmdline.c"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i1199",
+   "ahead": 100,
+   "changed_files": 121,
+   "fresh": [
+    "include/arch/arm/arch/64/mode/smp/smp.h",
+    "include/arch/arm/arch/machine/gic_v2.h",
+    "include/arch/arm/arch/machine/gic_v3.h",
+    "src/arch/arm/machine/gic_v3.c",
+    "include/arch/arm/arch/machine/gic_common.h",
+    "src/arch/arm/kernel/boot.c",
+    "src/arch/arm/machine/gic_v2.c",
+    "include/arch/arm/arch/32/mode/smp/smp.h"
+   ],
+   "stale": [
+    "include/arch/arm/arch/64/mode/smp/smp.h",
+    "include/arch/arm/arch/machine/gic_v2.h",
+    "include/arch/arm/arch/machine/gic_v3.h",
+    "src/arch/arm/machine/gic_v3.c",
+    "include/arch/arm/arch/machine/gic_common.h",
+    "src/arch/arm/kernel/boot.c",
+    "src/arch/arm/machine/gic_v2.c",
+    "include/arch/arm/arch/32/mode/smp/smp.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 961,
+   "gold_fresh": [],
+   "gold_stale": [],
+   "gold": 1
+  },
+  {
+   "id": "i1529",
+   "ahead": 100,
+   "changed_files": 128,
+   "fresh": [
+    "configs/seL4Config.cmake",
+    "tools/invocation_json_gen.py",
+    "config.cmake",
+    "src/arch/arm/config.cmake",
+    "src/arch/arm/kernel/boot.c",
+    "src/plat/tx2/config.cmake"
+   ],
+   "stale": [
+    "configs/seL4Config.cmake",
+    "tools/invocation_json_gen.py",
+    "config.cmake",
+    "src/arch/arm/config.cmake",
+    "src/arch/arm/kernel/boot.c",
+    "src/plat/tx2/config.cmake"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 1007,
+   "gold_fresh": [],
+   "gold_stale": [],
+   "gold": 1
+  },
+  {
+   "id": "i1489",
+   "ahead": 100,
+   "changed_files": 130,
+   "fresh": [
+    "src/arch/arm/machine/gic_v3.c",
+    "include/arch/arm/arch/machine/gic_v3.h",
+    "tools/config_gen.py",
+    "include/arch/arm/arch/machine/gic_v2.h",
+    "include/arch/arm/arch/machine/gic_common.h"
+   ],
+   "stale": [
+    "src/arch/arm/machine/gic_v3.c",
+    "include/arch/arm/arch/machine/gic_v3.h",
+    "tools/config_gen.py",
+    "include/arch/arm/arch/machine/gic_v2.h",
+    "include/arch/arm/arch/machine/gic_common.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 1007,
+   "gold_fresh": [
+    "include/arch/arm/arch/machine/gic_v3.h"
+   ],
+   "gold_stale": [
+    "include/arch/arm/arch/machine/gic_v3.h"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i1170",
+   "ahead": 100,
+   "changed_files": 132,
+   "fresh": [
+    "src/arch/riscv/idle.c",
+    "src/arch/arm/32/idle.c",
+    "src/arch/arm/64/idle.c",
+    "src/arch/x86/idle.c",
+    "include/arch/arm/armv/armv7-a/armv/machine.h",
+    "include/util.h",
+    "src/arch/arm/32/idle.S",
+    "include/api/debug.h"
+   ],
+   "stale": [
+    "src/arch/riscv/idle.c",
+    "src/arch/arm/32/idle.c",
+    "src/arch/arm/64/idle.c",
+    "src/arch/x86/idle.c",
+    "include/arch/arm/armv/armv7-a/armv/machine.h",
+    "include/util.h",
+    "src/arch/arm/32/idle.S",
+    "include/api/debug.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 1023,
+   "gold_fresh": [],
+   "gold_stale": [],
+   "gold": 2
+  },
+  {
+   "id": "i1091",
+   "ahead": 100,
+   "changed_files": 139,
+   "fresh": [
+    "src/arch/riscv/kernel/vspace.c",
+    "src/kernel/sporadic.c",
+    "src/arch/arm/kernel/boot.c",
+    "include/kernel/sporadic.h",
+    "src/kernel/thread.c",
+    "include/kernel/thread.h",
+    "src/arch/riscv/kernel/boot.c",
+    "src/api/syscall.c"
+   ],
+   "stale": [
+    "src/arch/riscv/kernel/vspace.c",
+    "src/kernel/sporadic.c",
+    "src/arch/arm/kernel/boot.c",
+    "include/kernel/sporadic.h",
+    "src/kernel/thread.c",
+    "include/kernel/thread.h",
+    "src/arch/riscv/kernel/boot.c",
+    "src/api/syscall.c"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 944,
+   "gold_fresh": [],
+   "gold_stale": [],
+   "gold": 3
+  },
+  {
+   "id": "i805",
+   "ahead": 100,
+   "changed_files": 155,
+   "fresh": [
+    "gcc.cmake",
+    "tools/lex.py",
+    "include/assert.h",
+    "tools/umm.py",
+    "include/config.h",
+    "include/util.h",
+    "src/assert.c",
+    "libsel4/include/sel4/assert.h"
+   ],
+   "stale": [
+    "gcc.cmake",
+    "tools/lex.py",
+    "include/assert.h",
+    "tools/umm.py",
+    "include/config.h",
+    "include/util.h",
+    "src/assert.c",
+    "libsel4/include/sel4/assert.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 937,
+   "gold_fresh": [],
+   "gold_stale": [],
+   "gold": 2
+  },
+  {
+   "id": "i56",
+   "ahead": 100,
+   "changed_files": 232,
+   "fresh": [
+    "src/kernel/boot.c",
+    "src/arch/arm/kernel/boot.c",
+    "src/arch/x86/kernel/boot.c",
+    "src/arch/arm/32/kernel/vspace.c",
+    "src/arch/x86/kernel/boot_sys.c",
+    "src/api/syscall.c",
+    "Kconfig",
+    "src/arch/x86/32/kernel/vspace.c"
+   ],
+   "stale": [
+    "src/kernel/boot.c",
+    "src/arch/arm/kernel/boot.c",
+    "src/arch/x86/kernel/boot.c",
+    "src/arch/arm/32/kernel/vspace.c",
+    "src/arch/x86/kernel/boot_sys.c",
+    "src/api/syscall.c",
+    "Kconfig",
+    "src/arch/x86/32/kernel/vspace.c"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 842,
+   "gold_fresh": [
+    "src/kernel/boot.c"
+   ],
+   "gold_stale": [
+    "src/kernel/boot.c"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i1008",
+   "ahead": 100,
+   "changed_files": 158,
+   "fresh": [
+    "tools/hardware/utils/memory.py",
+    "tools/hardware/memory.py",
+    "src/kernel/boot.c",
+    "tools/hardware/config.py",
+    "tools/hardware/outputs/c_header.py",
+    "tools/hardware/outputs/compat_strings.py",
+    "tools/hardware/outputs/yaml.py",
+    "tools/hardware/utils/rule.py"
+   ],
+   "stale": [
+    "tools/hardware/utils/memory.py",
+    "tools/hardware/memory.py",
+    "src/util.c",
+    "tools/hardware/config.py",
+    "include/util.h",
+    "tools/hardware/outputs/c_header.py",
+    "tools/hardware/outputs/yaml.py",
+    "tools/hardware/outputs/compat_strings.py"
+   ],
+   "overlap": 0.6,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 1000,
+   "gold_fresh": [
+    "src/kernel/boot.c"
+   ],
+   "gold_stale": [],
+   "gold": 3
+  },
+  {
+   "id": "i788",
+   "ahead": 100,
+   "changed_files": 155,
+   "fresh": [
+    "tools/bitfield_gen.py",
+    "libsel4/tools/syscall_stub_gen.py",
+    "include/arch/arm/arch/32/mode/object/structures.h",
+    "src/arch/arm/32/object/objecttype.c",
+    "include/arch/x86/arch/32/mode/object/structures.h",
+    "src/arch/arm/32/kernel/vspace.c",
+    "include/object/structures.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+   ],
+   "stale": [
+    "tools/bitfield_gen.py",
+    "libsel4/tools/syscall_stub_gen.py",
+    "include/arch/arm/arch/32/mode/object/structures.h",
+    "src/arch/arm/32/object/objecttype.c",
+    "include/arch/x86/arch/32/mode/object/structures.h",
+    "src/arch/arm/32/kernel/vspace.c",
+    "include/object/structures.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 933,
+   "gold_fresh": [
+    "tools/bitfield_gen.py"
+   ],
+   "gold_stale": [
+    "tools/bitfield_gen.py"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i1243",
+   "ahead": 100,
+   "changed_files": 159,
+   "fresh": [
+    "src/drivers/smmu/smmuv2.c",
+    "include/api/types.h",
+    "tools/changed.sh",
+    "include/drivers/smmu/smmuv2.h",
+    "libsel4/arch_include/arm/interfaces/sel4arch.xml",
+    "src/arch/arm/object/smmu.c",
+    "src/arch/arm/64/object/objecttype.c",
+    "include/arch/arm/arch/object/smmu.h"
+   ],
+   "stale": [
+    "tools/bitfield_gen.py",
+    "src/drivers/smmu/smmuv2.c",
+    "include/api/types.h",
+    "include/drivers/smmu/smmuv2.h",
+    "libsel4/arch_include/arm/interfaces/sel4arch.xml",
+    "src/arch/arm/object/smmu.c",
+    "src/arch/arm/64/object/objecttype.c",
+    "include/arch/arm/arch/object/smmu.h"
+   ],
+   "overlap": 0.778,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 978,
+   "gold_fresh": [
+    "include/api/types.h"
+   ],
+   "gold_stale": [
+    "include/api/types.h"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i53",
+   "ahead": 100,
+   "changed_files": 154,
+   "fresh": [
+    "tools/invocation_header_gen.py",
+    "libsel4/tools/invocation_header_gen.py",
+    "tools/syscall_header_gen.py",
+    "libsel4/tools/syscall_stub_gen.py",
+    "libsel4/tools/syscall_header_gen.py"
+   ],
+   "stale": [
+    "tools/invocation_header_gen.py",
+    "libsel4/tools/invocation_header_gen.py",
+    "tools/syscall_header_gen.py",
+    "libsel4/tools/syscall_stub_gen.py",
+    "libsel4/tools/syscall_header_gen.py"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 750,
+   "gold_fresh": [
+    "tools/invocation_header_gen.py"
+   ],
+   "gold_stale": [
+    "tools/invocation_header_gen.py"
+   ],
+   "gold": 1
+  },
+  {
+   "id": "i472",
+   "ahead": 100,
+   "changed_files": 234,
+   "fresh": [
+    "include/arch/arm/arch/machine/gic_v2.h",
+    "include/arch/arm/arch/machine/gic_v3.h",
+    "include/drivers/irq/am335x.h",
+    "include/arch/arm/arch/machine/gic_common.h",
+    "src/arch/arm/machine/gic_v3.c",
+    "src/arch/arm/machine/gic_v2.c",
+    "include/arch/arm/arch/object/interrupt.h",
+    "include/machine/interrupt.h"
+   ],
+   "stale": [
+    "include/arch/arm/arch/machine/gic_v2.h",
+    "include/arch/arm/arch/machine/gic_v3.h",
+    "include/drivers/irq/am335x.h",
+    "include/arch/arm/arch/machine/gic_common.h",
+    "src/arch/arm/machine/gic_v3.c",
+    "src/arch/arm/machine/gic_v2.c",
+    "include/arch/arm/arch/object/interrupt.h",
+    "include/machine/interrupt.h"
+   ],
+   "overlap": 1.0,
+   "gone_from_the_tree": [],
+   "says_behind": true,
+   "stale_count": 934,
+   "gold_fresh": [],
+   "gold_stale": [],
+   "gold": 1
+  }
+ ]
+}

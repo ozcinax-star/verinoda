@@ -1,0 +1,8 @@
+{
+ "tasks": "<REPO>/benchmarks/results/agent-compare-sel4-2026-10-02/tasks.json",
+ "fresh": "<BENCH>/assist/sel4/work/{task}/verinoda_mod",
+ "stale": "<BENCH>/assist/sel4/stale/{task}",
+ "full": "<BENCH>/sel4/full",
+ "verinoda": "<REPO>/.venv/Scripts/verinoda.exe",
+ "ahead": 100
+}
