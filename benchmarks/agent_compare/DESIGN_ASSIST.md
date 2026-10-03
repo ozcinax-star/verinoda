@@ -191,12 +191,20 @@ seL4 development runs had finished and Home Assistant's were running when these 
     (the agent alone is at the ceiling), and in seL4 only 7 of the 21 tasks differ between any two arms: the choice rests on a
     handful of tasks. The confirmatory set, where every task has two to six gold files, is where a claim can be made.
 
-Bug fixes made after the development runs and before `selection.json` (none changes what an answer lists in those runs): the
+12. **Home Assistant's first development sessions did not get the treatment, and were rerun.** The mod asked the daemon through
+    the host's own HTTP call, whose time limit ended Home Assistant's answers (10 to 100 s; the daemon's log is full of reset
+    connections): `inject` reached the model in 2 of 19 sessions and the gate in 1 of 13, where on seL4 (answers of 0.2 to 1.3 s)
+    they reached 63 of 63. The 129 mod-arm sessions of that run are kept apart (`ha/dev_r1.jsonl.undelivered`) and the mod arms
+    were run again with the fix below; `none` and `verinoda_setup` are unaffected and were kept. The arm choice reads the
+    rerun only. The seL4 development runs are not affected.
+
+Bug fixes made after the development runs began and before `selection.json` (none changes what an answer lists): the
 daemon's `status` checks that the server that answers is this repository's daemon (the `repo` and `pid` it reports) and
 never takes a host from the state file, `stop` checks the answer to its request, two `start`s at once leave one daemon, a
 slow answer does not delete the state file of a live daemon, and a request in flight is not ended by the idle timeout; the
 git deadline of `locate` ends the whole process tree on Windows; the mod applies its project test to the tools, the
 system-prompt line and the gate as to the prompt, forgets the files read when a new task starts, spends its note budget on
-source files only once each, and sends nothing but to 127.0.0.1. One known fault is left as it is: `locate` reads the history of
+source files only once each, and makes no HTTP call at all: `locate` and `coupled` ask a running daemon of the repository
+themselves (a command's limit is ten minutes; `--no-daemon` computes in the command) and the mod only runs them. One known fault is left as it is: `locate` reads the history of
 all anchors in one walk limited to 300 commits per anchor in all, so a quiet anchor next to a busy one may get fewer
 commits than its own 300; the answer says "history read" all the same. It is the same in every arm and every set.
