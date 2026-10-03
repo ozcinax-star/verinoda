@@ -1,6 +1,6 @@
 {
   "name": "verinoda-live",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Verinoda in Claude Code: keeps the code index fresh while Claude edits, checks each edit for names that do not exist, reviews commits, and shows it all in a Turkish pane with an animated mascot.",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -27,7 +27,17 @@
       "title": "Code questions at start",
       "description": "What a code question gets before anything is chosen with /verinoda-auto: off, nudge (the agent is asked to start with Verinoda's analyze) or search (Verinoda's results are attached). A choice made with /verinoda-auto is kept and wins.",
       "default": "off",
-      "options": ["off", "nudge", "search"]
+      "options": [
+        "off",
+        "nudge",
+        "search"
+      ]
+    },
+    "assist": {
+      "type": "string",
+      "title": "Where a change belongs",
+      "description": "Help with finding every file a change touches, before anything is chosen with /verinoda-assist. Presets: off; inject (the located files go in with the prompt); tool (locate and coupled tools, first-class, and a line in the system prompt); full (tool, and a note of what changes together with each source file the agent opens); strict (full, and the first search of a task is answered with the located files). Or a comma list of inject, coupled, tool, prompt, gate. A choice made with /verinoda-assist is kept and wins.",
+      "default": "off"
     },
     "motion": {
       "type": "boolean",

@@ -61,6 +61,12 @@ export type CheckInfo = {
 }
 
 declare module 'claude-code' {
+  // The tools the mod registers (feature `tool`), so a `tool.call` hook can name them and read their arguments.
+  interface McpToolInputs {
+    'mcp__verinoda-live__locate': { text: string; files?: string[] }
+    'mcp__verinoda-live__coupled': { files: string[] }
+  }
+
   interface PluginState {
     'verinoda-live': {
       status: string
@@ -74,6 +80,7 @@ declare module 'claude-code' {
       lastReview: ReviewInfo | null
       reviewing: string | null // the short sha of the commit under review
       expanded: boolean // the review summary shown whole
+      assist: string // the assist setting: a preset (off, inject, tool, full, strict) or a list of features
     }
   }
 }

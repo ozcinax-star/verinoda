@@ -2,6 +2,11 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { AutoMode, CheckInfo, ContextInfo, IndexKind, IndexState, Notice, ReviewInfo } from '../types'
+import {
+  ASSIST_USAGE, assistFeatures, assistPrompt, COUPLED_TOOL, coupledNote, isBlockedSearch, isSourceFile, LOCATE_TOOL, parseAssist,
+  renderLocate, TOOL_SPECS,
+} from './assist'
+import type { Features, Located } from './assist'
 import { frameRows, MASCOT_HEIGHT, MASCOT_WIDTH } from './mascot'
 import type { MascotProps, Mood } from './mascot'
 
@@ -60,6 +65,17 @@ const QUESTION_ANYWHERE = new RegExp(
 // A shell command that may move HEAD; whether it did is read from HEAD itself, before and after.
 const GIT_WORD = /\bgit\b/
 
+// The assist features (./assist.ts) ask `verinoda locate` and `verinoda coupled`. A daemon, when the CLI has one, keeps
+// the graph loaded (loading it takes 3 s on seL4 and about 30 s on Home Assistant); without one every lookup is a CLI run.
+const LOCATE_TIMEOUT_MS = 90_000
+const DAEMON_START_TIMEOUT_MS = 120_000
+const LOCATE_TEXT_MAX = 4_000 // of a report, what the lookup is given: a command line has a limit
+const LOCATE_ANSWER_MAX = 1_800
+const ANCHORS_MAX = 5
+const COUPLED_BUDGET = 6 // notes about a file's partners, per session: each is a lookup and a few hundred tokens
+const TASK_MIN_CHARS = 40 // a prompt shorter than this is not a task to locate
+const ASSIST_TOOL = (name: string) => `mcp__verinoda-live__${name}`
+
 const CHECKING: IndexState = { kind: 'checking', n: 0, waiting: false, since: null, at: null, error: '' }
 
 // Session state the drawing reads (declared in ../types); settings are also kept in $.store across sessions.
@@ -74,11 +90,12 @@ const lastContext = atom({ plugin: 'verinoda-live', key: 'lastContext' } as cons
 const lastReview = atom({ plugin: 'verinoda-live', key: 'lastReview' } as const, null as ReviewInfo | null)
 const reviewing = atom({ plugin: 'verinoda-live', key: 'reviewing' } as const, null as string | null)
 const expanded = atom({ plugin: 'verinoda-live', key: 'expanded' } as const, false)
+const assist = atom({ plugin: 'verinoda-live', key: 'assist' } as const, 'off')
 
 // Where Verinoda is, settled at session start from the plugin's settings (`userConfig`), else found: the project is
 // the nearest folder at or above the session's with a .verinoda index; the CLI is the project's own .venv one if it
 // has one, else `verinoda` on PATH; the Python beside that CLI reads the graph's state.
-const cfg = { cli: 'verinoda', python: 'python', motion: true, auto: 'off' as AutoMode }
+const cfg = { cli: 'verinoda', python: 'python', motion: true, auto: 'off' as AutoMode, assist: 'off' }
 
 // Module state: a reload starts it over, which only forgets edits not yet indexed.
 const live = {
@@ -98,6 +115,13 @@ const live = {
   freshAt: null as number | null,
   isReviewing: false,
   reviewAgain: false, // a commit landed while a review ran: review once more when it ends
+  task: '', // the person's latest prompt long enough to be a task: what the gate and the tools locate from
+  reads: [] as string[], // the project's files the model has opened, relative, in order
+  coupledAsked: new Set<string>(),
+  usedLocate: false, // the model called the locate tool for this task
+  gated: false, // the gate has answered the first search of this task
+  daemon: undefined as { url: string; token: string } | undefined,
+  daemonStart: undefined as Promise<void> | undefined,
 }
 
 export function norm(p: string): string {
@@ -265,6 +289,15 @@ async function setCheck($: EngineInterface, value: boolean): Promise<void> {
   await $.store.set('check', value)
 }
 
+async function setAssist($: EngineInterface, value: string): Promise<void> {
+  await update($, assist, () => value)
+  await $.store.set('assist', value)
+}
+
+async function features($: EngineInterface): Promise<Features> {
+  return assistFeatures(await read($, assist))
+}
+
 // Auto-context and commit review start off, the check after edits on; what the person chose last is kept in the store.
 async function loadSettings($: EngineInterface): Promise<void> {
   // the setting (`userConfig.auto`) is where a session starts that has never been asked; a stored choice wins
@@ -272,9 +305,11 @@ async function loadSettings($: EngineInterface): Promise<void> {
   const mode = stored === undefined ? cfg.auto : asMode(stored)
   const isGuard = (await $.store.get('guard')) === true
   const isCheck = (await $.store.get('check')) !== false
+  const storedAssist = await $.store.get('assist')
   await update($, auto, () => mode)
   await update($, guard, () => isGuard)
   await update($, check, () => isCheck)
+  await update($, assist, () => (typeof storedAssist === 'string' ? storedAssist : cfg.assist))
 }
 
 // `check --diff` reads the lines changed against HEAD (and new files whole); a project without git, or a diff the
@@ -540,6 +575,113 @@ async function retrieve($: EngineInterface, prompt: string): Promise<string | un
   }
 }
 
+// ---- the assist features: lookups, tools, notes (./assist.ts holds the pure parts) ------------------------------
+
+// The daemon, started in the background at session start when a feature will ask for it; an old CLI that knows no
+// `locate --daemon` exits non-zero, and every lookup is then a CLI run.
+async function startDaemon($: EngineInterface, root: string): Promise<void> {
+  try {
+    const { exitCode, stdout } = await $.process.run(
+      [cfg.cli, 'locate', '--daemon', 'start', '--repo', root, '--json'],
+      { cwd: root, timeoutMs: DAEMON_START_TIMEOUT_MS },
+    )
+    if (exitCode !== 0) return
+    const d = JSON.parse(stdout) as { running?: boolean; url?: string; token?: string }
+    if (d.running === true && typeof d.url === 'string' && typeof d.token === 'string') live.daemon = { url: d.url, token: d.token }
+  } catch {
+    // no daemon, nothing lost
+  }
+}
+
+function wantsDaemon(f: Features): boolean {
+  return f.inject || f.coupled || f.tool || f.gate
+}
+
+function ensureDaemon($: EngineInterface, f: Features): void {
+  if (live.root === undefined || live.daemonStart !== undefined || !wantsDaemon(f)) return
+  live.daemonStart = startDaemon($, live.root)
+  background(live.daemonStart)
+}
+
+function parseLocated(text: string): Located | undefined {
+  try {
+    const d = JSON.parse(text) as unknown
+    return typeof d === 'object' && d !== null && !Array.isArray(d) ? (d as Located) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+type Lookup = { op: 'locate'; text: string; anchors: string[] } | { op: 'coupled'; files: string[] }
+
+// One lookup: the daemon when there is one and it answers, else the CLI; undefined when neither does.
+async function lookup($: EngineInterface, root: string, q: Lookup): Promise<Located | undefined> {
+  await live.daemonStart?.catch(() => undefined)
+  const daemon = live.daemon
+  if (daemon !== undefined) {
+    try {
+      const body = q.op === 'locate' ? { text: q.text, anchors: q.anchors, max_chars: LOCATE_ANSWER_MAX } : { files: q.files }
+      const res = await $.http.fetch(`${daemon.url}/${q.op}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Verinoda-Token': daemon.token }, body: JSON.stringify(body),
+      })
+      if (res.ok) return parseLocated(res.text)
+    } catch {
+      // the CLI answers below
+    }
+    live.daemon = undefined // it does not answer: not asked again this session
+  }
+  const argv = q.op === 'locate'
+    ? [cfg.cli, 'locate', '--repo', root, '--json', '--max-chars', String(LOCATE_ANSWER_MAX), ...q.anchors.flatMap(a => ['--anchor', a]), '--', q.text]
+    : [cfg.cli, 'coupled', '--repo', root, '--json', ...q.files]
+  try {
+    const { exitCode, stdout } = await $.process.run(argv, { cwd: root, timeoutMs: LOCATE_TIMEOUT_MS })
+    return exitCode === 0 ? parseLocated(stdout) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function registerAssistTools($: EngineInterface): Promise<void> {
+  for (const spec of TOOL_SPECS) {
+    await $.tool.register({ name: spec.name, description: spec.description, inputSchema: spec.inputSchema as unknown as Record<string, unknown> })
+  }
+}
+
+// A path as the lookups spell it: relative to the project, slashes forward.
+function toRel(root: string, file: string): string {
+  const p = file.replace(/\\/g, '/')
+  return isInside(p, root) ? relPath(root, p) : p.replace(/^\.\//, '')
+}
+
+function noteRead(rel: string): void {
+  if (!live.reads.includes(rel) && live.reads.length < 50) live.reads.push(rel)
+}
+
+// A prompt that could be a task starts a new hunt: the gate may answer its first search, the tool counts as not yet used.
+function startTask(text: string): void {
+  const t = text.trim()
+  if (t.length < TASK_MIN_CHARS || /^[/!#]/.test(t)) return
+  live.task = t
+  live.gated = false
+  live.usedLocate = false
+}
+
+export function locateBlock(answer: string): string {
+  return (
+    "[Verinoda locate] Files Verinoda's index, the project's git history and sibling directories point to for this " +
+    'request. They are leads, not verified answers: read them, check what you rely on, and name every file that ' +
+    `needs the change.\n\n${answer}`
+  )
+}
+
+export function gateText(answer: string): string {
+  return (
+    "[Verinoda] This search was not run. Before searching, Verinoda's index, the project's git history and sibling " +
+    `directories point to these files for the task:\n\n${answer}\n\nRead them first and name every file that needs ` +
+    'the change; run the search again only if you still need it.'
+  )
+}
+
 // What the last commit changed, by concern: Verinoda's review of the working tree against the commit's parent.
 async function reviewCommit($: EngineInterface, sha: string): Promise<void> {
   const root = live.root
@@ -714,10 +856,12 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     live.cwd = await $.session.cwd()
     cfg.auto = asMode(options.auto)
+    cfg.assist = typeof options.assist === 'string' ? options.assist : 'off'
     live.root = await findRoot($, typeof options.root === 'string' ? options.root.trim() : '', live.cwd)
     if (live.root !== undefined) await resolveTools($, live.root, options)
     await loadSettings($)
     await $.command.register({ name: 'verinoda-update', description: 'Re-index the files edited this session now.' })
+    await $.command.register({ name: 'verinoda-assist', description: 'Where a change belongs: locate files, what changes together, a tool and the first search (off, inject, tool, full, strict).' })
     await $.command.register({ name: 'verinoda-auto', description: 'Code questions: nudge (start with Verinoda analyze), search (attach results) or off.' })
     await $.command.register({ name: 'verinoda-guard', description: 'Review each commit with Verinoda afterwards: on, off, or toggle.' })
     await $.command.register({ name: 'verinoda-check', description: 'Check each edit of Python/Java/Kotlin code for names that do not exist: on, off, or toggle.' })
@@ -726,7 +870,75 @@ export const register: Register = (on, options) => {
     publish($)
     background(checkGraph($))
     if (live.root !== undefined && (await read($, check))) background(warmCheck($, live.root))
+    const f = await features($)
+    if (live.root !== undefined && f.tool) await registerAssistTools($) // awaited: listed by the first turn
+    ensureDaemon($, f)
     return next(e)
+  })
+
+  // The tools are first-class: their schemas in the prompt's list, not behind ToolSearch, where the agent studies found
+  // a tool that must first be looked up is not called (in this build a plugin's tool is deferred unless a hook says not).
+  on('tool.describe', { tool: [LOCATE_TOOL, COUPLED_TOOL] }, ($, e) => {
+    const spec = TOOL_SPECS.find(s => ASSIST_TOOL(s.name) === e.tool)
+    return { description: spec?.description ?? e.description, isDeferred: false }
+  })
+
+  on('prompt.compose', async ($, e, next) => {
+    const out = await next(e)
+    const f = await features($)
+    if (!f.prompt || live.root === undefined) return out
+    return { sections: [...out.sections, { id: 'verinoda-live:assist', text: assistPrompt(f), scope: 'session' as const }] }
+  })
+
+  // The tools answer a plain string: any other shape fails the engine's check of a plugin's tool result.
+  on('tool.call', { tool: LOCATE_TOOL }, async ($, e) => {
+    live.usedLocate = true
+    const root = live.root
+    if (root === undefined) return { result: 'verinoda locate: this project has no Verinoda index' }
+    const text = typeof e.text === 'string' ? e.text.trim() : ''
+    if (text === '') return { result: 'verinoda locate needs the text of the bug report or task (the text argument)' }
+    const named = Array.isArray(e.files) ? e.files.filter((f): f is string => typeof f === 'string' && f !== '') : []
+    const anchors = (named.length > 0 ? named.map(f => toRel(root, f)) : live.reads).slice(0, ANCHORS_MAX)
+    const located = await lookup($, root, { op: 'locate', text: text.slice(0, LOCATE_TEXT_MAX), anchors })
+    if (located === undefined) return { result: 'verinoda locate failed (the CLI did not answer); search the code yourself' }
+    return { result: renderLocate(located, LOCATE_ANSWER_MAX) ?? 'verinoda locate found no file for this text' }
+  })
+
+  on('tool.call', { tool: COUPLED_TOOL }, async ($, e) => {
+    const root = live.root
+    if (root === undefined) return { result: 'verinoda coupled: this project has no Verinoda index' }
+    const files = Array.isArray(e.files) ? e.files.filter((f): f is string => typeof f === 'string' && f !== '').map(f => toRel(root, f)).slice(0, ANCHORS_MAX) : []
+    if (files.length === 0) return { result: 'verinoda coupled needs the files to look up (the files argument)' }
+    const located = await lookup($, root, { op: 'coupled', files })
+    if (located === undefined) return { result: 'verinoda coupled failed (the CLI did not answer); search the code yourself' }
+    return { result: renderLocate(located, LOCATE_ANSWER_MAX) ?? 'verinoda coupled found no file that changes together with these' }
+  })
+
+  // A file the model opens brings the files that change together with it: attached to a call the agent makes anyway.
+  on('tool.call', { tool: 'Read' }, async ($, e, next) => {
+    const ran = await next(e)
+    const root = live.root
+    if (root === undefined || ran.deny !== undefined || ran.isError === true || typeof e.file_path !== 'string') return ran
+    if (!isInside(e.file_path, root)) return ran
+    const rel = toRel(root, e.file_path)
+    if (rel.startsWith('.verinoda/')) return ran
+    noteRead(rel)
+    if (!(await features($)).coupled || !isSourceFile(rel) || live.coupledAsked.has(rel) || live.coupledAsked.size >= COUPLED_BUDGET) return ran
+    live.coupledAsked.add(rel)
+    const note = coupledNote(rel, await lookup($, root, { op: 'coupled', files: [rel] }))
+    return note === undefined ? ran : { ...ran, context: [...(ran.context ?? []), note] }
+  })
+
+  // The task's first search is answered with the files that point to it, and run again if still wanted: the answer
+  // reaches an agent that did not ask. Once per task, and never once the model has called the tool itself.
+  on('tool.call', { tool: ['Grep', 'Glob', ...SHELL_TOOLS] }, async ($, e, next) => {
+    const root = live.root
+    if (root === undefined || live.gated || live.usedLocate || live.task === '' || !isBlockedSearch(e)) return next(e)
+    if (!(await features($)).gate) return next(e)
+    live.gated = true
+    const located = await lookup($, root, { op: 'locate', text: live.task.slice(0, LOCATE_TEXT_MAX), anchors: live.reads.slice(0, ANCHORS_MAX) })
+    const answer = renderLocate(located, LOCATE_ANSWER_MAX)
+    return answer === undefined ? next(e) : { deny: gateText(answer) }
   })
 
   on('tool.call', { tool: EDIT_TOOLS }, async ($, e, next) => {
@@ -760,19 +972,28 @@ export const register: Register = (on, options) => {
   // A code question typed in the project gets the nudge (or, in search mode, Verinoda's results) as context.
   on('prompt.submit', async ($, e, next) => {
     const isUser = isPersonsPrompt(e.origin)
+    if (isUser) startTask(e.text)
     if (live.root === undefined || !isUser || !isInside(live.cwd, live.root)) return next(e)
-    const mode = await read($, auto)
-    if (mode === 'off' || !looksLikeCodeQuestion(e.text, mode === 'nudge' ? NUDGE_MAX_CHARS : 2_000)) return next(e)
-    let block: string | undefined
-    if (mode === 'nudge') {
-      const nudge = nudgeBlock(live.root, cfg.cli)
-      block = nudge
-      const at = await $.clock.now()
-      await update($, lastContext, () => ({ prompt: e.text.trim().slice(0, 80), mode, ok: true, chars: nudge.length, seconds: 0, note: '', at }))
-    } else {
-      block = await retrieve($, e.text)
+    const blocks: string[] = []
+    if ((await features($)).inject && looksLikeCodeQuestion(e.text, NUDGE_MAX_CHARS)) {
+      const located = await lookup($, live.root, { op: 'locate', text: e.text.trim().slice(0, LOCATE_TEXT_MAX), anchors: [] })
+      const answer = renderLocate(located, LOCATE_ANSWER_MAX)
+      if (answer !== undefined) blocks.push(locateBlock(answer))
     }
-    return next(block === undefined ? e : { ...e, context: [...(e.context ?? []), block] })
+    const mode = await read($, auto)
+    if (mode !== 'off' && looksLikeCodeQuestion(e.text, mode === 'nudge' ? NUDGE_MAX_CHARS : 2_000)) {
+      let block: string | undefined
+      if (mode === 'nudge') {
+        const nudge = nudgeBlock(live.root, cfg.cli)
+        block = nudge
+        const at = await $.clock.now()
+        await update($, lastContext, () => ({ prompt: e.text.trim().slice(0, 80), mode, ok: true, chars: nudge.length, seconds: 0, note: '', at }))
+      } else {
+        block = await retrieve($, e.text)
+      }
+      if (block !== undefined) blocks.push(block)
+    }
+    return next(blocks.length === 0 ? e : { ...e, context: [...(e.context ?? []), ...blocks] })
   })
 
   // One re-index per turn, not per edit; left running so the turn ends at once.
@@ -789,6 +1010,18 @@ export const register: Register = (on, options) => {
     await setAuto($, mode)
     const where = mode !== 'off' && live.root !== undefined && !isInside(live.cwd, live.root) ? ` (only for sessions started in ${live.root})` : ''
     return { text: `auto-context: ${mode}${where}` }
+  })
+
+  on('command.run', { command: 'verinoda-assist' }, async ($, e) => {
+    if (e.args.trim() === '') return { text: `assist: ${await read($, assist)} (${ASSIST_USAGE})` }
+    const value = parseAssist(e.args)
+    if (value === undefined) return { text: ASSIST_USAGE }
+    await setAssist($, value)
+    const f = assistFeatures(value)
+    if (live.root !== undefined && f.tool) await registerAssistTools($)
+    ensureDaemon($, f)
+    const where = value !== 'off' && live.root !== undefined && !isInside(live.cwd, live.root) ? ` (only for sessions started in ${live.root})` : ''
+    return { text: `assist: ${value}${where}` }
   })
 
   on('command.run', { command: 'verinoda-guard' }, async ($, e) => {
