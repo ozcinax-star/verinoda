@@ -3,9 +3,9 @@
 | arm | recall | solved | hit@1 | precision | sessions using the tool | turns | input tokens | output tokens | cost USD | seconds |
 |---|---|---|---|---|---|---|---|---|---|---|
 | none | 35.83/40 | 32 | 35 | 0.657 | 0/40 (0 calls) | 210 | 3,534,557 | 37,057 | 2.43 | 970 |
-| graphify | 37.0/40 | 34 | 36 | 0.677 | 7/40 (7 calls) | 201 | 3,295,309 | 34,992 | 2.45 | 790 |
-| verinoda_mod | 37.33/40 | 34 | 38 | 0.675 | 6/40 (7 calls) | 212 | 3,507,425 | 37,575 | 2.59 | 775 |
-| verinoda_setup | 37.83/40 | 35 | 37 | 0.7 | 2/40 (3 calls) | 216 | 3,582,612 | 38,237 | 2.57 | 742 |
+| graphify | 37.0/40 | 34 | 36 | 0.677 | 2/40 (2 calls) | 201 | 3,295,309 | 34,992 | 2.45 | 790 |
+| verinoda_mod | 37.33/40 | 34 | 38 | 0.675 | 0/40 (0 calls) | 212 | 3,507,425 | 37,575 | 2.59 | 775 |
+| verinoda_setup | 37.83/40 | 35 | 37 | 0.7 | 0/40 (0 calls) | 216 | 3,582,612 | 38,237 | 2.57 | 742 |
 
 | decision (recall, summed over tasks) | difference [95% CI] | W/T/L | input tokens | turns | seconds |
 |---|---|---|---|---|---|
@@ -18,9 +18,9 @@
 | arm | recall | solved | hit@1 | precision | sessions using the tool | turns | input tokens | output tokens | cost USD | seconds |
 |---|---|---|---|---|---|---|---|---|---|---|
 | none | 35.83/40 | 32 | 35 | 0.657 | 0/40 (0 calls) | 210 | 3,534,557 | 37,057 | 2.43 | 970 |
-| graphify | 37.0/40 | 34 | 36 | 0.677 | 7/40 (7 calls) | 201 | 3,295,309 | 34,992 | 2.45 | 790 |
-| verinoda_mod | 37.33/40 | 34 | 38 | 0.675 | 6/40 (7 calls) | 212 | 3,507,425 | 37,575 | 2.59 | 775 |
-| verinoda_setup | 37.83/40 | 35 | 37 | 0.7 | 2/40 (3 calls) | 216 | 3,582,612 | 38,237 | 2.57 | 742 |
+| graphify | 37.0/40 | 34 | 36 | 0.677 | 2/40 (2 calls) | 201 | 3,295,309 | 34,992 | 2.45 | 790 |
+| verinoda_mod | 37.33/40 | 34 | 38 | 0.675 | 0/40 (0 calls) | 212 | 3,507,425 | 37,575 | 2.59 | 775 |
+| verinoda_setup | 37.83/40 | 35 | 37 | 0.7 | 0/40 (0 calls) | 216 | 3,582,612 | 38,237 | 2.57 | 742 |
 
 | decision (recall, summed over tasks) | difference [95% CI] | W/T/L | input tokens | turns | seconds |
 |---|---|---|---|---|---|

@@ -23,8 +23,8 @@
     "solved": 34,
     "hit1": 36,
     "precision": 0.677,
-    "sessions_using_tool": 7,
-    "tool_calls": 7,
+    "sessions_using_tool": 2,
+    "tool_calls": 2,
     "turns": 201,
     "input_tokens": 3295309,
     "output_tokens": 34992,
@@ -39,8 +39,8 @@
     "solved": 34,
     "hit1": 38,
     "precision": 0.675,
-    "sessions_using_tool": 6,
-    "tool_calls": 7,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 212,
     "input_tokens": 3507425,
     "output_tokens": 37575,
@@ -55,8 +55,8 @@
     "solved": 35,
     "hit1": 37,
     "precision": 0.7,
-    "sessions_using_tool": 2,
-    "tool_calls": 3,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 216,
     "input_tokens": 3582612,
     "output_tokens": 38237,
@@ -793,8 +793,8 @@
     "solved": 34,
     "hit1": 36,
     "precision": 0.677,
-    "sessions_using_tool": 7,
-    "tool_calls": 7,
+    "sessions_using_tool": 2,
+    "tool_calls": 2,
     "turns": 201,
     "input_tokens": 3295309,
     "output_tokens": 34992,
@@ -809,8 +809,8 @@
     "solved": 34,
     "hit1": 38,
     "precision": 0.675,
-    "sessions_using_tool": 6,
-    "tool_calls": 7,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 212,
     "input_tokens": 3507425,
     "output_tokens": 37575,
@@ -825,8 +825,8 @@
     "solved": 35,
     "hit1": 37,
     "precision": 0.7,
-    "sessions_using_tool": 2,
-    "tool_calls": 3,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 216,
     "input_tokens": 3582612,
     "output_tokens": 38237,
@@ -1815,7 +1815,7 @@
     "cost": 0.051912,
     "input": 73691,
     "output": 739,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    },
@@ -1845,7 +1845,7 @@
     "cost": 0.0633916,
     "input": 102306,
     "output": 921,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    }
@@ -2217,7 +2217,7 @@
     "cost": 0.041664400000000004,
     "input": 48764,
     "output": 478,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    }
@@ -2279,7 +2279,7 @@
     "cost": 0.048813999999999996,
     "input": 73601,
     "output": 659,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    }
@@ -2869,7 +2869,7 @@
     "cost": 0.046359,
     "input": 48843,
     "output": 651,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    },
@@ -2931,7 +2931,7 @@
     "cost": 0.039407,
     "input": 47347,
     "output": 539,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    },
@@ -3055,7 +3055,7 @@
     "cost": 0.0643514,
     "input": 99199,
     "output": 1108,
-    "tool": 2,
+    "tool": 0,
     "network": 0,
     "answered": true
    },
@@ -3070,7 +3070,7 @@
     "cost": 0.07514420000000001,
     "input": 126594,
     "output": 1400,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    },
@@ -3519,7 +3519,7 @@
     "cost": 0.0484234,
     "input": 72618,
     "output": 556,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    }
@@ -3581,7 +3581,7 @@
     "cost": 0.039989399999999994,
     "input": 47312,
     "output": 612,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    }
@@ -3752,7 +3752,7 @@
     "cost": 0.066375,
     "input": 79266,
     "output": 664,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    },
@@ -3861,7 +3861,7 @@
     "cost": 0.045325000000000004,
     "input": 49413,
     "output": 578,
-    "tool": 1,
+    "tool": 0,
     "network": 0,
     "answered": true
    },
@@ -4015,7 +4015,7 @@
     "cost": 0.11598420000000001,
     "input": 201857,
     "output": 2143,
-    "tool": 2,
+    "tool": 0,
     "network": 0,
     "answered": true
    }

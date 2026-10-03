@@ -28,7 +28,7 @@ Sections: [Update 2026-10-02](#update-2026-10-02-graphify-0973-contextbench-agai
 ## Update 2026-10-02: Graphify 0.9.73, ContextBench again, agents in the loop, `update --fast`
 
 Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-2026-10-02/`,
-`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`, `agent-compare-guard-2026-10-02/`, `agent-compare-big-2026-10-02/`,
+`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`, `agent-compare-guard-2026-10-02/`, `agent-compare-big-2026-10-02/`, `agent-compare-sel4-2026-10-02/`,
 `mod-live-2026-10-02/`,
 `mod-live-self-quiet-2026-10-02/`. Verinoda at 5999912.
 
@@ -68,10 +68,18 @@ Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-
   then a second run of all 160): original Claude Code, Claude Code with Graphify's own integration, and with Verinoda's
   setup plus the verinoda-live mod (and Verinoda's setup alone). Recall of the gold files: 35.8, 37.0, 37.3 and 37.8
   of 40; no decision reaches a claim (the best, mod against none, +1.50 [+0.00 to +4.00]); a second run and the
-  same arm's run-to-run difference (-1.17 [-3.67 to +0.67]) show the differences are chance. The tools were shown to
-  every session and used in 5-18 % of them, with the same recall as `none` on those tasks: every issue names its
+  same arm's run-to-run difference (-1.17 [-3.67 to +0.67]) show the differences are chance. The tools were shown to every session; Graphify was used in 5 of 80 and Verinoda in none: every issue names its
   integration, whose folder holds a median of 8 Python files, so a `grep` finds the file and the repository's size
   does not matter.
+- **Three Claude Codes on seL4** (`agent-compare-sel4-2026-10-02/`, the C microkernel, 1,059 files: where the no-agent table
+  had the index far ahead of lexical search; 21 real bug reports, each at its own base commit as a one-commit repository,
+  every session run three times, pre-registered): recall of 21 = 17.67 (none), 18.28 (Graphify), 17.78 (Verinoda with the
+  mod), 17.56 (Verinoda's setup alone); no decision reaches a claim (mod - none +0.11 [-0.50 to +0.67]). **No Verinoda
+  arm session ever called Verinoda**: 0 of 126 here and 0 of 160 on Home Assistant, though the mod's nudge, the MCP server
+  and the skill were in every one of them and a probe showed the tools work; Graphify was used in 21 of 63 seL4 sessions,
+  its hook speaking when the agent starts to `grep` where the nudge speaks with the prompt. An earlier version of this page
+  counted 6 to 7 Home Assistant sessions as Verinoda users: the counter took a working copy's folder name for a call,
+  and all counts were recounted from the transcripts.
 - **`update --fast` on 2,876 files** (`mod-live-self-quiet-2026-10-02/`): 6-7x quicker than a plain update (about
   20 s against 130-155 s), the graph caught up after 2.5-3 min. Two findings, both fixed: a function in a file added
   since the last build lost to similarly named symbols until the graph had it (it now ranks as the symbol will;

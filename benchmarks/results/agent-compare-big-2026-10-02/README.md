@@ -30,9 +30,9 @@ load). A warm query takes about 50 s (Graphify) and 29 s (Verinoda) and Verinoda
 | arm | recall (of 40) | solved (all gold files) | hit@1 | precision | sessions that used the arm's tool | input tokens |
 |---|---|---|---|---|---|---|
 | none | 35.83 | 32 | 35 | 0.657 | - | 3.53 M |
-| graphify | 37.00 | 34 | 36 | 0.677 | 7 of 40 | 3.30 M |
-| verinoda_mod | 37.33 | 34 | 38 | 0.675 | 6 of 40 | 3.51 M |
-| verinoda_setup | 37.83 | 35 | 37 | 0.700 | 2 of 40 | 3.58 M |
+| graphify | 37.00 | 34 | 36 | 0.677 | 2 of 40 | 3.30 M |
+| verinoda_mod | 37.33 | 34 | 38 | 0.675 | **0 of 40** | 3.51 M |
+| verinoda_setup | 37.83 | 35 | 37 | 0.700 | **0 of 40** | 3.58 M |
 
 | decision (recall, summed over 40 tasks) | difference [95 % CI] | W/T/L | input tokens | turns |
 |---|---|---|---|---|
@@ -45,29 +45,38 @@ exactly zero (two tasks better, none worse, 38 unchanged). The agent alone found
 solved 32 of 40 tasks completely: the ceiling of the earlier studies is here too, on a repository roughly 30 to 200
 times larger. Seconds are not compared: the arms ran with different concurrency (plain 4 sessions at once, the others 2).
 
-## The tools were shown and rarely used
+## The tools were shown; Verinoda was never used
 
-Every session was told about its arm's tool, as that tool's own setup does it (checked in the transcripts):
-Graphify's `CLAUDE.md` rule in 40 of 40 sessions and its PreToolUse hook ("MANDATORY ... you MUST run `graphify query`
-before grepping raw files") in 39; the mod's nudge ("start by running Verinoda's analyze") in 40 of 40, with the MCP
-server and the skill; the Verinoda setup's MCP server and skill in 40 of 40. The agent used the tool in 7, 6 and 2
-sessions of 40 (graphify, verinoda_mod, verinoda_setup). Where it did, its recall was exactly that of `none` on the
-same tasks (7.00 against 7.00, 5.50 against 5.50, 1.50 against 1.50). Every task where the arms differ is one where the
-differing arms made **no tool call at all** (`pr180472`: `none` 0.00, the other three 1.00, no tool call in any): the
-difference is not the tool.
+Every session was told about its arm's tool, as that tool's own setup does it (checked in the transcripts): Graphify's
+`CLAUDE.md` rule in 40 of 40 sessions and its PreToolUse hook ("MANDATORY ... you MUST run `graphify query` before
+grepping raw files") in 39; the mod's nudge ("start by running Verinoda's analyze") in 40 of 40, with the MCP server and
+the skill; the Verinoda setup's MCP server and skill in 40 of 40. **In none of the 80 sessions of `verinoda_mod` and
+`verinoda_setup` did the agent call Verinoda** (no `mcp__verinoda` tool, no `verinoda` command); it used Graphify in 2 of 40
+sessions. The tools were usable (a probe session in the same harness, asked to, ran `verinoda query` through `Bash` and
+an MCP tool found with `ToolSearch`); the agent did not reach for them. So in the Verinoda arms the difference from `none`
+is the instructions and the tool list in the context, not Verinoda's answers, and the differences between the arms are
+what chance puts between identical sessions: `pr180472`, for one, `none` 0.00 and the other three 1.00, no tool called
+in any.
+
+**A correction.** The first version of this README (and of the pull-request text and the mod's documents) said the agent
+used Verinoda in 6 of 40 sessions and Graphify in 7. That was wrong: the harness's counter took the name of a working
+copy's folder (`verinoda`, `verinoda_mod`, `graphify`) in a command for a call of the tool. All sessions of this study and
+of `../agent-compare-sel4-2026-10-02/` were recounted from the transcripts (`recount_tools.py`; the old counts are in
+`*_uncorrected` in the result files), checked with a second, separate scan of every tool input. The recall, the decisions and
+the noise floor do not depend on the counts and did not change.
 
 ## Not pre-registered: a second run, the noise floor, the two runs pooled
 
-After the first run showed that the differences came from sessions that used no tool, every session was run a
+After the first run showed that the differences between the arms came from sessions that used no tool, every session was run a
 second time (same prompts, same copies, `results_r2.jsonl`; `extra.py` -> `extra.json`). One caveat: both runs share
 the Verinoda indexes, so the few analyses of the first run are in the second run's atlas.
 
 | arm | recall run 1 | recall run 2 | pooled (mean of the two) | sessions using the tool, run 2 |
 |---|---|---|---|---|
 | none | 35.83 | 37.00 | 36.42 | - |
-| graphify | 37.00 | 36.83 | 36.92 | 8 |
-| verinoda_mod | 37.33 | 36.83 | 37.08 | 7 |
-| verinoda_setup | 37.83 | 37.83 | 37.83 | 3 |
+| graphify | 37.00 | 36.83 | 36.92 | 3 |
+| verinoda_mod | 37.33 | 36.83 | 37.08 | 0 |
+| verinoda_setup | 37.83 | 37.83 | 37.83 | 0 |
 
 - **The noise floor:** the same arm run twice moves by chance as much as the arms differ: `none` run 1 - run 2 =
   -1.17 [-3.67 to +0.67] (one task better, two worse, 37 unchanged). In the second run `none` is above `graphify`
@@ -75,8 +84,8 @@ the Verinoda indexes, so the few analyses of the first run are in the second run
 - **Pooled decisions:** verinoda_mod - none +0.67 [-0.50 to +2.00]; graphify - none +0.50 [+0.00 to +1.50];
   verinoda_mod - graphify +0.17 [-0.58 to +1.00]; verinoda_mod - verinoda_setup -0.75 [-2.00 to +0.00].
   Nothing reaches a claim, and the mod does not add to Verinoda's own setup here.
-- **Tool users again:** in the second run too, the sessions that used the tool scored what `none` scored on their
-  tasks (7.50 against 7.50, 6.00 against 6.00, 2.17 against 2.17).
+- **Graphify's users:** the 2 sessions of the first run and the 3 of the second that used Graphify scored what `none`
+  scored on their tasks (2.00 against 2.00, 2.50 against 2.50).
 
 ## Why the big repository did not make these tasks hard
 
@@ -84,17 +93,18 @@ Home Assistant's bug-report template asks for the integration, so all 40 issues 
 (40 of 40). That removes the hard part of a 1,460-integration repository: what is left is choosing among the files
 of one integration folder, which holds a median of 8 Python files (2 to 51; 31 of the 40 have 15 or fewer), and
 a `grep` of the issue's words finds the right one. An index has nothing to add to that, and the agent, which knows
-it, mostly skipped the tool even when told to use it first.
+it, mostly skipped the tool even when told to use it first (Graphify in 5 of 80 sessions, Verinoda in none).
 
 ## What this says about the mod
 
 - On a 27,078-file repository, with real bug reports and the mod's own recommended setting, the agent solved the
   tasks as well without Verinoda, Graphify or the mod as with them; the decision rule gave no claim, and the
   second run and the noise floor say the small positive differences are chance.
-- The nudge reached every session and the agent used Verinoda in 6 to 7 of 40 (whether before its first search was
-  not measured). Graphify's hook, worded as MANDATORY, was followed by use of Graphify in 7 to 8 of 40. An agent that
-  can answer from a `grep` of the issue's words mostly does, and these tasks let it.
-- The mod is not what was missing: `verinoda_mod` and `verinoda_setup` do not differ.
+- The nudge reached every session and the agent never used Verinoda, in 80 sessions here and 126 on seL4
+  (`../agent-compare-sel4-2026-10-02/`). Graphify's hook, which speaks when the agent starts to `grep`, was followed by
+  use of Graphify in 5 of these 80 sessions (and 21 of 63 on seL4). An agent that can answer from a `grep` of the issue's
+  words mostly does, and an instruction given with the prompt does not change that.
+- The mod is not what was missing: `verinoda_mod` and `verinoda_setup` do not differ, and neither used Verinoda.
 - This does not show the tools are useless on big repositories. It shows that when the issue names the component,
   the repository's size does not matter. The test that would is a report that does not name it (a user who does not
   know which integration is at fault); that was not run.
@@ -118,5 +128,5 @@ pre-registered.
 
 `tasks.json` (the 40 tasks), `candidates.json` (the 323 candidates and `tasks.json`'s filter counts), `tasks_config.json`,
 `config.json`, `builds.json`, `results.jsonl` (the pre-registered run, one line per session: the files named, tool
-calls, turns, cost, the answer), `results_r2.jsonl` (the second run), `scores.json` and `summary.md` (`score_big.py`),
+calls (recounted), turns, cost, the answer), `results_r2.jsonl` (the second run), `scores.json` and `summary.md` (`score_big.py`),
 `extra.py` and `extra.json` (the analyses not pre-registered).

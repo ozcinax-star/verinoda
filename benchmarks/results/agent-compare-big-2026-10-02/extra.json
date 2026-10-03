@@ -209,8 +209,8 @@
     "solved": 34,
     "hit1": 36,
     "precision": 0.677,
-    "sessions_using_tool": 7,
-    "tool_calls": 7,
+    "sessions_using_tool": 2,
+    "tool_calls": 2,
     "turns": 201,
     "input_tokens": 3295309,
     "output_tokens": 34992,
@@ -225,8 +225,8 @@
     "solved": 34,
     "hit1": 38,
     "precision": 0.675,
-    "sessions_using_tool": 6,
-    "tool_calls": 7,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 212,
     "input_tokens": 3507425,
     "output_tokens": 37575,
@@ -241,8 +241,8 @@
     "solved": 35,
     "hit1": 37,
     "precision": 0.7,
-    "sessions_using_tool": 2,
-    "tool_calls": 3,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 216,
     "input_tokens": 3582612,
     "output_tokens": 38237,
@@ -277,8 +277,8 @@
     "solved": 33,
     "hit1": 37,
     "precision": 0.683,
-    "sessions_using_tool": 8,
-    "tool_calls": 10,
+    "sessions_using_tool": 3,
+    "tool_calls": 3,
     "turns": 198,
     "input_tokens": 3449280,
     "output_tokens": 36845,
@@ -293,8 +293,8 @@
     "solved": 33,
     "hit1": 35,
     "precision": 0.676,
-    "sessions_using_tool": 7,
-    "tool_calls": 7,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 202,
     "input_tokens": 3503187,
     "output_tokens": 37293,
@@ -309,8 +309,8 @@
     "solved": 35,
     "hit1": 35,
     "precision": 0.688,
-    "sessions_using_tool": 3,
-    "tool_calls": 3,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
     "turns": 209,
     "input_tokens": 3550452,
     "output_tokens": 37424,
@@ -514,54 +514,54 @@
  "tool_users": {
   "run1": {
    "graphify": {
-    "sessions_using_tool": 7,
-    "recall_users": 7.0,
-    "none_on_the_same_tasks": 7.0,
-    "recall_non_users": 30.0,
-    "none_on_the_non_user_tasks": 28.83,
-    "non_users": 33
+    "sessions_using_tool": 2,
+    "recall_users": 2.0,
+    "none_on_the_same_tasks": 2.0,
+    "recall_non_users": 35.0,
+    "none_on_the_non_user_tasks": 33.83,
+    "non_users": 38
    },
    "verinoda_mod": {
-    "sessions_using_tool": 6,
-    "recall_users": 5.5,
-    "none_on_the_same_tasks": 5.5,
-    "recall_non_users": 31.83,
-    "none_on_the_non_user_tasks": 30.33,
-    "non_users": 34
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 37.33,
+    "none_on_the_non_user_tasks": 35.83,
+    "non_users": 40
    },
    "verinoda_setup": {
-    "sessions_using_tool": 2,
-    "recall_users": 1.5,
-    "none_on_the_same_tasks": 1.5,
-    "recall_non_users": 36.33,
-    "none_on_the_non_user_tasks": 34.33,
-    "non_users": 38
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 37.83,
+    "none_on_the_non_user_tasks": 35.83,
+    "non_users": 40
    }
   },
   "run2": {
    "graphify": {
-    "sessions_using_tool": 8,
-    "recall_users": 7.5,
-    "none_on_the_same_tasks": 7.5,
-    "recall_non_users": 29.33,
-    "none_on_the_non_user_tasks": 29.5,
-    "non_users": 32
+    "sessions_using_tool": 3,
+    "recall_users": 2.5,
+    "none_on_the_same_tasks": 2.5,
+    "recall_non_users": 34.33,
+    "none_on_the_non_user_tasks": 34.5,
+    "non_users": 37
    },
    "verinoda_mod": {
-    "sessions_using_tool": 7,
-    "recall_users": 6.0,
-    "none_on_the_same_tasks": 6.0,
-    "recall_non_users": 30.83,
-    "none_on_the_non_user_tasks": 31.0,
-    "non_users": 33
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 36.83,
+    "none_on_the_non_user_tasks": 37.0,
+    "non_users": 40
    },
    "verinoda_setup": {
-    "sessions_using_tool": 3,
-    "recall_users": 2.17,
-    "none_on_the_same_tasks": 2.17,
-    "recall_non_users": 35.67,
-    "none_on_the_non_user_tasks": 34.83,
-    "non_users": 37
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 37.83,
+    "none_on_the_non_user_tasks": 37.0,
+    "non_users": 40
    }
   }
  },

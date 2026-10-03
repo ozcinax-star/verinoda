@@ -4,7 +4,7 @@ changed (score_big.py).
 
     python benchmarks/agent_compare/big_run.py CONFIG.json
 
-CONFIG: {"tasks": tasks.json, "copies": {arm: working copy}, "out": results.jsonl, "model": "claude-sonnet-5-5",
+CONFIG: {"tasks": tasks.json, "copies": {arm: working copy} or "copy_pattern": ".../{task}/{arm}", "project": "the ... repository at {c} (...)", "out": results.jsonl, "model": "claude-sonnet-5-5",
 "plugin_dir": the mod, "mod_options": {"auto": "nudge"}, "path_dirs": {arm: [dirs put on PATH]}, "drop_path": ["...\\.local\\bin"],
 "arms": [...], "arm_workers": {arm: n}, "workers": default n, "timeout_s": s, "max_turns": n}. Resumable: a task and arm already in `out` is skipped.
 """
@@ -38,15 +38,31 @@ SCHEMA = {
     },
     "required": ["files"],
 }
+# A call of the tool is its command followed by a subcommand, or an MCP tool: not a path that names a working copy (the
+# copies are folders called `verinoda`, `verinoda_mod`, `graphify`, so `cd .../verinoda && grep` is no call of Verinoda).
+_SUB = (r"(?:query|analyze|trace|map|plan|resolve|verify|challenge|doctor|api|review|probe|decide|check|claim|update|scan|setup|"
+        r"ui|tq|explain|impact|search|index|mcp|debug|history|path|affected|god-nodes|cluster-only|label|extract|watch|hook)")
+VERINODA_CMD = re.compile(r"""(?:(?<![\w./-])verinoda|/verinoda\.exe)["']?\s+""" + _SUB + r"\b")
+GRAPHIFY_CMD = re.compile(r"""(?:(?<![\w./-])graphify|/graphify\.exe)["']?\s+""" + _SUB + r"\b")
 NETWORK = re.compile(r"\b(curl|wget|Invoke-WebRequest|iwr|WebFetch|WebSearch)\b|github\.com|(^|[\s;&|])gh\s", re.IGNORECASE)
 VERINODA_ARMS = ("verinoda_mod", "verinoda_setup")
 
 
-def prompt_for(task: dict, copy: Path) -> str:
+DEFAULT_PROJECT = "the Home Assistant Core repository at {c} (a git checkout of its development branch)"
+
+
+def copy_of(cfg: dict, task: dict, arm: str) -> Path:
+    """The working copy of a task and arm: one per arm (``copies``), or one per task and arm (``copy_pattern``, for a
+    study whose tasks each sit at their own commit)."""
+    if "copy_pattern" in cfg:
+        return Path(cfg["copy_pattern"].format(task=task["id"], arm=arm))
+    return Path(cfg["copies"][arm])
+
+
+def prompt_for(task: dict, copy: Path, project: str | None = None) -> str:
     """The same text for every arm; it never mentions an index or a tool."""
     c = copy.as_posix()
-    return (f"You are working in the Home Assistant Core repository at {c} (a git checkout of its development "
-            "branch). A user filed this bug report:\n\n"
+    return (f"You are working in {(project or DEFAULT_PROJECT).format(c=c)}. A user filed this bug report:\n\n"
             f"Title: {task['title']}\n\n{task['body']}\n\n"
             "Task: find where in the repository's source code this bug should be fixed. This is a read-only task: "
             "do not modify any file, and do not use the network or look the issue up on the web or on GitHub; work "
@@ -140,9 +156,11 @@ def session_stats(transcript: Path | None) -> dict:
             s["tool_calls"] += 1
             if len(s["first_tools"]) < 5:
                 s["first_tools"].append(name)
-            if name.startswith("mcp__verinoda") or (name == "Bash" and "verinoda" in text):
+            command = str(inp.get("command", "")).replace("\\", "/")
+            if name.startswith("mcp__verinoda") or (name == "Bash" and VERINODA_CMD.search(command)):
                 s["verinoda_calls"] += 1
-            if (name == "Bash" and "graphify" in text) or "graphify-out" in text:
+            # Graphify's own files count as its use too: the graph's report and wiki are what its hook points the agent to
+            if (name == "Bash" and GRAPHIFY_CMD.search(command)) or "graphify-out" in text:
                 s["graphify_calls"] += 1
             if name in ("WebFetch", "WebSearch") or (name == "Bash" and NETWORK.search(str(inp.get("command", "")))):
                 s["network"].append(str(inp.get("command") or name)[:120])
@@ -150,8 +168,8 @@ def session_stats(transcript: Path | None) -> dict:
 
 
 def one(cfg: dict, task: dict, arm: str) -> dict:
-    copy = Path(cfg["copies"][arm])
-    argv = session_argv(prompt_for(task, copy), arm, copy, cfg)
+    copy = copy_of(cfg, task, arm)
+    argv = session_argv(prompt_for(task, copy, cfg.get("project")), arm, copy, cfg)
     rc, out, err, secs = run(argv, copy, session_env(arm, cfg), timeout=cfg.get("timeout_s", 1800))
     try:
         rep = json.loads(out)
@@ -219,7 +237,8 @@ def main() -> int:
         done = {(r["id"], r["arm"]) for r in map(json.loads, out.read_text(encoding="utf-8").splitlines()) if r}
     todo = [(t, a) for t in tasks for a in cfg["arms"] if (t["id"], a) not in done]
     lock = threading.Lock()
-    before = {a: status_paths(cfg["copies"][a]) for a in cfg["arms"]}
+    copies = {(t["id"], a): str(copy_of(cfg, t, a)) for t in tasks for a in cfg["arms"]}
+    before = {k: status_paths(c) for k, c in copies.items()}
     stop = threading.Event()
 
     def monitor() -> None:
@@ -246,8 +265,8 @@ def main() -> int:
         print(f"FAILED {item[0]['id']}:{item[1]} {err}", flush=True)
     stop.set()
     for arm in cfg["arms"]:
-        changed = sorted(status_paths(cfg["copies"][arm]) ^ before[arm])
-        print(f"{arm}: {len(changed)} paths changed in the working copy by the run {changed[:5]}", flush=True)
+        changed = sorted(f"{k[0]}: {x}" for k, c in copies.items() if k[1] == arm for x in status_paths(c) ^ before[k])
+        print(f"{arm}: {len(changed)} paths changed in the working copies by the run {changed[:5]}", flush=True)
     print("all done", flush=True)
     return 0
 

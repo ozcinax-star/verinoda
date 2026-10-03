@@ -1,0 +1,368 @@
+{
+ "filters": {
+  "candidates": 61,
+  "passed_filters": 21,
+  "dropped": {
+   "the issue names a gold file's path": 14,
+   "gold code files not 1-6 at the base commit": 18,
+   "issue body length outside 150-4000": 8
+  }
+ },
+ "tasks": [
+  {
+   "id": "i1566",
+   "issue": 1566,
+   "via": "pull request",
+   "ref": 1581,
+   "title": "clock sync test fails on SMP x86 whe running with QEMU",
+   "body": "Similar to QEMU ARM/RISC-V, `ENABLE_SMP_CLOCK_SYNC_TEST_ON_BOOT` should not be on for x86 QEMU. But since it's x86 the kernel doesn't know it's running on QEMU when you build the kernel for a generic x86 CPU.\n\nAccording to my colleague @dreamliner787-9 there's no reliable way of looking at CPUID to tell if you're being virtualised by QEMU.\n\nI'm wondering if anyone has any other ideas for how we could skip the test at run-time if we detect we're running on QEMU, I'm still getting familiar with the x86 architecture myself.",
+   "gold": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "base_sha": "33636e983d6836bc93a8f9a58142fe2b8c8aa17b",
+   "labels": [],
+   "issue_created": "2025-11-27T05:08:10Z",
+   "fixed_at": "2026-01-12T23:16:25Z"
+  },
+  {
+   "id": "i1311",
+   "issue": 1311,
+   "via": "pull request",
+   "ref": 1312,
+   "title": "seL4_TCB_SetSchedParams: inconsistency between API reference and implementation",
+   "body": "For the seL4_TCB_SetSchedParams (MCS) invocation, the API reference states the following about the `sched_context` parameter\r\n\r\n>  If the scheduling context is already bound to a notification or TCB that is not this TCB this operation will fail. Similarly, if this TCB is already bound to a scheduling context that is not this scheduling context, this will also fail.\r\n\r\nThis does not correspond to the implementation, which adheres to the following:\r\n\r\n> If the scheduling context is already bound to a notification or TCB, this operation will fail. Similarly, if this TCB is already bound to a scheduling context, this will also fail.\r\n\r\nIn other words, the operation will fail if the scheduling context passed in is the one that is already bound to the TCB.",
+   "gold": [
+    "src/object/tcb.c"
+   ],
+   "base_sha": "2ad02a00766dedd6fd146aab0a2930c73a603256",
+   "labels": [],
+   "issue_created": "2024-08-22T02:46:40Z",
+   "fixed_at": "2025-06-04T15:34:22Z"
+  },
+  {
+   "id": "i749",
+   "issue": 749,
+   "via": "pull request",
+   "ref": 776,
+   "title": "GCC 11.3 RISC-V ISA spec change from 2.2/20190608 to 20191213 might affect seL4",
+   "body": "In case we consider switching to GCC 11.3 or higher one day, we might run into this change causing problems:\r\n- https://gcc.gnu.org/gcc-11/changes.html\r\n- https://gcc.gnu.org/git/?p=gcc.git;a=commit;h=98416dbb0a62579d4a7a4a76bab51b5b52fec2cd\r\n\r\nThere is a mail on the RISC-V SW-Dev mailinglist (sw-dev@groups.riscv.org) that describes the details (see also https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/aE1ZeHHCYf4/m/v88QeovDAAAJ):\r\n\r\nIt’s Kito Cheng from the RISC-V GCC community, just sharing some news about the default ISA spec version that has been bumped to 20191213 on both RISC-V GCC and binutils recently, and that has one major incompatibility issue between current default ISA spec versions. The major incompatibility issue is the csr read/write (csrr*/csrw*) instructions and fence.i instruction has separated from the `I` extension, become two standalone extensions: Zicsr and Zifencei; so you might get error messages like that: unrecognized opcode `csrr`.\r\n# How to resolve those issues?\r\nHere is two solution to resolve:\r\n- First one is what we recommend, adding zicsr and/or zifencei to your -march option, e.g. -march=rv64imac become -march=rv64imac_zicsr_zifencei\r\n- The second one is a kind of workaround, using -misa-spec=2.2 to force RISC-V GCC using the older ISA spec version, however this is strongly  *NOT* recommended.\r\nIn case you want everything like before, you can add --with-isa-spec=2.2 build option for GCC and binutils, then the toolchain will default using the old version and work as an older GNU toolchain release.\r\n# Why GCC/binutils bump that?\r\nThe default ISA spec version was set to 2.2 for long time, however the spec is released at May, 2017, which is 5 years ago, and RISC-V has at least two ISA spec release after that, so we believe that’s time to bump, and we also raise the discussion on the RISC-V BoF at Linux plumber, we reach a consensus is that we should moving forward even that having incompatible issue.\r\n# Why bump that so late?\r\nWe worried about the incompatibility issue, but we realized that is unavoidable, and RISC-V is growing very quickly in the past year, so we believe it would be better to move forward now.\r\n# Why is there an incompatibility issue there? Why can't you avoid that?\r\nThat is because the RISC-V ISA spec has changed, we believe the toolchain should honor what spec written.\r\n# Which ISA spec versions are supported by GNU toolchain now?\r\nCurrently we support 2.2 20190608 and 20191213.\r\n2.2: https://github.com/riscv/riscv-isa-manual/releases/tag/riscv-user-2.2\r\n20190608: https://github.com/riscv/riscv-isa-manual/releases/tag/Ratified-IMFDQC-and-Priv-v1.11\r\n20191213: https://github.com/riscv/riscv-isa-manual/releases/tag/Ratified-IMAFDQC\r\n# Is there any newer ISA spec supported? It’s 2022!\r\n20191213 is already 2 years ago, but RISC-V didn’t have further formal ISA spec release after that, what we can promise is that RISC-V GNU toolchain will support soon if ISA spec has newer release.",
+   "gold": [
+    "CMakeLists.txt"
+   ],
+   "base_sha": "ab32a373980f121de8f05777f7e3691bb43a7377",
+   "labels": [],
+   "issue_created": "2022-01-24T16:34:10Z",
+   "fixed_at": "2022-03-06T21:40:34Z"
+  },
+  {
+   "id": "i991",
+   "issue": 991,
+   "via": "pull request",
+   "ref": 992,
+   "title": "remove irq parameter from mcsPreemptionPoint",
+   "body": "Since #327 `mcsPreemptionPoint` no longer uses its `irq` parameter, so the parameter should be removed.\r\n\r\nThis came out of the [discussion](https://github.com/seL4/seL4/issues/472#issuecomment-1229172341) on #472.\r\n\r\nVerification impact should be minimal as long as we do this before CRefine has not progressed too far. @michaelmcinerney do you agree?",
+   "gold": [
+    "src/api/syscall.c"
+   ],
+   "base_sha": "a7fcda426754091f66351942e18d964943016153",
+   "labels": [
+    "verification",
+    "MCS",
+    "cleanup"
+   ],
+   "issue_created": "2023-03-24T07:09:01Z",
+   "fixed_at": "2023-03-25T01:10:58Z"
+  },
+  {
+   "id": "i1004",
+   "issue": 1004,
+   "via": "pull request",
+   "ref": 1007,
+   "title": "document why it is Ok for some virtual kernel memory regions to overflow",
+   "body": "In #1002 and #389 we both stumbled over the fact that sometimes the function `create_untypeds_for_region` is being supplied with a region that overflows, i.e. where `end < start`.\r\n\r\nThis can happen when a valid physical memory region is translated to kernel virtual addresses. The overflow is harmless and is being handled gracefully by `create_untypeds_for_region` for device untypeds.\r\n\r\nThis is because the loop in that function splits the region into size-aligned chunks, and size-aligned chunks cannot themselves overflow, i.e. they will always satisfy `start <= end` (and because it checks for minimum size, actually `start < end`).\r\n\r\nThe overflow might also be harmless for normal untypeds as long as the resulting virtual addresses are in the kernel window.\r\n\r\nAll of this should be documented at least in the code, and since it is user visible possibly also somewhere in the manual.",
+   "gold": [
+    "include/basic_types.h",
+    "src/kernel/boot.c"
+   ],
+   "base_sha": "57c46bc8d0554ef1f0118fec40d9163097564271",
+   "labels": [
+    "docs"
+   ],
+   "issue_created": "2023-04-03T08:05:31Z",
+   "fixed_at": "2023-04-12T05:07:03Z"
+  },
+  {
+   "id": "i1015",
+   "issue": 1015,
+   "via": "pull request",
+   "ref": 1181,
+   "title": "Allow VMPIDR_EL2 register to be set for VMs when CONFIG_MAX_NUM_NODES=1 ",
+   "body": "Currently the seL4_VCPUReg enum only defines the seL4_VCPUReg_VMPIDR_EL2 register when the kernel is configured for SMP. This register should be available for unicore systems too as otherwise a user level VMM is not able to control the value of MPIDR_EL1 that the guest VM reads.\r\n\r\n```\r\n#if CONFIG_MAX_NUM_NODES > 1\r\n    /* Virtualisation Multiprocessor ID Register */\r\n    seL4_VCPUReg_VMPIDR_EL2,\r\n#endif /* CONFIG_MAX_NUM_NODES > 1 */\r\n```",
+   "gold": [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "include/arch/arm/arch/object/vcpu.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "base_sha": "3ccbfc083a8a110bbca2b54b7eb6af84587a8a84",
+   "labels": [
+    "virtualisation"
+   ],
+   "issue_created": "2023-04-14T22:18:19Z",
+   "fixed_at": "2024-03-14T12:09:11Z"
+  },
+  {
+   "id": "i1209",
+   "issue": 1209,
+   "via": "pull request",
+   "ref": 1210,
+   "title": "USER_TOP lower than expected on AArch64 platforms?",
+   "body": "I am looking at USER_TOP in the generated configs in Microkit and I notice that all of them have the same value for USER_TOP which is 0xa0000000. This surprised me since this is quite low for all the platforms currently supported by Microkit.\r\n\r\nI notice that if I build sel4test, e.g:\r\n`../init-build -DPLATFORM=odroidc4 && ninja`\r\n\r\nand look at `kernel/gen_config/kernel/gen_config.h` I see:\r\n```c\r\n#define CONFIG_USER_TOP  0xa0000000\r\n```\r\n\r\nTo my understanding, USER_TOP is not something configurable by the user of seL4 and so I don't think it's something going wrong with how I am building sel4test/Microkit?",
+   "gold": [
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "base_sha": "3740c2902c3084514dd1beaaf122162e1ac36dd6",
+   "labels": [],
+   "issue_created": "2024-02-29T01:12:50Z",
+   "fixed_at": "2024-02-29T06:16:56Z"
+  },
+  {
+   "id": "i1104",
+   "issue": 1104,
+   "via": "pull request",
+   "ref": 1486,
+   "title": "MCS fault handling issue when specifying period of a TCB.",
+   "body": "This issue is related to VPPI faults on AArch64, which uses the fault handling mechanisms to deliver virtual PPI's to a single-threaded VM. Specifically, it was observed in an seL4 system built using Microkit where a virtual-machine-monitor services a Linux virtual machine. The `microkit` branch of seL4 was used with the Odroid-C4 and qemu-arm-virt platforms.\r\n\r\nWhen specifying a period different to the budget of the TCB for the virtual machine and using the VPPI handling mechanism, we non-deterministically hit an assert in the ```tcbReleaseEnqueue``` function where our TCB is seemingly already in the release queue, and potentially shouldn't be at this point in time. The particular assert is here: https://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/object/tcb.c#L283\r\n\r\nThis issue doesn't occur when we set the period of the VM equal to our budget, and the thread is treated as a round robin thread.\r\n\r\nMy main suspicion is that the `postpone()` function, which in turn calls ```tcbReleaseEnqueue``` was getting invoked twice, but I have not been unable to completely validate this assumption. https://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/kernel/thread.c#L568 \r\n\r\nPostpone is called from three places mainly https://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/kernel/thread.c#L614 \r\nhttps://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/kernel/thread.c#L128\r\nand\r\nhttps://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/object/schedcontext.c#L284 \r\n\r\nSo the interrupting thread may be unable to refill or have insufficient refill available when trying to end its timeslice, handle a reply transfer or attempt to resume.\r\n\r\nThe naive and inconclusive fix for this was to switch the assert to an if statement, and return if the tcb was already in the release queue rather than hitting the assert. As the `tcbReleaseEnqueue` function places the thread into the release queue, which it already is in, I assumed this to be an ok behavior. However, this lead to other issues, such as hitting asserts stating the the thread is un-scheduable. \r\n\r\nThis was the snippet added to `tcbReleaseEnqueue`:\r\n```\r\n    if (thread_state_get_tcbInReleaseQueue(tcb->tcbState) == true) {\r\n        // Thread is already in queue,no need to queue again\r\n        return;\r\n    }\r\n```\r\nWe have recreated this behavior in the simple example system at the following repository for both qemu-arm-virt and the odroidc4:\r\n\r\nhttps://github.com/Kswin01/sel4cp_vmm/tree/mcs-bug\r\n\r\nWe have specified additional priority, budget and period for the VM thread inside of the system description files, as seen in the following commit: https://github.com/Kswin01/sel4cp_vmm/commit/14b3a5c388c1ecd222d313365bc46f5a6694b280.\r\n\r\n\r\n\r\n",
+   "gold": [
+    "src/arch/arm/object/vcpu.c"
+   ],
+   "base_sha": "dec87e641abd0c02b43e63258fde6234d98e65ad",
+   "labels": [
+    "MCS"
+   ],
+   "issue_created": "2023-09-14T04:54:39Z",
+   "fixed_at": "2025-06-24T09:26:05Z"
+  },
+  {
+   "id": "i28",
+   "issue": 28,
+   "via": "commit",
+   "ref": "d95f10a416dfa240257e35742e5d3589162afd71",
+   "title": "x86: support to read out serial i/o ports from BIOS data area",
+   "body": "On Genode/x86 we use for all of our 7 supported x86 micokernels the BIOS data area to read out the serial configuration. This eliminates for us the need to manually finding out the I/O ports, which is especially handy on native machines you don't have next to you. Also the support of external users becomes comfortable since most the time the serial output 'just' works. We combine this mechanism with a small chained bootloader like bender [0, 1] that scans for PCI serial cards or/and Intel AMT SerialOverLine, writes it to the BIOS data area and then starts the actual microkernel.\n\nWhat is your opinion about adding this BDA feature to seL4  in general ?\n\nhttps://github.com/alex-ab/genode/commit/4c1fe8b2dbe4d7fed4c9f60bfa00822621e3f333 depicts the required changes, we currently apply manually to our Genode/seL4 version. (I decided for now to add extra cmdline options, which however are not strictly necessary for us.)\n\n[0] https://github.com/genodelabs/genode/issues/768\n[1] https://github.com/genodelabs/genode/issues/1625\n",
+   "gold": [
+    "src/arch/x86/kernel/cmdline.c"
+   ],
+   "base_sha": "8150e914c377bb2d94796c6857d08f64973a7295",
+   "labels": [],
+   "issue_created": "2016-07-04T16:26:55Z",
+   "fixed_at": "2016-07-05T15:33:55+02:00"
+  },
+  {
+   "id": "i1199",
+   "issue": 1199,
+   "via": "pull request",
+   "ref": 1200,
+   "title": "Potential bug/vulnerability",
+   "body": "Is it possible for user-space (maliciously or not) to trigger a CPU fault due to a NULL pointer access in the kernel?\r\n\r\nIt seems that we only need a vCPU cap to inject a vIRQ. However if the thread that injects the vIRQ is not running on the same pCPU of the target vCPU then an IPI is sent to the pCPU owner of the vCPU thread.\r\n\r\n`vcpu->vcpuTCB` this pointer might be `NULL` if the user space injected a vIRQ to a vCPU that has no TCB associated. This is not the normal behavior of correct code but user-space should **not be allowed** to provoke this or am I missing something?\r\n\r\n```\r\nexception_t invokeVCPUInjectIRQ(vcpu_t *vcpu, unsigned long index, virq_t virq)\r\n{\r\n    if (likely(ARCH_NODE_STATE(armHSCurVCPU) == vcpu)) {\r\n        set_gic_vcpu_ctrl_lr(index, virq);\r\n#ifdef ENABLE_SMP_SUPPORT\r\n    } else if (vcpu->vcpuTCB->tcbAffinity != getCurrentCPUIndex()) {\r\n        doRemoteOp3Arg(IpiRemoteCall_VCPUInjectInterrupt, (word_t)vcpu, index, virq.words[0],      vcpu->vcpuTCB->tcbAffinity);\r\n#endif /* CONFIG_ENABLE_SMP */\r\n    } else {\r\n        vcpu->vgic.lr[index] = virq;\r\n    }\r\n\r\n    return EXCEPTION_NONE;\r\n}\r\n```",
+   "gold": [
+    "src/arch/arm/object/vcpu.c"
+   ],
+   "base_sha": "31ca173e174afd18a38ee70a918a8e9f7869b31e",
+   "labels": [
+    "bug",
+    "SMP",
+    "virtualisation"
+   ],
+   "issue_created": "2024-02-16T04:30:44Z",
+   "fixed_at": "2024-02-21T01:03:39Z"
+  },
+  {
+   "id": "i1529",
+   "issue": 1529,
+   "via": "pull request",
+   "ref": 1531,
+   "title": "Only one of `ARCH_{ARM,RISCV,ARCH_X86}` ever appears in `gen_config.json`",
+   "body": "Most kernel config options appear in `gen_config.json` whether or not they are enabled. They are associated with the value `true` if enabled and as `false` otherwise. `KernelSel4Arch`, for example, behaves this way.\n\n`KernelArch` on the other hand, does not behave this way. For example, when configured for AArch64, `ARCH_ARM` is present in `gen_config.json` with the value `true`, but `ARCH_RISCV` and `ARCH_X86` are absent, instead of present with the value `false`.\n\nUnlike C `#ifdefs` where the use of an undefined macro is allowed, the `#[sel4_cfg]` macro in Rust requires that the config keys exist. That means that the following will fail to compile on AArch64:\n\n```rust\n#[sel4_cfg(ARCH_RISCV)]\nfn foo() {}\n```\n\nWe are using the following verbose workaround:\n\n```rust\n#[sel4_cfg(any(ARCH_RISCV32, ARCH_RISCV64)]\nfn foo() {}\n```\n\nThe issue seems to be related to the use of choice conditions in the definition of the `KernelArch` option:\n\nhttps://github.com/seL4/seL4/blob/f9eb65c9a586ccacb5d2583c1cf1882212bb592a/configs/seL4Config.cmake#L69-L76",
+   "gold": [
+    "tools/helpers.cmake"
+   ],
+   "base_sha": "f9eb65c9a586ccacb5d2583c1cf1882212bb592a",
+   "labels": [],
+   "issue_created": "2025-10-22T06:11:00Z",
+   "fixed_at": "2025-10-23T22:41:04Z"
+  },
+  {
+   "id": "i1489",
+   "issue": 1489,
+   "via": "pull request",
+   "ref": 1538,
+   "title": "The value defined by the GICD_CTLR_ARE_NS macro in GICV3 is incorrect.",
+   "body": "![Image](https://github.com/user-attachments/assets/82d2e59b-7bf6-4664-b8de-c2894a60b34d)\n\n![Image](https://github.com/user-attachments/assets/1994ccbd-af2c-4714-934d-8888439954af)\nThe value of this macro should be 5.",
+   "gold": [
+    "include/arch/arm/arch/machine/gic_v3.h"
+   ],
+   "base_sha": "70c75b956ef7ae03c5f27544b2a93f230ded8f4a",
+   "labels": [],
+   "issue_created": "2025-07-02T07:45:25Z",
+   "fixed_at": "2025-10-30T13:20:40Z"
+  },
+  {
+   "id": "i1170",
+   "issue": 1170,
+   "via": "pull request",
+   "ref": 1630,
+   "title": "seL4 doesn't boot with GICv3 on QEMU",
+   "body": "The existing `qemu-arm-virt` works with GICv2. GICv3 hasn't been tested with seL4 on QEMU. This discussion was raised in this PR #1157. Trying to run seL4 on QEMU/GICv3 halts  on boot with this error:\r\n\r\n> GICv3: GICR_WAKER returned non-zero 6\r\n\r\nFurther, it's likely that more debugging/work is needed to get timer interrupts even if the `halt()` is removed. ",
+   "gold": [
+    "src/arch/arm/machine/gic_v3.c",
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "base_sha": "27a52ddd4cf592b1996ba50074c85e21d832398a",
+   "labels": [
+    "Arm"
+   ],
+   "issue_created": "2024-01-26T11:56:13Z",
+   "fixed_at": "2026-03-28T22:56:39Z"
+  },
+  {
+   "id": "i1091",
+   "issue": 1091,
+   "via": "commit",
+   "ref": "c2497cbb38949134a441fc5be3e01da2aa7d63d8",
+   "title": "riscv: place traps and fastpath code adjacently",
+   "body": "Follow Arm's code where it tries to place traps and vector\r\ncode adjacently in a 4KiB page to optimise performance\r\n(through spatial cache locality).\r\n\r\nThis will also allow reducing the number of instructions\r\nin the fastpath code by one by using conditional branches instead\r\nof a check followed by a jump instruction. Though, if the future traps\r\nor fastpath code got bigger than 4 KiB, this may fail linking again.",
+   "gold": [
+    "include/arch/riscv/arch/kernel/traps.h",
+    "src/arch/riscv/common_riscv.lds",
+    "src/arch/riscv/traps.S"
+   ],
+   "base_sha": "b7ad2e0c669b5648ff32a9bb0dbc56337ec1ac77",
+   "labels": [],
+   "issue_created": "2023-08-14T13:49:49Z",
+   "fixed_at": "2023-11-02T09:36:28Z"
+  },
+  {
+   "id": "i805",
+   "issue": 805,
+   "via": "pull request",
+   "ref": 860,
+   "title": "Cloned functions (-O2) are incompatible with binary verification",
+   "body": "`gcc -O2` enables various inter-procedural optimisations that can produce cloned or partial functions in the binary. These functions don't directly correspond to any function in the C, and are beyond the current abilities of binary verification.\r\n\r\nFor example, if GCC determines that part of a function is worth inlining, but the rest of the function is too big, it might split the function into parts, inlining the first, and emitting the second as a separate function with a new name ending in something like `.part.0`.\r\n\r\nAdding `-fno-partial-inlining -fno-ipa-cp -fno-ipa-sra` seems to disable enough inter-procedural optimisations to avoid cloned and partial functions, at least with current kernel and compiler versions.\r\n\r\nThis issue is to discuss how and when these compiler options should be added to the kernel build. My initial suggestion would be to add the following to the bottom of `gcc.cmake`:\r\n\r\n```\r\n# Binary verification cannot handle cloned functions.\r\nif(KernelVerificationBuild)\r\n    add_compile_options(-fno-partial-inlining -fno-ipa-cp -fno-ipa-sra)\r\nendif()\r\n```\r\n\r\nWhat do people think?",
+   "gold": [
+    "CMakeLists.txt",
+    "config.cmake"
+   ],
+   "base_sha": "4a7d08def09b2b8b30cb76dee15144a9cfaeb5c7",
+   "labels": [
+    "verification"
+   ],
+   "issue_created": "2022-03-21T08:20:48Z",
+   "fixed_at": "2022-05-27T03:48:09Z"
+  },
+  {
+   "id": "i56",
+   "issue": 56,
+   "via": "commit",
+   "ref": "f3d62531b5e83a2ef948c4af567ad0febbf93692",
+   "title": "kernel/boot.c nitpick",
+   "body": "in allocate_bi_frame():\r\n\r\n```\r\n    /* create the bootinfo frame object */\r\n    pptr = alloc_region(BI_FRAME_SIZE_BITS); <--allocated BI_FRAME_SIZE_BITS\r\n    if (!pptr) {\r\n        printf(\"Kernel init failed: could not allocate bootinfo frame\\n\");\r\n        return 0;\r\n    }\r\n    clearMemory((void*)pptr, PAGE_BITS); <-- clear PAGE_BITS\r\n```\r\n\r\nIt allocates one size, but clears another. Per chance they are the same so the whole thing didn't blow up.",
+   "gold": [
+    "src/kernel/boot.c"
+   ],
+   "base_sha": "a384329336a3c312b47bd888b095b2384064e2e5",
+   "labels": [],
+   "issue_created": "2017-01-25T21:54:21Z",
+   "fixed_at": "2017-01-27T09:54:54+11:00"
+  },
+  {
+   "id": "i1008",
+   "issue": 1008,
+   "via": "pull request",
+   "ref": 1501,
+   "title": "Print memory regions as `[..)`",
+   "body": "At boot time we print memory regions as `[a..b]` even though `b` is not included in the interval.\r\n\r\nThis has confused me a number of times in the past, I suspect it is the same for others.\r\n\r\nCorrect [interval notation](https://en.wikipedia.org/wiki/Interval_(mathematics)#Notations_for_intervals) would be `[a..b)`. \r\n",
+   "gold": [
+    "src/arch/arm/kernel/boot.c",
+    "src/arch/riscv/kernel/boot.c",
+    "src/kernel/boot.c"
+   ],
+   "base_sha": "1dde1fcb2711bc10e2c3fde4264ad585c3562994",
+   "labels": [
+    "docs"
+   ],
+   "issue_created": "2023-04-04T00:08:16Z",
+   "fixed_at": "2025-08-01T10:38:57Z"
+  },
+  {
+   "id": "i788",
+   "issue": 788,
+   "via": "pull request",
+   "ref": 799,
+   "title": "allow non-contiguous tag field in bitfield generator",
+   "body": "Context: on AArch64, the encoding for PTE types is context dependent: on level 3, a block PTE is signified by bottom bits `0b11`, but on levels 0-2, bottom bits `0b11` instead mean table PTE. \r\n\r\nFor verification, we need a context-independent encoding of tagged unions. (And for general sanity).\r\n\r\nLuckily there are 4 bits in PTEs that are reserved for software, so we can use one of these to indicate which kind of PTE we are talking about. The problem is that these bits live at positions `[58:55]`, and the type bits at `[1:0]`, so they don't form a contiguous field, which the current bitfield generator assumes.\r\n\r\nWith a relatively small extension, this could be made possible.  The extension would contain roughly the following steps/features:\r\n\r\n- [x] extend parser to `tagged_union <type> <field>[:<field>]*`\r\n- [x] each of these fields has to be in the same position and width in all blocks/alternatives\r\n- [x] for simplicity, non-contiguous tags cannot be mixed with class-mask tags\r\n- [x] tag mask = `or` of the masks of all tag fields\r\n- [ ] enum = plain numbers (no shifting), e.g. `0b00010000011` where the first `1` is in a first field (e.g. one of those reserved bits) and the bottom `11` are in a separate field (e.g. the hardware type field)\r\n- [ ] creation = as now, tag is a plain number, needs no masking or shifting\r\n- [x] reading the tag = new combined function, works like normal field read, but with the overall tag mask\r\n- [x] should not generate field functions (esp not `set`) for any tag field\r\n\r\nMaking the tag the `or` of all tag fields (masked) means there is no performance impact compared to the current bitfield code -- the same number of shifting/masking operations is happening after constant folding. It does mean that all tag fields have to be within the same word (e.g. can't be spread over `word[0]` and `word[1]` of a larger bitfield).\r\n\r\nThe bitfield proofs should be almost unchanged, but we will see more when we have a few examples.\r\n\r\nAdding multiple words would be a performance impact (but only when they are used), and it would add a fair bit of complexity, including proof change, so this is best left for a separate stage if it is needed.\r\n",
+   "gold": [
+    "tools/bitfield_gen.py"
+   ],
+   "base_sha": "ae33886ff900bb7fcd72f3b8d2eb9ec0f6546b0a",
+   "labels": [
+    "enhancement",
+    "verification"
+   ],
+   "issue_created": "2022-02-28T01:18:38Z",
+   "fixed_at": "2022-03-21T06:43:37Z"
+  },
+  {
+   "id": "i1243",
+   "issue": 1243,
+   "via": "pull request",
+   "ref": 1244,
+   "title": "A specific  specific colorscheme is assumed",
+   "body": "# Problem\r\n\r\nI just spent some time trying to debug my solution for the tutorial, when I found this: a spurious print of seL4 in green.\r\n\r\n![image](https://github.com/seL4/microkit/assets/20400405/c90a832c-a004-4b24-8f7f-076acdfb6b2e)\r\n\r\nPlaying with the terminal, I finally found the following, crucial information:\r\n\r\n![image](https://github.com/seL4/microkit/assets/20400405/b3ece8b4-329d-40a6-bf22-15d170a3cc15)\r\n\r\n# Additional Information\r\n\r\nFor reference, my colorscheme is as following (generated using `terminal-colors -o`):\r\n\r\n![image](https://github.com/seL4/microkit/assets/20400405/26e066d3-e345-4536-a494-bcaf00b83705)\r\n\r\n# Cause\r\n\r\nNow, investigating the [output](https://github.com/seL4/microkit/files/15047830/out.txt) yields an interesting observation: the prints are styled as following: \r\n\r\n1. Reset style\r\n2. Set foreground (text) to whatever the current colorscheme considers black\r\n3. Set the font to bold\r\n4. (put text)\r\n5. Reset style\r\n\r\nObviously, ~~most~~ many people run a dark colorscheme. And in many cases, for these the background color will be equal to what the colorscheme considers black. So generally speaking, I would advice the following:\r\n\r\n- __Never change the foreground color to either black (`30m`) or white (`37m`)__\r\n  - Reason:  these are quite likely to collide with the background color of a given terminal\r\n- It is of course ok to change the foreground color __if__ the background color is changed as well to a different color not equal to the default (`49m`)\r\n\r\nNow my personal preference would be to leave the background intact, thus forcing the use of a foregroundcolor  (how about yellow, to indicate a non fatal yet significant problem?) except for black/white for the seL4/microkit generated output, or the use of __bold__ alone (which blends in well with any terminal colorscheme, thus my preference).\r\n\r\nAs is, the UX is unnecessarily poor for fellow dark-colorscheme users tinkering with the (otherwise excellent!) tutorial, or microkit in general.",
+   "gold": [
+    "include/api/types.h"
+   ],
+   "base_sha": "a58480425c5b4c7a3d5000c797f083bc7d5fd532",
+   "labels": [],
+   "issue_created": "2024-04-20T10:51:17Z",
+   "fixed_at": "2024-04-28T00:26:11Z"
+  },
+  {
+   "id": "i53",
+   "issue": 53,
+   "via": "commit",
+   "ref": "4bfa5bb9793f7674696bb9066b2ed96d4f41b638",
+   "title": "Bug in invocation_header_gen.py on ia32?",
+   "body": "In file `tool/invocation_header_gen.py`, around line 80:\r\n\r\n```\r\nenum sel4_arch_invocation_label {\r\n    {{for label, condition in invocations}}\r\n    ...\r\n    {{label}} = nInvocationLabels,\r\n    ...\r\n    {{endfor}}\r\n    nSeL4ArchInvocationLabels\r\n}\r\n```\r\n\r\nOn ia32, becasue `seL4_arch_invocations` is an empty list, this will cause `nSeL4ArchInvocationLabels` to be declared as 0, rather than `nInvocationLabels` as intented.",
+   "gold": [
+    "tools/invocation_header_gen.py"
+   ],
+   "base_sha": "706eca6ae268496aeba10873d8646089b396c0d7",
+   "labels": [],
+   "issue_created": "2016-12-31T22:38:45Z",
+   "fixed_at": "2017-01-04T10:40:25+11:00"
+  },
+  {
+   "id": "i472",
+   "issue": 472,
+   "via": "pull request",
+   "ref": 993,
+   "title": "handleInterruptEntry() should call getActiveIRQ() after CONFIG_KERNEL_MCS checks",
+   "body": "Out of curiosity, is there a reason why `handleInterruptEntry()` calls `getActiveIRQ()` before doing the `CONFIG_KERNEL_MCS` handling?\r\n```\r\n    irq = getActiveIRQ();\r\n#ifdef CONFIG_KERNEL_MCS\r\n    if (SMP_TERNARY(clh_is_self_in_queue(), 1)) {\r\n        updateTimestamp();\r\n        checkBudget();\r\n    }\r\n```\r\nShouldn't the MSC handling happen first to avoid billing the thread too much? Checking which interrupt is pending can also wait a few more cycles.",
+   "gold": [
+    "src/api/syscall.c"
+   ],
+   "base_sha": "621a1ddd762427405a8e4014103674146b37b6cb",
+   "labels": [
+    "verification",
+    "MCS",
+    "cleanup"
+   ],
+   "issue_created": "2021-07-29T18:36:09Z",
+   "fixed_at": "2023-03-25T21:16:19Z"
+  }
+ ]
+}
