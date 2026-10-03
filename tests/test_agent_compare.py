@@ -458,3 +458,31 @@ def test_big_pooled_report_averages_the_runs_per_task_and_arm_and_pairs_the_runs
     n = rep["noise_floor"]["none"]
     assert len(n) == 1 and n[0]["runs"] == [1, 2] and n[0]["diff"] == -1.5
     assert rep["noise_floor"]["verinoda_mod"][0]["diff"] == 0.0
+
+
+def test_big_session_stats_do_not_take_a_working_copys_name_for_a_call_to_the_tool(tmp_path):
+    """The copies are folders called `verinoda`, `verinoda_mod`, `graphify`: a command that only names the folder is not a call."""
+    def use(name, **inp):
+        return {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": name, "input": inp}]}}
+    not_calls = [use("Bash", command="cd C:/w/i805/verinoda_mod && ls && wc -l gcc.cmake"),
+                 use("Bash", command="grep -rn fastpath C:/vbench/big/verinoda src include"),
+                 use("Bash", command="cd C:/vbench/big/verinoda; grep -n x y.c"),
+                 use("Bash", command="cd C:/vbench/big/graphify && grep -rn handler homeassistant"),
+                 use("Bash", command="ls C:/w/i1/verinoda_setup/src"),
+                 use("Grep", pattern="verinoda", path="C:/w/i1/verinoda"),
+                 use("Read", file_path="C:/vbench/big/graphify/homeassistant/x.py")]
+    calls = [use("Bash", command="verinoda analyze \"why\" --repo ."),
+             use("Bash", command=r'"C:\x\.venv\Scripts\verinoda.exe" query "q" --repo C:/w/verinoda'),
+             use("Bash", command="cd C:/w/verinoda && verinoda query x"),
+             use("mcp__verinoda__analyze", question="q"),
+             use("Bash", command="graphify query 'light timeout'"),
+             use("Bash", command="C:/g/Scripts/graphify.exe explain Notifications"),
+             use("Read", file_path="graphify-out/GRAPH_REPORT.md"),
+             use("Bash", command="cat graphify-out/GRAPH_REPORT.md | head -50")]
+    path = tmp_path / "s.jsonl"
+    path.write_text("\n".join(json.dumps(x) for x in not_calls) + "\n", encoding="utf-8")
+    s = big_run.session_stats(path)
+    assert s["tool_calls"] == 7 and s["verinoda_calls"] == 0 and s["graphify_calls"] == 0
+    path.write_text("\n".join(json.dumps(x) for x in calls) + "\n", encoding="utf-8")
+    s = big_run.session_stats(path)
+    assert s["verinoda_calls"] == 4 and s["graphify_calls"] == 4, s

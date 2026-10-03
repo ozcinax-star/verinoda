@@ -38,6 +38,12 @@ SCHEMA = {
     },
     "required": ["files"],
 }
+# A call of the tool is its command followed by a subcommand, or an MCP tool: not a path that names a working copy (the
+# copies are folders called `verinoda`, `verinoda_mod`, `graphify`, so `cd .../verinoda && grep` is no call of Verinoda).
+_SUB = (r"(?:query|analyze|trace|map|plan|resolve|verify|challenge|doctor|api|review|probe|decide|check|claim|update|scan|setup|"
+        r"ui|tq|explain|impact|search|index|mcp|debug|history|path|affected|god-nodes|cluster-only|label|extract|watch|hook)")
+VERINODA_CMD = re.compile(r"""(?:(?<![\w./-])verinoda|/verinoda\.exe)["']?\s+""" + _SUB + r"\b")
+GRAPHIFY_CMD = re.compile(r"""(?:(?<![\w./-])graphify|/graphify\.exe)["']?\s+""" + _SUB + r"\b")
 NETWORK = re.compile(r"\b(curl|wget|Invoke-WebRequest|iwr|WebFetch|WebSearch)\b|github\.com|(^|[\s;&|])gh\s", re.IGNORECASE)
 VERINODA_ARMS = ("verinoda_mod", "verinoda_setup")
 
@@ -150,9 +156,11 @@ def session_stats(transcript: Path | None) -> dict:
             s["tool_calls"] += 1
             if len(s["first_tools"]) < 5:
                 s["first_tools"].append(name)
-            if name.startswith("mcp__verinoda") or (name == "Bash" and "verinoda" in text):
+            command = str(inp.get("command", "")).replace("\\", "/")
+            if name.startswith("mcp__verinoda") or (name == "Bash" and VERINODA_CMD.search(command)):
                 s["verinoda_calls"] += 1
-            if (name == "Bash" and "graphify" in text) or "graphify-out" in text:
+            # Graphify's own files count as its use too: the graph's report and wiki are what its hook points the agent to
+            if (name == "Bash" and GRAPHIFY_CMD.search(command)) or "graphify-out" in text:
                 s["graphify_calls"] += 1
             if name in ("WebFetch", "WebSearch") or (name == "Bash" and NETWORK.search(str(inp.get("command", "")))):
                 s["network"].append(str(inp.get("command") or name)[:120])

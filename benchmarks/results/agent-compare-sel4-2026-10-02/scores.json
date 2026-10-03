@@ -1,0 +1,1588 @@
+{
+ "pooled": {
+  "summary": {
+   "none": {
+    "tasks": 21,
+    "recall": 17.67,
+    "solved": 15.666666666666666,
+    "hit1": 19.333333333333332,
+    "precision": 0.853,
+    "sessions_using_tool": 0,
+    "tool_calls": 0.0,
+    "turns": 115.33333333333333,
+    "input_tokens": 1846076.0,
+    "output_tokens": 17273.0,
+    "cost_usd": 0.97,
+    "seconds": 380,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "graphify": {
+    "tasks": 21,
+    "recall": 18.28,
+    "solved": 16.0,
+    "hit1": 19.333333333333332,
+    "precision": 0.844,
+    "sessions_using_tool": 12,
+    "tool_calls": 8.333333333333332,
+    "turns": 114.0,
+    "input_tokens": 1906832.3333333333,
+    "output_tokens": 18861.666666666668,
+    "cost_usd": 1.03,
+    "seconds": 495,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_mod": {
+    "tasks": 21,
+    "recall": 17.78,
+    "solved": 16.0,
+    "hit1": 19.666666666666668,
+    "precision": 0.843,
+    "sessions_using_tool": 0,
+    "tool_calls": 0.0,
+    "turns": 113.33333333333333,
+    "input_tokens": 1863520.0,
+    "output_tokens": 17961.333333333332,
+    "cost_usd": 1.03,
+    "seconds": 517,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_setup": {
+    "tasks": 21,
+    "recall": 17.56,
+    "solved": 15.333333333333334,
+    "hit1": 19.666666666666668,
+    "precision": 0.86,
+    "sessions_using_tool": 0,
+    "tool_calls": 0.0,
+    "turns": 121.33333333333333,
+    "input_tokens": 2031055.0,
+    "output_tokens": 19328.333333333332,
+    "cost_usd": 1.05,
+    "seconds": 531,
+    "network_sessions": 0,
+    "unanswered": 0
+   }
+  },
+  "decisions": {
+   "verinoda_mod - none": {
+    "n": 21,
+    "diff": 0.1111,
+    "ci95": [
+     -0.5,
+     0.6667
+    ],
+    "wins": 2,
+    "ties": 18,
+    "losses": 1,
+    "input": {
+     "ratio": 1.009,
+     "ci95": [
+      0.915,
+      1.115
+     ]
+    },
+    "output": {
+     "ratio": 1.04,
+     "ci95": [
+      0.956,
+      1.136
+     ]
+    },
+    "turns": {
+     "ratio": 0.983,
+     "ci95": [
+      0.892,
+      1.082
+     ]
+    },
+    "seconds": {
+     "ratio": 1.359,
+     "ci95": [
+      1.26,
+      1.466
+     ]
+    },
+    "cost": {
+     "ratio": 1.065,
+     "ci95": [
+      0.973,
+      1.163
+     ]
+    }
+   },
+   "graphify - none": {
+    "n": 21,
+    "diff": 0.6111,
+    "ci95": [
+     -0.2778,
+     1.7222
+    ],
+    "wins": 3,
+    "ties": 16,
+    "losses": 2,
+    "input": {
+     "ratio": 1.033,
+     "ci95": [
+      0.918,
+      1.142
+     ]
+    },
+    "output": {
+     "ratio": 1.092,
+     "ci95": [
+      0.97,
+      1.216
+     ]
+    },
+    "turns": {
+     "ratio": 0.988,
+     "ci95": [
+      0.901,
+      1.072
+     ]
+    },
+    "seconds": {
+     "ratio": 1.303,
+     "ci95": [
+      1.181,
+      1.422
+     ]
+    },
+    "cost": {
+     "ratio": 1.065,
+     "ci95": [
+      0.967,
+      1.158
+     ]
+    }
+   },
+   "verinoda_mod - graphify": {
+    "n": 21,
+    "diff": -0.5,
+    "ci95": [
+     -1.3333,
+     0.1111
+    ],
+    "wins": 1,
+    "ties": 17,
+    "losses": 3,
+    "input": {
+     "ratio": 0.977,
+     "ci95": [
+      0.874,
+      1.075
+     ]
+    },
+    "output": {
+     "ratio": 0.952,
+     "ci95": [
+      0.837,
+      1.083
+     ]
+    },
+    "turns": {
+     "ratio": 0.994,
+     "ci95": [
+      0.898,
+      1.08
+     ]
+    },
+    "seconds": {
+     "ratio": 1.043,
+     "ci95": [
+      0.961,
+      1.133
+     ]
+    },
+    "cost": {
+     "ratio": 1.0,
+     "ci95": [
+      0.888,
+      1.108
+     ]
+    }
+   }
+  },
+  "secondary": {
+   "verinoda_mod - none": {
+    "recall": {
+     "n": 21,
+     "diff": 0.1111,
+     "ci95": [
+      -0.5,
+      0.6667
+     ],
+     "wins": 2,
+     "ties": 18,
+     "losses": 1,
+     "input": {
+      "ratio": 1.009,
+      "ci95": [
+       0.915,
+       1.115
+      ]
+     },
+     "output": {
+      "ratio": 1.04,
+      "ci95": [
+       0.956,
+       1.136
+      ]
+     },
+     "turns": {
+      "ratio": 0.983,
+      "ci95": [
+       0.892,
+       1.082
+      ]
+     },
+     "seconds": {
+      "ratio": 1.359,
+      "ci95": [
+       1.26,
+       1.466
+      ]
+     },
+     "cost": {
+      "ratio": 1.065,
+      "ci95": [
+       0.973,
+       1.163
+      ]
+     }
+    },
+    "solved": {
+     "n": 21,
+     "diff": 0.3333,
+     "ci95": [
+      0.0,
+      1.0
+     ],
+     "wins": 1,
+     "ties": 20,
+     "losses": 0,
+     "input": {
+      "ratio": 1.009,
+      "ci95": [
+       0.915,
+       1.115
+      ]
+     },
+     "output": {
+      "ratio": 1.04,
+      "ci95": [
+       0.956,
+       1.136
+      ]
+     },
+     "turns": {
+      "ratio": 0.983,
+      "ci95": [
+       0.892,
+       1.082
+      ]
+     },
+     "seconds": {
+      "ratio": 1.359,
+      "ci95": [
+       1.26,
+       1.466
+      ]
+     },
+     "cost": {
+      "ratio": 1.065,
+      "ci95": [
+       0.973,
+       1.163
+      ]
+     }
+    },
+    "hit1": {
+     "n": 21,
+     "diff": 0.3333,
+     "ci95": [
+      0.0,
+      1.0
+     ],
+     "wins": 1,
+     "ties": 20,
+     "losses": 0,
+     "input": {
+      "ratio": 1.009,
+      "ci95": [
+       0.915,
+       1.115
+      ]
+     },
+     "output": {
+      "ratio": 1.04,
+      "ci95": [
+       0.956,
+       1.136
+      ]
+     },
+     "turns": {
+      "ratio": 0.983,
+      "ci95": [
+       0.892,
+       1.082
+      ]
+     },
+     "seconds": {
+      "ratio": 1.359,
+      "ci95": [
+       1.26,
+       1.466
+      ]
+     },
+     "cost": {
+      "ratio": 1.065,
+      "ci95": [
+       0.973,
+       1.163
+      ]
+     }
+    }
+   },
+   "graphify - none": {
+    "recall": {
+     "n": 21,
+     "diff": 0.6111,
+     "ci95": [
+      -0.2778,
+      1.7222
+     ],
+     "wins": 3,
+     "ties": 16,
+     "losses": 2,
+     "input": {
+      "ratio": 1.033,
+      "ci95": [
+       0.918,
+       1.142
+      ]
+     },
+     "output": {
+      "ratio": 1.092,
+      "ci95": [
+       0.97,
+       1.216
+      ]
+     },
+     "turns": {
+      "ratio": 0.988,
+      "ci95": [
+       0.901,
+       1.072
+      ]
+     },
+     "seconds": {
+      "ratio": 1.303,
+      "ci95": [
+       1.181,
+       1.422
+      ]
+     },
+     "cost": {
+      "ratio": 1.065,
+      "ci95": [
+       0.967,
+       1.158
+      ]
+     }
+    },
+    "solved": {
+     "n": 21,
+     "diff": 0.3333,
+     "ci95": [
+      -1.0,
+      2.0
+     ],
+     "wins": 1,
+     "ties": 19,
+     "losses": 1,
+     "input": {
+      "ratio": 1.033,
+      "ci95": [
+       0.918,
+       1.142
+      ]
+     },
+     "output": {
+      "ratio": 1.092,
+      "ci95": [
+       0.97,
+       1.216
+      ]
+     },
+     "turns": {
+      "ratio": 0.988,
+      "ci95": [
+       0.901,
+       1.072
+      ]
+     },
+     "seconds": {
+      "ratio": 1.303,
+      "ci95": [
+       1.181,
+       1.422
+      ]
+     },
+     "cost": {
+      "ratio": 1.065,
+      "ci95": [
+       0.967,
+       1.158
+      ]
+     }
+    },
+    "hit1": {
+     "n": 21,
+     "diff": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "wins": 0,
+     "ties": 21,
+     "losses": 0,
+     "input": {
+      "ratio": 1.033,
+      "ci95": [
+       0.918,
+       1.142
+      ]
+     },
+     "output": {
+      "ratio": 1.092,
+      "ci95": [
+       0.97,
+       1.216
+      ]
+     },
+     "turns": {
+      "ratio": 0.988,
+      "ci95": [
+       0.901,
+       1.072
+      ]
+     },
+     "seconds": {
+      "ratio": 1.303,
+      "ci95": [
+       1.181,
+       1.422
+      ]
+     },
+     "cost": {
+      "ratio": 1.065,
+      "ci95": [
+       0.967,
+       1.158
+      ]
+     }
+    }
+   },
+   "verinoda_mod - graphify": {
+    "recall": {
+     "n": 21,
+     "diff": -0.5,
+     "ci95": [
+      -1.3333,
+      0.1111
+     ],
+     "wins": 1,
+     "ties": 17,
+     "losses": 3,
+     "input": {
+      "ratio": 0.977,
+      "ci95": [
+       0.874,
+       1.075
+      ]
+     },
+     "output": {
+      "ratio": 0.952,
+      "ci95": [
+       0.837,
+       1.083
+      ]
+     },
+     "turns": {
+      "ratio": 0.994,
+      "ci95": [
+       0.898,
+       1.08
+      ]
+     },
+     "seconds": {
+      "ratio": 1.043,
+      "ci95": [
+       0.961,
+       1.133
+      ]
+     },
+     "cost": {
+      "ratio": 1.0,
+      "ci95": [
+       0.888,
+       1.108
+      ]
+     }
+    },
+    "solved": {
+     "n": 21,
+     "diff": -0.0,
+     "ci95": [
+      -1.0,
+      1.0
+     ],
+     "wins": 1,
+     "ties": 19,
+     "losses": 1,
+     "input": {
+      "ratio": 0.977,
+      "ci95": [
+       0.874,
+       1.075
+      ]
+     },
+     "output": {
+      "ratio": 0.952,
+      "ci95": [
+       0.837,
+       1.083
+      ]
+     },
+     "turns": {
+      "ratio": 0.994,
+      "ci95": [
+       0.898,
+       1.08
+      ]
+     },
+     "seconds": {
+      "ratio": 1.043,
+      "ci95": [
+       0.961,
+       1.133
+      ]
+     },
+     "cost": {
+      "ratio": 1.0,
+      "ci95": [
+       0.888,
+       1.108
+      ]
+     }
+    },
+    "hit1": {
+     "n": 21,
+     "diff": 0.3333,
+     "ci95": [
+      0.0,
+      1.0
+     ],
+     "wins": 1,
+     "ties": 20,
+     "losses": 0,
+     "input": {
+      "ratio": 0.977,
+      "ci95": [
+       0.874,
+       1.075
+      ]
+     },
+     "output": {
+      "ratio": 0.952,
+      "ci95": [
+       0.837,
+       1.083
+      ]
+     },
+     "turns": {
+      "ratio": 0.994,
+      "ci95": [
+       0.898,
+       1.08
+      ]
+     },
+     "seconds": {
+      "ratio": 1.043,
+      "ci95": [
+       0.961,
+       1.133
+      ]
+     },
+     "cost": {
+      "ratio": 1.0,
+      "ci95": [
+       0.888,
+       1.108
+      ]
+     }
+    }
+   },
+   "verinoda_mod - verinoda_setup": {
+    "recall": {
+     "n": 21,
+     "diff": 0.2222,
+     "ci95": [
+      -0.3333,
+      1.0
+     ],
+     "wins": 1,
+     "ties": 19,
+     "losses": 1,
+     "input": {
+      "ratio": 0.918,
+      "ci95": [
+       0.839,
+       1.008
+      ]
+     },
+     "output": {
+      "ratio": 0.929,
+      "ci95": [
+       0.832,
+       1.042
+      ]
+     },
+     "turns": {
+      "ratio": 0.934,
+      "ci95": [
+       0.857,
+       1.029
+      ]
+     },
+     "seconds": {
+      "ratio": 0.973,
+      "ci95": [
+       0.91,
+       1.042
+      ]
+     },
+     "cost": {
+      "ratio": 0.977,
+      "ci95": [
+       0.907,
+       1.057
+      ]
+     }
+    },
+    "solved": {
+     "n": 21,
+     "diff": 0.6667,
+     "ci95": [
+      0.0,
+      2.0
+     ],
+     "wins": 1,
+     "ties": 20,
+     "losses": 0,
+     "input": {
+      "ratio": 0.918,
+      "ci95": [
+       0.839,
+       1.008
+      ]
+     },
+     "output": {
+      "ratio": 0.929,
+      "ci95": [
+       0.832,
+       1.042
+      ]
+     },
+     "turns": {
+      "ratio": 0.934,
+      "ci95": [
+       0.857,
+       1.029
+      ]
+     },
+     "seconds": {
+      "ratio": 0.973,
+      "ci95": [
+       0.91,
+       1.042
+      ]
+     },
+     "cost": {
+      "ratio": 0.977,
+      "ci95": [
+       0.907,
+       1.057
+      ]
+     }
+    },
+    "hit1": {
+     "n": 21,
+     "diff": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "wins": 0,
+     "ties": 21,
+     "losses": 0,
+     "input": {
+      "ratio": 0.918,
+      "ci95": [
+       0.839,
+       1.008
+      ]
+     },
+     "output": {
+      "ratio": 0.929,
+      "ci95": [
+       0.832,
+       1.042
+      ]
+     },
+     "turns": {
+      "ratio": 0.934,
+      "ci95": [
+       0.857,
+       1.029
+      ]
+     },
+     "seconds": {
+      "ratio": 0.973,
+      "ci95": [
+       0.91,
+       1.042
+      ]
+     },
+     "cost": {
+      "ratio": 0.977,
+      "ci95": [
+       0.907,
+       1.057
+      ]
+     }
+    }
+   }
+  }
+ },
+ "runs": [
+  {
+   "summary": {
+    "none": {
+     "tasks": 21,
+     "recall": 17.5,
+     "solved": 16,
+     "hit1": 19,
+     "precision": 0.857,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 120,
+     "input_tokens": 1948183,
+     "output_tokens": 17823,
+     "cost_usd": 1.34,
+     "seconds": 413,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "graphify": {
+     "tasks": 21,
+     "recall": 18.33,
+     "solved": 16,
+     "hit1": 20,
+     "precision": 0.857,
+     "sessions_using_tool": 8,
+     "tool_calls": 10,
+     "turns": 117,
+     "input_tokens": 1970055,
+     "output_tokens": 19171,
+     "cost_usd": 1.43,
+     "seconds": 528,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "verinoda_mod": {
+     "tasks": 21,
+     "recall": 17.17,
+     "solved": 16,
+     "hit1": 19,
+     "precision": 0.813,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 116,
+     "input_tokens": 1816299,
+     "output_tokens": 17885,
+     "cost_usd": 1.39,
+     "seconds": 547,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "verinoda_setup": {
+     "tasks": 21,
+     "recall": 17.5,
+     "solved": 15,
+     "hit1": 20,
+     "precision": 0.857,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 120,
+     "input_tokens": 2078415,
+     "output_tokens": 19318,
+     "cost_usd": 1.43,
+     "seconds": 583,
+     "network_sessions": 0,
+     "unanswered": 0
+    }
+   }
+  },
+  {
+   "summary": {
+    "none": {
+     "tasks": 21,
+     "recall": 17.33,
+     "solved": 15,
+     "hit1": 20,
+     "precision": 0.841,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 112,
+     "input_tokens": 1817328,
+     "output_tokens": 16987,
+     "cost_usd": 0.8,
+     "seconds": 394,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "graphify": {
+     "tasks": 21,
+     "recall": 18.5,
+     "solved": 16,
+     "hit1": 19,
+     "precision": 0.841,
+     "sessions_using_tool": 9,
+     "tool_calls": 11,
+     "turns": 113,
+     "input_tokens": 1944132,
+     "output_tokens": 19152,
+     "cost_usd": 0.85,
+     "seconds": 511,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "verinoda_mod": {
+     "tasks": 21,
+     "recall": 17.83,
+     "solved": 16,
+     "hit1": 20,
+     "precision": 0.881,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 112,
+     "input_tokens": 1860734,
+     "output_tokens": 18338,
+     "cost_usd": 0.85,
+     "seconds": 522,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "verinoda_setup": {
+     "tasks": 21,
+     "recall": 17.83,
+     "solved": 16,
+     "hit1": 20,
+     "precision": 0.881,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 127,
+     "input_tokens": 2098022,
+     "output_tokens": 19709,
+     "cost_usd": 0.93,
+     "seconds": 532,
+     "network_sessions": 0,
+     "unanswered": 0
+    }
+   }
+  },
+  {
+   "summary": {
+    "none": {
+     "tasks": 21,
+     "recall": 18.17,
+     "solved": 16,
+     "hit1": 19,
+     "precision": 0.861,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 114,
+     "input_tokens": 1772717,
+     "output_tokens": 17009,
+     "cost_usd": 0.77,
+     "seconds": 333,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "graphify": {
+     "tasks": 21,
+     "recall": 18.0,
+     "solved": 16,
+     "hit1": 19,
+     "precision": 0.833,
+     "sessions_using_tool": 4,
+     "tool_calls": 4,
+     "turns": 112,
+     "input_tokens": 1806310,
+     "output_tokens": 18262,
+     "cost_usd": 0.81,
+     "seconds": 447,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "verinoda_mod": {
+     "tasks": 21,
+     "recall": 18.33,
+     "solved": 16,
+     "hit1": 20,
+     "precision": 0.833,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 112,
+     "input_tokens": 1913527,
+     "output_tokens": 17661,
+     "cost_usd": 0.84,
+     "seconds": 481,
+     "network_sessions": 0,
+     "unanswered": 0
+    },
+    "verinoda_setup": {
+     "tasks": 21,
+     "recall": 17.33,
+     "solved": 15,
+     "hit1": 19,
+     "precision": 0.841,
+     "sessions_using_tool": 0,
+     "tool_calls": 0,
+     "turns": 117,
+     "input_tokens": 1916728,
+     "output_tokens": 18958,
+     "cost_usd": 0.81,
+     "seconds": 479,
+     "network_sessions": 0,
+     "unanswered": 0
+    }
+   }
+  }
+ ],
+ "noise_floor": {
+  "none": [
+   {
+    "runs": [
+     1,
+     2
+    ],
+    "n": 21,
+    "diff": 0.1667,
+    "ci95": [
+     -1.3333,
+     1.6667
+    ],
+    "wins": 2,
+    "ties": 18,
+    "losses": 1,
+    "input": {
+     "ratio": 1.072,
+     "ci95": [
+      0.91,
+      1.238
+     ]
+    },
+    "output": {
+     "ratio": 1.049,
+     "ci95": [
+      0.866,
+      1.237
+     ]
+    },
+    "turns": {
+     "ratio": 1.071,
+     "ci95": [
+      0.927,
+      1.227
+     ]
+    },
+    "seconds": {
+     "ratio": 1.047,
+     "ci95": [
+      0.91,
+      1.192
+     ]
+    },
+    "cost": {
+     "ratio": 1.67,
+     "ci95": [
+      1.444,
+      1.921
+     ]
+    }
+   },
+   {
+    "runs": [
+     1,
+     3
+    ],
+    "n": 21,
+    "diff": -0.6667,
+    "ci95": [
+     -2.3333,
+     1.0
+    ],
+    "wins": 1,
+    "ties": 17,
+    "losses": 3,
+    "input": {
+     "ratio": 1.099,
+     "ci95": [
+      0.985,
+      1.24
+     ]
+    },
+    "output": {
+     "ratio": 1.048,
+     "ci95": [
+      0.943,
+      1.195
+     ]
+    },
+    "turns": {
+     "ratio": 1.053,
+     "ci95": [
+      0.971,
+      1.14
+     ]
+    },
+    "seconds": {
+     "ratio": 1.239,
+     "ci95": [
+      1.128,
+      1.36
+     ]
+    },
+    "cost": {
+     "ratio": 1.74,
+     "ci95": [
+      1.495,
+      2.076
+     ]
+    }
+   },
+   {
+    "runs": [
+     2,
+     3
+    ],
+    "n": 21,
+    "diff": -0.8333,
+    "ci95": [
+     -2.6667,
+     1.0
+    ],
+    "wins": 1,
+    "ties": 17,
+    "losses": 3,
+    "input": {
+     "ratio": 1.025,
+     "ci95": [
+      0.861,
+      1.231
+     ]
+    },
+    "output": {
+     "ratio": 0.999,
+     "ci95": [
+      0.827,
+      1.231
+     ]
+    },
+    "turns": {
+     "ratio": 0.982,
+     "ci95": [
+      0.853,
+      1.141
+     ]
+    },
+    "seconds": {
+     "ratio": 1.184,
+     "ci95": [
+      1.023,
+      1.376
+     ]
+    },
+    "cost": {
+     "ratio": 1.042,
+     "ci95": [
+      0.849,
+      1.298
+     ]
+    }
+   }
+  ],
+  "graphify": [
+   {
+    "runs": [
+     1,
+     2
+    ],
+    "n": 21,
+    "diff": -0.1667,
+    "ci95": [
+     -0.5,
+     0.0
+    ],
+    "wins": 0,
+    "ties": 20,
+    "losses": 1,
+    "input": {
+     "ratio": 1.013,
+     "ci95": [
+      0.911,
+      1.129
+     ]
+    },
+    "output": {
+     "ratio": 1.001,
+     "ci95": [
+      0.852,
+      1.172
+     ]
+    },
+    "turns": {
+     "ratio": 1.035,
+     "ci95": [
+      0.96,
+      1.123
+     ]
+    },
+    "seconds": {
+     "ratio": 1.033,
+     "ci95": [
+      0.858,
+      1.277
+     ]
+    },
+    "cost": {
+     "ratio": 1.693,
+     "ci95": [
+      1.467,
+      2.008
+     ]
+    }
+   },
+   {
+    "runs": [
+     1,
+     3
+    ],
+    "n": 21,
+    "diff": 0.3333,
+    "ci95": [
+     -0.5,
+     1.5
+    ],
+    "wins": 1,
+    "ties": 19,
+    "losses": 1,
+    "input": {
+     "ratio": 1.091,
+     "ci95": [
+      0.967,
+      1.228
+     ]
+    },
+    "output": {
+     "ratio": 1.05,
+     "ci95": [
+      0.91,
+      1.202
+     ]
+    },
+    "turns": {
+     "ratio": 1.045,
+     "ci95": [
+      0.948,
+      1.148
+     ]
+    },
+    "seconds": {
+     "ratio": 1.183,
+     "ci95": [
+      1.053,
+      1.348
+     ]
+    },
+    "cost": {
+     "ratio": 1.771,
+     "ci95": [
+      1.555,
+      2.067
+     ]
+    }
+   },
+   {
+    "runs": [
+     2,
+     3
+    ],
+    "n": 21,
+    "diff": 0.5,
+    "ci95": [
+     0.0,
+     1.5
+    ],
+    "wins": 1,
+    "ties": 20,
+    "losses": 0,
+    "input": {
+     "ratio": 1.076,
+     "ci95": [
+      0.943,
+      1.216
+     ]
+    },
+    "output": {
+     "ratio": 1.049,
+     "ci95": [
+      0.939,
+      1.17
+     ]
+    },
+    "turns": {
+     "ratio": 1.009,
+     "ci95": [
+      0.92,
+      1.108
+     ]
+    },
+    "seconds": {
+     "ratio": 1.145,
+     "ci95": [
+      0.989,
+      1.31
+     ]
+    },
+    "cost": {
+     "ratio": 1.046,
+     "ci95": [
+      0.89,
+      1.219
+     ]
+    }
+   }
+  ],
+  "verinoda_mod": [
+   {
+    "runs": [
+     1,
+     2
+    ],
+    "n": 21,
+    "diff": -0.6667,
+    "ci95": [
+     -2.1667,
+     0.6667
+    ],
+    "wins": 1,
+    "ties": 18,
+    "losses": 2,
+    "input": {
+     "ratio": 0.976,
+     "ci95": [
+      0.844,
+      1.119
+     ]
+    },
+    "output": {
+     "ratio": 0.975,
+     "ci95": [
+      0.876,
+      1.076
+     ]
+    },
+    "turns": {
+     "ratio": 1.036,
+     "ci95": [
+      0.951,
+      1.124
+     ]
+    },
+    "seconds": {
+     "ratio": 1.049,
+     "ci95": [
+      0.936,
+      1.163
+     ]
+    },
+    "cost": {
+     "ratio": 1.632,
+     "ci95": [
+      1.436,
+      1.895
+     ]
+    }
+   },
+   {
+    "runs": [
+     1,
+     3
+    ],
+    "n": 21,
+    "diff": -1.1667,
+    "ci95": [
+     -3.0,
+     0.5
+    ],
+    "wins": 1,
+    "ties": 17,
+    "losses": 3,
+    "input": {
+     "ratio": 0.949,
+     "ci95": [
+      0.805,
+      1.105
+     ]
+    },
+    "output": {
+     "ratio": 1.013,
+     "ci95": [
+      0.841,
+      1.171
+     ]
+    },
+    "turns": {
+     "ratio": 1.036,
+     "ci95": [
+      0.91,
+      1.156
+     ]
+    },
+    "seconds": {
+     "ratio": 1.137,
+     "ci95": [
+      1.044,
+      1.239
+     ]
+    },
+    "cost": {
+     "ratio": 1.66,
+     "ci95": [
+      1.42,
+      1.964
+     ]
+    }
+   },
+   {
+    "runs": [
+     2,
+     3
+    ],
+    "n": 21,
+    "diff": -0.5,
+    "ci95": [
+     -1.5,
+     0.0
+    ],
+    "wins": 0,
+    "ties": 20,
+    "losses": 1,
+    "input": {
+     "ratio": 0.972,
+     "ci95": [
+      0.878,
+      1.092
+     ]
+    },
+    "output": {
+     "ratio": 1.038,
+     "ci95": [
+      0.914,
+      1.157
+     ]
+    },
+    "turns": {
+     "ratio": 1.0,
+     "ci95": [
+      0.92,
+      1.084
+     ]
+    },
+    "seconds": {
+     "ratio": 1.084,
+     "ci95": [
+      0.97,
+      1.229
+     ]
+    },
+    "cost": {
+     "ratio": 1.017,
+     "ci95": [
+      0.921,
+      1.137
+     ]
+    }
+   }
+  ],
+  "verinoda_setup": [
+   {
+    "runs": [
+     1,
+     2
+    ],
+    "n": 21,
+    "diff": -0.3333,
+    "ci95": [
+     -1.0,
+     0.0
+    ],
+    "wins": 0,
+    "ties": 20,
+    "losses": 1,
+    "input": {
+     "ratio": 0.991,
+     "ci95": [
+      0.891,
+      1.111
+     ]
+    },
+    "output": {
+     "ratio": 0.98,
+     "ci95": [
+      0.91,
+      1.071
+     ]
+    },
+    "turns": {
+     "ratio": 0.945,
+     "ci95": [
+      0.87,
+      1.046
+     ]
+    },
+    "seconds": {
+     "ratio": 1.094,
+     "ci95": [
+      0.932,
+      1.279
+     ]
+    },
+    "cost": {
+     "ratio": 1.546,
+     "ci95": [
+      1.336,
+      1.83
+     ]
+    }
+   },
+   {
+    "runs": [
+     1,
+     3
+    ],
+    "n": 21,
+    "diff": 0.1667,
+    "ci95": [
+     -1.3333,
+     1.6667
+    ],
+    "wins": 2,
+    "ties": 18,
+    "losses": 1,
+    "input": {
+     "ratio": 1.084,
+     "ci95": [
+      0.948,
+      1.238
+     ]
+    },
+    "output": {
+     "ratio": 1.019,
+     "ci95": [
+      0.911,
+      1.156
+     ]
+    },
+    "turns": {
+     "ratio": 1.026,
+     "ci95": [
+      0.921,
+      1.126
+     ]
+    },
+    "seconds": {
+     "ratio": 1.217,
+     "ci95": [
+      1.078,
+      1.393
+     ]
+    },
+    "cost": {
+     "ratio": 1.776,
+     "ci95": [
+      1.592,
+      2.012
+     ]
+    }
+   },
+   {
+    "runs": [
+     2,
+     3
+    ],
+    "n": 21,
+    "diff": 0.5,
+    "ci95": [
+     -1.0,
+     2.0
+    ],
+    "wins": 3,
+    "ties": 17,
+    "losses": 1,
+    "input": {
+     "ratio": 1.095,
+     "ci95": [
+      0.939,
+      1.248
+     ]
+    },
+    "output": {
+     "ratio": 1.04,
+     "ci95": [
+      0.898,
+      1.187
+     ]
+    },
+    "turns": {
+     "ratio": 1.085,
+     "ci95": [
+      0.933,
+      1.225
+     ]
+    },
+    "seconds": {
+     "ratio": 1.112,
+     "ci95": [
+      1.024,
+      1.233
+     ]
+    },
+    "cost": {
+     "ratio": 1.149,
+     "ci95": [
+      0.955,
+      1.349
+     ]
+    }
+   }
+  ]
+ }
+}
