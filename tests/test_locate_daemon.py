@@ -369,3 +369,40 @@ def test_a_body_over_the_limit_is_a_413(running):
     big = b'{"text": "' + b"x" * (locate_daemon.MAX_BODY + 10) + b'"}'
     assert call(url, "/locate", token, raw=big)[0] == 413
     assert call(url, "/locate", token, {"text": TEXT})[0] == 200  # and the next request is served
+
+
+# -- the commands use a running daemon by themselves ---------------------------------------------------------------
+
+def test_locate_and_coupled_ask_a_running_daemon_and_compute_for_themselves_when_none_runs(orders, capsys):
+    """The mod runs the commands (a host call has a time limit a big repository's answer can pass, and a command's can be
+    ten minutes); the daemon's graph is what makes them quick, so they find it by themselves."""
+    try:
+        locate_daemon.start(orders, idle_timeout=120)
+        before = locate_daemon.status(orders)["requests"]
+        assert cli.main(["locate", TEXT, "--repo", str(orders), "--json"]) == 0
+        res = json.loads(capsys.readouterr().out)
+        assert res["files"][0]["path"] == "orders/pricing.py" and res["text"].startswith("verinoda locate: ")
+        assert locate_daemon.status(orders)["requests"] == before + 1  # the daemon answered it
+        assert cli.main(["coupled", "orders/pricing.py", "--repo", str(orders), "--json"]) == 0
+        assert json.loads(capsys.readouterr().out)["files"][0]["path"] == "tests/test_pricing.py"
+        assert locate_daemon.status(orders)["requests"] == before + 2
+        assert cli.main(["locate", TEXT, "--repo", str(orders), "--json", "--no-daemon"]) == 0
+        capsys.readouterr()
+        assert cli.main(["coupled", "orders/pricing.py", "--repo", str(orders), "--no-daemon"]) == 0
+        assert capsys.readouterr().out.startswith("verinoda coupled: ")
+        assert locate_daemon.status(orders)["requests"] == before + 2  # --no-daemon asks nobody
+        assert cli.main(["locate", TEXT, "--repo", str(orders), "--max-chars", "400"]) == 0  # text mode, through the daemon too
+        assert len(capsys.readouterr().out.strip()) <= 400 and locate_daemon.status(orders)["requests"] == before + 3
+    finally:
+        locate_daemon.stop(orders)
+    assert cli.main(["locate", TEXT, "--repo", str(orders), "--json"]) == 0  # none runs: computed here, the same answer
+    assert json.loads(capsys.readouterr().out)["files"][0]["path"] == "orders/pricing.py"
+
+
+def test_a_daemon_that_cannot_answer_does_not_stop_the_command(orders, capsys, monkeypatch):
+    def broken(*a, **k):
+        raise OSError("boom")
+    monkeypatch.setattr(locate_daemon, "_post", broken)
+    _state(orders, port=9, pid=1)
+    assert cli.main(["locate", TEXT, "--repo", str(orders), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["files"][0]["path"] == "orders/pricing.py"

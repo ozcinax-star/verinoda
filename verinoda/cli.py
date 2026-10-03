@@ -1377,6 +1377,15 @@ def cmd_locate(args) -> int:
         return 0 if args.daemon != "start" or res.get("running") else 1
     if not args.serve and not args.text:
         raise SystemExit("error: locate needs the issue text (or --serve or --daemon)")
+    budget = _files_text_budget(args)
+    if not (args.serve or args.no_daemon):  # a daemon of this repository, when one runs, has the graph loaded
+        from verinoda import locate_daemon
+
+        asked = locate_daemon.ask(repo, "locate", {"text": args.text, "anchors": list(args.anchor or ()), "max_files": args.max_files,
+                                                   "max_chars": budget, "history": not args.no_history})
+        if asked is not None:
+            _write(_dump(asked) if args.json else asked["text"])
+            return 0
     _need_graph(repo)
     if args.serve:
         for stream in (sys.stdin, sys.stdout):
@@ -1385,7 +1394,6 @@ def cmd_locate(args) -> int:
             except (AttributeError, ValueError):
                 pass
         return locate.serve(repo)
-    budget = _files_text_budget(args)
     try:
         res = locate.locate(locate.GraphKeeper(repo), repo, args.text, anchors=args.anchor or (),
                             max_files=args.max_files, max_chars=budget, history=not args.no_history)
@@ -1406,6 +1414,13 @@ def cmd_coupled(args) -> int:
     repo = _repo(args)
     if not repo.is_dir():
         raise SystemExit(f"error: {repo} is not a directory")
+    if not args.no_daemon:
+        from verinoda import locate_daemon
+
+        asked = locate_daemon.ask(repo, "coupled", {"files": list(args.files), "max_files": args.max_files, "history": not args.no_history})
+        if asked is not None:
+            _write(_dump(asked) if args.json else asked["text"])
+            return 0
     res = locate.coupled(repo, args.files, max_files=args.max_files, history=not args.no_history)
     if args.json:
         _write(_dump({**res, "text": locate.render(res, 1800, kind="coupled")}))
@@ -5090,12 +5105,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--idle-timeout", type=float, default=None, metavar="SECONDS",
                     help="with --daemon start: seconds without a request after which the daemon ends (default 600)")
     sp.add_argument("--serve-http", action="store_true", help=argparse.SUPPRESS)  # what `--daemon start` runs
+    sp.add_argument("--no-daemon", action="store_true",
+                    help="compute the answer here even when a daemon of this repository runs (by default it is asked)")
     sp = add("coupled", cmd_coupled, "the files that change together with the given files, without loading the graph "
                                      "(the git history of each file, imports, includes, same-stem partners, "
                                      "same-name twins)")
     sp.add_argument("files", nargs="+", metavar="FILE", help="repository-relative paths")
     sp.add_argument("--max-files", type=int, default=8, help="files listed at most (default 8)")
     sp.add_argument("--no-history", action="store_true", help="do not read the git history")
+    sp.add_argument("--no-daemon", action="store_true", help="compute the answer here even when a daemon runs (by default it is asked)")
     sp = add("trace", cmd_trace, "directed paths between two symbols/files with edge locations")
     sp.add_argument("source")
     sp.add_argument("target")

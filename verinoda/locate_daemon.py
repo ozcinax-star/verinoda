@@ -45,6 +45,7 @@ IDLE_TIMEOUT = 600.0
 START_WAIT = 150.0  # seconds `start` waits for the daemon to listen (not for the graph: that loads meanwhile)
 LOAD_WAIT = 900.0  # seconds a `locate` request waits for the graph to load
 STOP_WAIT = 20.0
+ASK_TIMEOUT = 600.0  # seconds a command waits for the daemon's answer (a big repository's first one waits for the graph)
 TOKEN_HEADER = "X-Verinoda-Token"
 MAX_BODY = 1_000_000
 
@@ -329,6 +330,40 @@ def _request(state: dict, method: str, path: str, timeout: float = 15.0) -> tupl
         return r.status, data if isinstance(data, dict) else {}
     finally:
         conn.close()
+
+
+def _post(state: dict, path: str, body: dict, timeout: float) -> tuple[int, dict]:
+    conn = http.client.HTTPConnection(HOST, state["port"], timeout=timeout)  # never the file's host
+    try:
+        conn.request("POST", path, body=json.dumps(body).encode("utf-8"),
+                     headers={TOKEN_HEADER: state["token"], "Content-Type": "application/json"})
+        r = conn.getresponse()
+        raw = r.read()
+        try:
+            data = json.loads(raw or b"{}")
+        except ValueError:
+            data = {}
+        return r.status, data if isinstance(data, dict) else {}
+    finally:
+        conn.close()
+
+
+def ask(repo: Path | str, kind: str, body: dict) -> dict | None:
+    """What this repository's running daemon answers to a ``locate`` or ``coupled`` request (the JSON `--json` prints), or None
+    when none runs or it cannot answer: the command then computes the answer itself. The commands call this first, so a
+    caller that runs them (the mod: a host's own HTTP call has a time limit, a command's can be ten minutes) gets the daemon's
+    speed without knowing about it."""
+    repo = Path(repo).resolve()
+    if not status(repo)["running"]:
+        return None
+    state = _read_state(repo)
+    if state is None:
+        return None
+    try:
+        code, data = _post(state, f"/{kind}", body, ASK_TIMEOUT)
+    except OSError:
+        return None
+    return data if code == 200 and isinstance(data.get("files"), list) and isinstance(data.get("text"), str) else None
 
 
 def _ours(data: dict, repo: Path, state: dict) -> bool:

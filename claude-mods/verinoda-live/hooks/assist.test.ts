@@ -26,7 +26,6 @@ type Opts = {
   cwd?: string
   daemon?: { url: string; token: string } | 'unsupported'
   locate?: { exitCode: number; stdout: string }
-  fetchOk?: boolean
 }
 
 // The world beneath the plugin: an indexed project, a CLI whose locate/coupled answer from here, a daemon that may or
@@ -34,6 +33,7 @@ type Opts = {
 function world(on: On, opts: Opts = {}) {
   const runs: string[][] = []
   const registered: string[] = []
+  const timeouts: Record<string, number | undefined> = {} // how long a lookup may take, by command
   const fetched: { url: string; init: { headers?: Record<string, string>; body?: string } }[] = []
   on('session.start', () => ({ cwd: opts.cwd ?? ROOT }))
   on('session.cwd', () => ({ value: opts.cwd ?? ROOT }))
@@ -47,6 +47,7 @@ function world(on: On, opts: Opts = {}) {
   on('process.run', ($, e) => {
     if (e.argv[1] === 'check') return { value: { exitCode: 0, stdout: '{"sites": []}', stderr: '' } } as never
     runs.push([...e.argv])
+    if (!e.argv.includes('--daemon')) timeouts[String(e.argv[1])] = (e.init as { timeoutMs?: number } | undefined)?.timeoutMs
     if (e.argv[1] === '-c') return { value: { exitCode: 0, stdout: '{"locked": false, "behind": 0}', stderr: '' } } as never
     if (e.argv[1] === 'locate' && e.argv.includes('--daemon')) {
       if (opts.daemon === undefined || opts.daemon === 'unsupported') return { value: { exitCode: 2, stdout: '', stderr: 'unknown option' } } as never
@@ -57,15 +58,14 @@ function world(on: On, opts: Opts = {}) {
     return { value: { exitCode: 0, stdout: '{}', stderr: '' } } as never
   })
   on('http.fetch', ($, e) => {
-    fetched.push({ url: e.url, init: (e.init ?? {}) as never })
-    const body = e.url.endsWith('/coupled') ? COUPLED_JSON : LOCATE_JSON
-    return { value: { status: opts.fetchOk === false ? 500 : 200, ok: opts.fetchOk !== false, headers: {}, text: JSON.stringify(body) } } as never
+    fetched.push({ url: e.url, init: (e.init ?? {}) as never }) // the mod makes none: the commands ask the daemon themselves
+    return { value: { status: 500, ok: false, headers: {}, text: '' } } as never
   })
   on('tool.call', () => ({ result: 'ok' }) as never)
   on('prompt.submit', ($, e) => ({ text: e.text, context: e.context }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'You are an agent.', scope: 'shared' }] }) as never)
   const cli = (op: string) => runs.filter(r => r[1] === op && !r.includes('--daemon'))
-  return { runs, registered, fetched, cli }
+  return { runs, registered, fetched, cli, timeouts }
 }
 
 const COMPOSE = { model: 'm', promptModel: 'm', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [] } as never
@@ -369,7 +369,7 @@ describe('assist: the first search is answered with the located files (gate)', (
 })
 
 describe('assist: a daemon keeps the graph loaded', () => {
-  test('it is started at session start and answers over HTTP with its token; the CLI is not run', { options: { assist: 'tool' } }, async ($, on) => {
+  test('it is started at session start, and the lookups are commands (which ask it): the mod makes no HTTP call', { options: { assist: 'tool' } }, async ($, on) => {
     const clock = mock.clock(on)
     mock.store(on)
     const w = world(on, { daemon: { url: 'http://127.0.0.1:51234', token: 'tok' } })
@@ -377,23 +377,10 @@ describe('assist: a daemon keeps the graph loaded', () => {
     await clock.settle()
     expect(w.runs.some(r => r[1] === 'locate' && r.includes('--daemon') && r.includes('start'))).toBe(true)
     await $.tool.call({ tool: LOCATE, text: REPORT, files: ['src/a.c'] } as never)
-    expect(w.fetched.length).toBe(1)
-    expect(w.fetched[0]?.url).toBe('http://127.0.0.1:51234/locate')
-    expect(w.fetched[0]?.init.headers?.['X-Verinoda-Token']).toBe('tok')
-    expect(JSON.parse(w.fetched[0]?.init.body ?? '{}')).toEqual(expect.objectContaining({ text: REPORT, anchors: ['src/a.c'] }))
-    expect(w.cli('locate').length).toBe(0)
-  })
-
-  test('a daemon that does not answer falls back to the CLI, and is not asked again', { options: { assist: 'tool' } }, async ($, on) => {
-    const clock = mock.clock(on)
-    mock.store(on)
-    const w = world(on, { daemon: { url: 'http://127.0.0.1:51234', token: 'tok' }, fetchOk: false })
-    await $.session.start(START)
-    await clock.settle()
-    await $.tool.call({ tool: LOCATE, text: REPORT } as never)
-    await $.tool.call({ tool: LOCATE, text: REPORT } as never)
-    expect(w.fetched.length).toBe(1)
-    expect(w.cli('locate').length).toBe(2)
+    await $.tool.call({ tool: COUPLED, files: ['src/a.c'] } as never)
+    expect(w.cli('locate').length).toBe(1)
+    expect(w.cli('coupled').length).toBe(1)
+    expect(w.fetched.length).toBe(0) // a call of the host's own HTTP has a time limit a big repository's answer passes
   })
 
   test('an old CLI that knows no daemon is used as it is', { options: { assist: 'tool' } }, async ($, on) => {
@@ -403,8 +390,18 @@ describe('assist: a daemon keeps the graph loaded', () => {
     await $.session.start(START)
     await clock.settle()
     await $.tool.call({ tool: LOCATE, text: REPORT } as never)
-    expect(w.fetched.length).toBe(0)
     expect(w.cli('locate').length).toBe(1)
+  })
+
+  test('a slow answer is waited for up to five minutes, not dropped at an HTTP time limit', { options: { assist: 'tool' } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    const w = world(on)
+    await $.session.start(START)
+    await $.tool.call({ tool: LOCATE, text: REPORT } as never)
+    await $.tool.call({ tool: COUPLED, files: ['src/a.c'] } as never)
+    expect(w.timeouts.locate).toBe(300_000)
+    expect(w.timeouts.coupled).toBe(300_000)
   })
 
   test('with nothing that asks for it, no daemon is started', async ($, on) => {
@@ -510,17 +507,6 @@ describe('what an independent review found', () => {
     await $.prompt.submit(ask(`${REPORT} A different one.`))
     await $.tool.call({ tool: LOCATE, text: REPORT } as never)
     expect(w.cli('locate')[0]).not.toContain('--anchor')
-  })
-
-  test('a daemon that names a host other than 127.0.0.1 is never used, and the prompt goes nowhere else', { options: { assist: 'tool' } }, async ($, on) => {
-    const clock = mock.clock(on)
-    mock.store(on)
-    const w = world(on, { daemon: { url: 'http://evil.example:8080', token: 'tok' } })
-    await $.session.start(START)
-    await clock.settle()
-    await $.tool.call({ tool: LOCATE, text: REPORT } as never)
-    expect(w.fetched.length).toBe(0)
-    expect(w.cli('locate').length).toBe(1)
   })
 
   test('the note budget is not spent on vendored files or on a file twice under two spellings', { options: { assist: 'coupled' } }, async ($, on) => {

@@ -65,9 +65,11 @@ const QUESTION_ANYWHERE = new RegExp(
 // A shell command that may move HEAD; whether it did is read from HEAD itself, before and after.
 const GIT_WORD = /\bgit\b/
 
-// The assist features (./assist.ts) ask `verinoda locate` and `verinoda coupled`. A daemon, when the CLI has one, keeps
-// the graph loaded (loading it takes 3 s on seL4 and about 30 s on Home Assistant); without one every lookup is a CLI run.
-const LOCATE_TIMEOUT_MS = 90_000
+// The assist features (./assist.ts) run `verinoda locate` and `verinoda coupled`. A daemon, when the CLI has one, keeps the
+// graph loaded (loading it takes 3 s on seL4 and about 30 s on Home Assistant) and the commands ask it by themselves; the mod
+// only runs them. (A call of the host's own HTTP has a time limit that a big repository's answer can pass: the first
+// version asked the daemon that way and Home Assistant's answers, 10 to 100 s, were dropped.) A command's limit is ten minutes.
+const LOCATE_TIMEOUT_MS = 300_000
 const DAEMON_START_TIMEOUT_MS = 120_000
 const LOCATE_TEXT_MAX = 4_000 // of a report, what the lookup is given: a command line has a limit
 const LOCATE_ANSWER_MAX = 1_800
@@ -120,7 +122,6 @@ const live = {
   coupledAsked: new Set<string>(),
   usedLocate: false, // the model called the locate tool for this task
   gated: false, // the gate has answered the first search of this task
-  daemon: undefined as { url: string; token: string } | undefined,
   daemonStart: undefined as Promise<void> | undefined,
 }
 
@@ -582,20 +583,12 @@ async function retrieve($: EngineInterface, prompt: string): Promise<string | un
 
 // ---- the assist features: lookups, tools, notes (./assist.ts holds the pure parts) ------------------------------
 
-// The daemon, started in the background at session start when a feature will ask for it; an old CLI that knows no
-// `locate --daemon` exits non-zero, and every lookup is then a CLI run.
+// The daemon, started in the background at session start when a feature will ask for it (it listens at once and loads the
+// graph meanwhile); the commands find it by themselves. An old CLI that knows no `locate --daemon` exits non-zero, and
+// every lookup is then a command that loads the graph itself.
 async function startDaemon($: EngineInterface, root: string): Promise<void> {
   try {
-    const { exitCode, stdout } = await $.process.run(
-      [cfg.cli, 'locate', '--daemon', 'start', '--repo', root, '--json'],
-      { cwd: root, timeoutMs: DAEMON_START_TIMEOUT_MS },
-    )
-    if (exitCode !== 0) return
-    const d = JSON.parse(stdout) as { running?: boolean; url?: string; token?: string }
-    // only the machine's own loopback: the state file is in the repository, and the prompt is sent to this address
-    if (d.running === true && typeof d.url === 'string' && typeof d.token === 'string' && /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(d.url)) {
-      live.daemon = { url: d.url, token: d.token }
-    }
+    await $.process.run([cfg.cli, 'locate', '--daemon', 'start', '--repo', root, '--json'], { cwd: root, timeoutMs: DAEMON_START_TIMEOUT_MS })
   } catch {
     // no daemon, nothing lost
   }
@@ -622,22 +615,9 @@ function parseLocated(text: string): Located | undefined {
 
 type Lookup = { op: 'locate'; text: string; anchors: string[] } | { op: 'coupled'; files: string[] }
 
-// One lookup: the daemon when there is one and it answers, else the CLI; undefined when neither does.
+// One lookup: the command, which asks this repository's daemon when one runs; undefined when it fails.
 async function lookup($: EngineInterface, root: string, q: Lookup): Promise<Located | undefined> {
   await live.daemonStart?.catch(() => undefined)
-  const daemon = live.daemon
-  if (daemon !== undefined) {
-    try {
-      const body = q.op === 'locate' ? { text: q.text, anchors: q.anchors, max_chars: LOCATE_ANSWER_MAX } : { files: q.files }
-      const res = await $.http.fetch(`${daemon.url}/${q.op}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Verinoda-Token': daemon.token }, body: JSON.stringify(body),
-      })
-      if (res.ok) return parseLocated(res.text)
-    } catch {
-      // the CLI answers below
-    }
-    live.daemon = undefined // it does not answer: not asked again this session
-  }
   const argv = q.op === 'locate'
     ? [cfg.cli, 'locate', '--repo', root, '--json', '--max-chars', String(LOCATE_ANSWER_MAX), ...q.anchors.flatMap(a => ['--anchor', a]), '--', q.text]
     : [cfg.cli, 'coupled', '--repo', root, '--json', ...q.files]
