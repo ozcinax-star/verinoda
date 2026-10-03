@@ -718,3 +718,34 @@ def test_answers_are_checked_for_files_that_do_not_exist_at_the_base_commit(tmp_
     assert out["none"] == {"sessions": 2, "named": 3, "missing": 1, "share_missing": round(1 / 3, 3), "sessions_with_a_missing": 1}
     assert out["strict"]["named"] == 3 and out["strict"]["missing"] == 2 and out["strict"]["sessions_with_a_missing"] == 1
     assert answer_checks.tracked(repo) == {"src/a.c", "src/b.c", "README.md"}
+
+
+assist_report = _load("assist_report")
+
+
+def test_the_assist_report_gives_each_arm_its_gain_over_none_and_its_recall_by_number_of_gold_files():
+    tasks = [{"id": "t0", "gold": ["a.py"]}, {"id": "t1", "gold": ["a.py", "b.py"]}, {"id": "t2", "gold": ["a.py", "b.py", "c.py"]}]
+    a_shown = {"inject": 1, "coupled_notes": 0, "gate": 0, "nudge": 0, "locate_calls": 0, "coupled_calls": 0, "tool_search": 0}
+
+    def row(t, arm, files, assist=None, secs=10.0, cost=0.1):
+        return {"id": t, "arm": arm, "files": files, "num_turns": 4, "seconds": secs, "cost_usd": cost, "input_tokens": 100,
+                "output_tokens": 10, "verinoda_calls": 0, "graphify_calls": 0, "network": [], "answered": True,
+                "assist": assist or {k: 0 for k in a_shown}}
+    runs = [[row("t0", "none", ["a.py"]), row("t1", "none", ["a.py"]), row("t2", "none", ["a.py"]),
+             row("t0", "inject", ["a.py"], a_shown, 20.0, 0.12), row("t1", "inject", ["a.py", "b.py"], a_shown, 20.0, 0.12),
+             row("t2", "inject", ["a.py", "b.py"], a_shown, 20.0, 0.12)]]
+    md = assist_report.report(tasks, runs, title="a set")
+    assert md.startswith("### a set")
+    assert "| inject | 2.67/3 | +0.83 [" in md  # 1 + 1 + 0.67 against 1 + 0.5 + 0.33
+    assert "| none | 1.83/3 |" in md
+    by = assist_report.by_gold_count(tasks, runs)
+    assert by["1 gold file"]["none"] == 1.0 and by["2 gold files"]["inject"] == 1.0
+    assert round(by["3 or more gold files"]["none"], 3) == 0.333 and round(by["3 or more gold files"]["inject"], 3) == 0.667
+    assert "| 3 or more gold files |" in md
+
+
+def test_the_project_sentence_may_name_the_tasks_own_repository(tmp_path):
+    task = {"id": "x", "title": "T", "body": "B", "repo": "fmtlib/fmt"}
+    p = big_run.prompt_for(task, tmp_path, "the {repo} repository at {c} (a git checkout at the commit before the fix)")
+    assert p.startswith("You are working in the fmtlib/fmt repository at ") and "(a git checkout at the commit before the fix)" in p
+    assert big_run.prompt_for({"id": "x", "title": "T", "body": "B"}, tmp_path, "the repository at {c}").startswith("You are working in the repository at ")

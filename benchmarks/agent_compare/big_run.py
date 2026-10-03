@@ -125,7 +125,8 @@ def copy_of(cfg: dict, task: dict, arm: str) -> Path:
 def prompt_for(task: dict, copy: Path, project: str | None = None, suffix: str = "") -> str:
     """The same text for every arm; it never mentions an index or a tool. An arm that tests an instruction adds ``suffix``."""
     c = copy.as_posix()
-    text = (f"You are working in {(project or DEFAULT_PROJECT).format(c=c)}. A user filed this bug report:\n\n"
+    where = (project or DEFAULT_PROJECT).format(c=c, repo=task.get("repo", ""))
+    text = (f"You are working in {where}. A user filed this bug report:\n\n"
             f"Title: {task['title']}\n\n{task['body']}\n\n"
             "Task: find where in the repository's source code this bug should be fixed. This is a read-only task: "
             "do not modify any file, and do not use the network or look the issue up on the web or on GitHub; work "
