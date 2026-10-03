@@ -1,0 +1,1409 @@
+{
+ "summary": {
+  "missed_gold_instances": 28,
+  "sessions_with_a_miss": 16,
+  "signals": {
+   "samedir": {
+    "mean_list_size": 12.6,
+    "covers@3": 0,
+    "covers@5": 0,
+    "covers@8": 2
+   },
+   "twins": {
+    "mean_list_size": 11.5,
+    "covers@3": 3,
+    "covers@5": 4,
+    "covers@8": 4
+   },
+   "pair": {
+    "mean_list_size": 13.9,
+    "covers@3": 5,
+    "covers@5": 6,
+    "covers@8": 8
+   },
+   "neighbors": {
+    "mean_list_size": 39.7,
+    "covers@3": 2,
+    "covers@5": 3,
+    "covers@8": 3
+   },
+   "cochange_path": {
+    "mean_list_size": 6.6,
+    "covers@3": 4,
+    "covers@5": 4,
+    "covers@8": 6
+   },
+   "cochange_verinoda": {
+    "mean_list_size": 0.9,
+    "covers@3": 2,
+    "covers@5": 2,
+    "covers@8": 2
+   },
+   "query": {
+    "mean_list_size": 4.8,
+    "covers@3": 5,
+    "covers@5": 7,
+    "covers@8": 7
+   },
+   "union5": {
+    "mean_list_size": 13.2,
+    "covers@3": 15,
+    "covers@5": 15,
+    "covers@8": 15
+   }
+  }
+ },
+ "rows": [
+  {
+   "task": "i1566",
+   "run": 1,
+   "gold": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "named": [
+    "include/kernel/boot.h",
+    "src/arch/x86/kernel/smp_sys.c"
+   ],
+   "anchors": [
+    "include/kernel/boot.h",
+    "src/arch/x86/kernel/smp_sys.c"
+   ],
+   "missed": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 16,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 8,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "neighbors": {
+     "size": 56,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 14,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 3,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "query": {
+     "size": 4,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1004",
+   "run": 1,
+   "gold": [
+    "include/basic_types.h",
+    "src/kernel/boot.c"
+   ],
+   "named": [
+    "src/kernel/boot.c"
+   ],
+   "anchors": [
+    "src/kernel/boot.c"
+   ],
+   "missed": [
+    "include/basic_types.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 5,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 7,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 59,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 6,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    }
+   }
+  },
+  {
+   "task": "i1015",
+   "run": 1,
+   "gold": [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "include/arch/arm/arch/object/vcpu.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "named": [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h"
+   ],
+   "anchors": [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h"
+   ],
+   "missed": [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "include/arch/arm/arch/object/vcpu.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 13,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 48,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+     ]
+    },
+    "pair": {
+     "size": 50,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+     ]
+    },
+    "neighbors": {
+     "size": 26,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ]
+    },
+    "cochange_path": {
+     "size": 9,
+     "cover@3": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@5": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@8": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 13,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h",
+      "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i805",
+   "run": 1,
+   "gold": [
+    "CMakeLists.txt",
+    "config.cmake"
+   ],
+   "named": [
+    "gcc.cmake"
+   ],
+   "anchors": [
+    "gcc.cmake"
+   ],
+   "missed": [
+    "CMakeLists.txt",
+    "config.cmake"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 18,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "CMakeLists.txt"
+     ]
+    },
+    "twins": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 5,
+     "cover@3": [
+      "CMakeLists.txt"
+     ],
+     "cover@5": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ],
+     "cover@8": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ]
+    },
+    "union5": {
+     "size": 5,
+     "cover@3": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ],
+     "cover@5": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ],
+     "cover@8": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1091",
+   "run": 1,
+   "gold": [
+    "include/arch/riscv/arch/kernel/traps.h",
+    "src/arch/riscv/common_riscv.lds",
+    "src/arch/riscv/traps.S"
+   ],
+   "named": [
+    "src/arch/riscv/common_riscv.lds",
+    "src/arch/riscv/traps.S",
+    "src/arch/riscv/c_traps.c"
+   ],
+   "anchors": [
+    "src/arch/riscv/common_riscv.lds",
+    "src/arch/riscv/traps.S",
+    "src/arch/riscv/c_traps.c"
+   ],
+   "missed": [
+    "include/arch/riscv/arch/kernel/traps.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 4,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 10,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 14,
+     "cover@3": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@5": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@8": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ]
+    },
+    "neighbors": {
+     "size": 42,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 12,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 10,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 24,
+     "cover@3": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@5": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@8": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1566",
+   "run": 2,
+   "gold": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "named": [
+    "include/kernel/boot.h",
+    "src/arch/x86/kernel/smp_sys.c"
+   ],
+   "anchors": [
+    "include/kernel/boot.h",
+    "src/arch/x86/kernel/smp_sys.c"
+   ],
+   "missed": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 16,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 8,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "neighbors": {
+     "size": 56,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 14,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 3,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "query": {
+     "size": 4,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [
+      "src/kernel/boot.c"
+     ],
+     "cover@5": [
+      "src/kernel/boot.c"
+     ],
+     "cover@8": [
+      "src/kernel/boot.c"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1004",
+   "run": 2,
+   "gold": [
+    "include/basic_types.h",
+    "src/kernel/boot.c"
+   ],
+   "named": [
+    "src/kernel/boot.c"
+   ],
+   "anchors": [
+    "src/kernel/boot.c"
+   ],
+   "missed": [
+    "include/basic_types.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 5,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 7,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 59,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 6,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    }
+   }
+  },
+  {
+   "task": "i1015",
+   "run": 2,
+   "gold": [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "include/arch/arm/arch/object/vcpu.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "named": [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "anchors": [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "missed": [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "include/arch/arm/arch/object/vcpu.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 8,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 44,
+     "cover@3": [],
+     "cover@5": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@8": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ]
+    },
+    "pair": {
+     "size": 44,
+     "cover@3": [],
+     "cover@5": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@8": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ]
+    },
+    "neighbors": {
+     "size": 20,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 10,
+     "cover@3": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@5": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@5": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ],
+     "cover@8": [
+      "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1170",
+   "run": 2,
+   "gold": [
+    "src/arch/arm/machine/gic_v3.c",
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "named": [
+    "src/arch/arm/machine/gic_v3.c",
+    "include/arch/arm/arch/machine/gic_v3.h"
+   ],
+   "anchors": [
+    "src/arch/arm/machine/gic_v3.c",
+    "include/arch/arm/arch/machine/gic_v3.h"
+   ],
+   "missed": [
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 19,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 52,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 6,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    }
+   }
+  },
+  {
+   "task": "i1091",
+   "run": 2,
+   "gold": [
+    "include/arch/riscv/arch/kernel/traps.h",
+    "src/arch/riscv/common_riscv.lds",
+    "src/arch/riscv/traps.S"
+   ],
+   "named": [
+    "src/arch/riscv/common_riscv.lds",
+    "src/arch/riscv/traps.S",
+    "src/arch/riscv/c_traps.c"
+   ],
+   "anchors": [
+    "src/arch/riscv/common_riscv.lds",
+    "src/arch/riscv/traps.S",
+    "src/arch/riscv/c_traps.c"
+   ],
+   "missed": [
+    "include/arch/riscv/arch/kernel/traps.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 4,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 10,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 14,
+     "cover@3": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@5": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@8": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ]
+    },
+    "neighbors": {
+     "size": 42,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 12,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 10,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 24,
+     "cover@3": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@5": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ],
+     "cover@8": [
+      "include/arch/riscv/arch/kernel/traps.h"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i805",
+   "run": 2,
+   "gold": [
+    "CMakeLists.txt",
+    "config.cmake"
+   ],
+   "named": [
+    "CMakeLists.txt",
+    "gcc.cmake"
+   ],
+   "anchors": [
+    "CMakeLists.txt",
+    "gcc.cmake"
+   ],
+   "missed": [
+    "config.cmake"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 17,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 4,
+     "cover@3": [
+      "config.cmake"
+     ],
+     "cover@5": [
+      "config.cmake"
+     ],
+     "cover@8": [
+      "config.cmake"
+     ]
+    },
+    "union5": {
+     "size": 5,
+     "cover@3": [
+      "config.cmake"
+     ],
+     "cover@5": [
+      "config.cmake"
+     ],
+     "cover@8": [
+      "config.cmake"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1566",
+   "run": 3,
+   "gold": [
+    "include/arch/x86/arch/machine.h",
+    "src/kernel/boot.c"
+   ],
+   "named": [
+    "include/kernel/boot.h",
+    "src/arch/x86/kernel/smp_sys.c",
+    "src/kernel/boot.c"
+   ],
+   "anchors": [
+    "include/kernel/boot.h",
+    "src/arch/x86/kernel/smp_sys.c",
+    "src/kernel/boot.c"
+   ],
+   "missed": [
+    "include/arch/x86/arch/machine.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 21,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 6,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 9,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 109,
+     "cover@3": [],
+     "cover@5": [
+      "include/arch/x86/arch/machine.h"
+     ],
+     "cover@8": [
+      "include/arch/x86/arch/machine.h"
+     ]
+    },
+    "cochange_path": {
+     "size": 13,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 15,
+     "cover@3": [
+      "include/arch/x86/arch/machine.h"
+     ],
+     "cover@5": [
+      "include/arch/x86/arch/machine.h"
+     ],
+     "cover@8": [
+      "include/arch/x86/arch/machine.h"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1004",
+   "run": 3,
+   "gold": [
+    "include/basic_types.h",
+    "src/kernel/boot.c"
+   ],
+   "named": [
+    "src/kernel/boot.c"
+   ],
+   "anchors": [
+    "src/kernel/boot.c"
+   ],
+   "missed": [
+    "include/basic_types.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 5,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 7,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 59,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 6,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    }
+   }
+  },
+  {
+   "task": "i1015",
+   "run": 3,
+   "gold": [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "include/arch/arm/arch/object/vcpu.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h"
+   ],
+   "named": [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+   ],
+   "anchors": [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h"
+   ],
+   "missed": [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "include/arch/arm/arch/object/vcpu.h"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 25,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 50,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ]
+    },
+    "pair": {
+     "size": 52,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ]
+    },
+    "neighbors": {
+     "size": 26,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ]
+    },
+    "cochange_path": {
+     "size": 12,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "include/arch/arm/arch/32/mode/machine.h"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 13,
+     "cover@3": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@5": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ],
+     "cover@8": [
+      "include/arch/arm/arch/object/vcpu.h"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i805",
+   "run": 3,
+   "gold": [
+    "CMakeLists.txt",
+    "config.cmake"
+   ],
+   "named": [
+    "gcc.cmake"
+   ],
+   "anchors": [
+    "gcc.cmake"
+   ],
+   "missed": [
+    "CMakeLists.txt",
+    "config.cmake"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 18,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "CMakeLists.txt"
+     ]
+    },
+    "twins": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 5,
+     "cover@3": [
+      "CMakeLists.txt"
+     ],
+     "cover@5": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ],
+     "cover@8": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ]
+    },
+    "union5": {
+     "size": 5,
+     "cover@3": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ],
+     "cover@5": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ],
+     "cover@8": [
+      "CMakeLists.txt",
+      "config.cmake"
+     ]
+    }
+   }
+  },
+  {
+   "task": "i1170",
+   "run": 3,
+   "gold": [
+    "src/arch/arm/machine/gic_v3.c",
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "named": [
+    "src/arch/arm/machine/gic_v3.c"
+   ],
+   "anchors": [
+    "src/arch/arm/machine/gic_v3.c"
+   ],
+   "missed": [
+    "src/plat/qemu-arm-virt/config.cmake"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 8,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 29,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 7,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 9,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    }
+   }
+  }
+ ]
+}

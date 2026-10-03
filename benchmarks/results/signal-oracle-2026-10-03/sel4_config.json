@@ -1,0 +1,16 @@
+{
+ "tasks": "benchmarks/results/agent-compare-sel4-2026-10-02/tasks.json",
+ "none_results": [
+  "benchmarks/results/agent-compare-sel4-2026-10-02/results_r1.jsonl",
+  "benchmarks/results/agent-compare-sel4-2026-10-02/results_r2.jsonl",
+  "benchmarks/results/agent-compare-sel4-2026-10-02/results_r3.jsonl"
+ ],
+ "history_repo": "<work>/sel4/x0/wt/{task}",
+ "query_copy": "<work>/sel4/x0/q/{task}",
+ "limit_query_tasks": null,
+ "k": [
+  3,
+  5,
+  8
+ ]
+}

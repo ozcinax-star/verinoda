@@ -6,11 +6,18 @@ changed (score_big.py).
 
 CONFIG: {"tasks": tasks.json, "copies": {arm: working copy} or "copy_pattern": ".../{task}/{arm}", "project": "the ... repository at {c} (...)", "out": results.jsonl, "model": "claude-sonnet-5-5",
 "plugin_dir": the mod, "mod_options": {"auto": "nudge"}, "path_dirs": {arm: [dirs put on PATH]}, "drop_path": ["...\\.local\\bin"],
-"arms": [...], "arm_workers": {arm: n}, "workers": default n, "timeout_s": s, "max_turns": n}. Resumable: a task and arm already in `out` is skipped.
+"arms": [...], "arm_defs": {arm: {...}}, "arm_workers": {arm: n}, "workers": default n, "timeout_s": s, "max_turns": n}.
+Resumable: a task and arm already in `out` is skipped.
+
+The arms `none`, `graphify`, `verinoda_setup` and `verinoda_mod` are built in. `arm_defs` adds arms (or changes one): {"kind": "none" |
+"graphify" | "verinoda", "plugin": the mod is loaded, "mod_options": its settings (replace the study's `mod_options`), "copy_arm": the
+arm whose working copy it uses (arms sharing a copy run one session at a time there), "prompt_suffix": a paragraph after the shared
+task text, "model": the model of this arm}.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -45,7 +52,54 @@ _SUB = (r"(?:query|analyze|trace|map|plan|resolve|verify|challenge|doctor|api|re
 VERINODA_CMD = re.compile(r"""(?:(?<![\w./-])verinoda|/verinoda\.exe)["']?\s+""" + _SUB + r"\b")
 GRAPHIFY_CMD = re.compile(r"""(?:(?<![\w./-])graphify|/graphify\.exe)["']?\s+""" + _SUB + r"\b")
 NETWORK = re.compile(r"\b(curl|wget|Invoke-WebRequest|iwr|WebFetch|WebSearch)\b|github\.com|(^|[\s;&|])gh\s", re.IGNORECASE)
-VERINODA_ARMS = ("verinoda_mod", "verinoda_setup")
+BUILTIN_ARMS = {"none": {"kind": "none"}, "graphify": {"kind": "graphify"}, "verinoda_setup": {"kind": "verinoda"},
+                "verinoda_mod": {"kind": "verinoda", "plugin": True}}
+# what the mod's assist features put in front of the model: hook context, or the text of a refused search
+ASSIST_MARKS = {"inject": "[Verinoda locate]", "coupled_notes": "[Verinoda coupled]", "gate": "[Verinoda] This search was not run",
+                "nudge": "[Verinoda auto-context]"}
+_COPY_LOCKS: dict[str, threading.Lock] = {}
+_COPY_LOCKS_GUARD = threading.Lock()
+
+
+def arm_def(cfg: dict, arm: str) -> dict:
+    """An arm's definition: the built-in one, changed by the config's ``arm_defs``; KeyError for an arm neither knows."""
+    d = {**BUILTIN_ARMS.get(arm, {}), **(cfg.get("arm_defs") or {}).get(arm, {})}
+    if "kind" not in d:
+        raise KeyError(f"arm {arm!r} is not built in and has no entry in arm_defs")
+    return d
+
+
+@contextlib.contextmanager
+def isolated_plugin_store(folder: Path | None = None):
+    """Empty the mod's stored choices for a run and put them back after it. A choice stored by `/verinoda-auto`,
+    `-guard` or `-assist` wins over the settings a scripted session is given, and the store is shared by every session
+    that loads the mod, so an earlier `/verinoda-auto nudge` would put the nudge into arms that never asked for it.
+    The copy of each file is kept next to it (`*.study-backup`) while the run lasts; one left by a run that died is
+    put back first."""
+    folder = folder or Path.home() / ".claude" / "plugins" / "store"
+    files = sorted(folder.glob("verinoda-live_*.json")) if folder.is_dir() else []
+    for f in files:
+        backup = f.with_name(f.name + ".study-backup")
+        if backup.exists():
+            f.write_bytes(backup.read_bytes())
+        else:
+            backup.write_bytes(f.read_bytes())
+        f.write_bytes(b"{}")
+    try:
+        yield
+    finally:
+        for f in files:
+            backup = f.with_name(f.name + ".study-backup")
+            if backup.exists():
+                f.write_bytes(backup.read_bytes())
+                backup.unlink()
+
+
+def copy_lock(copy: str | Path) -> threading.Lock:
+    """One lock per working copy: two arms that share a copy never run a session in it at the same time."""
+    key = Path(copy).as_posix().lower()
+    with _COPY_LOCKS_GUARD:
+        return _COPY_LOCKS.setdefault(key, threading.Lock())
 
 
 DEFAULT_PROJECT = "the Home Assistant Core repository at {c} (a git checkout of its development branch)"
@@ -54,15 +108,16 @@ DEFAULT_PROJECT = "the Home Assistant Core repository at {c} (a git checkout of 
 def copy_of(cfg: dict, task: dict, arm: str) -> Path:
     """The working copy of a task and arm: one per arm (``copies``), or one per task and arm (``copy_pattern``, for a
     study whose tasks each sit at their own commit)."""
+    which = arm_def(cfg, arm).get("copy_arm", arm)
     if "copy_pattern" in cfg:
-        return Path(cfg["copy_pattern"].format(task=task["id"], arm=arm))
-    return Path(cfg["copies"][arm])
+        return Path(cfg["copy_pattern"].format(task=task["id"], arm=which))
+    return Path(cfg["copies"][which])
 
 
-def prompt_for(task: dict, copy: Path, project: str | None = None) -> str:
-    """The same text for every arm; it never mentions an index or a tool."""
+def prompt_for(task: dict, copy: Path, project: str | None = None, suffix: str = "") -> str:
+    """The same text for every arm; it never mentions an index or a tool. An arm that tests an instruction adds ``suffix``."""
     c = copy.as_posix()
-    return (f"You are working in {(project or DEFAULT_PROJECT).format(c=c)}. A user filed this bug report:\n\n"
+    text = (f"You are working in {(project or DEFAULT_PROJECT).format(c=c)}. A user filed this bug report:\n\n"
             f"Title: {task['title']}\n\n{task['body']}\n\n"
             "Task: find where in the repository's source code this bug should be fixed. This is a read-only task: "
             "do not modify any file, and do not use the network or look the issue up on the web or on GitHub; work "
@@ -70,21 +125,32 @@ def prompt_for(task: dict, copy: Path, project: str | None = None) -> str:
             "Answer with the files that must change to fix this bug: at most five, the most important first, "
             "non-test source files only, each with its path relative to the repository root, the lines or the "
             "function that must change, and one sentence on why.")
+    return f"{text}\n\n{suffix}" if suffix else text
 
 
-def tools_for(arm: str) -> str:
-    return "Bash Read Glob Grep Skill" + (" mcp__verinoda" if arm in VERINODA_ARMS else "")
+def mod_options(cfg: dict, arm: str) -> dict:
+    """The mod's settings in this arm: its own, else the study's."""
+    return arm_def(cfg, arm).get("mod_options", cfg.get("mod_options", {}))
+
+
+def tools_for(arm: str, cfg: dict | None = None) -> str:
+    """The tools a session may use without asking: the mod's own (`locate`, `coupled`) only where its assist is on."""
+    cfg = cfg or {}
+    d = arm_def(cfg, arm)
+    has_assist = bool(d.get("plugin")) and str(mod_options(cfg, arm).get("assist", "off")).strip() not in ("", "off")
+    return "Bash Read Glob Grep Skill" + (" mcp__verinoda" if d["kind"] == "verinoda" else "") + (" mcp__verinoda-live" if has_assist else "")
 
 
 def session_argv(prompt: str, arm: str, copy: Path, cfg: dict) -> list[str]:
-    argv = ["claude", "-p", prompt, "--output-format", "json", "--model", cfg["model"],
-            "--setting-sources", "project,local", "--strict-mcp-config", "--allowedTools", tools_for(arm),
+    d = arm_def(cfg, arm)
+    argv = ["claude", "-p", prompt, "--output-format", "json", "--model", d.get("model", cfg["model"]),
+            "--setting-sources", "project,local", "--strict-mcp-config", "--allowedTools", tools_for(arm, cfg),
             "--max-turns", str(cfg.get("max_turns", 80)), "--json-schema", json.dumps(SCHEMA)]
-    if arm in VERINODA_ARMS:
+    if d["kind"] == "verinoda":
         argv += ["--mcp-config", str(copy / ".mcp.json")]
-    if arm == "verinoda_mod":
+    if d.get("plugin"):
         argv += ["--plugin-dir", cfg["plugin_dir"], "--settings",
-                 json.dumps({"pluginConfigs": {"verinoda-live": {"options": cfg["mod_options"]}}})]
+                 json.dumps({"pluginConfigs": {"verinoda-live": {"options": mod_options(cfg, arm)}}})]
     return argv
 
 
@@ -93,7 +159,8 @@ def session_env(arm: str, cfg: dict, base: dict | None = None) -> dict:
     env = dict(base if base is not None else git_env())
     drop = [d.lower().replace("/", "\\") for d in cfg.get("drop_path", [])]
     keep = [p for p in env.get("PATH", "").split(os.pathsep) if p.lower().replace("/", "\\").rstrip("\\") not in drop]
-    env["PATH"] = os.pathsep.join([*cfg.get("path_dirs", {}).get(arm, []), *keep])
+    dirs = cfg.get("path_dirs", {})  # an arm without an entry takes the one of the arm whose copy it uses
+    env["PATH"] = os.pathsep.join([*dirs.get(arm, dirs.get(arm_def(cfg, arm).get("copy_arm", arm), [])), *keep])
     env["GRAPHIFY_NO_AUTO_REFRESH"] = "1"
     return env
 
@@ -137,15 +204,26 @@ def extract_answer(rep: dict) -> dict | None:
 
 def session_stats(transcript: Path | None) -> dict:
     """What the transcript shows the session did: tool calls, calls to the arm's tool, and network lookups."""
-    s = {"tool_calls": 0, "verinoda_calls": 0, "graphify_calls": 0, "network": [], "first_tools": []}
+    assist = {"inject": 0, "coupled_notes": 0, "gate": 0, "nudge": 0, "locate_calls": 0, "coupled_calls": 0, "tool_search": 0}
+    s = {"tool_calls": 0, "verinoda_calls": 0, "graphify_calls": 0, "network": [], "first_tools": [], "assist": assist}
     if transcript is None or not transcript.is_file():
         return s
     for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
-            m = json.loads(line).get("message") or {}
+            entry = json.loads(line)
         except ValueError:
             continue
+        attached = entry.get("attachment") or {}
+        if attached.get("type") == "hook_additional_context":
+            for note in attached.get("content") or []:
+                for key in ("inject", "coupled_notes", "nudge"):
+                    assist[key] += str(note).startswith(ASSIST_MARKS[key])
+        m = entry.get("message") or {}
         c = m.get("content")
+        if m.get("role") == "user" and isinstance(c, list):
+            for x in c:
+                if x.get("type") == "tool_result" and ASSIST_MARKS["gate"] in json.dumps(x.get("content")):
+                    assist["gate"] += 1
         if m.get("role") != "assistant" or not isinstance(c, list):
             continue
         for x in c:
@@ -154,6 +232,9 @@ def session_stats(transcript: Path | None) -> dict:
             name, inp = x.get("name", ""), x.get("input") or {}
             text = json.dumps(inp).replace("\\\\", "/").lower()
             s["tool_calls"] += 1
+            assist["locate_calls"] += name == "mcp__verinoda-live__locate"
+            assist["coupled_calls"] += name == "mcp__verinoda-live__coupled"
+            assist["tool_search"] += name == "ToolSearch"
             if len(s["first_tools"]) < 5:
                 s["first_tools"].append(name)
             command = str(inp.get("command", "")).replace("\\", "/")
@@ -169,8 +250,10 @@ def session_stats(transcript: Path | None) -> dict:
 
 def one(cfg: dict, task: dict, arm: str) -> dict:
     copy = copy_of(cfg, task, arm)
-    argv = session_argv(prompt_for(task, copy, cfg.get("project")), arm, copy, cfg)
-    rc, out, err, secs = run(argv, copy, session_env(arm, cfg), timeout=cfg.get("timeout_s", 1800))
+    d = arm_def(cfg, arm)
+    argv = session_argv(prompt_for(task, copy, cfg.get("project"), d.get("prompt_suffix", "")), arm, copy, cfg)
+    with copy_lock(copy):
+        rc, out, err, secs = run(argv, copy, session_env(arm, cfg), timeout=cfg.get("timeout_s", 1800))
     try:
         rep = json.loads(out)
     except ValueError:
@@ -178,7 +261,7 @@ def one(cfg: dict, task: dict, arm: str) -> dict:
     answer = extract_answer(rep)
     usage = rep.get("usage") or {}
     st = session_stats(find_transcript(rep.get("session_id", "")))
-    return {"id": task["id"], "arm": arm, "exit": rc, "seconds": secs, "files": files_named(answer, copy),
+    return {"id": task["id"], "arm": arm, "model": d.get("model", cfg["model"]), "exit": rc, "seconds": secs, "files": files_named(answer, copy),
             "answered": answer is not None, "is_error": rep.get("is_error"), "subtype": rep.get("subtype"),
             "session_id": rep.get("session_id"), "num_turns": rep.get("num_turns"), "cost_usd": rep.get("total_cost_usd"),
             "input_tokens": sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_creation_input_tokens",
@@ -230,6 +313,13 @@ def run_by_arm(todo: list, limits: dict, work, default: int = 2) -> list:
 
 def main() -> int:
     cfg = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    uses_mod = any(arm_def(cfg, a).get("plugin") for a in cfg["arms"])
+    store = Path(cfg["plugin_store_dir"]) if cfg.get("plugin_store_dir") else None
+    with isolated_plugin_store(store) if uses_mod else contextlib.nullcontext():
+        return run_study(cfg)
+
+
+def run_study(cfg: dict) -> int:
     tasks = json.loads(Path(cfg["tasks"]).read_text(encoding="utf-8"))["tasks"]
     out = Path(cfg["out"])
     done = set()
@@ -257,9 +347,10 @@ def main() -> int:
         with lock, out.open("ab") as f:
             f.write((json.dumps(r) + "\n").encode("utf-8"))
         hit = len(set(r["files"]) & set(t["gold"]))
+        shown = r["assist"]["inject"] + r["assist"]["coupled_notes"] + r["assist"]["gate"]
         print(f"{time.strftime('%H:%M:%S')} {t['id']}:{a} gold {hit}/{len(t['gold'])} files={len(r['files'])} "
-              f"tool={r['verinoda_calls'] or r['graphify_calls']} net={len(r['network'])} turns={r['num_turns']} {r['seconds']} s",
-              flush=True)
+              f"tool={r['verinoda_calls'] or r['graphify_calls']} assist_shown={shown} net={len(r['network'])} "
+              f"turns={r['num_turns']} {r['seconds']} s", flush=True)
 
     for item, err in run_by_arm(todo, cfg.get("arm_workers", {}), work, cfg.get("workers", 2)):
         print(f"FAILED {item[0]['id']}:{item[1]} {err}", flush=True)

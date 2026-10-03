@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -486,3 +488,128 @@ def test_big_session_stats_do_not_take_a_working_copys_name_for_a_call_to_the_to
     path.write_text("\n".join(json.dumps(x) for x in calls) + "\n", encoding="utf-8")
     s = big_run.session_stats(path)
     assert s["verinoda_calls"] == 4 and s["graphify_calls"] == 4, s
+
+
+def test_big_arm_defs_add_arms_and_leave_the_old_ones_as_they_were(tmp_path):
+    cfg = {"model": "claude-sonnet-5-5", "plugin_dir": "C:/mod", "mod_options": {"auto": "nudge"},
+           "arm_defs": {"assist_full": {"kind": "verinoda", "plugin": True, "copy_arm": "verinoda_mod", "mod_options": {"assist": "full"}},
+                        "forced": {"kind": "verinoda", "plugin": True, "copy_arm": "verinoda_mod", "mod_options": {"assist": "tool"},
+                                   "prompt_suffix": "Start by calling the locate tool.", "model": "claude-haiku-4-5-20251001"}}}
+    task = {"id": "t", "title": "T", "body": "B"}
+    p = big_run.prompt_for(task, tmp_path)
+    full = big_run.session_argv(p, "assist_full", tmp_path, cfg)
+    assert "--mcp-config" in full and full[full.index("--plugin-dir") + 1] == "C:/mod"
+    assert json.loads(full[-1]) == {"pluginConfigs": {"verinoda-live": {"options": {"assist": "full"}}}}  # the arm's options, not the study's
+    allowed = full[full.index("--allowedTools") + 1].split()
+    assert "mcp__verinoda" in allowed and "mcp__verinoda-live" in allowed
+    assert full[full.index("--model") + 1] == "claude-sonnet-5-5"
+    forced = big_run.session_argv(p, "forced", tmp_path, cfg)
+    assert forced[forced.index("--model") + 1] == "claude-haiku-4-5-20251001"
+    # the old arms are what they were: the mod arm takes the study's options and no assist tools are allowed elsewhere
+    old = big_run.session_argv(p, "verinoda_mod", tmp_path, cfg)
+    assert json.loads(old[-1]) == {"pluginConfigs": {"verinoda-live": {"options": {"auto": "nudge"}}}}
+    assert "mcp__verinoda-live" not in old[old.index("--allowedTools") + 1].split()
+    assert "--plugin-dir" not in big_run.session_argv(p, "verinoda_setup", tmp_path, cfg)
+    assert "--mcp-config" not in big_run.session_argv(p, "none", tmp_path, cfg)
+    # the prompt: the arm's suffix follows the shared text; without one it is the shared text
+    assert big_run.prompt_for(task, tmp_path, None, "Start by calling the locate tool.").endswith("\n\nStart by calling the locate tool.")
+    assert big_run.prompt_for(task, tmp_path, None, "").endswith("one sentence on why.")
+    with pytest.raises(KeyError):
+        big_run.arm_def(cfg, "nonesuch")
+
+
+def test_an_arm_that_uses_another_arms_copy_gets_that_arms_tool_dirs_on_path():
+    cfg = {"path_dirs": {"verinoda_mod": ["C:/v/Scripts"], "alone": ["C:/a"]},
+           "arm_defs": {"assist": {"kind": "verinoda", "copy_arm": "verinoda_mod"}, "alone": {"kind": "none"}}}
+    base = {"PATH": r"C:\Windows"}
+    assert big_run.session_env("assist", cfg, base)["PATH"].split(os.pathsep) == ["C:/v/Scripts", r"C:\Windows"]
+    assert big_run.session_env("alone", cfg, base)["PATH"].split(os.pathsep) == ["C:/a", r"C:\Windows"]
+    assert big_run.session_env("none", cfg, base)["PATH"].split(os.pathsep) == [r"C:\Windows"]
+
+
+def test_big_arms_may_share_a_working_copy_one_session_at_a_time():
+    cfg = {"copy_pattern": "/w/{task}/{arm}", "arm_defs": {"assist": {"kind": "verinoda", "copy_arm": "verinoda_mod"}}}
+    assert big_run.copy_of(cfg, {"id": "t1"}, "assist").as_posix() == "/w/t1/verinoda_mod"
+    assert big_run.copy_of(cfg, {"id": "t1"}, "none").as_posix() == "/w/t1/none"
+    assert big_run.copy_of({"copies": {"verinoda_mod": "/w/vm"}, "arm_defs": cfg["arm_defs"]}, {"id": "t1"}, "assist").as_posix() == "/w/vm"
+    a, b = big_run.copy_lock("/w/t1/verinoda_mod"), big_run.copy_lock("/w/t1/verinoda_mod")
+    assert a is b and big_run.copy_lock("/w/t2/verinoda_mod") is not a
+
+
+def test_big_session_stats_count_what_the_assist_features_did(tmp_path):
+    def use(name, **inp):
+        return {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": name, "input": inp}]}}
+
+    def hook(text):
+        return {"type": "attachment", "attachment": {"type": "hook_additional_context", "content": [text], "hookName": "tool.call"}}
+
+    def result(text, error=False):
+        return {"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "content": text, "is_error": error}]}}
+    lines = [hook("[Verinoda locate] Files Verinoda's index point to:\nsrc/a.c"), use("ToolSearch", query="select:mcp__verinoda-live__locate"),
+             use("mcp__verinoda-live__locate", text="bug"), use("mcp__verinoda-live__coupled", files=["src/a.c"]),
+             use("Grep", pattern="x"), result("[Verinoda] This search was not run. Before searching, ...", error=True),
+             use("Read", file_path="src/a.c"), hook("[Verinoda coupled] src/a.c is usually changed together with these files"),
+             use("Read", file_path="src/b.c"), hook("[Verinoda coupled] src/b.c is usually changed together with these files"),
+             hook("[Verinoda auto-context] This project has a Verinoda code index"), result("a normal result")]
+    t = tmp_path / "s.jsonl"
+    t.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    s = big_run.session_stats(t)
+    assert s["assist"] == {"inject": 1, "coupled_notes": 2, "gate": 1, "nudge": 1, "locate_calls": 1, "coupled_calls": 1, "tool_search": 1}
+    assert s["verinoda_calls"] == 2  # the mod's own tools are Verinoda use
+    assert big_run.session_stats(None)["assist"] == {"inject": 0, "coupled_notes": 0, "gate": 0, "nudge": 0, "locate_calls": 0,
+                                                     "coupled_calls": 0, "tool_search": 0}
+
+
+def test_big_scores_take_any_arm_in_the_data_and_decide_each_new_one_against_none():
+    tasks = [{"id": "t0", "gold": ["a.py", "b.py"]}, {"id": "t1", "gold": ["c.py"]}]
+    assist = {"inject": 0, "coupled_notes": 1, "gate": 0, "locate_calls": 0, "coupled_calls": 1, "tool_search": 1}
+
+    def row(i, arm, files, a=None):
+        return {"id": i, "arm": arm, "files": files, "num_turns": 4, "seconds": 10.0, "cost_usd": 0.1, "input_tokens": 100,
+                "output_tokens": 10, "verinoda_calls": 1 if a else 0, "graphify_calls": 0, "network": [], "answered": True,
+                "assist": a or {k: 0 for k in assist}}
+    r1 = [row("t0", "none", ["a.py"]), row("t0", "assist_full", ["a.py", "b.py"], assist), row("t0", "verinoda_setup", ["a.py"]),
+          row("t1", "none", ["x.py"]), row("t1", "assist_full", ["c.py"], assist), row("t1", "verinoda_setup", ["x.py"])]
+    r2 = [row("t0", "none", ["a.py", "b.py"]), row("t0", "assist_full", ["a.py", "b.py"]), row("t0", "verinoda_setup", ["a.py"]),
+          row("t1", "none", ["c.py"]), row("t1", "assist_full", ["c.py"]), row("t1", "verinoda_setup", ["x.py"])]
+    rep = score_big.report_pooled([r1, r2], tasks)
+    s = rep["pooled"]["summary"]
+    assert list(s) == ["none", "verinoda_setup", "assist_full"]  # the known arms in their order, the others after
+    # pooled over runs, a task counts once if any of its runs had the feature show or the tool called
+    assert s["assist_full"]["recall"] == 2.0 and s["assist_full"]["sessions_assist_shown"] == 2
+    assert s["assist_full"]["sessions_assist_called"] == 2 and s["none"]["sessions_assist_shown"] == 0
+    assert rep["pooled"]["decisions"]["assist_full - none"]["diff"] == 0.75
+    assert "assist_full - verinoda_setup" in rep["pooled"]["secondary"]
+    assert "assist_full" in rep["noise_floor"] and "none" in rep["noise_floor"]
+    one = score_big.report(r1, tasks)["all sessions"]
+    assert "assist_full - none" in one["decisions"] and one["summary"]["assist_full"]["sessions_assist_shown"] == 2
+    # a result written before the counters existed still scores
+    old = {k: v for k, v in r1[0].items() if k != "assist"}
+    assert score_big.cells([old], tasks)["t0"]["none"]["assist_shown"] == 0
+
+
+def test_a_choice_the_mod_stored_is_emptied_for_the_run_and_put_back_after_it(tmp_path):
+    """A choice stored by /verinoda-auto, -guard or -assist wins over the settings a scripted session is given: the
+    smoke run of the assist arms got the nudge of an earlier `/verinoda-auto nudge` that way."""
+    d = tmp_path / "store"
+    d.mkdir()
+    mine = d / "verinoda-live_inline-abc.json"
+    mine.write_text('{"auto": "nudge", "guard": false}', encoding="utf-8")
+    other = d / "diff_builtin-x.json"
+    other.write_text('{"k": 1}', encoding="utf-8")
+    with big_run.isolated_plugin_store(d):
+        assert json.loads(mine.read_text(encoding="utf-8")) == {}  # nothing stored: the arm's own options decide
+        assert other.read_text(encoding="utf-8") == '{"k": 1}'  # the stores of other plugins are not touched
+    assert json.loads(mine.read_text(encoding="utf-8")) == {"auto": "nudge", "guard": False}
+    assert not list(d.glob("*.study-backup"))
+    with pytest.raises(RuntimeError), big_run.isolated_plugin_store(d):  # an error inside puts it back too
+        raise RuntimeError("boom")
+    assert json.loads(mine.read_text(encoding="utf-8")) == {"auto": "nudge", "guard": False}
+    # a run that died before it could put the file back: the next one starts by doing that
+    mine.write_text("{}", encoding="utf-8")
+    (d / (mine.name + ".study-backup")).write_text('{"auto": "search"}', encoding="utf-8")
+    with big_run.isolated_plugin_store(d):
+        assert json.loads(mine.read_text(encoding="utf-8")) == {}
+    assert json.loads(mine.read_text(encoding="utf-8")) == {"auto": "search"}
+    with big_run.isolated_plugin_store(tmp_path / "no-such-folder"):  # nothing stored yet is fine
+        pass

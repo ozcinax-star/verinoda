@@ -1,0 +1,1244 @@
+{
+ "summary": {
+  "missed_gold_instances": 15,
+  "sessions_with_a_miss": 14,
+  "signals": {
+   "samedir": {
+    "mean_list_size": 16.9,
+    "covers@3": 3,
+    "covers@5": 8,
+    "covers@8": 10
+   },
+   "twins": {
+    "mean_list_size": 2248.9,
+    "covers@3": 0,
+    "covers@5": 0,
+    "covers@8": 0
+   },
+   "pair": {
+    "mean_list_size": 1820.9,
+    "covers@3": 0,
+    "covers@5": 0,
+    "covers@8": 0
+   },
+   "neighbors": {
+    "mean_list_size": 3.9,
+    "covers@3": 6,
+    "covers@5": 9,
+    "covers@8": 9
+   },
+   "cochange_path": {
+    "mean_list_size": 9.5,
+    "covers@3": 7,
+    "covers@5": 9,
+    "covers@8": 10
+   },
+   "cochange_verinoda": {
+    "mean_list_size": 0.1,
+    "covers@3": 0,
+    "covers@5": 0,
+    "covers@8": 0
+   },
+   "query": {
+    "mean_list_size": 4.1,
+    "covers@3": 0,
+    "covers@5": 0,
+    "covers@8": 0
+   },
+   "union5": {
+    "mean_list_size": 15.2,
+    "covers@3": 12,
+    "covers@5": 12,
+    "covers@8": 12
+   }
+  }
+ },
+ "rows": [
+  {
+   "task": "pr173270",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/mitsubishi_comfort/__init__.py",
+    "homeassistant/components/mitsubishi_comfort/config_flow.py",
+    "homeassistant/components/mitsubishi_comfort/const.py"
+   ],
+   "named": [
+    "homeassistant/components/mitsubishi_comfort/__init__.py",
+    "homeassistant/components/mitsubishi_comfort/config_flow.py",
+    "homeassistant/components/mitsubishi_comfort/manifest.json"
+   ],
+   "anchors": [
+    "homeassistant/components/mitsubishi_comfort/__init__.py",
+    "homeassistant/components/mitsubishi_comfort/config_flow.py",
+    "homeassistant/components/mitsubishi_comfort/manifest.json"
+   ],
+   "missed": [
+    "homeassistant/components/mitsubishi_comfort/const.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 6,
+     "cover@3": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    },
+    "twins": {
+     "size": 5181,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 3683,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 2,
+     "cover@3": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 11,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 12,
+     "cover@3": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr180472",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/cloud/__init__.py"
+   ],
+   "named": [
+    "homeassistant/components/mobile_app/webhook.py",
+    "homeassistant/components/mobile_app/__init__.py",
+    "homeassistant/components/mobile_app/http_api.py"
+   ],
+   "anchors": [
+    "homeassistant/components/mobile_app/webhook.py",
+    "homeassistant/components/mobile_app/__init__.py",
+    "homeassistant/components/mobile_app/http_api.py"
+   ],
+   "missed": [
+    "homeassistant/components/cloud/__init__.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 19,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 2749,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 2749,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 7,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 10,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 5,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 18,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    }
+   }
+  },
+  {
+   "task": "pr166748",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/history_stats/coordinator.py",
+    "homeassistant/components/history_stats/data.py"
+   ],
+   "named": [
+    "homeassistant/components/history_stats/data.py"
+   ],
+   "anchors": [
+    "homeassistant/components/history_stats/data.py"
+   ],
+   "missed": [
+    "homeassistant/components/history_stats/coordinator.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 11,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ]
+    },
+    "twins": {
+     "size": 17,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 17,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 5,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 6,
+     "cover@3": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 4,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 16,
+     "cover@3": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/history_stats/coordinator.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr182949",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/braviatv/__init__.py",
+    "homeassistant/components/braviatv/config_flow.py",
+    "homeassistant/components/braviatv/diagnostics.py"
+   ],
+   "named": [
+    "homeassistant/components/braviatv/config_flow.py",
+    "homeassistant/components/braviatv/__init__.py"
+   ],
+   "anchors": [
+    "homeassistant/components/braviatv/config_flow.py",
+    "homeassistant/components/braviatv/__init__.py"
+   ],
+   "missed": [
+    "homeassistant/components/braviatv/diagnostics.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 9,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/braviatv/diagnostics.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/braviatv/diagnostics.py"
+     ]
+    },
+    "twins": {
+     "size": 3682,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 3682,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 9,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 8,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 15,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    }
+   }
+  },
+  {
+   "task": "pr177499",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/anglian_water/__init__.py",
+    "homeassistant/components/anglian_water/config_flow.py"
+   ],
+   "named": [
+    "homeassistant/components/anglian_water/manifest.json",
+    "requirements_all.txt",
+    "requirements_test_all.txt",
+    "homeassistant/components/anglian_water/config_flow.py"
+   ],
+   "anchors": [
+    "homeassistant/components/anglian_water/manifest.json",
+    "requirements_all.txt",
+    "homeassistant/components/anglian_water/config_flow.py"
+   ],
+   "missed": [
+    "homeassistant/components/anglian_water/__init__.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 38,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 2436,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 938,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 11,
+     "cover@3": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 16,
+     "cover@3": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr180357",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/http/config.py",
+    "homeassistant/components/http/websocket_api.py"
+   ],
+   "named": [
+    "homeassistant/components/http/config.py",
+    "homeassistant/components/http/__init__.py"
+   ],
+   "anchors": [
+    "homeassistant/components/http/config.py",
+    "homeassistant/components/http/__init__.py"
+   ],
+   "missed": [
+    "homeassistant/components/http/websocket_api.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 18,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 2758,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 2758,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 4,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/http/websocket_api.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 5,
+     "cover@3": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/http/websocket_api.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/http/websocket_api.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr183498",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/enphase_envoy/const.py",
+    "homeassistant/components/enphase_envoy/sensor.py"
+   ],
+   "named": [
+    "homeassistant/components/enphase_envoy/sensor.py"
+   ],
+   "anchors": [
+    "homeassistant/components/enphase_envoy/sensor.py"
+   ],
+   "missed": [
+    "homeassistant/components/enphase_envoy/const.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 15,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ]
+    },
+    "twins": {
+     "size": 754,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 754,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 3,
+     "cover@3": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 6,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 13,
+     "cover@3": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr182734",
+   "run": 1,
+   "gold": [
+    "homeassistant/components/xbox/binary_sensor.py",
+    "homeassistant/components/xbox/entity.py"
+   ],
+   "named": [
+    "homeassistant/components/xbox/binary_sensor.py",
+    "homeassistant/components/xbox/coordinator.py",
+    "homeassistant/components/xbox/manifest.json"
+   ],
+   "anchors": [
+    "homeassistant/components/xbox/binary_sensor.py",
+    "homeassistant/components/xbox/coordinator.py",
+    "homeassistant/components/xbox/manifest.json"
+   ],
+   "missed": [
+    "homeassistant/components/xbox/entity.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 16,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    },
+    "twins": {
+     "size": 2420,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 922,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 10,
+     "cover@3": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 18,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 8,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 20,
+     "cover@3": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr173270",
+   "run": 2,
+   "gold": [
+    "homeassistant/components/mitsubishi_comfort/__init__.py",
+    "homeassistant/components/mitsubishi_comfort/config_flow.py",
+    "homeassistant/components/mitsubishi_comfort/const.py"
+   ],
+   "named": [
+    "homeassistant/components/mitsubishi_comfort/__init__.py",
+    "homeassistant/components/mitsubishi_comfort/config_flow.py"
+   ],
+   "anchors": [
+    "homeassistant/components/mitsubishi_comfort/__init__.py",
+    "homeassistant/components/mitsubishi_comfort/config_flow.py"
+   ],
+   "missed": [
+    "homeassistant/components/mitsubishi_comfort/const.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 7,
+     "cover@3": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    },
+    "twins": {
+     "size": 3682,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 3682,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 2,
+     "cover@3": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 11,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 13,
+     "cover@3": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/mitsubishi_comfort/const.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr182949",
+   "run": 2,
+   "gold": [
+    "homeassistant/components/braviatv/__init__.py",
+    "homeassistant/components/braviatv/config_flow.py",
+    "homeassistant/components/braviatv/diagnostics.py"
+   ],
+   "named": [
+    "homeassistant/components/braviatv/config_flow.py"
+   ],
+   "anchors": [
+    "homeassistant/components/braviatv/config_flow.py"
+   ],
+   "missed": [
+    "homeassistant/components/braviatv/__init__.py",
+    "homeassistant/components/braviatv/diagnostics.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 10,
+     "cover@3": [
+      "homeassistant/components/braviatv/__init__.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/braviatv/__init__.py",
+      "homeassistant/components/braviatv/diagnostics.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/braviatv/__init__.py",
+      "homeassistant/components/braviatv/diagnostics.py"
+     ]
+    },
+    "twins": {
+     "size": 937,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 937,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 8,
+     "cover@3": [
+      "homeassistant/components/braviatv/__init__.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/braviatv/__init__.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/braviatv/__init__.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 8,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 15,
+     "cover@3": [
+      "homeassistant/components/braviatv/__init__.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/braviatv/__init__.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/braviatv/__init__.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr182734",
+   "run": 2,
+   "gold": [
+    "homeassistant/components/xbox/binary_sensor.py",
+    "homeassistant/components/xbox/entity.py"
+   ],
+   "named": [
+    "homeassistant/components/xbox/coordinator.py",
+    "homeassistant/components/xbox/binary_sensor.py"
+   ],
+   "anchors": [
+    "homeassistant/components/xbox/coordinator.py",
+    "homeassistant/components/xbox/binary_sensor.py"
+   ],
+   "missed": [
+    "homeassistant/components/xbox/entity.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 17,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    },
+    "twins": {
+     "size": 921,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 921,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 10,
+     "cover@3": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 16,
+     "cover@3": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 9,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 18,
+     "cover@3": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/xbox/entity.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/xbox/entity.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr180357",
+   "run": 2,
+   "gold": [
+    "homeassistant/components/http/config.py",
+    "homeassistant/components/http/websocket_api.py"
+   ],
+   "named": [
+    "homeassistant/components/http/config.py",
+    "homeassistant/components/http/__init__.py"
+   ],
+   "anchors": [
+    "homeassistant/components/http/config.py",
+    "homeassistant/components/http/__init__.py"
+   ],
+   "missed": [
+    "homeassistant/components/http/websocket_api.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 18,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 2758,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 2758,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 4,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/http/websocket_api.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 5,
+     "cover@3": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/http/websocket_api.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 3,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 14,
+     "cover@3": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/http/websocket_api.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/http/websocket_api.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr177499",
+   "run": 2,
+   "gold": [
+    "homeassistant/components/anglian_water/__init__.py",
+    "homeassistant/components/anglian_water/config_flow.py"
+   ],
+   "named": [
+    "homeassistant/components/anglian_water/manifest.json",
+    "requirements_all.txt",
+    "requirements_test_all.txt",
+    "homeassistant/components/anglian_water/config_flow.py"
+   ],
+   "anchors": [
+    "homeassistant/components/anglian_water/manifest.json",
+    "requirements_all.txt",
+    "homeassistant/components/anglian_water/config_flow.py"
+   ],
+   "missed": [
+    "homeassistant/components/anglian_water/__init__.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 38,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "twins": {
+     "size": 2436,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 938,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 1,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_path": {
+     "size": 11,
+     "cover@3": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ]
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 2,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 16,
+     "cover@3": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/anglian_water/__init__.py"
+     ]
+    }
+   }
+  },
+  {
+   "task": "pr183498",
+   "run": 2,
+   "gold": [
+    "homeassistant/components/enphase_envoy/const.py",
+    "homeassistant/components/enphase_envoy/sensor.py"
+   ],
+   "named": [
+    "homeassistant/components/enphase_envoy/sensor.py"
+   ],
+   "anchors": [
+    "homeassistant/components/enphase_envoy/sensor.py"
+   ],
+   "missed": [
+    "homeassistant/components/enphase_envoy/const.py"
+   ],
+   "signals": {
+    "samedir": {
+     "size": 15,
+     "cover@3": [],
+     "cover@5": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ]
+    },
+    "twins": {
+     "size": 754,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "pair": {
+     "size": 754,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "neighbors": {
+     "size": 3,
+     "cover@3": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ]
+    },
+    "cochange_path": {
+     "size": 6,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "cochange_verinoda": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "query": {
+     "size": 0,
+     "cover@3": [],
+     "cover@5": [],
+     "cover@8": []
+    },
+    "union5": {
+     "size": 13,
+     "cover@3": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@5": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ],
+     "cover@8": [
+      "homeassistant/components/enphase_envoy/const.py"
+     ]
+    }
+   }
+  }
+ ]
+}

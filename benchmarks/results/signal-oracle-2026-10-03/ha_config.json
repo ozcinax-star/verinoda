@@ -1,0 +1,24 @@
+{
+ "tasks": "benchmarks/results/agent-compare-big-2026-10-02/tasks.json",
+ "none_results": [
+  "benchmarks/results/agent-compare-big-2026-10-02/results.jsonl",
+  "benchmarks/results/agent-compare-big-2026-10-02/results_r2.jsonl"
+ ],
+ "history_repo": "<work>/big/base",
+ "query_copy": "<work>/big/x0q",
+ "limit_query_tasks": [
+  "pr166748",
+  "pr173270",
+  "pr177499",
+  "pr180357",
+  "pr180472",
+  "pr182734",
+  "pr182949",
+  "pr183498"
+ ],
+ "k": [
+  3,
+  5,
+  8
+ ]
+}

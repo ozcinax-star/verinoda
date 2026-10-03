@@ -24,6 +24,22 @@ DECISIONS = (("verinoda_mod", "none"), ("graphify", "none"), ("verinoda_mod", "g
 SECONDARY = (("verinoda_mod", "verinoda_setup"),)
 
 
+def arms_of(c: dict[str, dict[str, dict]]) -> tuple[str, ...]:
+    """The arms with a cell: the known ones in their order, any other after them in the order it first appears."""
+    present = [a for v in c.values() for a in v]
+    return (*[a for a in ARMS if a in present], *dict.fromkeys(a for a in present if a not in ARMS))
+
+
+def decisions_for(arms: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    """The pre-registered decisions, and each arm added through `arm_defs` against `none`."""
+    return (*DECISIONS, *((a, "none") for a in arms if a not in ARMS and "none" in arms))
+
+
+def secondary_for(arms: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    """The secondary pairs, and each added arm against the Verinoda setup without the mod."""
+    return (*SECONDARY, *((a, "verinoda_setup") for a in arms if a not in ARMS and "verinoda_setup" in arms))
+
+
 def cell(files: list[str], gold: list[str]) -> dict:
     hit = [f for f in files if f in set(gold)]
     return {"recall": len(hit) / len(gold), "solved": int(len(hit) == len(gold)),
@@ -37,8 +53,11 @@ def cells(results: list[dict], tasks: list[dict], skip_network: bool = False) ->
     for r in results:
         if r["id"] not in gold or (skip_network and r.get("network")):
             continue
+        a = r.get("assist") or {}  # the mod's assist features: what was put in front of the model, and the tools it called
         out.setdefault(r["id"], {})[r["arm"]] = {
             **cell(r.get("files") or [], gold[r["id"]]), "turns": r.get("num_turns") or 0,
+            "assist_shown": sum(a.get(k, 0) for k in ("inject", "coupled_notes", "gate")),
+            "assist_called": sum(a.get(k, 0) for k in ("locate_calls", "coupled_calls")), "tool_search": a.get("tool_search", 0),
             "seconds": r.get("seconds") or 0.0, "cost": r.get("cost_usd") or 0.0, "input": r.get("input_tokens") or 0,
             "output": r.get("output_tokens") or 0, "tool": (r.get("verinoda_calls") or 0) + (r.get("graphify_calls") or 0),
             "network": len(r.get("network") or []), "answered": bool(r.get("answered"))}
@@ -64,14 +83,15 @@ def paired(c: dict, x: str, y: str, metric: str) -> dict:
 
 def summary(c: dict, tasks: list[dict]) -> dict:
     out = {}
-    for a in ARMS:
+    for a in arms_of(c):
         rows = [v[a] for v in c.values() if a in v]
-        if not rows:
-            continue
         n = len(rows)
         out[a] = {"tasks": n, "recall": round(sum(r["recall"] for r in rows), 2), "solved": sum(r["solved"] for r in rows),
                   "hit1": sum(r["hit1"] for r in rows), "precision": round(sum(r["precision"] for r in rows) / n, 3),
                   "sessions_using_tool": sum(r["tool"] > 0 for r in rows), "tool_calls": sum(r["tool"] for r in rows),
+                  "sessions_assist_shown": sum(r["assist_shown"] > 0 for r in rows),
+                  "sessions_assist_called": sum(r["assist_called"] > 0 for r in rows),
+                  "sessions_tool_search": sum(r["tool_search"] > 0 for r in rows),
                   "turns": sum(r["turns"] for r in rows), "input_tokens": sum(r["input"] for r in rows),
                   "output_tokens": sum(r["output"] for r in rows), "cost_usd": round(sum(r["cost"] for r in rows), 2),
                   "seconds": round(sum(r["seconds"] for r in rows)), "network_sessions": sum(r["network"] > 0 for r in rows),
@@ -83,11 +103,13 @@ def report(results: list[dict], tasks: list[dict]) -> dict:
     out = {}
     for name, skip in (("all sessions", False), ("without sessions that looked something up on the network", True)):
         c = cells(results, tasks, skip)
+        arms = arms_of(c)
+        decisions = decisions_for(arms)
         out[name] = {"summary": summary(c, tasks),
-                     "decisions": {f"{x} - {y}": paired(c, x, y, "recall") for x, y in DECISIONS
+                     "decisions": {f"{x} - {y}": paired(c, x, y, "recall") for x, y in decisions
                                    if any(x in v and y in v for v in c.values())},
                      "secondary": {f"{x} - {y}": {m: paired(c, x, y, m) for m in ("recall", "solved", "hit1")}
-                                   for x, y in (*DECISIONS, *SECONDARY) if any(x in v and y in v for v in c.values())}}
+                                   for x, y in (*decisions, *secondary_for(arms)) if any(x in v and y in v for v in c.values())}}
     out["per_task"] = cells(results, tasks)
     return out
 
@@ -96,7 +118,7 @@ def pool(runs: list[dict[str, dict[str, dict]]]) -> dict[str, dict[str, dict]]:
     """Per task and arm the mean of every number over the runs that have the cell."""
     out: dict[str, dict[str, dict]] = {}
     for task in sorted(set().union(*[set(r) for r in runs])):
-        for arm in ARMS:
+        for arm in sorted({a for r in runs if task in r for a in r[task]}):
             cs = [r[task][arm] for r in runs if task in r and arm in r[task]]
             if cs:
                 out.setdefault(task, {})[arm] = {k: sum(float(c[k]) for c in cs) / len(cs) for k in cs[0]}
@@ -109,7 +131,8 @@ def report_pooled(runs: list[list[dict]], tasks: list[dict]) -> dict:
     per_run = [cells(r, tasks) for r in runs]
     pooled = pool(per_run)
     noise: dict[str, list] = {}
-    for arm in ARMS:
+    arms = arms_of(pooled)
+    for arm in arms:
         for i in range(len(per_run)):
             for j in range(i + 1, len(per_run)):
                 c = {t: {"a": per_run[i][t][arm], "b": per_run[j][t][arm]} for t in per_run[i]
@@ -117,10 +140,11 @@ def report_pooled(runs: list[list[dict]], tasks: list[dict]) -> dict:
                 if c:
                     noise.setdefault(arm, []).append({"runs": [i + 1, j + 1], **paired(c, "a", "b", "recall")})
     has = lambda x, y: any(x in v and y in v for v in pooled.values())
+    decisions = decisions_for(arms)
     return {"pooled": {"summary": summary(pooled, tasks),
-                       "decisions": {f"{x} - {y}": paired(pooled, x, y, "recall") for x, y in DECISIONS if has(x, y)},
+                       "decisions": {f"{x} - {y}": paired(pooled, x, y, "recall") for x, y in decisions if has(x, y)},
                        "secondary": {f"{x} - {y}": {m: paired(pooled, x, y, m) for m in ("recall", "solved", "hit1")}
-                                     for x, y in (*DECISIONS, *SECONDARY) if has(x, y)}},
+                                     for x, y in (*decisions, *secondary_for(arms)) if has(x, y)}},
             "runs": [{"summary": summary(c, tasks)} for c in per_run], "noise_floor": noise}
 
 
