@@ -651,3 +651,70 @@ def test_a_study_may_cap_the_sessions_running_at_once_whatever_the_arms(tmp_path
     for t in threads:
         t.join(30)
     assert state["peak"] > 2  # without a cap they run together
+
+
+choose_arm = _load("choose_arm")
+
+
+def _dev_rows(table, runs=1):
+    """table: {task: {arm: [files named per run]}} -> a list of runs of result rows."""
+    return [[{"id": t, "arm": a, "files": files[min(r, len(files) - 1)], "num_turns": 3, "seconds": 5.0, "cost_usd": 0.05,
+              "input_tokens": 10, "output_tokens": 1, "verinoda_calls": 0, "graphify_calls": 0, "network": [], "answered": True}
+             for t, arms in table.items() for a, files in arms.items()] for r in range(runs)]
+
+
+def test_the_arm_is_chosen_by_the_summed_gain_over_both_development_sets_and_ties_go_to_fewer_features():
+    tasks_a = [{"id": "a1", "gold": ["x", "y"]}, {"id": "a2", "gold": ["x", "y"]}]
+    tasks_b = [{"id": "b1", "gold": ["x", "y"]}]
+    # seL4-like set, two runs: none finds half, `strict` all of it, `inject` all of one task, `forced` everything (never a candidate)
+    a = {"a1": {"none": [["x"], ["x"]], "strict": [["x", "y"]], "inject": [["x", "y"]], "coupled": [["x"]], "forced": [["x", "y"]]},
+         "a2": {"none": [["x"], ["x"]], "strict": [["x", "y"]], "inject": [["x"]], "coupled": [["x"]], "forced": [["x", "y"]]}}
+    b = {"b1": {"none": [["x"]], "strict": [["x"]], "inject": [["x", "y"]], "coupled": [["x"]], "forced": [["x", "y"]]}}
+    res = choose_arm.choose([(tasks_a, _dev_rows(a, 2)), (tasks_b, _dev_rows(b, 1))])
+    t = res["totals"]
+    assert t["strict"] == 1.0 and t["inject"] == 1.0 and t["coupled"] == 0.0 and "forced" not in t and "none" not in t
+    # an exact tie goes to the one with fewer features (inject: 1, strict: 3)
+    assert res["mod_best"] == "inject" and res["mod_second"] == "strict" and res["swapped"] is False
+    # strict gains 0.5 more: within 1.0 of inject, so inject (fewer features) is still first, and that is a swap
+    b["b1"]["strict"] = [["x", "y"]]
+    res = choose_arm.choose([(tasks_a, _dev_rows(a, 2)), (tasks_b, _dev_rows(b, 1))])
+    assert res["totals"]["strict"] == 1.5 and res["totals"]["inject"] == 1.0
+    assert res["mod_best"] == "inject" and res["mod_second"] == "strict" and res["swapped"] is True
+    # a gap of 1.0 is not "within 1.0": the winner stays first whatever its features
+    b["b1"]["inject"] = [["x"]]
+    res = choose_arm.choose([(tasks_a, _dev_rows(a, 2)), (tasks_b, _dev_rows(b, 1))])
+    assert res["totals"]["strict"] == 1.5 and res["totals"]["inject"] == 0.5
+    assert res["mod_best"] == "strict" and res["mod_second"] == "inject" and res["swapped"] is False
+    assert [r["arm"] for r in res["ranking"]][:2] == ["strict", "inject"] and res["n_tasks"] == 3
+
+
+def test_only_arms_that_ran_on_every_set_are_candidates():
+    tasks_a, tasks_b = [{"id": "a1", "gold": ["x", "y"]}], [{"id": "b1", "gold": ["x", "y"]}]
+    a = {"a1": {"none": [["x"]], "strict": [["x", "y"]], "tool": [["x", "y"]]}}
+    b = {"b1": {"none": [["x"]], "strict": [["x", "y"]]}}  # `tool` did not run on the second set
+    res = choose_arm.choose([(tasks_a, _dev_rows(a)), (tasks_b, _dev_rows(b))])
+    assert set(res["totals"]) == {"strict"} and res["mod_best"] == "strict" and res["mod_second"] is None
+
+
+answer_checks = _load("answer_checks")
+
+
+def test_answers_are_checked_for_files_that_do_not_exist_at_the_base_commit(tmp_path):
+    import subprocess
+    repo = tmp_path / "t1" / "none"
+    repo.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / "src").mkdir()
+    for f in ("src/a.c", "src/b.c", "README.md"):
+        (repo / f).write_bytes(b"x\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "i"], cwd=repo, check=True)
+    cfg = {"copy_pattern": str(tmp_path / "{task}" / "{arm}")}
+    rows = [{"id": "t1", "arm": "none", "files": ["src/a.c", "src/gone.c"]},
+            {"id": "t1", "arm": "none", "files": ["src/b.c"]},
+            {"id": "t1", "arm": "strict", "files": ["src/a.c", "SRC/A.C", "src/new.c"]},
+            {"id": "t1", "arm": "strict", "files": []}]
+    out = answer_checks.check(cfg, rows)
+    assert out["none"] == {"sessions": 2, "named": 3, "missing": 1, "share_missing": round(1 / 3, 3), "sessions_with_a_missing": 1}
+    assert out["strict"]["named"] == 3 and out["strict"]["missing"] == 2 and out["strict"]["sessions_with_a_missing"] == 1
+    assert answer_checks.tracked(repo) == {"src/a.c", "src/b.c", "README.md"}

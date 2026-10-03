@@ -1,0 +1,10 @@
+{
+ "tasks": "<REPO>/benchmarks/results/agent-compare-sel4-2026-10-02/tasks.json",
+ "clone": "<BENCH>/sel4/full",
+ "work": "<BENCH>/assist/sel4/work",
+ "history_depth": 100000,
+ "arms": {"none": {"kind": "none"}, "verinoda_mod": {"kind": "verinoda"}, "verinoda_setup": {"kind": "verinoda"}},
+ "verinoda_dir": "<REPO>/.venv/Scripts",
+ "workers": 3,
+ "git_config": {"core.autocrlf": "false"}
+}

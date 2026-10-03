@@ -1,0 +1,135 @@
+{
+ "model": "claude-sonnet-5-5",
+ "plugin_dir": "<REPO>/claude-mods/verinoda-live",
+ "mod_options": {
+  "auto": "off"
+ },
+ "drop_path": [
+  "<USER>/.local/bin"
+ ],
+ "timeout_s": 1800,
+ "max_turns": 80,
+ "tasks": "<REPO>/benchmarks/results/agent-compare-sel4-2026-10-02/tasks.json",
+ "copy_pattern": "<BENCH>/assist/sel4/work/{task}/{arm}",
+ "project": "the seL4 microkernel repository at {c} (a git checkout of it)",
+ "path_dirs": {
+  "verinoda_mod": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_setup": [
+   "<REPO>/.venv/Scripts"
+  ]
+ },
+ "arm_defs": {
+  "inject": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject"
+   }
+  },
+  "coupled": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "coupled"
+   }
+  },
+  "gate": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "gate"
+   }
+  },
+  "tool": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "tool"
+   }
+  },
+  "passive": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject,coupled"
+   }
+  },
+  "passive_gate": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject,coupled,gate"
+   }
+  },
+  "full": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "full"
+   }
+  },
+  "strict": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "strict"
+   }
+  },
+  "forced": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "tool"
+   },
+   "prompt_suffix": "Before you search the code, call the tool mcp__verinoda-live__locate with the text of the bug report, then read the files it lists."
+  }
+ },
+ "arms": [
+  "none",
+  "verinoda_setup",
+  "inject",
+  "coupled",
+  "gate",
+  "tool",
+  "passive",
+  "passive_gate",
+  "full",
+  "strict",
+  "forced"
+ ],
+ "arm_workers": {
+  "none": 2,
+  "verinoda_setup": 2,
+  "inject": 2,
+  "coupled": 2,
+  "gate": 2,
+  "tool": 2,
+  "passive": 2,
+  "passive_gate": 2,
+  "full": 2,
+  "strict": 2,
+  "forced": 2
+ },
+ "max_concurrent": 8,
+ "out": "<BENCH>/assist/sel4/dev_r1.jsonl"
+}

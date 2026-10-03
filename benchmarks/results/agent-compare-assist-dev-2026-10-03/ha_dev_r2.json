@@ -1,0 +1,116 @@
+{
+ "model": "claude-sonnet-5-5",
+ "plugin_dir": "<REPO>/claude-mods/verinoda-live",
+ "mod_options": {
+  "auto": "off"
+ },
+ "drop_path": [
+  "<USER>/.local/bin"
+ ],
+ "timeout_s": 1800,
+ "max_turns": 80,
+ "tasks": "<REPO>/benchmarks/results/agent-compare-big-2026-10-02/tasks.json",
+ "copies": {
+  "none": "<BENCH>/assist/ha/none",
+  "verinoda_setup": "<BENCH>/assist/ha/verinoda_setup",
+  "verinoda_mod": "<BENCH>/assist/ha/verinoda_mod",
+  "verinoda_mod_b": "<BENCH>/assist/ha/verinoda_mod_b",
+  "verinoda_mod_c": "<BENCH>/assist/ha/verinoda_mod_c"
+ },
+ "path_dirs": {
+  "verinoda_mod": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_mod_b": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_mod_c": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_setup": [
+   "<REPO>/.venv/Scripts"
+  ]
+ },
+ "arm_defs": {
+  "inject": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject"
+   }
+  },
+  "coupled": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod_b",
+   "mod_options": {
+    "auto": "off",
+    "assist": "coupled"
+   }
+  },
+  "gate": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod_c",
+   "mod_options": {
+    "auto": "off",
+    "assist": "gate"
+   }
+  },
+  "tool": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "tool"
+   }
+  },
+  "passive": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod_b",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject,coupled"
+   }
+  },
+  "passive_gate": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod_c",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject,coupled,gate"
+   }
+  },
+  "full": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "full"
+   }
+  },
+  "strict": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod_b",
+   "mod_options": {
+    "auto": "off",
+    "assist": "strict"
+   }
+  }
+ },
+ "arms": [
+  "none"
+ ],
+ "arm_workers": {
+  "none": 3
+ },
+ "max_concurrent": 6,
+ "out": "<BENCH>/assist/ha/dev_r2.jsonl"
+}
