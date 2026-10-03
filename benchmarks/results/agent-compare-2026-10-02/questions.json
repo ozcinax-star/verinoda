@@ -1,0 +1,401 @@
+[
+ {
+  "set": "glow_mod",
+  "id": "q01",
+  "question": "Wisp.spawn kimler tarafından çağrılıyor?",
+  "category": "callers",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q02",
+  "question": "Who calls GlowConfig.load?",
+  "category": "callers",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q03",
+  "question": "Bir wisp öldüğünde hangi eşyalar düşüyor ve bunlar nerede tanımlanıyor?",
+  "category": "cross_layer",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q04",
+  "question": "Which Java code runs the glowmod:ritual/start data pack function?",
+  "category": "cross_layer",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q05",
+  "question": "glowmod:ritual/tick fonksiyonu nereden çağrılıyor?",
+  "category": "callers",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q06",
+  "question": "Where is glowmod.yml loaded and where do its default values come from?",
+  "category": "config",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q07",
+  "question": "Her tick'te kaç bloğun onarılacağı nerede ayarlanıyor?",
+  "category": "config",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q08",
+  "question": "Where is the crafting recipe for the lantern staff and what goes into it?",
+  "category": "resources",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q09",
+  "question": "Fener asasının (lantern_staff) eşya modeli ve oyunda görünen adı hangi dosyalarda tanımlı?",
+  "category": "resources",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q10",
+  "question": "How does pressing the summon key on the client end up spawning a wisp on the server?",
+  "category": "flow",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q11",
+  "question": "Sunucu kapanırken henüz onarılmamış bloklara ne oluyor?",
+  "category": "behaviour",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q12",
+  "question": "Where are the mod's items registered?",
+  "category": "where",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q13",
+  "question": "Oyuncu fener asasıyla bir ruh fenerine sağ tıklayınca ne oluyor?",
+  "category": "behaviour",
+  "in_sample": false
+ },
+ {
+  "set": "glow_mod",
+  "id": "q14",
+  "question": "In the original Paper plugin, how was a wisp spawned and what called it?",
+  "category": "where",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q01",
+  "question": "EmberForgeBlockEntity.stoke kimler tarafından çağrılıyor?",
+  "category": "callers",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q02",
+  "question": "Who calls HeatMath.addHeat?",
+  "category": "callers",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q03",
+  "question": "emberforge:forging tarif tipi kodda nerede tanımlanıyor ve bu tarifleri hangi kod okuyup kullanıyor?",
+  "category": "cross_layer",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q04",
+  "question": "Where is the #emberforge:forge_fuels tag defined, what does it contain, and which code checks it?",
+  "category": "cross_layer",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q05",
+  "question": "Cüruf cevheri dünyada hangi biyomlarda ve nasıl oluşuyor?",
+  "category": "cross_layer",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q06",
+  "question": "Where is max_heat declared, what is its default, and which code reads it?",
+  "category": "config",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q07",
+  "question": "/emberforge reset komutunu kapatan ayar nerede tanımlanıyor ve nerede kontrol ediliyor?",
+  "category": "config",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q08",
+  "question": "Which blockstate, block models and textures does the Ember Forge use when it is lit and when it is not?",
+  "category": "resources",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q09",
+  "question": "Kor Ocağı'nın Türkçe ve İngilizce adı hangi anahtarla, hangi dosyalarda tanımlı ve blok kodda nerede kaydediliyor?",
+  "category": "resources",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q10",
+  "question": "How does pressing the Stoke button in the forge screen end up adding heat on the server?",
+  "category": "flow",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q11",
+  "question": "Kor Ocağı'nın blok varlığı her tick'te ne yapıyor?",
+  "category": "behaviour",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q12",
+  "question": "What does /emberforge reset do, from the command down to the data pack?",
+  "category": "cross_layer",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q13",
+  "question": "emberforge:rewards/first_cinder fonksiyonu nereden çalıştırılıyor?",
+  "category": "callers",
+  "in_sample": false
+ },
+ {
+  "set": "forge_mod",
+  "id": "q14",
+  "question": "Where are the mod's block entity type, menu type and recipe serializer registered, and where are those registers attached to the mod event bus?",
+  "category": "where",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h01",
+  "question": "Where is an experiment's process tree killed when it times out?",
+  "category": "where",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h02",
+  "question": "Which environment variables are passed to experiment commands, and where is that decided?",
+  "category": "config",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h03",
+  "question": "What does repoatlas scan call to build the index and invalidate stale claims?",
+  "category": "flow",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h04",
+  "question": "What is affected if evidence.content_hash changes?",
+  "category": "impact",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h05",
+  "question": "How is a claim marked stale when its cited files change?",
+  "category": "behaviour",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h06",
+  "question": "Why can a claim not be deleted from the store?",
+  "category": "why",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h07",
+  "question": "Where does RepoAtlas decide whether an experiment command needs a container?",
+  "category": "where",
+  "in_sample": false
+ },
+ {
+  "set": "heldout_repoatlas",
+  "id": "h08",
+  "question": "Which tests cover stale claim invalidation?",
+  "category": "tests",
+  "in_sample": false
+ },
+ {
+  "set": "graphify_core",
+  "id": "g01",
+  "question": "Where is graphify query output cut to fit the token budget?",
+  "category": "where",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g02",
+  "question": "Which functions does the graphify query command call to turn a question into graph context?",
+  "category": "flow",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g03",
+  "question": "Which environment variables control graphify's query log?",
+  "category": "config",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g04",
+  "question": "Where does graphify store its AST extraction cache and how is a cache entry keyed?",
+  "category": "where",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g05",
+  "question": "Which environment variable raises the maximum graph.json size, and what is the default limit?",
+  "category": "config",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g06",
+  "question": "Why does graphify drop stopwords from query terms?",
+  "category": "why",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g07",
+  "question": "What is affected if _query_terms changes?",
+  "category": "impact",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g08",
+  "question": "How does graphify update rebuild the code graph without an LLM?",
+  "category": "flow",
+  "in_sample": true
+ },
+ {
+  "set": "graphify_core",
+  "id": "g09",
+  "question": "Which tests cover the graph file size cap and its environment override?",
+  "category": "tests",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u01",
+  "question": "Kopya klasörler nasıl bulunuyor?",
+  "category": "how",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u02",
+  "question": "kullanıcının doğrudan bu grafiği açmasının bir yolu yok mu",
+  "category": "how",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u03",
+  "question": "Sayfa indeks değişince kendini nasıl yeniliyor?",
+  "category": "flow",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u04",
+  "question": "Kendi notlarım nerede saklanıyor?",
+  "category": "where",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u05",
+  "question": "Etki analizi hangi bağlantıları sayıyor?",
+  "category": "impact",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u06",
+  "question": "Dışa aktarılan dosyada makinenin yolları nasıl siliniyor?",
+  "category": "how",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u07",
+  "question": "graph.html neden artık yazılmıyor?",
+  "category": "why",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u08",
+  "question": "analyze bir alt soruyu ne zaman karşılandı sayıyor?",
+  "category": "behaviour",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u09",
+  "question": "update neden bu kadar uzun sürüyor?",
+  "category": "why",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u10",
+  "question": "Arayüz sunucusu başka sitelerden gelen isteklere karşı nasıl korunuyor?",
+  "category": "how",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u11",
+  "question": "Portable id'ler ne işe yarıyor?",
+  "category": "behaviour",
+  "in_sample": true
+ },
+ {
+  "set": "verinoda_user_tr",
+  "id": "u12",
+  "question": "--watch dosya değişikliğini nasıl fark ediyor?",
+  "category": "flow",
+  "in_sample": true
+ }
+]

@@ -1,0 +1,566 @@
+{
+  "benchmark": "mod-live edit-to-fresh",
+  "date": "2026-10-02T09:40:02+00:00",
+  "verinoda_commit": "5999912",
+  "corpus": "<CORPUS>",
+  "steps_spec": [
+    "comment",
+    "body",
+    "batch:20",
+    "add",
+    "del"
+  ],
+  "runs": 2,
+  "platform": {
+    "os": "nt",
+    "python": "3.13.14",
+    "cpus": 16
+  },
+  "setup": {
+    "fast": {
+      "scan_seconds": 396.475,
+      "files": 409
+    },
+    "full": {
+      "scan_seconds": 427.639,
+      "files": 409
+    }
+  },
+  "steps": [
+    {
+      "run": 0,
+      "step": "comment",
+      "files": [
+        "benchmarks/contextbench/aggregate.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 23.039,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 246.333,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 204.674,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "body",
+      "files": [
+        "benchmarks/contextbench/aggregate.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 138.901,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 21.63,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 242.517,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "batch:20",
+      "files": [
+        "benchmarks/contextbench/aggregate.py",
+        "benchmarks/contextbench/bm25.py",
+        "benchmarks/contextbench/diagnostics.py",
+        "benchmarks/contextbench/run.py",
+        "benchmarks/contextbench/sample.py",
+        "benchmarks/contextbench/views.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/__init__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/__main__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/__init__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/_jsonedit.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/_tomledit.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/installer.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/analysis.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/anchors.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/architecture_map.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/__init__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/__main__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/approaches.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/critique_eval.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/llm.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 28.491,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 217.503,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 171.342,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "add",
+      "files": [
+        "bench_mod_0.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 133.123,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 18.752,
+          "exit_code": 0,
+          "text_now": false,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 196.49,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 0,
+      "step": "del",
+      "files": [
+        "bench_mod_0.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 25.187,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 177.718,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 127.425,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "comment",
+      "files": [
+        "benchmarks/contextbench/aggregate.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 110.505,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 17.393,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 178.195,
+          "graph_fresh": null,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "body",
+      "files": [
+        "benchmarks/contextbench/aggregate.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 26.009,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 197.023,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 152.64,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "batch:20",
+      "files": [
+        "benchmarks/contextbench/aggregate.py",
+        "benchmarks/contextbench/bm25.py",
+        "benchmarks/contextbench/diagnostics.py",
+        "benchmarks/contextbench/run.py",
+        "benchmarks/contextbench/sample.py",
+        "benchmarks/contextbench/views.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/__init__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/__main__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/__init__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/_jsonedit.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/_tomledit.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/agents/installer.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/analysis.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/anchors.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/architecture_map.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/__init__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/__main__.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/approaches.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/critique_eval.py",
+        "benchmarks/corpora/heldout_repoatlas_7371990/repoatlas/benchmark/llm.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 139.593,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 21.485,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 136.665,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "add",
+      "files": [
+        "bench_mod_1.py"
+      ],
+      "measures": [
+        {
+          "mode": "fast",
+          "seconds": 17.611,
+          "exit_code": 0,
+          "text_now": false,
+          "symbol_now": false,
+          "graph_pending": true,
+          "graph_seconds": 141.984,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "full",
+          "seconds": 110.863,
+          "exit_code": 0,
+          "text_now": true,
+          "symbol_now": true,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": true,
+          "gone_absent": null,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "step": "del",
+      "files": [
+        "bench_mod_1.py"
+      ],
+      "measures": [
+        {
+          "mode": "full",
+          "seconds": 110.509,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": false,
+          "graph_seconds": null,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        },
+        {
+          "mode": "fast",
+          "seconds": 15.426,
+          "exit_code": 0,
+          "text_now": null,
+          "symbol_now": null,
+          "graph_pending": true,
+          "graph_seconds": 132.133,
+          "graph_fresh": null,
+          "gone_absent": true,
+          "leftover_changes": 0,
+          "stderr_tail": ""
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "comment": {
+      "fast": {
+        "n": 2,
+        "median_seconds": 20.216,
+        "max_seconds": 23.039,
+        "median_graph_seconds": 212.264,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "2/2",
+        "graph_fresh": null,
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 2,
+        "median_seconds": 157.589,
+        "max_seconds": 204.674,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "0/2",
+        "graph_fresh": null,
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 7.8
+    },
+    "body": {
+      "fast": {
+        "n": 2,
+        "median_seconds": 23.819,
+        "max_seconds": 26.009,
+        "median_graph_seconds": 219.77,
+        "errors": 0,
+        "text_now": "2/2",
+        "symbol_now": "0/2",
+        "graph_pending": "2/2",
+        "graph_fresh": "2/2",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 2,
+        "median_seconds": 145.77,
+        "max_seconds": 152.64,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": "2/2",
+        "symbol_now": "2/2",
+        "graph_pending": "0/2",
+        "graph_fresh": "2/2",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 6.12
+    },
+    "batch:20": {
+      "fast": {
+        "n": 2,
+        "median_seconds": 24.988,
+        "max_seconds": 28.491,
+        "median_graph_seconds": 177.084,
+        "errors": 0,
+        "text_now": "2/2",
+        "symbol_now": "0/2",
+        "graph_pending": "2/2",
+        "graph_fresh": "2/2",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 2,
+        "median_seconds": 155.468,
+        "max_seconds": 171.342,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": "2/2",
+        "symbol_now": "2/2",
+        "graph_pending": "0/2",
+        "graph_fresh": "2/2",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 6.22
+    },
+    "add": {
+      "fast": {
+        "n": 2,
+        "median_seconds": 18.181,
+        "max_seconds": 18.752,
+        "median_graph_seconds": 169.237,
+        "errors": 0,
+        "text_now": "0/2",
+        "symbol_now": "0/2",
+        "graph_pending": "2/2",
+        "graph_fresh": "2/2",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 2,
+        "median_seconds": 121.993,
+        "max_seconds": 133.123,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": "2/2",
+        "symbol_now": "2/2",
+        "graph_pending": "0/2",
+        "graph_fresh": "2/2",
+        "gone_absent": null,
+        "leftover_changes": 0
+      },
+      "speedup": 6.71
+    },
+    "del": {
+      "fast": {
+        "n": 2,
+        "median_seconds": 20.306,
+        "max_seconds": 25.187,
+        "median_graph_seconds": 154.925,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "2/2",
+        "graph_fresh": null,
+        "gone_absent": "2/2",
+        "leftover_changes": 0
+      },
+      "full": {
+        "n": 2,
+        "median_seconds": 118.967,
+        "max_seconds": 127.425,
+        "median_graph_seconds": null,
+        "errors": 0,
+        "text_now": null,
+        "symbol_now": null,
+        "graph_pending": "0/2",
+        "graph_fresh": null,
+        "gone_absent": "2/2",
+        "leftover_changes": 0
+      },
+      "speedup": 5.86
+    }
+  }
+}

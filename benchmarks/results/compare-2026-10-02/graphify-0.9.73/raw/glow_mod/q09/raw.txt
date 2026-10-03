@@ -1,0 +1,196 @@
+$ grep -rniE 'fener|asasının|lantern_staff|eşya|modeli|oyunda|görünen|adı|hangi|dosyalarda|tanımlı' .   # 15 matching lines in 9 files
+src/main/resources/assets/glowmod/lang/tr_tr.json:2: "item.glowmod.lantern_staff": "Fener Asası",
+src/main/java/com/example/glowmod/ritual/Ritual.java:16: private static final int RADIUS = 3;
+src/main/java/com/example/glowmod/ritual/Ritual.java:27: BlockPos at = altar.add((int) Math.round(Math.cos(angle) * RADIUS), 1,
+src/main/java/com/example/glowmod/ritual/Ritual.java:28: (int) Math.round(Math.sin(angle) * RADIUS));
+src/main/java/com/example/glowmod/ritual/Ritual.java:35: for (BlockPos pos : BlockPos.iterate(altar.add(-RADIUS, 1, -RADIUS), altar.add(RADIUS, 2, RADIUS))) {
+src/main/java/com/example/glowmod/event/LanternEvents.java:20: if (world.isClient() || !player.getStackInHand(hand).isOf(ModItems.LANTERN_STAFF)) {
+src/main/java/com/example/glowmod/event/LanternEvents.java:27: if (player.getItemCooldownManager().isCoolingDown(ModItems.LANTERN_STAFF)) {
+src/main/java/com/example/glowmod/event/LanternEvents.java:31: player.getItemCooldownManager().set(ModItems.LANTERN_STAFF, STAFF_COOLDOWN_TICKS);
+src/main/java/com/example/glowmod/item/ModItems.java:13: public static final Item LANTERN_STAFF = register("lantern_staff", new Item(new Item.Settings().maxCount(1)));
+src/main/java/com/example/glowmod/item/ModItems.java:26: ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> entries.add(LANTERN_STAFF));
+src/main/java/com/example/glowmod/command/GlowCommands.java:6: import com.mojang.brigadier.context.CommandContext;
+src/main/java/com/example/glowmod/network/ServerNetworking.java:22: if (!player.getMainHandStack().isOf(ModItems.LANTERN_STAFF)) {
+src/main/resources/assets/glowmod/lang/en_us.json:2: "item.glowmod.lantern_staff": "Lantern Staff",
+src/main/resources/assets/glowmod/models/item/lantern_staff.json:4: "layer0": "glowmod:item/lantern_staff"
+src/main/resources/data/glowmod/recipe/lantern_staff.json:15: "id": "glowmod:lantern_staff",
+
+==> src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 <==
+     1	{
+     2	  "item.glowmod.lantern_staff": "Fener Asası",
+     3	  "item.glowmod.ember_shard": "Kor Kırığı",
+     4	  "item.glowmod.wisp_heart": "Wisp Kalbi",
+     5	  "entity.glowmod.wisp": "Wisp",
+     6	  "key.glowmod.summon_wisp": "Wisp Çağır",
+     7	  "category.glowmod": "Glow Mod",
+     8	  "command.glowmod.wisp.spawned": "Bir wisp belirdi.",
+     9	  "command.glowmod.wisp.failed": "Wisp gelmedi.",
+    10	  "command.glowmod.reload.done": "Glow Mod ayarları yeniden yüklendi."
+    11	}
+
+==> src/main/java/com/example/glowmod/ritual/Ritual.java:1-43 <==
+     1	package com.example.glowmod.ritual;
+     2	
+     3	import com.example.glowmod.config.GlowConfig;
+     4	import com.example.glowmod.entity.Wisp;
+     5	import com.example.glowmod.repair.RepairScheduler;
+     6	import com.example.glowmod.util.Datapack;
+     7	import net.minecraft.block.BlockState;
+     8	import net.minecraft.block.Blocks;
+     9	import net.minecraft.registry.tag.BlockTags;
+    10	import net.minecraft.server.world.ServerWorld;
+    11	import net.minecraft.util.math.BlockPos;
+    12	import net.minecraft.util.math.Vec3d;
+    13	
+    14	/** The lantern ritual: the data pack plays the effects, the mod clears the circle and calls the wisps. */
+    15	public final class Ritual {
+    16	    private static final int RADIUS = 3;
+    17	
+    18	    private Ritual() {
+    19	    }
+    20	
+    21	    public static void baslat(ServerWorld world, BlockPos altar) {
+    22	        Datapack.runQualified(world, Vec3d.ofBottomCenter(altar), "glowmod:ritual/start");
+    23	        alaniAc(world, altar);
+    24	        int count = GlowConfig.get().ritualWispCount();
+    25	        for (int i = 0; i < count; i++) {
+    26	            double angle = 2 * Math.PI * i / count;
+    27	            BlockPos at = altar.add((int) Math.round(Math.cos(angle) * RADIUS), 1,
+    28	                    (int) Math.round(Math.sin(angle) * RADIUS));
+    29	            Wisp.spawn(world, at);
+    30	        }
+    31	    }
+    32	
+    33	    /** Burns away grass and flowers around the altar; RepairScheduler puts them back later. */
+    34	    private static void alaniAc(ServerWorld world, BlockPos altar) {
+    35	        for (BlockPos pos : BlockPos.iterate(altar.add(-RADIUS, 1, -RADIUS), altar.add(RADIUS, 2, RADIUS))) {
+    36	            BlockState state = world.getBlockState(pos);
+    37	            if (state.isIn(BlockTags.REPLACEABLE_BY_TREES)) {
+    38	                RepairScheduler.kaydet(world, pos.toImmutable(), state);
+    39	                world.setBlockState(pos, Blocks.AIR.getDefaultState());
+    40	            }
+    41	        }
+    42	    }
+    43	}
+
+==> src/main/java/com/example/glowmod/event/LanternEvents.java:1-35 <==
+     1	package com.example.glowmod.event;
+     2	
+     3	import com.example.glowmod.entity.Wisp;
+     4	import com.example.glowmod.item.ModItems;
+     5	import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+     6	import net.minecraft.block.Blocks;
+     7	import net.minecraft.server.world.ServerWorld;
+     8	import net.minecraft.util.ActionResult;
+     9	import net.minecraft.util.math.BlockPos;
+    10	
+    11	public final class LanternEvents {
+    12	    private static final int STAFF_COOLDOWN_TICKS = 100;
+    13	
+    14	    private LanternEvents() {
+    15	    }
+    16	
+    17	    /** Lantern staff + right click on a soul lantern calls a wisp out of the lantern. */
+    18	    public static void etkinlestir() {
+    19	        UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
+    20	            if (world.isClient() || !player.getStackInHand(hand).isOf(ModItems.LANTERN_STAFF)) {
+    21	                return ActionResult.PASS;
+    22	            }
+    23	            BlockPos pos = hit.getBlockPos();
+    24	            if (!world.getBlockState(pos).isOf(Blocks.SOUL_LANTERN)) {
+    25	                return ActionResult.PASS;
+    26	            }
+    27	            if (player.getItemCooldownManager().isCoolingDown(ModItems.LANTERN_STAFF)) {
+    28	                return ActionResult.FAIL;
+    29	            }
+    30	            Wisp.spawn((ServerWorld) world, pos.up());
+    31	            player.getItemCooldownManager().set(ModItems.LANTERN_STAFF, STAFF_COOLDOWN_TICKS);
+    32	            return ActionResult.SUCCESS;
+    33	        });
+    34	    }
+    35	}
+
+==> src/main/java/com/example/glowmod/item/ModItems.java:1-32 <==
+     1	package com.example.glowmod.item;
+     2	
+     3	import com.example.glowmod.GlowMod;
+     4	import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
+     5	import net.minecraft.item.Item;
+     6	import net.minecraft.item.ItemGroups;
+     7	import net.minecraft.registry.Registries;
+     8	import net.minecraft.registry.Registry;
+     9	import net.minecraft.util.Identifier;
+    10	import net.minecraft.util.Rarity;
+    11	
+    12	public final class ModItems {
+    13	    public static final Item LANTERN_STAFF = register("lantern_staff", new Item(new Item.Settings().maxCount(1)));
+    14	    public static final Item EMBER_SHARD = register("ember_shard", new Item(new Item.Settings()));
+    15	    public static final Item WISP_HEART = register("wisp_heart", new Item(new Item.Settings().rarity(Rarity.UNCOMMON)));
+    16	
+    17	    private ModItems() {
+    18	    }
+    19	
+    20	    private static Item register(String name, Item item) {
+    21	        return Registry.register(Registries.ITEM, Identifier.of(GlowMod.MOD_ID, name), item);
+    22	    }
+    23	
+    24	    /** Loads the class (so the fields above register) and puts the items into the creative tabs. */
+    25	    public static void initialize() {
+    26	        ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> entries.add(LANTERN_STAFF));
+    27	        ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
+    28	            entries.add(EMBER_SHARD);
+    29	            entries.add(WISP_HEART);
+    30	        });
+    31	    }
+    32	}
+
+==> src/main/java/com/example/glowmod/command/GlowCommands.java:1-49 <==
+     1	package com.example.glowmod.command;
+     2	
+     3	import com.example.glowmod.config.GlowConfig;
+     4	import com.example.glowmod.entity.Wisp;
+     5	import com.example.glowmod.ritual.Ritual;
+     6	import com.mojang.brigadier.context.CommandContext;
+     7	import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+     8	import net.minecraft.server.command.CommandManager;
+     9	import net.minecraft.server.command.ServerCommandSource;
+    10	import net.minecraft.text.Text;
+    11	import net.minecraft.util.math.BlockPos;
+    12	
+    13	/** /glow wisp | ritual | reload (operators only). */
+    14	public final class GlowCommands {
+    15	    private GlowCommands() {
+    16	    }
+    17	
+    18	    public static void register() {
+    19	        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
+    20	                dispatcher.register(CommandManager.literal("glow")
+    21	                        .requires(source -> source.hasPermissionLevel(2))
+    22	                        .then(CommandManager.literal("wisp").executes(GlowCommands::wisp))
+    23	                        .then(CommandManager.literal("ritual").executes(GlowCommands::ritual))
+    24	                        .then(CommandManager.literal("reload").executes(GlowCommands::reload))));
+    25	    }
+    26	
+    27	    private static int wisp(CommandContext<ServerCommandSource> ctx) {
+    28	        ServerCommandSource source = ctx.getSource();
+    29	        Wisp wisp = Wisp.spawn(source.getWorld(), BlockPos.ofFloored(source.getPosition()));
+    30	        if (wisp == null) {
+    31	            source.sendError(Text.translatable("command.glowmod.wisp.failed"));
+    32	            return 0;
+    33	        }
+    34	        source.sendFeedback(() -> Text.translatable("command.glowmod.wisp.spawned"), false);
+    35	        return 1;
+    36	    }
+    37	
+    38	    private static int ritual(CommandContext<ServerCommandSource> ctx) {
+    39	        ServerCommandSource source = ctx.getSource();
+    40	        Ritual.baslat(source.getWorld(), BlockPos.ofFloored(source.getPosition()));
+    41	        return 1;
+    42	    }
+    43	
+    44	    private static int reload(CommandContext<ServerCommandSource> ctx) {
+    45	        GlowConfig.load();
+    46	        ctx.getSource().sendFeedback(() -> Text.translatable("command.glowmod.reload.done"), true);
+    47	        return 1;
+    48	    }
+    49	}

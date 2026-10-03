@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -337,6 +338,32 @@ def _spawn(argv: list[str], **kw):
     return subprocess.Popen(argv, **kw)
 
 
+def _open_append(path: Path):
+    """The log as a binary file object every write of which lands at the end of the file, also in a child process
+    that inherits it as its stdout. On POSIX ``O_APPEND`` does this for every holder; on Windows ``"ab"`` appends
+    only for the process that opened it (a child writes from the position it inherited, over lines added since), so
+    the handle is opened with FILE_APPEND_DATA access, which the system appends for whoever writes through it."""
+    import sys
+
+    if sys.platform != "win32":
+        return open(path, "ab")
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                                wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    file_append_data, synchronize = 0x0004, 0x00100000
+    share_all = 0x1 | 0x2 | 0x4  # read, write, delete
+    open_always, normal = 4, 0x80
+    h = k32.CreateFileW(str(path), file_append_data | synchronize, share_all, None, open_always, normal, None)
+    if h is None or h == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    return os.fdopen(msvcrt.open_osfhandle(h, os.O_APPEND | os.O_WRONLY), "ab")
+
+
 def start_background_update(repo: Path) -> dict:
     """Start ``verinoda update`` for ``repo`` in a detached process that outlives this one (its output goes
     to ``background_update.log`` beside the index). Nothing is started while another build holds the lock:
@@ -348,9 +375,22 @@ def start_background_update(repo: Path) -> dict:
     from verinoda.paths import index_dir
 
     repo = Path(repo).resolve()
-    if buildlock.is_locked(repo):
-        return {"started": False, "why": "another index build is running; it or the next update takes the changes in"}
     log = index_dir(repo) / _BG_LOG
+
+    def note(line: str) -> None:
+        # the log otherwise holds completions only: a start, or a start refused, is told apart afterwards from a
+        # build that never ran or never finished
+        try:
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with open(log, "a", encoding="utf-8") as fh:
+                fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {line}\n")
+        except OSError:
+            pass
+
+    if buildlock.is_locked(repo):
+        why = "another index build is running; it or the next update takes the changes in"
+        note(f"background not started: {why}")
+        return {"started": False, "why": why}
     kw: dict = {"stdin": subprocess.DEVNULL, "cwd": tempfile.gettempdir()}
     if sys.platform == "win32":
         kw["creationflags"] = (getattr(subprocess, "DETACHED_PROCESS", 0x8)
@@ -360,10 +400,13 @@ def start_background_update(repo: Path) -> dict:
         kw["start_new_session"] = True
     try:
         log.parent.mkdir(parents=True, exist_ok=True)
-        with open(log, "ab") as out:
+        with _open_append(log) as out:  # the child appends, never writes over lines added after it started
             p = _spawn(buildlock.updater_argv(repo), stdout=out, stderr=out, **kw)
     except OSError as exc:
-        return {"started": False, "why": f"could not start ({type(exc).__name__}): run `verinoda update`"}
+        why = f"could not start ({type(exc).__name__}): run `verinoda update`"
+        note(f"background not started: {why}")
+        return {"started": False, "why": why}
+    note(f"background start: pid {p.pid}")
     return {"started": True, "pid": p.pid, "log": str(log)}
 
 

@@ -1,0 +1,78 @@
+expanded: build index->build_index, invalidate stale->invalidate_stale, stale claims->stale_claims (+2 more)
+## repoatlas/claims.py:1022-1092 invalidate_stale
+  doc: Mark claims stale when something they depend on changed since their snapshot.
+  calls: snapshot_files@1037?, latest_snapshot@1041?, Claims@1046, all@1047?, assess_change@1056, set_status@1063?, record_location@1076, record_transition@1080?
+  called by: replay (repoatlas/benchmark/staleness.py:405); scan (repoatlas/workflow.py:144); update (repoatlas/workflow.py:210); _current_snapshot (repoatlas/workflow.py:244); _index_refused (repoatlas/workflow.py:44); test_shift_edit_rebinds_symbol_claims_instead_of_staling_them (tests/test_snapshot_stale.py:446)
+  const repoatlas/claims.py:69: VERIFIED = {"observed", "experiment_verified", "statically_verified", "primary_source_verified"}
+  const repoatlas/claims.py:944: ACTIVE = ("observed", "experiment_verified", "statically_verified", "primary_source_verified",
+  repoatlas/claims.py:1022-1026
+1022 def invalidate_stale(store: Store, new_snapshot: dict | None, *, actor: str = "repoatlas",
+1023                      files: dict[str, str] | None = None, repo: Path | None = None,
+1024                      report: dict | None = None) -> list[dict]:
+1025     """Mark claims stale when something they depend on changed since their snapshot.
+  repoatlas/claims.py:1041-1054
+1041     root = (new_snapshot or {}).get("repo_root") or (store.latest_snapshot() or {}).get("repo_root")
+1042     repo = Path(root) if root else None
+1043 cache: dict[str, dict[str, str]] = {}
+1044 changed_claims = []
+1045 rebound = checked = 0
+1046 cl = Claims(store, repo)
+1047 for c in store.all(
+1048     f"SELECT * FROM claims WHERE status IN ({','.join('?' * len(ACTIVE))}) AND superseded_by IS NULL",
+1049     ACTIVE,
+1050 ):
+1051     sid = c["snapshot_id"]
+1052     if not sid or sid == new_sid:
+1053         continue
+1054     old_files = cache.setdefault(sid, store.snapshot_files(sid))
+## repoatlas/workflow.py:126-154 scan
+  doc: Full index build, snapshot, stale invalidation and derived data.
+  calls: graph_path@135, missing_source_files@136, build@138, _index_refused@141, _no_missing_files@142, take_snapshot@143, invalidate_stale@144, snapshot_files@145?, _derive@148
+  called by: evaluate (repoatlas/benchmark/critique_eval.py:235); run_benchmark (repoatlas/benchmark/runner.py:373); run_mutation_suite (repoatlas/benchmark/staleness.py:602); cmd_scan (repoatlas/cli.py:174); update (repoatlas/workflow.py:175); test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run (tests/test_analysis.py:168); test_analysis_refreshes_a_changed_tree_before_citing (tests/test_analysis.py:238); test_entry_point_that_writes_directly_is_a_one_node_path (tests/test_analysis.py:264) (+29)
+  repoatlas/workflow.py:126-128
+126 def scan(store: Store, repo: Path, *, force: bool = False) -> dict:
+127     """Full index build, snapshot, stale invalidation and derived data.
+  repoatlas/workflow.py:134-147
+134 t0 = time.monotonic()
+135 had_graph = graph_path(repo).exists()
+136 missing_before = index.missing_source_files(repo) if had_graph else []
+137 force = force or not had_graph or bool(missing_before)
+138 stats = index.build(repo, force=force)
+139 t_index = time.monotonic() - t0
+140 if not stats.get("ok", True):
+141     return {**_index_refused(store, repo, stats, force=force), "index_seconds": round(t_index, 3)}
+142 stats, pruned = _no_missing_files(repo, stats)
+143 snap = take_snapshot(store, repo, graph_stats=stats)
+144 stale = invalidate_stale(store, snap)
+145 files = store.snapshot_files(snap["id"])
+146 out = {"snapshot": snap, "graph": {k: stats[k] for k in ("nodes", "edges", "graph_path")},
+147        "index_seconds": round(t_index, 3), "stale": stale,
+## repoatlas/workflow.py:222-245 _current_snapshot
+  doc: A snapshot of the working tree as it is now (refreshing the index if needed).
+  calls: latest_snapshot@231?, current_state@232, graph_path@234, update@235, take_snapshot@243, invalidate_stale@244
+  called by: verify (repoatlas/workflow.py:261)
+222 def _current_snapshot(store: Store, repo: Path) -> tuple[dict | None, dict | None]:
+223     """A snapshot of the working tree as it is now (refreshing the index if needed).
+225     Returns ``(snapshot, refresh)`` where ``refresh`` summarises the update
+226     that had to run, or None when the latest snapshot already matched. When
+227     the index refused to rebuild, ``refresh`` carries ``error``/``hint`` and
+228     the snapshot returned is the previous one, which does NOT describe the
+229     current tree.
+230     """
+231     snap = store.latest_snapshot()
+232     if snap is not None and snap["tree_hash"] == current_state(repo, store=store)["tree_hash"]:
+233         return snap, None
+234     if graph_path(repo).exists():
+235         res = update(store, repo)
+236         refresh = {"mode": res["mode"], "changed_count": res["changed_count"],
+237                    "stale": [s["id"] for s in res["stale"]]}
+238         if res.get("error"):
+239             refresh.update(error=res["error"], hint=res["hint"])
+240         return res["snapshot"], refresh
+241     # A project that was never scanned (claims added by hand): record the
+242     # tree without building an index.
+243     snap = take_snapshot(store, repo)
+244     stale = invalidate_stale(store, snap)
+245     return snap, {"mode": "snapshot_only", "changed_count": None, "stale": [s["id"] for s in stale]}
+… 1841 more candidates not shown: repoatlas/research.py:339-360 def _build_index(checkout: Path, version_key: str) -> tuple[dict, bool]; tests/test_scip_reader.py:106-122 def build_index() -> bytes; repoatlas/workflow.py:35-52 def _index_refused(store: Store, repo: Path, stats: dict, *, force: bool, files: dict[str, s; tests/test_snapshot_stale.py:422-446 test_shift_edit_rebinds_symbol_claims_ins…
+next: verinoda query "…" --max-chars 12000

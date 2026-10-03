@@ -1,0 +1,117 @@
+analysis ana_f2a34ea993eb, snapshot snp_f67fe74d1a63 (commit 0bb6af3963)
+understood as: Anladığım (kurallarla): q1 [konum] emberforge:forging tarif tipi kodda nerede tanımlanıyor | q2 [konum] bu tarifleri hangi kod okuyup kullanıyor? (karşılıklar: tarif=recipe, tanımlanıyor=define, tarifleri=recipe, kod=code)
+plan links: emberforge -> src/main/java/net/ashvale/emberforge/EmberForge.java:16-37; forging -> src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:24-87
+q1 [met] locate: emberforge:forging tarif tipi kodda nerede tanımlanıyor
+  [statically_verified] `EmberConfig` is defined at src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41  (clm_47b4d3adcd2c)
+  [statically_verified] `ForgeFunctions` is defined at src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:9-26  (clm_c9270e371958)
+  [statically_verified] src/main/resources/data/emberforge/recipe/cinder_ingots_from_forging.json:2 contains: "type": "emberforge:forging",  (clm_b9cf61545a57)
+  [statically_verified] src/main/resources/data/emberforge/recipe/forge_hammer.json:2 contains: "type": "emberforge:forging",  (clm_6921d9dc065a)
+  [primary_source_verified] `Emberforge (example mod)` is defined at README.md:1-22  (clm_6e43707c9450)
+q2 [unmet] locate: bu tarifleri hangi kod okuyup kullanıyor?
+  (also answers this: clm_47b4d3adcd2c)
+  (also answers this: clm_c9270e371958)
+  (also answers this: clm_6e43707c9450)
+  unknown: the question's words 'okuyup', 'kullaniyor' occur nowhere in this repository (code, comments or docs); next: use the names the code uses (see `verinoda map`), or research the external system the question is about
+  unknown: the question asks which code uses the code it names; the claims found are definitions, not code that uses it; next: ask `what calls <name>?` for the function or class you mean
+context (found on the way; not what answers):
+  [statically_verified] src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:8 contains: /** Runs the mod's data-pack functions from code. */  (clm_3ca1c10029ed)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: emberforg->ember, tarif->recip, kodda->cod (+1 more)
+## README.md:1-22 Emberforge (example mod)
+ 1 # Emberforge (example mod)
+ 3 A small, fictional NeoForge 1.21.1 mod used as a test corpus for Verinoda. It builds on
+ 4 paper only: textures (`.png`) are left out so the example stays plain text, and nothing
+ 5 here has been run in a game.
+ 7 Adds:
+ 9 - **Ember Forge** - a block that burns fuel into heat and slowly forges its input with
+10   `emberforge:forging` recipes. Right-click opens it; a Forge Hammer stokes it.
+11 - **Cinder Ore** - generated in a few overworld biomes; forged into two Cinder Ingots
+12   (a furnace gives one).
+13 - `/emberforge reset` and `/emberforge heat <pos>` for operators.
+15 Layout:
+17 - `src/main/java` - Java code (registries, block, block entity, menu, recipe, network, events)
+18 - `src/main/kotlin` - Kotlin code (heat rules, forge screen, commands); needs Kotlin for Forge
+19 - `src/main/resources/data/emberforge` - recipes, tags, loot tables, worldgen, advancement, functions
+20 - `src/main/resources/assets/emberforge` - blockstates, models, `en_us` / `tr_tr` translations
+21 - `config/emberforge-common.toml` - the default common config, for reference
+22 - `src/test/java` - JUnit tests
+## src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41 public final class EmberConfig
+  src/main/java/net/ashvale/emberforge/config/EmberConfig.java:5-8
+5 /**
+6  * Common settings. NeoForge writes them to config/emberforge-common.toml on first start;
+7  * the spec is registered in the EmberForge constructor.
+8  */
+  src/main/java/net/ashvale/emberforge/config/EmberConfig.java:19-30
+20 b.comment("Ember Forge heat settings").push("forge");
+21 HEAT_PER_FUEL = b.comment("Heat added by one fuel item (blaze rods count double)")
+22         .defineInRange("heat_per_fuel", 40, 1, 400);
+23 MAX_HEAT = b.comment("Upper limit of a forge's heat")
+24         .defineInRange("max_heat", 200, 50, 1000);
+25 STOKE_HEAT = b.comment("Heat added by the Stoke button or a Forge Hammer hit")
+26         .defineInRange("stoke_heat", 15, 0, 100);
+27 DECAY_INTERVAL = b.comment("Ticks between two losses of 1 heat")
+28         .defineInRange("decay_interval_ticks", 20, 1, 1200);
+29 b.pop();
+## src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:9-26 ForgeFunctions
+  names: `emberforge:debug/reset_forges` (line 10, id) -> src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction
+ 9 public final class ForgeFunctions {
+10     public static final String RESET_FORGES = "emberforge:debug/reset_forges";
+12     private ForgeFunctions() {
+13     }
+15     /** Runs the reset function at the source's position; false when the data pack does not provide it. */
+16     public static boolean resetForges(CommandSourceStack source) {
+17         MinecraftServer server = source.getServer();
+18         ResourceLocation id = ResourceLocation.parse(RESET_FORGES);
+19         if (server.getFunctions().get(id).isEmpty()) {
+20             EmberForge.LOGGER.warn("Function {} is missing; is the mod's data pack disabled?", id);
+21             return false;
+22         }
+23         server.getCommands().performPrefixedCommand(source, "function " + RESET_FORGES);
+24         return true;
+25     }
+26 }
+## src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:12-25 ModRecipes
+12 public final class ModRecipes {
+13     public static final DeferredRegister<RecipeType<?>> RECIPE_TYPES =
+14             DeferredRegister.create(Registries.RECIPE_TYPE, EmberForge.MOD_ID);
+15     public static final DeferredRegister<RecipeSerializer<?>> RECIPE_SERIALIZERS =
+16             DeferredRegister.create(Registries.RECIPE_SERIALIZER, EmberForge.MOD_ID);
+18     public static final Supplier<RecipeType<ForgingRecipe>> FORGING_TYPE =
+19             RECIPE_TYPES.register("forging", () -> RecipeType.simple(EmberForge.id("forging")));
+20     public static final Supplier<RecipeSerializer<ForgingRecipe>> FORGING_SERIALIZER =
+21             RECIPE_SERIALIZERS.register("forging", ForgingRecipe.Serializer::new);
+23     private ModRecipes() {
+24     }
+25 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge)
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:90-103
+ 91 ItemStack input = forge.items.getStackInSlot(SLOT_INPUT);
+ 92 Optional<RecipeHolder<ForgingRecipe>> match = level.getRecipeManager()
+ 93         .getRecipeFor(ModRecipes.FORGING_TYPE.get(), new SingleRecipeInput(input), level);
+ 94 if (match.isPresent() && forge.canOutput(match.get().value().result())) {
+ 95     ForgingRecipe recipe = match.get().value();
+ 96     forge.forgeTime = recipe.forgeTime();
+ 97     forge.progress += HeatMath.progressPerTick(forge.heat, recipe.minHeat());
+ 98     if (forge.progress >= recipe.forgeTime()) {
+ 99         forge.finish(recipe);
+100     }
+101     changed = true;
+102 } else if (forge.progress != 0) {
+103     forge.progress = 0;
+## src/main/resources/data/emberforge/recipe/cinder_ingots_from_forging.json:1-12 emberforge:cinder_ingots_from_forging
+  names: `emberforge:cinder_ingot` (line 7, id) -> src/main/resources/assets/emberforge/models/item/cinder_ingot.json
+ 1 {
+ 2   "type": "emberforge:forging",
+ 3   "ingredient": {
+ 4     "tag": "emberforge:cinder_ores"
+ 5   },
+ 6   "result": {
+ 7     "id": "emberforge:cinder_ingot",
+ 8     "count": 2
+ 9   },
+10   "forge_time": 160,
+11   "min_heat": 40
+12 }
+… 158 more candidates not shown: src/main/resources/data/emberforge/recipe/forge_hammer.json:1-12 {; src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:24-87 ForgingRecipe; src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:133-138 EmberForgeBlockEntity.finish; src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:23-24 ModRecipes.ModRecipes
+next: verinoda query "…" --max-chars 12000

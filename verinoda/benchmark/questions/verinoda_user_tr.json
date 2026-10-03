@@ -43,9 +43,6 @@
      "match_any": [
       {
        "loc": "verinoda/copies.py:72-74"
-      },
-      {
-       "text": "copies.detect"
       }
      ]
     },

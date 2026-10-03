@@ -1,0 +1,24 @@
+{
+ "tasks": "<REPO>/benchmarks/results/agent-compare-guard-2026-10-02/tasks.json",
+ "repos": {
+  "graphify": {
+   "base": "<GUARD>/base/Graphify-Labs__graphify",
+   "python": "<GUARD>/envs/Graphify-Labs__graphify/Scripts/python.exe"
+  },
+  "sqlmodel": {
+   "base": "<GUARD>/base/fastapi__sqlmodel",
+   "python": "<GUARD>/envs/fastapi__sqlmodel/Scripts/python.exe"
+  }
+ },
+ "runs": "<GUARD>/runs",
+ "out": "<GUARD>/results.jsonl",
+ "plugin_dir": "<REPO>/claude-mods/verinoda-live",
+ "verinoda_python": "<REPO>/.venv/Scripts/python.exe",
+ "arms": [
+  "plain",
+  "guard"
+ ],
+ "workers": 8,
+ "timeout_s": 2700,
+ "max_turns": 100
+}

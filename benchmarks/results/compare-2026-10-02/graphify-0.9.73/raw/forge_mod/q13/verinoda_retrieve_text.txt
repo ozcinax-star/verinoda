@@ -1,0 +1,103 @@
+expanded: emberforg->ember, fonksiyonu->function, calistiriliyor->run (+1 more)
+## src/main/resources/data/emberforge/advancement/first_cinder.json:1-30 emberforge:first_cinder
+  names: `emberforge:cinder_ore` (line 5, id, kind not stated: inferred) -> src/main/resources/assets/emberforge/blockstates/cinder_ore.json; `#emberforge:cinder_ores` (line 21, id) -> src/main/resources/data/emberforge/tags/item/cinder_ores.json (+1)
+  src/main/resources/data/emberforge/advancement/first_cinder.json:1-13
+ 1 {
+ 2   "parent": "minecraft:story/mine_stone",
+ 3   "display": {
+ 4     "icon": {
+ 5       "id": "emberforge:cinder_ore"
+ 6     },
+ 7     "title": {
+ 8       "translate": "advancement.emberforge.first_cinder.title"
+ 9     },
+10     "description": {
+11       "translate": "advancement.emberforge.first_cinder.description"
+12     },
+13     "frame": "task"
+  src/main/resources/data/emberforge/advancement/first_cinder.json:18-30
+18       "conditions": {
+19         "items": [
+20           {
+21             "items": "#emberforge:cinder_ores"
+22           }
+23         ]
+24       }
+25     }
+26   },
+27   "rewards": {
+28     "function": "emberforge:rewards/first_cinder"
+29   }
+30 }
+## src/main/resources/data/emberforge/function/rewards/first_cinder.mcfunction:1-3 emberforge:rewards/first_cinder
+  doc: Reward for the first cinder ore; runs as the player who earned the advancement.
+  named by: emberforge:first_cinder (src/main/resources/data/emberforge/advancement/first_cinder.json:28) as `emberforge:rewards/first_cinder`
+1 # Reward for the first cinder ore; runs as the player who earned the advancement.
+2 tellraw @s {"translate":"message.emberforge.first_cinder","color":"gold"}
+3 give @s minecraft:coal 4
+## src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:9-26 ForgeFunctions
+  names: `emberforge:debug/reset_forges` (line 10, id) -> src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction
+ 9 public final class ForgeFunctions {
+10     public static final String RESET_FORGES = "emberforge:debug/reset_forges";
+12     private ForgeFunctions() {
+13     }
+15     /** Runs the reset function at the source's position; false when the data pack does not provide it. */
+16     public static boolean resetForges(CommandSourceStack source) {
+17         MinecraftServer server = source.getServer();
+18         ResourceLocation id = ResourceLocation.parse(RESET_FORGES);
+19         if (server.getFunctions().get(id).isEmpty()) {
+20             EmberForge.LOGGER.warn("Function {} is missing; is the mod's data pack disabled?", id);
+21             return false;
+22         }
+23         server.getCommands().performPrefixedCommand(source, "function " + RESET_FORGES);
+24         return true;
+25     }
+26 }
+## src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:15-32 ForgeCommands.register
+15 @JvmStatic
+16 fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+17     dispatcher.register(
+18         Commands.literal("emberforge")
+19             .then(
+20                 Commands.literal("reset")
+21                     .requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }
+22                     .executes { ctx -> if (ForgeFunctions.resetForges(ctx.source)) 1 else 0 }
+23             )
+24             .then(
+25                 Commands.literal("heat")
+26                     .then(
+27                         Commands.argument("pos", BlockPosArgument.blockPos())
+28                             .executes { ctx -> reportHeat(ctx.source, BlockPosArgument.getLoadedBlockPos(ctx, "pos")) }
+29                     )
+30             )
+31     )
+32 }
+## src/main/resources/data/emberforge/tags/item/cinder_ores.json:1-6 #emberforge:cinder_ores
+  names: `emberforge:cinder_ore` (line 4, id, kind not stated: inferred) -> src/main/resources/assets/emberforge/blockstates/cinder_ore.json
+  named by: emberforge:first_cinder (src/main/resources/data/emberforge/advancement/first_cinder.json:21) as `#emberforge:cinder_ores`
+1 {
+2   "replace": false,
+3   "values": [
+4     "emberforge:cinder_ore"
+5   ]
+6 }
+## src/main/resources/data/emberforge/function/debug/reset_forges.mcfunction:1-4 emberforge:debug/reset_forges
+  names: `emberforge:ember_forge` (line 2, id, kind not stated: inferred) -> src/main/resources/assets/emberforge/blockstates/ember_forge.json; `#emberforge:forge_heat_sources` (line 3, id) -> src/main/resources/data/emberforge/tags/block/forge_heat_sources.json
+  named by: ForgeFunctions (src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10) as `emberforge:debug/reset_forges`
+1 # Puts out and empties every Ember Forge within 16 blocks. Forges face north afterwards.
+2 fill ~-16 ~-8 ~-16 ~16 ~8 ~16 emberforge:ember_forge[lit=false]{Heat:0,Progress:0} replace emberforge:ember_forge
+3 execute if block ~ ~-1 ~ #emberforge:forge_heat_sources run tellraw @s {"translate":"message.emberforge.reset.heat_source","color":"yellow"}
+4 tellraw @s {"translate":"message.emberforge.reset.done","color":"gold"}
+## src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:34-42 ForgeCommands.reportHeat
+34 private fun reportHeat(source: CommandSourceStack, pos: BlockPos): Int {
+35     val forge = source.level.getBlockEntity(pos) as? EmberForgeBlockEntity
+36     if (forge == null) {
+37         source.sendFailure(Component.translatable("command.emberforge.heat.not_a_forge"))
+38         return 0
+39     }
+40     source.sendSuccess({ Component.translatable("command.emberforge.heat", forge.heat) }, false)
+41     return forge.heat
+42 }
+src/main/resources/assets/emberforge/lang/en_us.json:1-17 {
+… 129 more candidates not shown: src/main/resources/assets/emberforge/blockstates/cinder_ore.json:1-5 {; src/main/resources/assets/emberforge/models/item/cinder_ore.json:1-3 {; src/main/resources/assets/emberforge/models/block/cinder_ore.json:1-6 {; src/main/resources/assets/emberforge/lang/tr_tr.json:1-17 {
+next: verinoda query "…" --max-chars 12000

@@ -120,6 +120,16 @@ DATA_SUFFIXES = (".mcfunction", ".mcmeta", ".json", ".jsonc", ".json5", ".snbt",
                  ".java", ".kt", ".scala", ".groovy", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".go",
                  ".rs", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp", ".hh", ".hxx", ".ipp", ".inl",
                  ".tpp", ".swift", ".lua", ".dart")
+# Source files among the data suffixes: a data unit of one is code the graph has no node for (yet: a file added since
+# the last build, before `update --fast`'s background build ends; or a directory the extractor skips).
+SOURCE_DATA_SUFFIXES = (".java", ".kt", ".scala", ".groovy", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".go",
+                        ".rs", ".rb", ".php", ".cs", ".c", ".h", ".cc", ".cpp", ".hpp", ".hh", ".hxx", ".swift", ".lua",
+                        ".dart")
+# What defines a name in those files, by its keyword (def, class, fn, func, function, ...) or as a JavaScript binding
+# of a function; enough to tell "the file defines loyalty_bonus_v7" from "the file mentions it".
+_DEFINES = re.compile(
+    r"\b(?:def|class|function|func|fn|interface|struct|enum|trait|record|object|module|sub)\s+\*?\s*([A-Za-z_$][\w$]*)"
+    r"|\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)")
 DATA_NAMES = frozenset({"Dockerfile", "Makefile", "Procfile", "Jenkinsfile", ".env.example"})
 BINARY_SUFFIXES = frozenset(""".png .jpg .jpeg .gif .webp .avif .ico .bmp .tga .psd .svgz .ogg .wav .mp3 .flac .mp4 .webm
     .nbt .dat .mca .mcr .schem .schematic .litematic .zip .gz .tgz .xz .7z .rar .jar .class .war .bin .exe .dll .so
@@ -657,6 +667,21 @@ def misaligned_files(db: Path) -> list[str]:
             conn.close()
     except sqlite3.Error:
         return []
+
+
+def defined_names(root: Path | None, f: str) -> set[str]:
+    """Names a source file defines (lower case, underscores stripped at the ends, as ``q.named`` is compared): read
+    from the file itself, for a data unit of a source file the graph has no node for. Empty when it cannot be read."""
+    if root is None:
+        return set()
+    try:
+        p = Path(root) / f
+        if p.stat().st_size > MAX_DATA_BYTES:
+            return set()
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return set()
+    return {(a or b).strip("_").lower() for a, b in _DEFINES.findall(text)}
 
 
 def _data_units(f: str, lines: list[str]) -> list["_Unit"]:
@@ -2368,6 +2393,8 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
         lex = {uid: s / top for uid, s in best.items() if s > 0}
         # the parts of "http.client" name a module (boosted above), not every symbol called client
         named = [nm for nm in q.named if nm.strip("_").lower() not in mentions.module_parts]
+        named_units: set[int] = set()  # units the question names: a symbol, or a definition in a file the graph lacks
+        named_new: set[int] = set()  # ... the latter: no graph node, so no graph prior to carry them up
         if named:
             want = {nm.strip("_").lower(): nm for nm in named}
             rows = _fetch(conn, "SELECT uid, name, qual FROM units WHERE uid IN "
@@ -2400,6 +2427,22 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                         (include_tests or not is_test_file(h.units[uid][0])):
                     lex[uid] = max(lex.get(uid, 0.0), ref_factor(uid))
                     reasons[uid].append(f"question names '{nm}'")
+                    named_units.add(uid)
+                    if uid not in per_unit and h.units[uid][7] is not None:
+                        per_unit[uid] = [(0.0, h.units[uid][7])]
+            # a source file the graph has no node for (added since the last build, before `update --fast`'s
+            # background build ends) is one data unit: a name it defines counts as that symbol would
+            root = getattr(g, "root", None)
+            for uid in list(best):
+                f = h.units[uid][0]
+                if h.units[uid][2] != "data" or not f.lower().endswith(SOURCE_DATA_SUFFIXES) or \
+                        (not include_tests and is_test_file(f)):
+                    continue
+                for low in sorted(want.keys() & defined_names(root, f)):
+                    lex[uid] = max(lex.get(uid, 0.0), ref_factor(uid))
+                    reasons[uid].append(f"question names '{want[low]}' (defined in {f}, not in the graph yet)")
+                    named_units.add(uid)
+                    named_new.add(uid)
                     if uid not in per_unit and h.units[uid][7] is not None:
                         per_unit[uid] = [(0.0, h.units[uid][7])]
         for nid, why in (seeds or {}).items():
@@ -2466,6 +2509,13 @@ def rank(g, question: str, *, include_tests: bool = True, seeds: dict[str, str] 
                 return {x for t in ts for x in groups.get(t, ())}
 
             _tests_yield(h, score, matched, word_weight)
+        # a definition the question names in a file the graph lacks ranks above units that only share words with the
+        # name, as the symbol does once the graph has it (it would otherwise lose to them by their graph prior alone)
+        if named_new:
+            floor = max((v for u, v in score.items() if u not in named_units), default=0.0)
+            for uid in named_new:
+                if uid in score and score[uid] <= floor:
+                    score[uid] = floor + 1e-6
         for uid in score:
             if ref_factor(uid) < 1.0:
                 reasons[uid].append(REFERENCE_REASON)

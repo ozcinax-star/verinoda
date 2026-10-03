@@ -1,0 +1,65 @@
+expanded: notlarım->notlar, saklanıyor->sakla
+## verinoda/ui/static/app.js:1592-1608 commands
+  calls: setMode@1596, goGraph3d@1597, startTour@1597, goGraph@1599, showChanges@1599, graphKey@1600, showKeys@1605
+  called by: matchCommands (verinoda/ui/static/app.js:1610)
+1592 function commands() {
+1593   const cs = [
+1594     { words: "graph graf view görünüm harita map", label: t("cmd.graph"), key: "G", run: () => { location.hash = "#/graph"; } },
+1595     G3 ? { words: "3d 2d view görünüm mode boyut üç düz", label: mode3d ? t("cmd.to2d") : t("cmd.to3d"), key: "V",
+1596       run: () => { if ($("#graphview").hidden) { mode3d = !mode3d; store.set("vn.graph3d", mode3d ? "1" : "0"); location.hash = "#/graph"; } else setMode(!mo…
+1597     G3 ? { words: "tour tur gezinti gez bölgeler regions overview özet", label: t("cmd.tour"), key: "T", run: () => goGraph3d().then(() => { if (!tour) start…
+1598     OFFLINE ? null : { words: "changed changes değişen değişenler what ne diff", label: t("cmd.changes"), key: "C",
+1599       run: () => goGraph().then(() => { const b = $("#global-changes"); b.checked = true; showChanges(true); }) },
+1600     { words: "fit all hepsi hepsini sığdır reset everything", label: t("cmd.fit"), key: "R", run: () => goGraph().then(() => graphKey({ key: "r" })) },
+1601     { words: "home start başlangıç ana sayfa", label: t("cmd.home"), run: () => { location.hash = "#/"; } },
+1602     { words: "notes notlarım my notes kendi", label: t("myNotes"), run: () => { location.hash = "#/"; } },
+1603     { words: "theme tema dark light koyu açık", label: t("theme"), run: () => $("#btn-theme").click() },
+1604     { words: "language dil türkçe english ingilizce", label: t("cmd.lang"), run: () => $("#btn-lang").click() },
+1605     { words: "help keys shortcuts kısayol kısayollar yardım tuşlar", label: t("keysTitle"), key: "?", run: () => showKeys() },
+1606   ];
+1607   return cs.filter(Boolean);
+1608 }
+## verinoda/question_plan.py:1451-1451 (module level)
+1451 "veritaban", "kalici", "depo", "sakla")
+## verinoda/ui/static/app.js:158-169 (module level)
+158 inferred: "çıkarım: bağlantı kodda açıkça yazmıyor, araç türetti", loading: "Yükleniyor…",
+159 noIndex: "Bu projenin henüz indeksi yok: içinde `verinoda scan .` çalıştırıp sayfayı yenileyin.",
+160 shown: "gösterilen", hidden: "gizli (en az bağlantılı)", test: "test", defined: "tanımı",
+161 sec: {
+162   defined_in: "Tanımlandığı yer", members: "Üyeler", calls: "Çağırdıkları", called_by: "Çağıranlar",
+163   extends: "Genişlettiği / uyguladığı", extended_by: "Alt sınıflar / uygulamalar", imports: "İçe aktardıkları",
+164   imported_by: "İçe aktaranlar", references: "Başvurdukları", referenced_by: "Başvuranlar",
+165   names_data: "Adlandırdığı kaynaklar", named_by: "Adlandıranlar", other_out: "Diğer bağlantılar",
+166   other_in: "Diğer geri bağlantılar", claims: "İddialar", outline: "Ana hat", hubs: "En çok bağlantılı",
+167   myNotes: "Notlarım", answerMore: "Ayrıca ilgili",
+168 },
+169 kind: {
+## verinoda/ui/static/app.js:134-145 (module level)
+134 highlight: "Notları vurgula…", labels: "Etiketler", fit: "Sığdır", close: "Kapat", back: "Geri", forward: "İleri",
+135 colorBy: "Renk", byFolder: "klasör", byCommunity: "topluluk",
+136 editor: "Editör", openIn: "Aç:", noEditor: "editör yok",
+137 myNote: "Notum", myNotes: "Notlarım", addNote: "+ Not", edit: "Düzenle", save: "Kaydet", cancel: "Vazgeç",
+138 del: "Sil", sure: "Silinsin mi?", keep: "Okudum: hâlâ doğru", noteHint: "Markdown: **kalın**, `kod`, - liste, [[Ad]] bir nota bağlar. Ctrl+Enter kaydeder…
+139 nst: { fresh: "güncel", changed: "kod değişti", gone: "kod yok" },
+140 changedSince: "Değişenler", changedInfo: "indeksten sonra değişti", affectedInfo: "bunları kullanıyor",
+141 refreshed: "İndeks güncellendi: sayfa artık onu gösteriyor.", updating: "İndeks güncelleniyor…",
+142 staleNote: "Bu dosya indeksten sonra değişti: bağlantılar ve satırlar kaymış olabilir. `verinoda update` onu alır.",
+143 ask: "Soruyu cevapla", answerFor: "Cevap", answerMore: "Ayrıca ilgili", answerNone: "Projede bunu cevaplayan bir şey yok.",
+144 answerStale: "indeksten sonra değişti (satırlar kaymış olabilir):", answerExp: "ayrıca arandı",
+145 impact: "Etki", impactTitle: "Etkilenebilecekler", impactNone: "Projede bunu kullanan yok.",
+## verinoda/ui/static/app.js:146-157 (module level)
+146 impactDepth: "bağlantı geri", impactStop: "şurada durdu:", impactTests: "testlerde", withTests: "testlerle",
+147 pathBtn: "Yol…", pathTo: "Ulaşılacak notu ara…", pathNone: "Aralarında çağrı, import ya da başvuru zinciri yok.",
+148 pathBack: "(ters yönde: hedef bu nota ulaşıyor)", pathTitle: "Yol", close2: "kapat",
+149 noteOn: "", noNotes: "Henüz kendi notun yok: bir not aç ve + Not'a bas.",
+150 theme: "Açık / koyu", toggleFiles: "Dosyaları göster ya da gizle", toggleGraph: "Yerel grafı göster ya da gizle",
+151 searchOffline: "Dosya ya da sembol ara  (/)   ·   komutlar: Ctrl+K",
+152 offlineHome: "Dışa aktarılmış görünüm: graf ve her dosyanın notu, kod olmadan; projede `verinoda ui` her notu koduyla gösterir. Dışa aktarım",
+153 offlineCode: "kod dışa aktarılan dosyada yok; `verinoda ui` gösterir",
+154 offlineMissing: "Bu not dışa aktarılan dosyada yok (graf ve dosya notları var); `verinoda ui` her notu gösterir.",
+155 notes: "not", filesN: "dosya", links: "bağlantı", dataNotes: "veri notu", hubs: "En çok bağlantılı",
+156 welcome: "Projenin her sembolü, dosyası ve veri dosyası bir not. Yukarıdan ara, dosyalara göz at ya da graf görünümünü aç.",
+157 lines: "satır", line: "satır", more: "daha", moreLines: "satır daha var", noResults: "Eşleşen not yok.",
+## verinoda/ui/static/app.js:1252-1261 function setMode(on)
+… 125 more candidates not shown: verinoda/ui/static/app.js:1577-1583 goGraph3d; verinoda/ui/static/app.js:1518-1550 graphKey; verinoda/ui/static/app.js:1573-1576 goGraph; verinoda/ui/static/app.js:1441-1449 startTour
+next: verinoda query "…" --max-chars 12000

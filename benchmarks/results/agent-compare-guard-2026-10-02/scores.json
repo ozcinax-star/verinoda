@@ -1,0 +1,851 @@
+{
+ "groups": {
+  "all": {
+   "summary": {
+    "plain": {
+     "tasks": 30,
+     "passed": 30,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 332,
+     "cost_usd": 15.23,
+     "seconds": 7468
+    },
+    "guard": {
+     "tasks": 30,
+     "passed": 30,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 373,
+     "cost_usd": 15.2,
+     "seconds": 7366
+    }
+   },
+   "pairs": {
+    "passes guard-plain": {
+     "n": 30,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 30,
+     "losses": 0
+    },
+    "absent sites plain-guard": {
+     "n": 30,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 30,
+     "losses": 0
+    },
+    "turns guard-plain": {
+     "n": 30,
+     "diff": 41,
+     "ci95": [
+      -10,
+      93
+     ],
+     "wins": 17,
+     "ties": 2,
+     "losses": 11
+    }
+   }
+  },
+  "graphify": {
+   "summary": {
+    "plain": {
+     "tasks": 20,
+     "passed": 20,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 199,
+     "cost_usd": 11.02,
+     "seconds": 6240
+    },
+    "guard": {
+     "tasks": 20,
+     "passed": 20,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 239,
+     "cost_usd": 11.0,
+     "seconds": 5861
+    }
+   },
+   "pairs": {
+    "passes guard-plain": {
+     "n": 20,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 20,
+     "losses": 0
+    },
+    "absent sites plain-guard": {
+     "n": 20,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 20,
+     "losses": 0
+    },
+    "turns guard-plain": {
+     "n": 20,
+     "diff": 40,
+     "ci95": [
+      -4,
+      86
+     ],
+     "wins": 11,
+     "ties": 1,
+     "losses": 8
+    }
+   }
+  },
+  "sqlmodel": {
+   "summary": {
+    "plain": {
+     "tasks": 10,
+     "passed": 10,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 133,
+     "cost_usd": 4.21,
+     "seconds": 1228
+    },
+    "guard": {
+     "tasks": 10,
+     "passed": 10,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 134,
+     "cost_usd": 4.2,
+     "seconds": 1505
+    }
+   },
+   "pairs": {
+    "passes guard-plain": {
+     "n": 10,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 10,
+     "losses": 0
+    },
+    "absent sites plain-guard": {
+     "n": 10,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 10,
+     "losses": 0
+    },
+    "turns guard-plain": {
+     "n": 10,
+     "diff": 1,
+     "ci95": [
+      -23,
+      22
+     ],
+     "wins": 6,
+     "ties": 1,
+     "losses": 3
+    }
+   }
+  },
+  "prompt names a helper": {
+   "summary": {
+    "plain": {
+     "tasks": 8,
+     "passed": 8,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 79,
+     "cost_usd": 3.58,
+     "seconds": 1451
+    },
+    "guard": {
+     "tasks": 8,
+     "passed": 8,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 87,
+     "cost_usd": 3.56,
+     "seconds": 1603
+    }
+   },
+   "pairs": {
+    "passes guard-plain": {
+     "n": 8,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 8,
+     "losses": 0
+    },
+    "absent sites plain-guard": {
+     "n": 8,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 8,
+     "losses": 0
+    },
+    "turns guard-plain": {
+     "n": 8,
+     "diff": 8,
+     "ci95": [
+      -10,
+      26
+     ],
+     "wins": 5,
+     "ties": 1,
+     "losses": 2
+    }
+   }
+  },
+  "prompt names no helper": {
+   "summary": {
+    "plain": {
+     "tasks": 22,
+     "passed": 22,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 253,
+     "cost_usd": 11.65,
+     "seconds": 6017
+    },
+    "guard": {
+     "tasks": 22,
+     "passed": 22,
+     "absent_sites": 0,
+     "sessions_leaving_absent_sites": 0,
+     "notes": 0,
+     "sessions_with_notes": 0,
+     "turns": 286,
+     "cost_usd": 11.63,
+     "seconds": 5762
+    }
+   },
+   "pairs": {
+    "passes guard-plain": {
+     "n": 22,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 22,
+     "losses": 0
+    },
+    "absent sites plain-guard": {
+     "n": 22,
+     "diff": 0,
+     "ci95": [
+      0,
+      0
+     ],
+     "wins": 0,
+     "ties": 22,
+     "losses": 0
+    },
+    "turns guard-plain": {
+     "n": 22,
+     "diff": 33,
+     "ci95": [
+      -13,
+      80
+     ],
+     "wins": 12,
+     "ties": 1,
+     "losses": 9
+    }
+   }
+  }
+ },
+ "per_task": {
+  "triage-extraction": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 17,
+    "cost": 0.6175372,
+    "seconds": 141.0
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 14,
+    "cost": 0.6252802,
+    "seconds": 638.6
+   }
+  },
+  "python-from-import-targets": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 8,
+    "cost": 0.46231339999999993,
+    "seconds": 223.1
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 6,
+    "cost": 0.3865992,
+    "seconds": 230.7
+   }
+  },
+  "python-symbol-ids": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 20,
+    "cost": 0.7228345999999999,
+    "seconds": 363.8
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 28,
+    "cost": 0.9900591999999999,
+    "seconds": 475.0
+   }
+  },
+  "explain_surprise": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 2,
+    "cost": 0.4911872,
+    "seconds": 196.8
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 9,
+    "cost": 0.41926199999999997,
+    "seconds": 100.2
+   }
+  },
+  "classify-js-import": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 15,
+    "cost": 0.7480378000000001,
+    "seconds": 474.4
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 14,
+    "cost": 0.7033604,
+    "seconds": 690.0
+   }
+  },
+  "kotlin-annotation-index": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 24,
+    "cost": 0.9877081999999999,
+    "seconds": 393.1
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 19,
+    "cost": 0.7612356,
+    "seconds": 325.7
+   }
+  },
+  "summarize_communities": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 2,
+    "cost": 0.5762288,
+    "seconds": 248.2
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 12,
+    "cost": 0.5172752,
+    "seconds": 263.4
+   }
+  },
+  "plan_wiki_filenames": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 14,
+    "cost": 0.5931558000000001,
+    "seconds": 241.2
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 14,
+    "cost": 0.578063,
+    "seconds": 298.4
+   }
+  },
+  "preview_id_collisions": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 8,
+    "cost": 0.41310160000000007,
+    "seconds": 229.9
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 9,
+    "cost": 0.4199078,
+    "seconds": 239.1
+   }
+  },
+  "adopt_legacy_semantic_entries": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 8,
+    "cost": 0.49379219999999996,
+    "seconds": 200.1
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 9,
+    "cost": 0.528022,
+    "seconds": 285.4
+   }
+  },
+  "split_slice_to_fit": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 5,
+    "cost": 0.299391,
+    "seconds": 162.4
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 6,
+    "cost": 0.3409518,
+    "seconds": 197.6
+   }
+  },
+  "extract_package_manifests": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 7,
+    "cost": 0.36263860000000003,
+    "seconds": 233.9
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 9,
+    "cost": 0.35992579999999996,
+    "seconds": 299.4
+   }
+  },
+  "merge_repo_graphs": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 13,
+    "cost": 0.6917488000000002,
+    "seconds": 393.5
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 20,
+    "cost": 0.8476351999999999,
+    "seconds": 426.3
+   }
+  },
+  "plan_ingest": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 2,
+    "cost": 0.48719999999999997,
+    "seconds": 239.1
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 15,
+    "cost": 0.5399642000000001,
+    "seconds": 274.6
+   }
+  },
+  "serve-describe-node": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 2,
+    "cost": 0.4502524,
+    "seconds": 174.6
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 9,
+    "cost": 0.3746924,
+    "seconds": 193.7
+   }
+  },
+  "hook_block_states": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 11,
+    "cost": 0.525506,
+    "seconds": 429.1
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 10,
+    "cost": 0.5338992,
+    "seconds": 433.7
+   }
+  },
+  "llm-plan-extraction-chunks": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 2,
+    "cost": 0.5384658,
+    "seconds": 228.9
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 10,
+    "cost": 0.49018539999999994,
+    "seconds": 267.2
+   }
+  },
+  "terraform-redact-attributes": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 11,
+    "cost": 0.4294112,
+    "seconds": 209.0
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 10,
+    "cost": 0.3777092,
+    "seconds": 225.2
+   }
+  },
+  "watch-classify-batch": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 15,
+    "cost": 0.8158333999999999,
+    "seconds": 357.7
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 12,
+    "cost": 0.7018349999999999,
+    "seconds": 595.3
+   }
+  },
+  "get-column-types": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 8,
+    "cost": 0.39588260000000003,
+    "seconds": 57.8
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 12,
+    "cost": 0.48148180000000007,
+    "seconds": 197.2
+   }
+  },
+  "sql-scan-triggers": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 10,
+    "cost": 0.43954219999999994,
+    "seconds": 233.8
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 7,
+    "cost": 0.3762462,
+    "seconds": 267.3
+   }
+  },
+  "get-relationship-targets": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 13,
+    "cost": 0.5336595999999999,
+    "seconds": 175.2
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 17,
+    "cost": 0.5996684000000001,
+    "seconds": 213.7
+   }
+  },
+  "sqlmodel-update-exclude": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 10,
+    "cost": 0.39249080000000003,
+    "seconds": 150.7
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 11,
+    "cost": 0.3909336,
+    "seconds": 159.5
+   }
+  },
+  "field-comment": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 10,
+    "cost": 0.4930826,
+    "seconds": 111.8
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 18,
+    "cost": 0.5352146000000001,
+    "seconds": 133.8
+   }
+  },
+  "table-model-construct": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 14,
+    "cost": 0.4658718,
+    "seconds": 117.3
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 15,
+    "cost": 0.5263998000000001,
+    "seconds": 128.0
+   }
+  },
+  "utc_now_expression": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 15,
+    "cost": 0.43199260000000006,
+    "seconds": 84.9
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 15,
+    "cost": 0.27565540000000005,
+    "seconds": 130.6
+   }
+  },
+  "async_stream_exec": {
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 17,
+    "cost": 0.5919006,
+    "seconds": 137.4
+   },
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 16,
+    "cost": 0.44274059999999993,
+    "seconds": 148.2
+   }
+  },
+  "select_columns": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 12,
+    "cost": 0.28481959999999995,
+    "seconds": 101.0
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 15,
+    "cost": 0.38900579999999996,
+    "seconds": 142.5
+   }
+  },
+  "session_count": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 9,
+    "cost": 0.20274419999999999,
+    "seconds": 104.2
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 11,
+    "cost": 0.232356,
+    "seconds": 147.8
+   }
+  },
+  "utc_datetime_naive_as_utc": {
+   "plain": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 17,
+    "cost": 0.4629896,
+    "seconds": 144.3
+   },
+   "guard": {
+    "passed": 1,
+    "bad": 0,
+    "notes": 0,
+    "turns": 12,
+    "cost": 0.275943,
+    "seconds": 146.8
+   }
+  }
+ }
+}

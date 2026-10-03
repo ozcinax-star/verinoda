@@ -16,7 +16,7 @@ from those numbers. No number from Graphify's published benchmarks or from the
 research and track reports is used in a computation, and no savings factor is
 claimed beyond the measured ratios.
 
-Sections: [Update 2026-09-28: ContextBench](#update-2026-09-28-contextbench-an-outside-benchmark-no-model) · [Update 2026-09-28: the token multiplier, with its accuracy](#update-2026-09-28-the-token-multiplier-with-its-accuracy) · [Update 2026-09-26: query ranking](#update-2026-09-26-query-ranking-d40) · [Update 2026-09-26: case-distinct graph ids](#update-2026-09-26-case-distinct-graph-ids) · [Update 2026-09-26: check --diff with an absent name](#update-2026-09-26-check---diff-with-an-absent-name) · [Update 2026-09-26: honest verdicts (D39)](#update-2026-09-26-honest-verdicts-wrong-met-d39) · [Update 2026-09-26: JVM callbacks (D38)](#update-2026-09-26-jvm-callbacks-d38) · [Update 2026-09-26: the merged night, tokens against Graphify](#update-2026-09-26-the-merged-night-tokens-against-graphify) · [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
+Sections: [Update 2026-10-02](#update-2026-10-02-graphify-0973-contextbench-again-agents-in-the-loop-update---fast) · [Update 2026-09-28: ContextBench](#update-2026-09-28-contextbench-an-outside-benchmark-no-model) · [Update 2026-09-28: the token multiplier, with its accuracy](#update-2026-09-28-the-token-multiplier-with-its-accuracy) · [Update 2026-09-26: query ranking](#update-2026-09-26-query-ranking-d40) · [Update 2026-09-26: case-distinct graph ids](#update-2026-09-26-case-distinct-graph-ids) · [Update 2026-09-26: check --diff with an absent name](#update-2026-09-26-check---diff-with-an-absent-name) · [Update 2026-09-26: honest verdicts (D39)](#update-2026-09-26-honest-verdicts-wrong-met-d39) · [Update 2026-09-26: JVM callbacks (D38)](#update-2026-09-26-jvm-callbacks-d38) · [Update 2026-09-26: the merged night, tokens against Graphify](#update-2026-09-26-the-merged-night-tokens-against-graphify) · [Update 2026-09-26: token wins](#update-2026-09-26-token-wins) · [Update 2026-09-26: exact names and a fresh index](#update-2026-09-26-exact-names-and-a-fresh-index-d37) · [Update 2026-09-26: never ok without looking](#update-2026-09-26-never-ok-without-looking) · [Update 2026-09-26: change review, second review round](#update-2026-09-26-change-review-second-review-round-d35) · [Update 2026-09-25: change review, first review round](#update-2026-09-25-change-review-first-review-round-d35) · [Update 2026-09-25: change review](#update-2026-09-25-change-review-verinoda-review-d35) · [Update 2026-09-25: behaviour probe](#update-2026-09-25-behaviour-probe-d36) · [Update 2026-09-25: debug ledger](#update-2026-09-25-debug-ledger-debugloops_v1) · [Update 2026-09-25: decisions](#update-2026-09-25-decisions-stay-human-d33) · [Name check, third review round](#update-2026-09-25-name-check-third-review-round) · [Name check, second review round](#update-2026-09-25-name-check-second-review-round) · [Name check after review](#update-2026-09-25-name-check-after-review) · [Name check 2026-09-25](#update-2026-09-25-name-existence-check-verinoda-check-d32) · [Update 2026-09-25 (truth rules)](#update-2026-09-25-truth-rules-word-overlap-never-verifies-roles-are-bound-code-names-are-not-substituted) · [Update 2026-09-25](#update-2026-09-25-analyze-keeps-what-query-found-grounded-verdicts-turkish-update-time) · [Update 2026-09-24](#update-2026-09-24-data-files-game-mods-java-calls) · [Update 2026-09-23](#update-2026-09-23-dogfooding-fixes) · [Summary](#summary) · [Results per set](#results-per-set) ·
 [Before round 3 vs now](#before-round-3-vs-now) · [Budget sweep](#budget-sweep) ·
 [Turkish vs English](#turkish-vs-english) · [Trust harnesses](#trust-harnesses) ·
 [Discussion](#discussion) · [Not measured](#not-measured) ·
@@ -24,6 +24,67 @@ Sections: [Update 2026-09-28: ContextBench](#update-2026-09-28-contextbench-an-o
 [Reproduce](#reproduce) · [What is compared](#what-is-compared) ·
 [Metrics](#metrics-exact-definitions) · [Question sets](#question-sets) ·
 [Per-question results](#per-question-results)
+
+## Update 2026-10-02: Graphify 0.9.73, ContextBench again, agents in the loop, `update --fast`
+
+Result folders (each with its own README): `compare-2026-10-02/`, `contextbench-2026-10-02/`,
+`agent-compare-2026-10-02/`, `agent-compare-realworld-2026-10-02/`, `agent-compare-stale-2026-10-02/`, `agent-compare-guard-2026-10-02/`, `agent-compare-big-2026-10-02/`, `agent-compare-sel4-2026-10-02/`,
+`mod-live-2026-10-02/`,
+`mod-live-self-quiet-2026-10-02/`. Verinoda at 5999912.
+
+- **Eight sets against Graphify** (`compare-2026-10-02/`): query 284/319 at 1,313 tokens per question (2.52 facts per
+  1k tokens), analyze 285/319; Graphify's CLI 0.9.73 67/319 (0.53), its vendored renderer 71/319, raw search
+  129/319. Since fd30f5b three held-out facts were lost; bisects name D60 (numbered passage lines take budget) and
+  D58 (refuted context is counted, not printed), whose own commit messages record them. `verinoda_user_tr`'s gold
+  failed the harness's check (a text alternative absent from its pinned corpus); fixed, with a test.
+- **ContextBench** (`contextbench-2026-10-02/`, 40 of the 80 pre-registered instances, stopped twice by the
+  runner's time limit; the same instances paired with 2026-09-28): BM25 identical on all 40 (the harness
+  reproduces); analyze's file recall 0.41 -> 0.47 (8 better, 1 worse); query 0.561 -> 0.553; Graphify 0.9.73 as
+  0.9.69.
+- **Agents in the loop** (`agent-compare-2026-10-02/`, 57 questions, 399 Claude Code sessions, pre-registered):
+  offered Verinoda, the agent called it in 6 of 57 sessions; told to start with analyze it found the same facts as
+  searching by hand (212 vs 212) at 0.84x input tokens, 0.78x output tokens and 0.71x tool calls (95 % intervals
+  exclude the noise floor of two samples of the agent alone); search results handed over up front cost less but
+  found 5-6 facts fewer. The corpora are small enough for the agent alone to reach 98 % of the facts.
+- **Agents on the ten real-world repositories** (`agent-compare-realworld-2026-10-02/`, 51 questions over the 107
+  gold facts, 153 sessions, pre-registered): no measurable difference in facts (the agent alone 107/113, told to
+  start with analyze 109/113, +2 [-4 to +10]; Graphify first 111/113, +4 [-1 to +12]). The first study's
+  input-token saving did not replicate: starting with analyze cost 1.14x input tokens [1.06-1.23] (one more
+  sequential turn per session, the agents still read the cited code) at 0.84x output tokens [0.78-0.91].
+- **Agents after the code moved on** (`agent-compare-stale-2026-10-02/`, 50 questions about code changed between an
+  older upstream commit, where the index was built, and the pinned one; 150 sessions, pre-registered): a fresh index
+  against a stale one, no measurable difference in facts (144 vs 147 of 153; the agent alone 147) or in stale
+  citations; no answer in any arm described removed code as current. `analyze` turned out to refresh a stale index
+  itself on projects under 300 files; on the five larger ones (not pre-registered) a stale index cost 1.18-1.23x the
+  input tokens of no index (both runs), and the fresh one cut that to 0.81x of the stale cost in one run (0.94x,
+  not significant, in the other).
+- **Checking each edit** (`agent-compare-guard-2026-10-02/`, 30 coding tasks with hidden tests on Graphify internals
+  changed after the model's training data and on SQLModel, 60 real headless Claude Code sessions, pre-registered):
+  verinoda-live 0.4.0's check after edits against no plugin. Both arms passed 30/30, no session left a name that
+  does not exist, and the check never had anything to report: every session read the code before its first edit
+  (a median of 4 reads or searches), so it called the real names. No measurable difference; the same cost.
+- **Three Claude Codes on a 27,078-file repository** (`agent-compare-big-2026-10-02/`, home-assistant/core, 40 real bug
+  reports closed by later pull requests, scored by the files those changed; 160 real headless sessions, pre-registered,
+  then a second run of all 160): original Claude Code, Claude Code with Graphify's own integration, and with Verinoda's
+  setup plus the verinoda-live mod (and Verinoda's setup alone). Recall of the gold files: 35.8, 37.0, 37.3 and 37.8
+  of 40; no decision reaches a claim (the best, mod against none, +1.50 [+0.00 to +4.00]); a second run and the
+  same arm's run-to-run difference (-1.17 [-3.67 to +0.67]) show the differences are chance. The tools were shown to every session; Graphify was used in 5 of 80 and Verinoda in none: every issue names its
+  integration, whose folder holds a median of 8 Python files, so a `grep` finds the file and the repository's size
+  does not matter.
+- **Three Claude Codes on seL4** (`agent-compare-sel4-2026-10-02/`, the C microkernel, 1,059 files: where the no-agent table
+  had the index far ahead of lexical search; 21 real bug reports, each at its own base commit as a one-commit repository,
+  every session run three times, pre-registered): recall of 21 = 17.67 (none), 18.28 (Graphify), 17.78 (Verinoda with the
+  mod), 17.56 (Verinoda's setup alone); no decision reaches a claim (mod - none +0.11 [-0.50 to +0.67]). **No Verinoda
+  arm session ever called Verinoda**: 0 of 126 here and 0 of 160 on Home Assistant, though the mod's nudge, the MCP server
+  and the skill were in every one of them and a probe showed the tools work; Graphify was used in 21 of 63 seL4 sessions,
+  its hook speaking when the agent starts to `grep` where the nudge speaks with the prompt. An earlier version of this page
+  counted 6 to 7 Home Assistant sessions as Verinoda users: the counter took a working copy's folder name for a call,
+  and all counts were recounted from the transcripts.
+- **`update --fast` on 2,876 files** (`mod-live-self-quiet-2026-10-02/`): 6-7x quicker than a plain update (about
+  20 s against 130-155 s), the graph caught up after 2.5-3 min. Two findings, both fixed: a function in a file added
+  since the last build lost to similarly named symbols until the graph had it (it now ranks as the symbol will;
+  no fact moved on the eight sets), and the background build's log could lose lines on Windows (a child writes
+  from the position it inherited; the log is now opened for true appends, and every start or refusal is logged).
 
 ## Update 2026-09-28: ContextBench, an outside benchmark (no model)
 

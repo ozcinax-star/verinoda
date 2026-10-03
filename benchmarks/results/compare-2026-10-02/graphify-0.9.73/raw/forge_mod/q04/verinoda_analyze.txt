@@ -1,0 +1,109 @@
+analysis ana_86c16bc85e7d, snapshot snp_f67fe74d1a63 (commit 0bb6af3963)
+understood as: Understood (rules): q1 [locate] Where is the #emberforge:forge_fuels tag defined | q2 [locate] what does it contain | q3 [locate] which code checks it?
+plan links: emberforge -> src/main/java/net/ashvale/emberforge/EmberForge.java:16-37; tag -> src/main/java/net/ashvale/emberforge/registry/ModTags.java:16-18
+q1 [met] locate: Where is the #emberforge:forge_fuels tag defined
+  [statically_verified] `ModTags` is defined at src/main/java/net/ashvale/emberforge/registry/ModTags.java:10-26 (uncertain: no symbol in the index is named `forge_fuels` (the name occurs at src/main/resources/data/emberforge/tags/item/forge_fuels.json); linked by text_hit to README.md, not by its name)  (clm_d57ebf3f6b56)
+  [statically_verified] `EmberConfig` is defined at src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41 (uncertain: no symbol in the index is named `forge_fuels` (the name occurs at src/main/resources/data/emberforge/tags/item/forge_fuels.json); linked by text_hit to README.md, not by its name)  (clm_47b4d3adcd2c)
+  [statically_verified] `.heatForFuel()` is defined at src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14-19 (uncertain: no symbol in the index is named `forge_fuels` (the name occurs at src/main/resources/data/emberforge/tags/item/forge_fuels.json); linked by text_hit to README.md, not by its name)  (clm_275c74d015aa)
+  [weak_inference] src/main/resources/data/emberforge/tags/item/forge_fuels.json:1 contains: { (uncertain: no symbol in the index is named `forge_fuels` (the name occurs at src/main/resources/data/emberforge/tags/item/forge_fuels.json); linked by text_hit to README.md, not by its name)  (clm_fcba4ccac873)
+q2 [met] locate: what does it contain
+  (also answers this: clm_47b4d3adcd2c)
+  (also answers this: clm_d57ebf3f6b56)
+q3 [met] locate: which code checks it?
+  [statically_verified] `EmberForgeMenu` is defined at src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:21-93  (clm_53831da2778a)
+  (also answers this: clm_47b4d3adcd2c)
+  (also answers this: clm_d57ebf3f6b56)
+context (found on the way; not what answers):
+  [statically_verified] src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:8 contains: /** Runs the mod's data-pack functions from code. */  (clm_3ca1c10029ed)
+  [statically_verified] src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9 contains: /** Client to server: the player pressed Stoke in the forge screen at {@code pos}. */  (clm_d308f9b57697)
+critique clm_fcba4ccac873: weak_inference -> weak_inference  
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: emberforg->ember
+## src/main/java/net/ashvale/emberforge/registry/ModTags.java:10-26 ModTags
+10 public final class ModTags {
+11     /** Items the forge can burn for heat. */
+12     public static final TagKey<Item> FORGE_FUELS = itemTag("forge_fuels");
+13     /** Blocks that keep a forge standing on them warm. */
+14     public static final TagKey<Block> FORGE_HEAT_SOURCES = blockTag("forge_heat_sources");
+16     private static TagKey<Item> itemTag(String name) {
+17         return TagKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(EmberForge.MOD_ID, name));
+18     }
+20     private static TagKey<Block> blockTag(String name) {
+21         return TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(EmberForge.MOD_ID, name));
+22     }
+24     private ModTags() {
+25     }
+26 }
+## src/main/resources/data/emberforge/tags/item/forge_fuels.json:1-8 #emberforge:forge_fuels
+1 {
+2   "replace": false,
+3   "values": [
+4     "minecraft:coal",
+5     "minecraft:charcoal",
+6     "minecraft:blaze_rod"
+7   ]
+8 }
+## src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41 public final class EmberConfig
+  src/main/java/net/ashvale/emberforge/config/EmberConfig.java:5-8
+5 /**
+6  * Common settings. NeoForge writes them to config/emberforge-common.toml on first start;
+7  * the spec is registered in the EmberForge constructor.
+8  */
+  src/main/java/net/ashvale/emberforge/config/EmberConfig.java:19-30
+20 b.comment("Ember Forge heat settings").push("forge");
+21 HEAT_PER_FUEL = b.comment("Heat added by one fuel item (blaze rods count double)")
+22         .defineInRange("heat_per_fuel", 40, 1, 400);
+23 MAX_HEAT = b.comment("Upper limit of a forge's heat")
+24         .defineInRange("max_heat", 200, 50, 1000);
+25 STOKE_HEAT = b.comment("Heat added by the Stoke button or a Forge Hammer hit")
+26         .defineInRange("stoke_heat", 15, 0, 100);
+27 DECAY_INTERVAL = b.comment("Ticks between two losses of 1 heat")
+28         .defineInRange("decay_interval_ticks", 20, 1, 1200);
+29 b.pop();
+## src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14-19 HeatMath.heatForFuel
+14 @JvmStatic
+15 fun heatForFuel(stack: ItemStack): Int {
+16     if (stack.isEmpty || !stack.`is`(ModTags.FORGE_FUELS)) return 0
+17     val base = EmberConfig.HEAT_PER_FUEL.get()
+18     return if (stack.`is`(Items.BLAZE_ROD)) base * 2 else base
+19 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:154-160 EmberForgeBlockEntity.saveAdditional
+154 @Override
+155 protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+156     super.saveAdditional(tag, registries);
+157     tag.put("Items", items.serializeNBT(registries));
+158     tag.putInt("Heat", heat);
+159     tag.putInt("Progress", progress);
+160 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:146-152 EmberForgeBlockEntity.loadAdditional
+146 @Override
+147 protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+148     super.loadAdditional(tag, registries);
+149     items.deserializeNBT(registries, tag.getCompound("Items"));
+150     heat = tag.getInt("Heat");
+151     progress = tag.getInt("Progress");
+152 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge)
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:77-85
+78 ItemStack fuel = forge.items.getStackInSlot(SLOT_FUEL);
+79 int fuelHeat = HeatMath.heatForFuel(fuel);
+80 if (fuelHeat > 0 && forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()) {
+81     forge.items.extractItem(SLOT_FUEL, 1, false);
+82     forge.heat = HeatMath.addHeat(forge.heat, fuelHeat);
+83     changed = true;
+84 }
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:175-178 @Override public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player)
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:32-34 public EmberForgeMenu(int containerId, Inventory inventory, EmberForgeBlockEntity forge, ContainerData data)
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:36-64 private EmberForgeMenu(int containerId, Inventory inventory, BlockPos pos, IItemHandler items, ContainerData data)
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:21-93 public class EmberForgeMenu extends AbstractContainerMenu
+src/main/java/net/ashvale/emberforge/config/EmberConfig.java:39-40 private EmberConfig()
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:9-26 public final class ForgeFunctions
+src/main/resources/data/emberforge/recipe/cinder_ingots_from_forging.json:1-12 {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:170-173 @Override public Component getDisplayName()
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:8-8 /** Runs the mod's data-pack functions from code. */
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:30-32 /**
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:27-29 public EmberForgeMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buf)
+src/main/resources/data/emberforge/worldgen/configured_feature/ore_cinder.json:1-18 {
+… 141 more candidates not shown: src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9-9 /** Client to server: the player pressed Stoke i; src/main/java/net/ashvale/emberforge/EmberForge.java:21-32 public EmberForge(IEventBus modBus, ModContainer container); src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:79-82 public int progressWidth(int width); src/main/kotlin/net…
+next: verinoda query "…" --max-chars 12000

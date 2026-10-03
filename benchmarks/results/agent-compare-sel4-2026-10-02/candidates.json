@@ -1,0 +1,1948 @@
+[
+ {
+  "issue": 1735,
+  "title": "aarch64: invalidateTranslationASID is called with wrong argument type",
+  "body": "[`invalidateTranslationASID`](https://github.com/seL4/seL4/blob/1326364bc9135d9445d936ebc01e38a402c1f4c6/include/arch/arm/arch/machine/tlb.h#L44) takes `hw_asid_t`, which is unconditionally [declared `uint8_t`](https://github.com/seL4/seL4/blob/1326364bc9135d9445d936ebc01e38a402c1f4c6/include/arch/arm/arch/types.h#L26), but on AArch64 in non-hyp mode [it is called with `asid_t`](https://github.com/seL4/seL4/blob/1326364bc9135d9445d936ebc01e38a402c1f4c6/src/arch/arm/64/kernel/vspace.c#L1079), which is 16 bit. Which means for seL4 ASIDs > 255 we're flushing the wrong hw ASID.\n\n(On the verified hyp kernel, the types do match)\n\nWe already have a [draft PR](https://github.com/seL4/seL4/pull/1628) for changes to switch on compiler warnings for this kind of thing, but we need to schedule time to do the necessary updates for it (incl proof changes, but they should be minor).\n ",
+  "created": "2026-08-23T09:21:59Z",
+  "labels": [
+   "bug",
+   "Arm"
+  ],
+  "via": "pull request",
+  "ref": 1741,
+  "base_sha": "654cc889f02a35252d95ec11d0b06fec59d3f0ee",
+  "fix_at": "2026-08-25T15:30:56Z",
+  "files": [
+   [
+    "include/arch/arm/arch/32/mode/types.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/machine.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/types.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/types.h",
+    "modified"
+   ],
+   [
+    "src/arch/arm/kernel/boot.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1693,
+  "title": "seL4_UserTop inclusive vs exclusive is inconsistent across platforms",
+  "body": "I swear I've made an issue for this before, but I can't find it. I have this [old GIST of mine which surveys all the uses and finds it is mostly exclusive](https://gist.github.com/midnightveil/866b8a4e22f6201f7d18a98743f59b20).\n\nMost platforms, `seL4_UserTop` is consistently an exclusive value. Except for on AArch64, where it is inclusive, that is, it is either `0x00ffffffffff` or `0x0fffffffffff` or `0x7fffffffffff`.\n\nThis means you can't use a consistent `if (vaddr > UserTop)` or `if (vaddr >= UserTop)` check, but need to make it different cross-architecture and make assumptions about them.\n\nIt would be useful for this to be consistent.",
+  "created": "2026-06-19T07:08:25Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1695,
+  "base_sha": "232471e90faf6df4c3b782fec9c8ab9724f31803",
+  "fix_at": "2026-07-01T00:57:37Z",
+  "files": [
+   [
+    "CHANGES.md",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/ia32/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv32/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv64/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/x86_64/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/allwinnerA20/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/am335x/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/apq8064/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/bcm2711/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/bcm2837/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/exynos4/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/exynos5/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/hikey/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/imx6/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/imx7/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/imx8mm-evk/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/imx8mp-evk/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/imx8mq-evk/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/maaxboard/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/omap3/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/qemu-arm-virt/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/tk1/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/zynq7000/sel4/plat/api/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/zynqmp/sel4/plat/api/constants.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1575,
+  "title": "x86_cpuid_initialize missing BOOT_CODE attribute",
+  "body": "Every function called in the early boot process is marked with `BOOT_CODE` to indicate to the linker it should be placed within the boot section of the kernel.\n\nExcept [x86_cpuid_initialize](https://github.com/seL4/seL4/blob/2bef61b9da4c200ada22efdc5d42461576cab7a7/src/arch/x86/machine/cpu_identification.c#L116):\n\n```c\nbool_t x86_cpuid_initialize(void)\n{\n    // ....\n}\n```\n\n`x86_cpuid_initialize` is called from `try_boot_sys()` in `src/arch/x86/kernel/boot_sys.c`.\n\nUnless I'm missing something, this function should almost certainly be placed in the BOOT_CODE region by the linker.\n\nIt isn't referenced anywhere else in the codebase.",
+  "created": "2025-12-17T03:45:04Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1578,
+  "base_sha": "78c3b11a02368dadd314e34a61d53853d6a4b2d7",
+  "fix_at": "2025-12-18T14:16:52Z",
+  "files": [
+   [
+    "src/arch/x86/machine/cpu_identification.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1566,
+  "title": "clock sync test fails on SMP x86 whe running with QEMU",
+  "body": "Similar to QEMU ARM/RISC-V, `ENABLE_SMP_CLOCK_SYNC_TEST_ON_BOOT` should not be on for x86 QEMU. But since it's x86 the kernel doesn't know it's running on QEMU when you build the kernel for a generic x86 CPU.\n\nAccording to my colleague @dreamliner787-9 there's no reliable way of looking at CPUID to tell if you're being virtualised by QEMU.\n\nI'm wondering if anyone has any other ideas for how we could skip the test at run-time if we detect we're running on QEMU, I'm still getting familiar with the x86 architecture myself.",
+  "created": "2025-11-27T05:08:10Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1581,
+  "base_sha": "33636e983d6836bc93a8f9a58142fe2b8c8aa17b",
+  "fix_at": "2026-01-12T23:16:25Z",
+  "files": [
+   [
+    "include/arch/x86/arch/machine.h",
+    "modified"
+   ],
+   [
+    "src/kernel/boot.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1529,
+  "title": "Only one of `ARCH_{ARM,RISCV,ARCH_X86}` ever appears in `gen_config.json`",
+  "body": "Most kernel config options appear in `gen_config.json` whether or not they are enabled. They are associated with the value `true` if enabled and as `false` otherwise. `KernelSel4Arch`, for example, behaves this way.\n\n`KernelArch` on the other hand, does not behave this way. For example, when configured for AArch64, `ARCH_ARM` is present in `gen_config.json` with the value `true`, but `ARCH_RISCV` and `ARCH_X86` are absent, instead of present with the value `false`.\n\nUnlike C `#ifdefs` where the use of an undefined macro is allowed, the `#[sel4_cfg]` macro in Rust requires that the config keys exist. That means that the following will fail to compile on AArch64:\n\n```rust\n#[sel4_cfg(ARCH_RISCV)]\nfn foo() {}\n```\n\nWe are using the following verbose workaround:\n\n```rust\n#[sel4_cfg(any(ARCH_RISCV32, ARCH_RISCV64)]\nfn foo() {}\n```\n\nThe issue seems to be related to the use of choice conditions in the definition of the `KernelArch` option:\n\nhttps://github.com/seL4/seL4/blob/f9eb65c9a586ccacb5d2583c1cf1882212bb592a/configs/seL4Config.cmake#L69-L76",
+  "created": "2025-10-22T06:11:00Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1531,
+  "base_sha": "f9eb65c9a586ccacb5d2583c1cf1882212bb592a",
+  "fix_at": "2025-10-23T22:41:04Z",
+  "files": [
+   [
+    "tools/helpers.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1498,
+  "title": "seL4_ARM_Page{Upper,Global]Directory typedefs should be moved to deprecated.h",
+  "body": "https://github.com/seL4/seL4/blob/f13f37a6a7bd74a43ca745f5a7565c063e74a633/libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/types.h#L11-L12\n\nWith the last release deprecating PageUpperDirectory/PageGlobalDirectory as aliases for PageTable then these should be moved to deprecated.h.\n\nThere's also a comment about PUD/PGD which I think is incorrect.",
+  "created": "2025-07-28T03:39:59Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1502,
+  "base_sha": "66207ddc5cf5c4253b47e395e6bef2eb5f438db6",
+  "fix_at": "2025-08-01T10:30:40Z",
+  "files": [
+   [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/deprecated.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/types.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1489,
+  "title": "The value defined by the GICD_CTLR_ARE_NS macro in GICV3 is incorrect.",
+  "body": "![Image](https://github.com/user-attachments/assets/82d2e59b-7bf6-4664-b8de-c2894a60b34d)\n\n![Image](https://github.com/user-attachments/assets/1994ccbd-af2c-4714-934d-8888439954af)\nThe value of this macro should be 5.",
+  "created": "2025-07-02T07:45:25Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1538,
+  "base_sha": "70c75b956ef7ae03c5f27544b2a93f230ded8f4a",
+  "fix_at": "2025-10-30T13:20:40Z",
+  "files": [
+   [
+    "include/arch/arm/arch/machine/gic_v3.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1462,
+  "title": "Build fails using QEMU v10",
+  "body": "I'm running into problems building using qemu version 10:\n\n```\nsel4test/build-aarch64 $ ../init-build.sh -DPLATFORM=qemu-arm-virt -DSIMULATION=TRUE  -DCMAKE_TOOLCHAIN_FILE=~/gnu-aarch64.cmake\nloading initial cache file /Users/seph/3rdparty/sel4test/projects/sel4test/settings.cmake\n-- ARM_CPU not set, defaulting to cortex-a53\n-- Extracting device tree from QEMU\n-- qemu found at qemu-system-aarch64\nCMake Error at /Users/seph/3rdparty/sel4test/kernel/src/plat/qemu-arm-virt/config.cmake:116 (message):\n  Error: need at least QEMU version 3.1.0, found '0.0.0'\nCall Stack (most recent call first):\n  /Users/seph/3rdparty/sel4test/kernel/configs/seL4Config.cmake:170 (include)\n  /Users/seph/3rdparty/sel4test/kernel/FindseL4.cmake:21 (include)\n  settings.cmake:32 (sel4_configure_platform_settings)\n\n\n-- Configuring incomplete, errors occurred!\n```\n\nThe problem is that its checking the qemu version, and the regex is failing:\n\n```\n $ qemu-system-aarch64 -version                                                 \nQEMU emulator version 10.0.0\n```\n\nThe problem is [this regex](https://github.com/seL4/seL4/blob/349745c53b6aafaf1d53ace9d91cc93e477e15ca/src/plat/qemu-arm-virt/config.cmake#L107-L113)\n\nThis line:\n\n    \"[0-9](\\\\.[0-9])+\"\n\nshould be:\n\n    \"[0-9]+(\\\\.[0-9]+)+\"\n\nThen the problem goes away.",
+  "created": "2025-05-20T05:12:29Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1463,
+  "base_sha": "349745c53b6aafaf1d53ace9d91cc93e477e15ca",
+  "fix_at": "2025-05-23T01:04:21Z",
+  "files": [
+   [
+    "src/plat/qemu-arm-virt/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/qemu-riscv-virt/config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1447,
+  "title": "types.h: unused asidMax, unused pageType",
+  "body": "https://github.com/seL4/seL4/blob/fd14374e9dc5723ed6bdbc71f587980cc1b6286c/include/arch/arm/arch/api/types.h#L13-L19\n\nSame for RISC-V and x86, the `asidMax` and `pageTypes` defines are never used anywhere. But we have `nASIDs` elsewhere which seems similar.\n\n`asid_t` and `asidInvalid` are used elsewhere.\n\nI can't tell why these files/defines exist, they predate the public release of seL4 code.\n",
+  "created": "2025-04-11T02:29:42Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1454,
+  "base_sha": "c03cad0894960771df066e21c8e1fc1dbe77abdd",
+  "fix_at": "2025-05-02T11:39:23Z",
+  "files": [
+   [
+    "include/arch/arm/arch/api/types.h",
+    "modified"
+   ],
+   [
+    "include/arch/riscv/arch/api/types.h",
+    "modified"
+   ],
+   [
+    "include/arch/x86/arch/api/types.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1350,
+  "title": "QEMU RISC-V Logging \"Invalid register read\" and \"Invalid enable write\" for the Sifive PLIC",
+  "body": "I've been experiencing some strange behaviour in QEMU and on real hardware (Star64) with PCIe level-triggered interrupts that I don't see on AArch64 (QEMU or iMX8). I'm not entirely sure whether these are related to this issue, or if this is completely benign, but there's something funny going on. Specifically, in QEMU RISC-V I see a /single/ PCIe interrupt for a level triggered interrupt even when I don't write to the registers to clear it -- so according to PCIe there is still an asserted interrupt -- but I only ever get one from seL4.\r\n\r\n---\r\n\r\nRunning the [microkit hello example](https://github.com/seL4/microkit/tree/main/example/qemu_virt_riscv64/hello), which just prints hello — the client doesn't matter as these errors are printed before the kernel even starts the root task — in QEMU prints out a long series of on boot. `qemu-system-riscv64 -machine virt -serial mon:stdio -kernel build/loader.img -m size=2G -nographic -d guest_errors`. Interrupts still /somewhat/ work (the timer interrupts are definitely happening), but I don't know what or why these happen. (Or if it's a QEMU issue).\r\n\r\n```\r\nInit local IRQ\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\n...\r\nInitializing PLIC...\r\nsifive_plic_read: Invalid register read 0x1010\r\nsifive_plic_write: Invalid register write 0x180\r\nsifive_plic_write: Invalid register write 0x184\r\n...\r\nsifive_plic_read: Invalid register read 0x2090\r\nsifive_plic_write: Invalid enable write 0x2090\r\nBooting all finished, dropped to user space\r\n```\r\n\r\n<details>\r\n<summary>Full boot logs</summary>\r\n\r\n```\r\n$ qemu-system-riscv64 -machine virt -serial mon:stdio -kernel build/loader.img -m size=2G -nographic -d guest_errors\r\n\r\nOpenSBI v1.3.1\r\n   ____                    _____ ____ _____\r\n  / __ \\                  / ____|  _ \\_   _|\r\n | |  | |_ __   ___ _ __ | (___ | |_) || |\r\n | |  | | '_ \\ / _ \\ '_ \\ \\___ \\|  _ < | |\r\n | |__| | |_) |  __/ | | |____) | |_) || |_\r\n  \\____/| .__/ \\___|_| |_|_____/|___/_____|\r\n        | |\r\n        |_|\r\n\r\nPlatform Name             : riscv-virtio,qemu\r\nPlatform Features         : medeleg\r\nPlatform HART Count       : 1\r\nPlatform IPI Device       : aclint-mswi\r\nPlatform Timer Device     : aclint-mtimer @ 10000000Hz\r\nPlatform Console Device   : uart8250\r\nPlatform HSM Device       : ---\r\nPlatform PMU Device       : ---\r\nPlatform Reboot Device    : sifive_test\r\nPlatform Shutdown Device  : sifive_test\r\nPlatform Suspend Device   : ---\r\nPlatform CPPC Device      : ---\r\nFirmware Base             : 0x80000000\r\nFirmware Size             : 194 KB\r\nFirmware RW Offset        : 0x20000\r\nFirmware RW Size          : 66 KB\r\nFirmware Heap Offset      : 0x28000\r\nFirmware Heap Size        : 34 KB (total), 2 KB (reserved), 9 KB (used), 22 KB (free)\r\nFirmware Scratch Size     : 4096 B (total), 760 B (used), 3336 B (free)\r\nRuntime SBI Version       : 1.0\r\n\r\nDomain0 Name              : root\r\nDomain0 Boot HART         : 0\r\nDomain0 HARTs             : 0*\r\nDomain0 Region00          : 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()\r\nDomain0 Region01          : 0x0000000080000000-0x000000008001ffff M: (R,X) S/U: ()\r\nDomain0 Region02          : 0x0000000080020000-0x000000008003ffff M: (R,W) S/U: ()\r\nDomain0 Region03          : 0x0000000000000000-0xffffffffffffffff M: (R,W,X) S/U: (R,W,X)\r\nDomain0 Next Address      : 0x0000000080200000\r\nDomain0 Next Arg1         : 0x00000000bfe00000\r\nDomain0 Next Mode         : S-mode\r\nDomain0 SysReset          : yes\r\nDomain0 SysSuspend        : yes\r\n\r\nBoot HART ID              : 0\r\nBoot HART Domain          : root\r\nBoot HART Priv Version    : v1.12\r\nBoot HART Base ISA        : rv64imafdch\r\nBoot HART ISA Extensions  : time,sstc\r\nBoot HART PMP Count       : 16\r\nBoot HART PMP Granularity : 4\r\nBoot HART PMP Address Bits: 54\r\nBoot HART MHPM Count      : 16\r\nBoot HART MIDELEG         : 0x0000000000001666\r\nBoot HART MEDELEG         : 0x0000000000f0b509\r\nLDR|INFO: altloader for seL4 starting\r\nLDR|INFO: Flags:                0x0000000000000000\r\nLDR|INFO: Kernel:      entry:   0xffffffff84000000\r\nLDR|INFO: Root server: physmem: 0x0000000084030000 -- 0x0000000084036000\r\nLDR|INFO:              virtmem: 0x000000008a000000 -- 0x000000008a006000\r\nLDR|INFO:              entry  : 0x000000008a000000\r\nLDR|INFO: region: 0x00000000   addr: 0x0000000084000000   size: 0x000000000002d000   offset: 0x0000000000000000   type: 0x0000000000000001\r\nLDR|INFO: region: 0x00000001   addr: 0x0000000084030000   size: 0x0000000000005e68   offset: 0x000000000002d000   type: 0x0000000000000001\r\nLDR|INFO: region: 0x00000002   addr: 0x000000008402d000   size: 0x00000000000008e8   offset: 0x0000000000032e68   type: 0x0000000000000001\r\nLDR|INFO: region: 0x00000003   addr: 0x000000008402e000   size: 0x0000000000000290   offset: 0x0000000000033750   type: 0x0000000000000001\r\nLDR|INFO: region: 0x00000004   addr: 0x000000008402f000   size: 0x0000000000000030   offset: 0x00000000000339e0   type: 0x0000000000000001\r\nLDR|INFO: copying region 0x00000000\r\nLDR|INFO: copying region 0x00000001\r\nLDR|INFO: copying region 0x00000002\r\nLDR|INFO: copying region 0x00000003\r\nLDR|INFO: copying region 0x00000004\r\nLDR|INFO: enabling MMU\r\nLDR|INFO: jumping to kernel\r\nInit local IRQ\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x2090\r\nsifive_plic_write: Invalid enable write 0x2090\r\nBootstrapping kernel\r\nInitializing PLIC...\r\nsifive_plic_read: Invalid register read 0x1010\r\nsifive_plic_write: Invalid register write 0x180\r\nsifive_plic_write: Invalid register write 0x184\r\nsifive_plic_write: Invalid register write 0x188\r\nsifive_plic_write: Invalid register write 0x18c\r\nsifive_plic_write: Invalid register write 0x190\r\nsifive_plic_write: Invalid register write 0x194\r\nsifive_plic_write: Invalid register write 0x198\r\nsifive_plic_write: Invalid register write 0x19c\r\nsifive_plic_write: Invalid register write 0x1a0\r\nsifive_plic_write: Invalid register write 0x1a4\r\nsifive_plic_write: Invalid register write 0x1a8\r\nsifive_plic_write: Invalid register write 0x1ac\r\nsifive_plic_write: Invalid register write 0x1b0\r\nsifive_plic_write: Invalid register write 0x1b4\r\nsifive_plic_write: Invalid register write 0x1b8\r\nsifive_plic_write: Invalid register write 0x1bc\r\nsifive_plic_write: Invalid register write 0x1c0\r\nsifive_plic_write: Invalid register write 0x1c4\r\nsifive_plic_write: Invalid register write 0x1c8\r\nsifive_plic_write: Invalid register write 0x1cc\r\nsifive_plic_write: Invalid register write 0x1d0\r\nsifive_plic_write: Invalid register write 0x1d4\r\nsifive_plic_write: Invalid register write 0x1d8\r\nsifive_plic_write: Invalid register write 0x1dc\r\nsifive_plic_write: Invalid register write 0x1e0\r\nsifive_plic_write: Invalid register write 0x1e4\r\nsifive_plic_write: Invalid register write 0x1e8\r\nsifive_plic_write: Invalid register write 0x1ec\r\nsifive_plic_write: Invalid register write 0x1f0\r\nsifive_plic_write: Invalid register write 0x1f4\r\nsifive_plic_write: Invalid register write 0x1f8\r\nsifive_plic_write: Invalid register write 0x1fc\r\nsifive_plic_write: Invalid register write 0x200\r\nsifive_plic_write: Invalid register write 0x204\r\navailable phys memory regions: 1\r\n  [80200000..100000000]\r\nreserved virt address space regions: 3\r\n  [ffffffc084000000..ffffffc08402d000]\r\n  [ffffffc08402d000..ffffffc084030000]\r\n  [ffffffc084030000..ffffffc084036000]\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x208c\r\nsifive_plic_write: Invalid enable write 0x208c\r\nsifive_plic_read: Invalid register read 0x2090\r\nsifive_plic_write: Invalid enable write 0x2090\r\nBooting all finished, dropped to user space\r\nMON|INFO: Microkit Bootstrap\r\nMON|INFO: bootinfo untyped list matches expected list\r\nMON|INFO: Number of bootstrap invocations: 0x00000009\r\nMON|INFO: Number of system invocations:    0x00000023\r\nMON|INFO: completed bootstrap invocations\r\nMON|INFO: completed system invocations\r\nhello, world\r\nQEMU: Terminated\r\n```\r\n\r\n</details>\r\n\r\n--- \r\n\r\nOn a (semi)related note, the `setTrigger` has `HAVE_SET_TRIGGER=1` set even though it does nothing. This is odd.\r\n\r\nhttps://github.com/seL4/seL4/blob/65825d4df8924c3dea07941dc3eac63e7fc32618/include/drivers/irq/riscv_plic0.h#L193-L199",
+  "created": "2024-11-08T03:09:55Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1351,
+  "base_sha": "65825d4df8924c3dea07941dc3eac63e7fc32618",
+  "fix_at": "2024-11-11T12:25:13Z",
+  "files": [
+   [
+    "include/drivers/irq/riscv_plic0.h",
+    "modified"
+   ],
+   [
+    "src/plat/qemu-riscv-virt/config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1334,
+  "title": "install target fails for the verified ARM_HYP configuration",
+  "body": "__Command to reproduce__:\r\n`nix build github:DLR-FT/seL4-nix-utils/7292affcd7fa8ca739a29a1684fb795a6f1189e5\\#seL4-kernel-arm-hyp --print-build-logs`\r\n\r\n__Actual error message__:\r\n\r\n```console\r\nseL4-armv7l-unknown-linux-gnueabihf> CMake Error at cmake_install.cmake:51 (file):\r\nseL4-armv7l-unknown-linux-gnueabihf>   file INSTALL cannot duplicate symlink\r\nseL4-armv7l-unknown-linux-gnueabihf>     /build/source/libsel4/sel4_arch_include/arm_hyp\r\nseL4-armv7l-unknown-linux-gnueabihf>   at\r\nseL4-armv7l-unknown-linux-gnueabihf>     /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include\r\nseL4-armv7l-unknown-linux-gnueabihf>   because: A directory already exists at that location\r\nseL4-armv7l-unknown-linux-gnueabihf> FAILED: CMakeFiles/install.util\r\nseL4-armv7l-unknown-linux-gnueabihf> cd /build/source/build && /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P cmake_install.cmake\r\nseL4-armv7l-unknown-linux-gnueabihf> ninja: build stopped: subcommand failed.\r\n```\r\n\r\n__Notes__:\r\n\r\n- @kent-mcleod could reproduce this failure without my Nix based environment, so I'm fairly sure its an actual problem in the CMake scripts.\r\n- The thing that actually fails is the final call to `ninja install`. Not many seL4 projects provide an install target, but the kernel itself does. @nspin is using this for the upstream Rust code, so I'm not sure if its feasible to just remove the install target all-together.\r\n\r\n\r\n<details>\r\n  <summary>Full build log</summary>\r\n\r\n```console\r\nseL4-armv7l-unknown-linux-gnueabihf> Running phase: unpackPhase\r\nseL4-armv7l-unknown-linux-gnueabihf> unpacking source archive /nix/store/nrqmk61l0la4g59ry5yf8dmfjr0g57dj-source\r\nseL4-armv7l-unknown-linux-gnueabihf> source root is source\r\nseL4-armv7l-unknown-linux-gnueabihf> Running phase: patchPhase\r\nseL4-armv7l-unknown-linux-gnueabihf> patching script interpreter paths in .\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/AARCH64_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/ARM_HYP_exynos5_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/ARM_HYP_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/ARM_MCS_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/ARM_imx8mm_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/ARM_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/RISCV64_MCS_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/RISCV64_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./configs/X64_verified.cmake: interpreter directive changed from \"#!/usr/bin/env -S cmake -P\" to \"/nix/store/rk067yylvhyb7a360n8k1ps4lb4xsbl3-coreutils-9.3/bin/env -S /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./manual/tools/gen_env.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./manual/tools/gen_invocations.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./manual/tools/parse_doxygen_xml.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/bitfield_gen.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/changed.sh: interpreter directive changed from \"#!/usr/bin/env bash\" to \"/nix/store/r9h133c9m8f6jnlsqzwf89zg9w0w78s8-bash-5.2-p15/bin/bash\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/circular_includes.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/cpp_gen.sh: interpreter directive changed from \"#!/usr/bin/env bash\" to \"/nix/store/r9h133c9m8f6jnlsqzwf89zg9w0w78s8-bash-5.2-p15/bin/bash\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/dts/update-dts.sh: interpreter directive changed from \"#!/usr/bin/env sh\" to \"/nix/store/r9h133c9m8f6jnlsqzwf89zg9w0w78s8-bash-5.2-p15/bin/sh\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/invocation_header_gen.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/kernel_pylint.sh: interpreter directive changed from \"#!/usr/bin/env bash\" to \"/nix/store/r9h133c9m8f6jnlsqzwf89zg9w0w78s8-bash-5.2-p15/bin/bash\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/kernel_xmllint.sh: interpreter directive changed from \"#!/usr/bin/env bash\" to \"/nix/store/r9h133c9m8f6jnlsqzwf89zg9w0w78s8-bash-5.2-p15/bin/bash\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/reciprocal.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/syscall_header_gen.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/umm.py: interpreter directive changed from \"#!/usr/bin/env python3\" to \"/nix/store/yvhwsfbh4bc99vfvwpaa70m4yng4pvpz-python3-3.11.8/bin/python3\"\r\nseL4-armv7l-unknown-linux-gnueabihf> ./tools/xmllint.sh: interpreter directive changed from \"#!/usr/bin/env bash\" to \"/nix/store/r9h133c9m8f6jnlsqzwf89zg9w0w78s8-bash-5.2-p15/bin/bash\"\r\nseL4-armv7l-unknown-linux-gnueabihf> Running phase: updateAutotoolsGnuConfigScriptsPhase\r\nseL4-armv7l-unknown-linux-gnueabihf> Running phase: updateAutotoolsGnuConfigScriptsPhase\r\nseL4-armv7l-unknown-linux-gnueabihf> Running phase: configurePhase\r\nseL4-armv7l-unknown-linux-gnueabihf> fixing cmake files...\r\nseL4-armv7l-unknown-linux-gnueabihf> cmake flags: -GNinja -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF -DCMAKE_EXPORT_NO_PACKAGE_REGISTRY=ON -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_INSTALL_LOCALEDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/share/locale -DCMAKE_INSTALL_LIBEXECDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libexec -DCMAKE_INSTALL_LIBDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/lib -DCMAKE_INSTALL_DOCDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/share/doc/seL4 -DCMAKE_INSTALL_INFODIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/share/info -DCMAKE_INSTALL_MANDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/share/man -DCMAKE_INSTALL_OLDINCLUDEDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/include -DCMAKE_INSTALL_INCLUDEDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/include -DCMAKE_INSTALL_SBINDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/sbin -DCMAKE_INSTALL_BINDIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/bin -DCMAKE_INSTALL_NAME_DIR=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/lib -DCMAKE_POLICY_DEFAULT_CMP0025=NEW -DCMAKE_OSX_SYSROOT= -DCMAKE_FIND_FRAMEWORK=LAST -DCMAKE_STRIP=/nix/store/6j1sldxhlx2f7b0jf95wi00mwxda3hq1-armv7l-unknown-linux-gnueabihf-gcc-wrapper-12.3.0/bin/armv7l-unknown-linux-gnueabihf-strip -DCMAKE_RANLIB=/nix/store/6j1sldxhlx2f7b0jf95wi00mwxda3hq1-armv7l-unknown-linux-gnueabihf-gcc-wrapper-12.3.0/bin/armv7l-unknown-linux-gnueabihf-ranlib -DCMAKE_AR=/nix/store/6j1sldxhlx2f7b0jf95wi00mwxda3hq1-armv7l-unknown-linux-gnueabihf-gcc-wrapper-12.3.0/bin/armv7l-unknown-linux-gnueabihf-ar -DCMAKE_C_COMPILER=armv7l-unknown-linux-gnueabihf-gcc -DCMAKE_CXX_COMPILER=armv7l-unknown-linux-gnueabihf-g++ -DCMAKE_INSTALL_PREFIX=/nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0 -GNinja -DCROSS_COMPILER_PREFIX=armv7l-unknown-linux-gnueabihf- -DCMAKE_TOOLCHAIN_FILE=../gcc.cmake -C../configs/ARM_HYP_verified.cmake -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=armv7l -DCMAKE_HOST_SYSTEM_NAME=Linux -DCMAKE_HOST_SYSTEM_PROCESSOR=x86_64\r\nseL4-armv7l-unknown-linux-gnueabihf> loading initial cache file ../configs/ARM_HYP_verified.cmake\r\nseL4-armv7l-unknown-linux-gnueabihf> -- The C compiler identification is GNU 12.3.0\r\nseL4-armv7l-unknown-linux-gnueabihf> -- The ASM compiler identification is GNU\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Found assembler: /nix/store/6j1sldxhlx2f7b0jf95wi00mwxda3hq1-armv7l-unknown-linux-gnueabihf-gcc-wrapper-12.3.0/bin/armv7l-unknown-linux-gnueabihf-gcc\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Detecting C compiler ABI info\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Detecting C compiler ABI info - done\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Check for working C compiler: /nix/store/6j1sldxhlx2f7b0jf95wi00mwxda3hq1-armv7l-unknown-linux-gnueabihf-gcc-wrapper-12.3.0/bin/armv7l-unknown-linux-gnueabihf-gcc - skipped\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Detecting C compile features\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Detecting C compile features - done\r\nseL4-armv7l-unknown-linux-gnueabihf> -- /build/source/build/gen_headers/plat/machine/devices_gen.h is out of date. Regenerating from DTB...\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Configuring done (1.4s)\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Generating done (0.0s)\r\nseL4-armv7l-unknown-linux-gnueabihf> CMake Warning:\r\nseL4-armv7l-unknown-linux-gnueabihf>   Manually-specified variables were not used by the project:\r\nseL4-armv7l-unknown-linux-gnueabihf>     BUILD_TESTING\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_EXPORT_NO_PACKAGE_REGISTRY\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_FIND_USE_PACKAGE_REGISTRY\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_BINDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_DOCDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_INCLUDEDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_INFODIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_LIBDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_LIBEXECDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_LOCALEDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_MANDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_OLDINCLUDEDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_INSTALL_SBINDIR\r\nseL4-armv7l-unknown-linux-gnueabihf>     CMAKE_POLICY_DEFAULT_CMP0025\r\nseL4-armv7l-unknown-linux-gnueabihf>\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Build files have been written to: /build/source/build\r\nseL4-armv7l-unknown-linux-gnueabihf> cmake: enabled parallel building\r\nseL4-armv7l-unknown-linux-gnueabihf> cmake: enabled parallel installing\r\nseL4-armv7l-unknown-linux-gnueabihf> Running phase: buildPhase\r\nseL4-armv7l-unknown-linux-gnueabihf> build flags: -j16\r\nseL4-armv7l-unknown-linux-gnueabihf> [1/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [2/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [3/47] Generate dummy headers for prune compilation\r\nseL4-armv7l-unknown-linux-gnueabihf> [4/47] Building C object libsel4/CMakeFiles/libsel4_shared_types_gen_pbf_temp_lib.dir/libsel4_shared_types_gen_pbf_temp.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [5/47] Building C object libsel4/CMakeFiles/libsel4_sel4_arch_types_gen_pbf_temp_lib.dir/libsel4_sel4_arch_types_gen_pbf_temp.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [6/47] Generating include/sel4/shared_types.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [7/47] Generating sel4_arch_include/arm_hyp/sel4/sel4_arch/types.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [8/47] Concatenating C files\r\nseL4-armv7l-unknown-linux-gnueabihf> [9/47] Generate invocation header gen_headers/arch/api/sel4_invocation.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [10/47] Generating from /build/source/build/libsel4/sel4_arch_include/arm_hyp/sel4/sel4_arch/types.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [11/47] Generating from /build/source/build/libsel4/include/sel4/shared_types.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [12/47] Generate invocation header gen_headers/api/invocation.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [13/47] Generate invocation header sel4_arch_include/arm_hyp/sel4/sel4_arch/invocation.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [14/47] Generate sel4_client.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [15/47] Generate syscall invocations\r\nseL4-armv7l-unknown-linux-gnueabihf> [16/47] Generate invocation header gen_headers/arch/api/invocation.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [17/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [18/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [19/47] Generate invocation header arch_include/arm/sel4/arch/invocation.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [20/47] Generate invocation header include/sel4/invocation.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [21/47] Building C object CMakeFiles/kernel_bf_gen_target_1_pbf_temp_lib.dir/kernel_bf_gen_target_1_pbf_temp.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [22/47] Generate syscall.h\r\nseL4-armv7l-unknown-linux-gnueabihf> [23/47] Generating generated/plat/machine/hardware.bf.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [24/47] Building C object CMakeFiles/kernel_all_pp_prune_wrapper_temp_lib.dir/kernel_all_pp_prune_wrapper_temp.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [25/47] Generating kernel_all_pp_prune.c\r\nseL4-armv7l-unknown-linux-gnueabihf> [26/47] Generating from generated/plat/machine/hardware.bf.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [27/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [28/47] Building C object CMakeFiles/kernel_bf_gen_target_11_pbf_temp_lib.dir/kernel_bf_gen_target_11_pbf_temp.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [29/47] Generating generated/arch/object/structures.bf.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [30/47] Generating from generated/arch/object/structures.bf.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [31/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [32/47] Building C object CMakeFiles/kernel_bf_gen_target_111_pbf_temp_lib.dir/kernel_bf_gen_target_111_pbf_temp.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [33/47] Generating generated/sel4/shared_types.bf.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [34/47] Generating from generated/sel4/shared_types.bf.pbf\r\nseL4-armv7l-unknown-linux-gnueabihf> [35/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [36/47] Creating C input file for preprocessor\r\nseL4-armv7l-unknown-linux-gnueabihf> [37/47] Building C object CMakeFiles/linker_ld_wrapper_temp_lib.dir/linker_ld_wrapper_temp.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [38/47] Generating linker.lds_pp\r\nseL4-armv7l-unknown-linux-gnueabihf> [39/47] Building C object CMakeFiles/kernel_i_wrapper_temp_lib.dir/kernel_all_copy.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [40/47] Generating kernel_all.i\r\nseL4-armv7l-unknown-linux-gnueabihf> [41/47] Generating circular_includes_valid\r\nseL4-armv7l-unknown-linux-gnueabihf> [42/47] Building ASM object CMakeFiles/kernel.elf.dir/src/arch/arm/armv/armv7-a/machine_asm.S.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [43/47] Building ASM object CMakeFiles/kernel.elf.dir/src/arch/arm/32/traps.S.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [44/47] Building ASM object CMakeFiles/kernel.elf.dir/src/arch/arm/32/head.S.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [45/47] Building ASM object CMakeFiles/kernel.elf.dir/src/arch/arm/32/hyp_traps.S.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [46/47] Building C object CMakeFiles/kernel.elf.dir/kernel_all.c.obj\r\nseL4-armv7l-unknown-linux-gnueabihf> [47/47] Linking C executable kernel.elf\r\nseL4-armv7l-unknown-linux-gnueabihf> /nix/store/id3p1y5nzi49jdag04cicy7vrz9nlb7a-armv7l-unknown-linux-gnueabihf-binutils-2.40/bin/armv7l-unknown-linux-gnueabihf-ld: warning: CMakeFiles/kernel.elf.dir/src/arch/arm/32/hyp_traps.S.obj: missing .note.GNU-stack section implies executable stack\r\nseL4-armv7l-unknown-linux-gnueabihf> /nix/store/id3p1y5nzi49jdag04cicy7vrz9nlb7a-armv7l-unknown-linux-gnueabihf-binutils-2.40/bin/armv7l-unknown-linux-gnueabihf-ld: NOTE: This behaviour is deprecated and will be removed in a future version of the linker\r\nseL4-armv7l-unknown-linux-gnueabihf> /nix/store/id3p1y5nzi49jdag04cicy7vrz9nlb7a-armv7l-unknown-linux-gnueabihf-binutils-2.40/bin/armv7l-unknown-linux-gnueabihf-ld: warning: kernel.elf has a LOAD segment with RWX permissions\r\nseL4-armv7l-unknown-linux-gnueabihf> Running phase: installPhase\r\nseL4-armv7l-unknown-linux-gnueabihf> install flags: -j16 install\r\nseL4-armv7l-unknown-linux-gnueabihf> [0/1] Install the project...\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Install configuration: \"Release\"\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/bin/kernel.elf\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/api\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/api/syscall.xml\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/api/syscall.xsd\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/interfaces\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/interfaces/object-api.xml\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/assert.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/benchmark_tracepoints_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/benchmark_track_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/benchmark_utilisation_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/bootinfo.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/bootinfo_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/config.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/constants.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/debug_assert.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/deprecated.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/errors.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/faults.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/functions.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/macros.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/objecttype.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/sel4.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/shared_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/simple_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/syscalls.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/syscalls_master.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/syscalls_mcs.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/virtual_client.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Up-to-date: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Up-to-date: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/interfaces\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/interfaces/object-api-arch.xml\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Up-to-date: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a15.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a35.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a53.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a55.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a57.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a7.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a72.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a8.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/constants_cortex_a9.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/deprecated.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/mapping.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/objecttype.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/shared_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/simple_types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/syscalls.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include/sel4/arch/types.h\r\nseL4-armv7l-unknown-linux-gnueabihf> -- Installing: /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include\r\nseL4-armv7l-unknown-linux-gnueabihf> CMake Error at cmake_install.cmake:51 (file):\r\nseL4-armv7l-unknown-linux-gnueabihf>   file INSTALL cannot duplicate symlink\r\nseL4-armv7l-unknown-linux-gnueabihf>     /build/source/libsel4/sel4_arch_include/arm_hyp\r\nseL4-armv7l-unknown-linux-gnueabihf>   at\r\nseL4-armv7l-unknown-linux-gnueabihf>     /nix/store/w49axx7rf3aaaqssj55y396aicc3dxip-seL4-armv7l-unknown-linux-gnueabihf-13.0.0/libsel4/include\r\nseL4-armv7l-unknown-linux-gnueabihf>   because: A directory already exists at that location\r\nseL4-armv7l-unknown-linux-gnueabihf> FAILED: CMakeFiles/install.util\r\nseL4-armv7l-unknown-linux-gnueabihf> cd /build/source/build && /nix/store/ih9mk4l2rr9sd10rkmyjm38fn2ysypl0-cmake-3.27.7/bin/cmake -P cmake_install.cmake\r\nseL4-armv7l-unknown-linux-gnueabihf> ninja: build stopped: subcommand failed.\r\n```\r\n\r\n</details>",
+  "created": "2024-10-18T07:01:35Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1338,
+  "base_sha": "6ff48c7d1ff3d77c9bb703889c181cf0d74d102c",
+  "fix_at": "2025-03-05T07:23:46Z",
+  "files": [
+   [
+    "CMakeLists.txt",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1311,
+  "title": "seL4_TCB_SetSchedParams: inconsistency between API reference and implementation",
+  "body": "For the seL4_TCB_SetSchedParams (MCS) invocation, the API reference states the following about the `sched_context` parameter\r\n\r\n>  If the scheduling context is already bound to a notification or TCB that is not this TCB this operation will fail. Similarly, if this TCB is already bound to a scheduling context that is not this scheduling context, this will also fail.\r\n\r\nThis does not correspond to the implementation, which adheres to the following:\r\n\r\n> If the scheduling context is already bound to a notification or TCB, this operation will fail. Similarly, if this TCB is already bound to a scheduling context, this will also fail.\r\n\r\nIn other words, the operation will fail if the scheduling context passed in is the one that is already bound to the TCB.",
+  "created": "2024-08-22T02:46:40Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1312,
+  "base_sha": "2ad02a00766dedd6fd146aab0a2930c73a603256",
+  "fix_at": "2025-06-04T15:34:22Z",
+  "files": [
+   [
+    "src/object/tcb.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1309,
+  "title": "add `riscv64-unknown-elf-` as RISCV gcc prefix",
+  "body": "https://github.com/seL4/seL4/blob/534ea259d3e104e17a6e5b70ade024e9ce573ef3/gcc.cmake#L73-L78",
+  "created": "2024-08-14T10:49:29Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1310,
+  "base_sha": "534ea259d3e104e17a6e5b70ade024e9ce573ef3",
+  "fix_at": "2024-08-14T13:33:19Z",
+  "files": [
+   [
+    "gcc.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1299,
+  "title": "PR preprocess test should compare with base branch",
+  "body": "Currently the preprocess test is looking at the AST diff between the verification manifest version of seL4 and the PR version of the code.\r\n\r\nWhen the verification manifest is in sync with the seL4 master branch (which it is most of the time), this happens to be mostly what we want.\r\n\r\nFor the preprocess check in deployment it is in fact exactly what we want, but for PR checks it would make more sense to compare to the base of the PR than the current verification manifest:\r\n\r\n- if the verification manifest is behind, we will be seeing the unrelated diff from how far it is behind on master plus the diff of the PR. That is not helpful to judge what the PR itself will change. \r\n- the base of the PR might not be the master branch, but a different PR. We are currently again seeing both diffs instead of just what the current pull request does.\r\n",
+  "created": "2024-07-19T01:33:48Z",
+  "labels": [
+   "CI"
+  ],
+  "via": "pull request",
+  "ref": 1643,
+  "base_sha": "727ccd140f0fd7c999da42ec80afd406553cac73",
+  "fix_at": "2026-04-10T11:16:18Z",
+  "files": [
+   [
+    ".github/workflows/pr.yml",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1258,
+  "title": "Emulation with `KernelRiscvUseClintMtime=ON` fails for QEMU >= 8.1.0",
+  "body": "I've observed that emulating seL4 on RISCV{32,64} platforms (at least `virt`, `spike`, and `hifive`) using QEMU fails with QEMU >= 8.1.0. In particular, PMP rejects accesses to the CLINT MTIME register. OpenSBI configures the MTIMER regions without any `SBI_DOMAIN_MEMREGION_SU_*` permissions [1]. seL4 was able to access the MTIME register on older versions of QEMU, even with the same version of OpenSBI, up until this commit, which appears to fix a bug in PMP policy enforcement:\r\n\r\nhttps://github.com/qemu/qemu/commit/a574b27af4fe340684ca9f20560a1b01905e4364\r\n\r\nIs anyone who knows more about all of this able to shed light on how `KernelRiscvUseClintMtime=ON` was able to work on platforms which use OpenSBI `PLATFORM=generic` in the first place, given that PMP configuration code I'm seeing?\r\n\r\nIs `KernelRiscvUseClintMtime=ON` suitable for all of the platforms it is currently set for?\r\n\r\nTagging @Ivan-Velickovic, who drove the PR adding `KernelRiscvUseClintMtime` (https://github.com/seL4/seL4/pull/1076).\r\n\r\n[1] https://github.com/riscv-software-src/opensbi/blob/d962db280725b03a0340e05a07e4c85c93f35bc5/lib/utils/timer/aclint_mtimer.c#L225-L260",
+  "created": "2024-06-10T18:25:34Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1259,
+  "base_sha": "5135e764a724b4872f6cb31557b931306a6f86c3",
+  "fix_at": "2024-06-16T04:31:29Z",
+  "files": [
+   [
+    "CHANGES",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/ariane/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/hifive/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/polarfire/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/qemu-riscv-virt/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/rocketchip/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/spike/config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1243,
+  "title": "A specific  specific colorscheme is assumed",
+  "body": "# Problem\r\n\r\nI just spent some time trying to debug my solution for the tutorial, when I found this: a spurious print of seL4 in green.\r\n\r\n![image](https://github.com/seL4/microkit/assets/20400405/c90a832c-a004-4b24-8f7f-076acdfb6b2e)\r\n\r\nPlaying with the terminal, I finally found the following, crucial information:\r\n\r\n![image](https://github.com/seL4/microkit/assets/20400405/b3ece8b4-329d-40a6-bf22-15d170a3cc15)\r\n\r\n# Additional Information\r\n\r\nFor reference, my colorscheme is as following (generated using `terminal-colors -o`):\r\n\r\n![image](https://github.com/seL4/microkit/assets/20400405/26e066d3-e345-4536-a494-bcaf00b83705)\r\n\r\n# Cause\r\n\r\nNow, investigating the [output](https://github.com/seL4/microkit/files/15047830/out.txt) yields an interesting observation: the prints are styled as following: \r\n\r\n1. Reset style\r\n2. Set foreground (text) to whatever the current colorscheme considers black\r\n3. Set the font to bold\r\n4. (put text)\r\n5. Reset style\r\n\r\nObviously, ~~most~~ many people run a dark colorscheme. And in many cases, for these the background color will be equal to what the colorscheme considers black. So generally speaking, I would advice the following:\r\n\r\n- __Never change the foreground color to either black (`30m`) or white (`37m`)__\r\n  - Reason:  these are quite likely to collide with the background color of a given terminal\r\n- It is of course ok to change the foreground color __if__ the background color is changed as well to a different color not equal to the default (`49m`)\r\n\r\nNow my personal preference would be to leave the background intact, thus forcing the use of a foregroundcolor  (how about yellow, to indicate a non fatal yet significant problem?) except for black/white for the seL4/microkit generated output, or the use of __bold__ alone (which blends in well with any terminal colorscheme, thus my preference).\r\n\r\nAs is, the UX is unnecessarily poor for fellow dark-colorscheme users tinkering with the (otherwise excellent!) tutorial, or microkit in general.",
+  "created": "2024-04-20T10:51:17Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1244,
+  "base_sha": "a58480425c5b4c7a3d5000c797f083bc7d5fd532",
+  "fix_at": "2024-04-28T00:26:11Z",
+  "files": [
+   [
+    "include/api/types.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1209,
+  "title": "USER_TOP lower than expected on AArch64 platforms?",
+  "body": "I am looking at USER_TOP in the generated configs in Microkit and I notice that all of them have the same value for USER_TOP which is 0xa0000000. This surprised me since this is quite low for all the platforms currently supported by Microkit.\r\n\r\nI notice that if I build sel4test, e.g:\r\n`../init-build -DPLATFORM=odroidc4 && ninja`\r\n\r\nand look at `kernel/gen_config/kernel/gen_config.h` I see:\r\n```c\r\n#define CONFIG_USER_TOP  0xa0000000\r\n```\r\n\r\nTo my understanding, USER_TOP is not something configurable by the user of seL4 and so I don't think it's something going wrong with how I am building sel4test/Microkit?",
+  "created": "2024-02-29T01:12:50Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1210,
+  "base_sha": "3740c2902c3084514dd1beaaf122162e1ac36dd6",
+  "fix_at": "2024-02-29T06:16:56Z",
+  "files": [
+   [
+    "src/plat/qemu-arm-virt/config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1199,
+  "title": "Potential bug/vulnerability",
+  "body": "Is it possible for user-space (maliciously or not) to trigger a CPU fault due to a NULL pointer access in the kernel?\r\n\r\nIt seems that we only need a vCPU cap to inject a vIRQ. However if the thread that injects the vIRQ is not running on the same pCPU of the target vCPU then an IPI is sent to the pCPU owner of the vCPU thread.\r\n\r\n`vcpu->vcpuTCB` this pointer might be `NULL` if the user space injected a vIRQ to a vCPU that has no TCB associated. This is not the normal behavior of correct code but user-space should **not be allowed** to provoke this or am I missing something?\r\n\r\n```\r\nexception_t invokeVCPUInjectIRQ(vcpu_t *vcpu, unsigned long index, virq_t virq)\r\n{\r\n    if (likely(ARCH_NODE_STATE(armHSCurVCPU) == vcpu)) {\r\n        set_gic_vcpu_ctrl_lr(index, virq);\r\n#ifdef ENABLE_SMP_SUPPORT\r\n    } else if (vcpu->vcpuTCB->tcbAffinity != getCurrentCPUIndex()) {\r\n        doRemoteOp3Arg(IpiRemoteCall_VCPUInjectInterrupt, (word_t)vcpu, index, virq.words[0],      vcpu->vcpuTCB->tcbAffinity);\r\n#endif /* CONFIG_ENABLE_SMP */\r\n    } else {\r\n        vcpu->vgic.lr[index] = virq;\r\n    }\r\n\r\n    return EXCEPTION_NONE;\r\n}\r\n```",
+  "created": "2024-02-16T04:30:44Z",
+  "labels": [
+   "bug",
+   "SMP",
+   "virtualisation"
+  ],
+  "via": "pull request",
+  "ref": 1200,
+  "base_sha": "31ca173e174afd18a38ee70a918a8e9f7869b31e",
+  "fix_at": "2024-02-21T01:03:39Z",
+  "files": [
+   [
+    "CHANGES",
+    "modified"
+   ],
+   [
+    "src/arch/arm/object/vcpu.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1197,
+  "title": "Generated platform descriptions (.yaml and .json) do not describe final device regions",
+  "body": "Files generated from the kernel build system, such as `platform_gen.json` and `platform_gen.yaml` currently list the device regions used by the kernel, e.g for the ZCU102:\r\n\r\n```yaml\r\ndevices:\r\n- end: 0xf9010000\r\n  start: 0x80000000\r\n- end: 0xf9020000\r\n  start: 0xf9011000\r\n- end: 0xf9040000\r\n  start: 0xf9021000\r\n- end: 0xfd800000\r\n  start: 0xf9041000\r\n- end: 0x800000000\r\n  start: 0xfd801000\r\n- end: 0x10000000000\r\n  start: 0x880000000\r\nmemory:\r\n- end: 0x80000000\r\n  start: 0x0\r\n- end: 0x880000000\r\n  start: 0x800000000\r\n```\r\n\r\nThe problem that I am finding is that these device regions are not necessarily used by the kernel as some of them depend on the configuration of the kernel. E.g the GIC VCPU control region is listed, but that is only used (and hence reserved) by the kernel in hypervisor mode.\r\n\r\nThe C header export works by outputting an `#ifdef` macro based on a hardware description file, e.g https://github.com/seL4/seL4/blob/a8eebabf58990c00706c0830fe8e3edca2eaf7e4/tools/hardware.yml#L32\r\n\r\nNot sure what the best way around it, would appreciate comments before I make a PR with a particular approach.\r\n\r\nThis currently blocks https://github.com/seL4/microkit/issues/35 as Microkit needs a way of knowing the *exact* reserved kernel regions as build-time.",
+  "created": "2024-02-14T02:54:40Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1390,
+  "base_sha": "7f6d5c72aadc5442eff7aaf12f67fcc89849279a",
+  "fix_at": "2025-02-10T01:48:13Z",
+  "files": [
+   [
+    "config.cmake",
+    "modified"
+   ],
+   [
+    "tools/hardware/outputs/c_header.py",
+    "modified"
+   ],
+   [
+    "tools/hardware/outputs/compat_strings.py",
+    "modified"
+   ],
+   [
+    "tools/hardware/outputs/elfloader.py",
+    "modified"
+   ],
+   [
+    "tools/hardware/outputs/json.py",
+    "modified"
+   ],
+   [
+    "tools/hardware/outputs/yaml.py",
+    "modified"
+   ],
+   [
+    "tools/hardware_gen.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1170,
+  "title": "seL4 doesn't boot with GICv3 on QEMU",
+  "body": "The existing `qemu-arm-virt` works with GICv2. GICv3 hasn't been tested with seL4 on QEMU. This discussion was raised in this PR #1157. Trying to run seL4 on QEMU/GICv3 halts  on boot with this error:\r\n\r\n> GICv3: GICR_WAKER returned non-zero 6\r\n\r\nFurther, it's likely that more debugging/work is needed to get timer interrupts even if the `halt()` is removed. ",
+  "created": "2024-01-26T11:56:13Z",
+  "labels": [
+   "Arm"
+  ],
+  "via": "pull request",
+  "ref": 1630,
+  "base_sha": "27a52ddd4cf592b1996ba50074c85e21d832398a",
+  "fix_at": "2026-03-28T22:56:39Z",
+  "files": [
+   [
+    "src/arch/arm/machine/gic_v3.c",
+    "modified"
+   ],
+   [
+    "src/plat/qemu-arm-virt/config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1104,
+  "title": "MCS fault handling issue when specifying period of a TCB.",
+  "body": "This issue is related to VPPI faults on AArch64, which uses the fault handling mechanisms to deliver virtual PPI's to a single-threaded VM. Specifically, it was observed in an seL4 system built using Microkit where a virtual-machine-monitor services a Linux virtual machine. The `microkit` branch of seL4 was used with the Odroid-C4 and qemu-arm-virt platforms.\r\n\r\nWhen specifying a period different to the budget of the TCB for the virtual machine and using the VPPI handling mechanism, we non-deterministically hit an assert in the ```tcbReleaseEnqueue``` function where our TCB is seemingly already in the release queue, and potentially shouldn't be at this point in time. The particular assert is here: https://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/object/tcb.c#L283\r\n\r\nThis issue doesn't occur when we set the period of the VM equal to our budget, and the thread is treated as a round robin thread.\r\n\r\nMy main suspicion is that the `postpone()` function, which in turn calls ```tcbReleaseEnqueue``` was getting invoked twice, but I have not been unable to completely validate this assumption. https://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/kernel/thread.c#L568 \r\n\r\nPostpone is called from three places mainly https://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/kernel/thread.c#L614 \r\nhttps://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/kernel/thread.c#L128\r\nand\r\nhttps://github.com/seL4/seL4/blob/61a8ccef44eeb08ecd20ad40296340c8319adee5/src/object/schedcontext.c#L284 \r\n\r\nSo the interrupting thread may be unable to refill or have insufficient refill available when trying to end its timeslice, handle a reply transfer or attempt to resume.\r\n\r\nThe naive and inconclusive fix for this was to switch the assert to an if statement, and return if the tcb was already in the release queue rather than hitting the assert. As the `tcbReleaseEnqueue` function places the thread into the release queue, which it already is in, I assumed this to be an ok behavior. However, this lead to other issues, such as hitting asserts stating the the thread is un-scheduable. \r\n\r\nThis was the snippet added to `tcbReleaseEnqueue`:\r\n```\r\n    if (thread_state_get_tcbInReleaseQueue(tcb->tcbState) == true) {\r\n        // Thread is already in queue,no need to queue again\r\n        return;\r\n    }\r\n```\r\nWe have recreated this behavior in the simple example system at the following repository for both qemu-arm-virt and the odroidc4:\r\n\r\nhttps://github.com/Kswin01/sel4cp_vmm/tree/mcs-bug\r\n\r\nWe have specified additional priority, budget and period for the VM thread inside of the system description files, as seen in the following commit: https://github.com/Kswin01/sel4cp_vmm/commit/14b3a5c388c1ecd222d313365bc46f5a6694b280.\r\n\r\n\r\n\r\n",
+  "created": "2023-09-14T04:54:39Z",
+  "labels": [
+   "MCS"
+  ],
+  "via": "pull request",
+  "ref": 1486,
+  "base_sha": "dec87e641abd0c02b43e63258fde6234d98e65ad",
+  "fix_at": "2025-06-24T09:26:05Z",
+  "files": [
+   [
+    "src/arch/arm/object/vcpu.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1094,
+  "title": "Possible regression with Polarfire SoC",
+  "body": "The commit that I made https://github.com/seL4/seL4/commit/69040396083959df9bb7cdc193cdf3f13af5bde8 recently seems to have caused a regression when booting seL4, as assertions such as:\r\n```\r\nBooting all finished, dropped to user space\r\nseL4 failed assertion 'refill_ready(thread->tcbSchedContext)' at /host/seL4/src/kernel/thread.c:447 in function switchToThread\r\nhalting...\r\nKernel entry via Interrupt, irq 0\r\n```\r\n\r\nare going off.\r\n\r\nThe reason I call this a *possible* regression is that I do not know whether it is an issue with QEMU or the commit itself. What is confusing to me is that I believe the Polarfire SoC has the *same* U54-MC CPU that the HiFive Unleashed has, which has no problems with this patch. I unfortunately do not have access to the hardware, so cannot confirm whether this is an issue with QEMU or not.",
+  "created": "2023-08-17T01:22:54Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1259,
+  "base_sha": "5135e764a724b4872f6cb31557b931306a6f86c3",
+  "fix_at": "2024-06-16T04:31:29Z",
+  "files": [
+   [
+    "CHANGES",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/ariane/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/hifive/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/polarfire/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/qemu-riscv-virt/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/rocketchip/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/spike/config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1091,
+  "title": "riscv: place traps and fastpath code adjacently",
+  "body": "Follow Arm's code where it tries to place traps and vector\r\ncode adjacently in a 4KiB page to optimise performance\r\n(through spatial cache locality).\r\n\r\nThis will also allow reducing the number of instructions\r\nin the fastpath code by one by using conditional branches instead\r\nof a check followed by a jump instruction. Though, if the future traps\r\nor fastpath code got bigger than 4 KiB, this may fail linking again.",
+  "created": "2023-08-14T13:49:49Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "c2497cbb38949134a441fc5be3e01da2aa7d63d8",
+  "base_sha": "b7ad2e0c669b5648ff32a9bb0dbc56337ec1ac77",
+  "fix_at": "2023-11-02T09:36:28Z",
+  "files": [
+   [
+    "include/arch/riscv/arch/kernel/traps.h",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/common_riscv.lds",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/traps.S",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1075,
+  "title": "aarch64 decodeARMFrameInvocation error reporting",
+  "body": "Two things that just came up in the aarch64 refinement proof: \r\n\r\nIn decodeARMFrameInvocation for aarch64: https://github.com/seL4/seL4/blob/8c9cf6c7db34a4f83aa9ab1b821ee9e8d8fdba8e/src/arch/arm/64/kernel/vspace.c#L2118-L2122\r\nwe report cap 0 as the invalid cap when ASIDs don't match, but aarch32 reports cap 1 in the same circumstances, which I think makes more sense. See: https://github.com/seL4/seL4/blob/8c9cf6c7db34a4f83aa9ab1b821ee9e8d8fdba8e/src/arch/arm/32/kernel/vspace.c#L2276-L2280\r\n\r\nSimilarly, for the `vaddr` comparison, aarch64 reports argument 2 as invalid, which is wrong (there is no argument 2). Aarch32 correctly report argument 0 as invalid, as does the overflow check in aarch64 that comes directly after:\r\n\r\nhttps://github.com/seL4/seL4/blob/8c9cf6c7db34a4f83aa9ab1b821ee9e8d8fdba8e/src/arch/arm/64/kernel/vspace.c#L2124-L2135",
+  "created": "2023-07-21T15:40:50Z",
+  "labels": [
+   "bug"
+  ],
+  "via": "pull request",
+  "ref": 801,
+  "base_sha": "6dbfeccd7cee8b2099c1f6aa146ccc460e48996e",
+  "fix_at": "2023-08-09T22:20:22Z",
+  "files": [
+   [
+    "CHANGES",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/kernel/vspace.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/fastpath/fastpath.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/kernel/vspace.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/machine/hardware.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/model/statedata.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/object/structures.bf",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/64/mode/object/structures.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/kernel/vspace.h",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/arm/sel4/arch/objecttype.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/objecttype.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/deprecated.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/objecttype.h",
+    "modified"
+   ],
+   [
+    "libsel4/tools/syscall_stub_gen.py",
+    "modified"
+   ],
+   [
+    "src/arch/arm/64/kernel/vspace.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/64/machine/capdl.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/64/model/statedata.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/64/object/objecttype.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/object/smmu.c",
+    "modified"
+   ],
+   [
+    "src/fastpath/fastpath.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1044,
+  "title": "Raspberry Pi 4B support does not handle variants",
+  "body": "The current memory map for the RPi4B:\r\nhttps://github.com/seL4/seL4/blob/b544529615ec3276d66920c7cdf286f03e85c9fd/src/plat/bcm2711/overlay-rpi4.dts#L46-L49\r\n\r\nassumes an 8GB when there seem to be (at least) four variants of the board. There are 1GB, 2GB, 4GB, and 8GB models. This means that any model with less than 8GB of RAM will not successfully boot seL4.",
+  "created": "2023-05-26T03:37:41Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1045,
+  "base_sha": "35c41a822fe5e9f55d49702a33598397c9441088",
+  "fix_at": "2023-06-01T05:54:05Z",
+  "files": [
+   [
+    "src/plat/bcm2711/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/bcm2711/overlay-rpi4-1gb.dts",
+    "added"
+   ],
+   [
+    "src/plat/bcm2711/overlay-rpi4-2gb.dts",
+    "added"
+   ],
+   [
+    "src/plat/bcm2711/overlay-rpi4-4gb.dts",
+    "added"
+   ],
+   [
+    "src/plat/bcm2711/overlay-rpi4-8gb.dts",
+    "added"
+   ],
+   [
+    "src/plat/bcm2711/overlay-rpi4.dts",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1039,
+  "title": "manual: mapping attributes for for AArch64 and RISCV are missing",
+  "body": "The table in section 7.2 \"Mapping Attributes\" currently only lists values for Arm and x64.\r\n\r\n",
+  "created": "2023-05-21T23:53:11Z",
+  "labels": [
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 1040,
+  "base_sha": "2826d3b0f41b0cbf7fc1e5f2ead7a151254d35ff",
+  "fix_at": "2023-05-22T01:57:29Z",
+  "files": [
+   [
+    "manual/parts/vspace.tex",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1015,
+  "title": "Allow VMPIDR_EL2 register to be set for VMs when CONFIG_MAX_NUM_NODES=1 ",
+  "body": "Currently the seL4_VCPUReg enum only defines the seL4_VCPUReg_VMPIDR_EL2 register when the kernel is configured for SMP. This register should be available for unicore systems too as otherwise a user level VMM is not able to control the value of MPIDR_EL1 that the guest VM reads.\r\n\r\n```\r\n#if CONFIG_MAX_NUM_NODES > 1\r\n    /* Virtualisation Multiprocessor ID Register */\r\n    seL4_VCPUReg_VMPIDR_EL2,\r\n#endif /* CONFIG_MAX_NUM_NODES > 1 */\r\n```",
+  "created": "2023-04-14T22:18:19Z",
+  "labels": [
+   "virtualisation"
+  ],
+  "via": "pull request",
+  "ref": 1181,
+  "base_sha": "3ccbfc083a8a110bbca2b54b7eb6af84587a8a84",
+  "fix_at": "2024-03-14T12:09:11Z",
+  "files": [
+   [
+    "CHANGES",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/object/vcpu.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/armv/armv7-a/armv/vcpu.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/armv/armv8-a/64/armv/vcpu.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/sel4/sel4_arch/constants.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1008,
+  "title": "Print memory regions as `[..)`",
+  "body": "At boot time we print memory regions as `[a..b]` even though `b` is not included in the interval.\r\n\r\nThis has confused me a number of times in the past, I suspect it is the same for others.\r\n\r\nCorrect [interval notation](https://en.wikipedia.org/wiki/Interval_(mathematics)#Notations_for_intervals) would be `[a..b)`. \r\n",
+  "created": "2023-04-04T00:08:16Z",
+  "labels": [
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 1501,
+  "base_sha": "1dde1fcb2711bc10e2c3fde4264ad585c3562994",
+  "fix_at": "2025-08-01T10:38:57Z",
+  "files": [
+   [
+    "src/arch/arm/kernel/boot.c",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/kernel/boot.c",
+    "modified"
+   ],
+   [
+    "src/kernel/boot.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 1004,
+  "title": "document why it is Ok for some virtual kernel memory regions to overflow",
+  "body": "In #1002 and #389 we both stumbled over the fact that sometimes the function `create_untypeds_for_region` is being supplied with a region that overflows, i.e. where `end < start`.\r\n\r\nThis can happen when a valid physical memory region is translated to kernel virtual addresses. The overflow is harmless and is being handled gracefully by `create_untypeds_for_region` for device untypeds.\r\n\r\nThis is because the loop in that function splits the region into size-aligned chunks, and size-aligned chunks cannot themselves overflow, i.e. they will always satisfy `start <= end` (and because it checks for minimum size, actually `start < end`).\r\n\r\nThe overflow might also be harmless for normal untypeds as long as the resulting virtual addresses are in the kernel window.\r\n\r\nAll of this should be documented at least in the code, and since it is user visible possibly also somewhere in the manual.",
+  "created": "2023-04-03T08:05:31Z",
+  "labels": [
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 1007,
+  "base_sha": "57c46bc8d0554ef1f0118fec40d9163097564271",
+  "fix_at": "2023-04-12T05:07:03Z",
+  "files": [
+   [
+    "include/basic_types.h",
+    "modified"
+   ],
+   [
+    "src/kernel/boot.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 991,
+  "title": "remove irq parameter from mcsPreemptionPoint",
+  "body": "Since #327 `mcsPreemptionPoint` no longer uses its `irq` parameter, so the parameter should be removed.\r\n\r\nThis came out of the [discussion](https://github.com/seL4/seL4/issues/472#issuecomment-1229172341) on #472.\r\n\r\nVerification impact should be minimal as long as we do this before CRefine has not progressed too far. @michaelmcinerney do you agree?",
+  "created": "2023-03-24T07:09:01Z",
+  "labels": [
+   "verification",
+   "MCS",
+   "cleanup"
+  ],
+  "via": "pull request",
+  "ref": 992,
+  "base_sha": "a7fcda426754091f66351942e18d964943016153",
+  "fix_at": "2023-03-25T01:10:58Z",
+  "files": [
+   [
+    "src/api/syscall.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 957,
+  "title": "AArch64 memory map diagram is wrong",
+  "body": "During verification we were looking at requirements for the value of `PPTR_TOP`on AArch64 in EL2. \r\n\r\nIt turns out that the actual `#define` is correct, or at least safe, but the comment and ASCII art diagram a) disagrees on the value and b) is incorrect.\r\n\r\nWe currently [have](https://github.com/seL4/seL4/blob/2493fc1c57009dbfe7c302b0c5bff146ef385cfd/include/arch/arm/arch/64/mode/hardware.h#L183):\r\n\r\n```\r\n#ifdef CONFIG_ARM_HYPERVISOR_SUPPORT\r\n#define PPTR_TOP UL_CONST(0x000000ffc0000000)\r\n```\r\n\r\nwhere `0x0000_00ff_c000_0000 = 2^40 - 2^30`\r\n\r\nThe [diagram](https://github.com/seL4/seL4/blob/2493fc1c57009dbfe7c302b0c5bff146ef385cfd/include/arch/arm/arch/64/mode/hardware.h#L137) has `PPTR_TOP` at 2^48-2^30 instead. I assume from the comment at the top of the diagram that the 48 comes from the max width of virtual addresses.\r\n\r\nThis number would be too high, because in addition to respecting virtual address width, in EL2 the kernel window also needs to map one-to-one on to the intermediate physical address space, which is only 40 or 44 bits wide, depending on config (probably the reason for the 2^40 in the acutal PPTR_TOP definition).\r\n\r\nSo the actual constraint is that the translated kernel window does not go outside the interval `[ 0 .. 2^IPA_WIDTH (`.\r\n",
+  "created": "2022-12-08T22:37:10Z",
+  "labels": [
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 1543,
+  "base_sha": "57a909f615cd57894f926ba32d9a248dc71077e4",
+  "fix_at": "2025-11-10T23:47:39Z",
+  "files": [
+   [
+    "include/arch/arm/arch/64/mode/hardware.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 942,
+  "title": "RISC-V: Use CLINT.mtime instead of rdtime",
+  "body": "At least for the platforms that emulate `rdtime` in SBI. See also [this comment](https://github.com/seL4/seL4/pull/863#issuecomment-1150427868) by @axel-h.\r\n\r\nE.g. on HIFIVE `rdtime` can take more than one microsecond, which is a hit taken on every context switch.\r\n\r\nI don't have RISC-V hardware, just putting this issue up here so someone who cares about RISC-V performance can pick this up.",
+  "created": "2022-10-28T08:09:28Z",
+  "labels": [
+   "enhancement",
+   "MCS",
+   "performance"
+  ],
+  "via": "pull request",
+  "ref": 1076,
+  "base_sha": "c5ab3d8c15c71a4a025dc9704f1f771f5a63b2d3",
+  "fix_at": "2023-08-12T23:01:48Z",
+  "files": [
+   [
+    "CHANGES",
+    "modified"
+   ],
+   [
+    "include/arch/riscv/arch/32/mode/machine.h",
+    "modified"
+   ],
+   [
+    "include/arch/riscv/arch/64/mode/machine.h",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/ariane/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/hifive/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/polarfire/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/qemu-riscv-virt/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/rocketchip/config.cmake",
+    "modified"
+   ],
+   [
+    "src/plat/spike/config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 805,
+  "title": "Cloned functions (-O2) are incompatible with binary verification",
+  "body": "`gcc -O2` enables various inter-procedural optimisations that can produce cloned or partial functions in the binary. These functions don't directly correspond to any function in the C, and are beyond the current abilities of binary verification.\r\n\r\nFor example, if GCC determines that part of a function is worth inlining, but the rest of the function is too big, it might split the function into parts, inlining the first, and emitting the second as a separate function with a new name ending in something like `.part.0`.\r\n\r\nAdding `-fno-partial-inlining -fno-ipa-cp -fno-ipa-sra` seems to disable enough inter-procedural optimisations to avoid cloned and partial functions, at least with current kernel and compiler versions.\r\n\r\nThis issue is to discuss how and when these compiler options should be added to the kernel build. My initial suggestion would be to add the following to the bottom of `gcc.cmake`:\r\n\r\n```\r\n# Binary verification cannot handle cloned functions.\r\nif(KernelVerificationBuild)\r\n    add_compile_options(-fno-partial-inlining -fno-ipa-cp -fno-ipa-sra)\r\nendif()\r\n```\r\n\r\nWhat do people think?",
+  "created": "2022-03-21T08:20:48Z",
+  "labels": [
+   "verification"
+  ],
+  "via": "pull request",
+  "ref": 860,
+  "base_sha": "4a7d08def09b2b8b30cb76dee15144a9cfaeb5c7",
+  "fix_at": "2022-05-27T03:48:09Z",
+  "files": [
+   [
+    "CMakeLists.txt",
+    "modified"
+   ],
+   [
+    "config.cmake",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 788,
+  "title": "allow non-contiguous tag field in bitfield generator",
+  "body": "Context: on AArch64, the encoding for PTE types is context dependent: on level 3, a block PTE is signified by bottom bits `0b11`, but on levels 0-2, bottom bits `0b11` instead mean table PTE. \r\n\r\nFor verification, we need a context-independent encoding of tagged unions. (And for general sanity).\r\n\r\nLuckily there are 4 bits in PTEs that are reserved for software, so we can use one of these to indicate which kind of PTE we are talking about. The problem is that these bits live at positions `[58:55]`, and the type bits at `[1:0]`, so they don't form a contiguous field, which the current bitfield generator assumes.\r\n\r\nWith a relatively small extension, this could be made possible.  The extension would contain roughly the following steps/features:\r\n\r\n- [x] extend parser to `tagged_union <type> <field>[:<field>]*`\r\n- [x] each of these fields has to be in the same position and width in all blocks/alternatives\r\n- [x] for simplicity, non-contiguous tags cannot be mixed with class-mask tags\r\n- [x] tag mask = `or` of the masks of all tag fields\r\n- [ ] enum = plain numbers (no shifting), e.g. `0b00010000011` where the first `1` is in a first field (e.g. one of those reserved bits) and the bottom `11` are in a separate field (e.g. the hardware type field)\r\n- [ ] creation = as now, tag is a plain number, needs no masking or shifting\r\n- [x] reading the tag = new combined function, works like normal field read, but with the overall tag mask\r\n- [x] should not generate field functions (esp not `set`) for any tag field\r\n\r\nMaking the tag the `or` of all tag fields (masked) means there is no performance impact compared to the current bitfield code -- the same number of shifting/masking operations is happening after constant folding. It does mean that all tag fields have to be within the same word (e.g. can't be spread over `word[0]` and `word[1]` of a larger bitfield).\r\n\r\nThe bitfield proofs should be almost unchanged, but we will see more when we have a few examples.\r\n\r\nAdding multiple words would be a performance impact (but only when they are used), and it would add a fair bit of complexity, including proof change, so this is best left for a separate stage if it is needed.\r\n",
+  "created": "2022-02-28T01:18:38Z",
+  "labels": [
+   "enhancement",
+   "verification"
+  ],
+  "via": "pull request",
+  "ref": 799,
+  "base_sha": "ae33886ff900bb7fcd72f3b8d2eb9ec0f6546b0a",
+  "fix_at": "2022-03-21T06:43:37Z",
+  "files": [
+   [
+    "tools/bitfield_gen.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 774,
+  "title": "C-Preprocessor conditionals in XML",
+  "body": "Before I jump too far down the rabbit hole on this, I wanted to sync with the community,\r\nIt was mentioned during one of the developer meetings that the xml currently contains some c-isms in the form of c-preprocessor declarations, \r\n\r\nMost of these are fairly simple, an example of the most complex being:\r\n```\r\ncondition=\"!(defined(CONFIG_ARM_HYPERVISOR_SUPPORT) &amp;&amp; defined(CONFIG_ARM_PA_SIZE_BITS_40))\"\r\n```\r\nin [sel4_arch_include/aarch64/interfaces/sel4arch.xml](https://github.com/seL4/seL4/blob/master/libsel4/sel4_arch_include/aarch64/interfaces/sel4arch.xml#L212)\r\n\r\nIf it weren't for these couple of complex conditions we could use something simple like:\r\n `condition_var=\"CONFIG_...\" condition_defined=true|false`\r\n\r\nI tried to come up with a schema to cope with these definitions in a language neutral fashion:\r\n#### Examples\r\n```\r\n<condition>\r\n        <config var=\"CONFIG_FOO\"/>\r\n</condition>\r\n```\r\n\r\n```\r\n<condition>\r\n        <not>\r\n         <and>\r\n             <or>\r\n                <config var=\"CONFIG_A\"/>\r\n                <config var=\"CONFIG_B\"/>\r\n             </or>\r\n             <not><config var=\"CONFIG_C\"/></not>\r\n         </and>\r\n        </not>\r\n</condition>\r\n```\r\n#### Schema\r\nThe schema for the above xml uses an xsd (below), while the current encoding is using a [dtd](https://github.com/seL4/seL4/blob/master/libsel4/tools/sel4_idl.dtd#L25)\r\n\r\nAs far as I can tell trying to do this with just a dtd leads to a much more verbose xml encoding.\r\n\r\n```\r\n<xsd:schema xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\">\r\n    <xsd:element name=\"condition\" type=\"Unary\" />\r\n    <xsd:group name=\"ConfigGroup\">\r\n        <xsd:choice>\r\n            <xsd:element name=\"and\" type=\"Binary\" />\r\n            <xsd:element name=\"or\" type=\"Binary\" />\r\n            <xsd:element name=\"not\" type=\"Unary\" />\r\n            <xsd:element name=\"config\">\r\n                <xsd:complexType>\r\n                        <xsd:attribute name=\"var\" type=\"xsd:string\" use=\"required\"/>\r\n                </xsd:complexType>\r\n            </xsd:element>\r\n        </xsd:choice>\r\n    </xsd:group>\r\n\r\n  <xsd:complexType name=\"Unary\">\r\n        <xsd:group ref=\"ConfigGroup\"/>\r\n  </xsd:complexType>\r\n\r\n  <xsd:complexType name=\"Binary\">\r\n    <xsd:sequence>\r\n            <xsd:group ref=\"ConfigGroup\" minOccurs=\"2\" maxOccurs=\"2\"/>\r\n    </xsd:sequence>\r\n  </xsd:complexType>\r\n</xsd:schema>\r\n```\r\n\r\n#### Questions\r\n\r\n* Should we include the `CONFIG_` contents of the `var` attribute?\r\n* Does this need an RFC even though it isn't really changing any visible aspects or behavior, but just refining existing behavior?\r\n* Is there any opposition to this or the approach taken here, or a better approach, or scheduling concerns if it could impact ongoing projects?\r\n\r\n#### checklist\r\n\r\n- [ ]  Switch the existing dtd to use an xsd\r\n- [ ]  Move the `condition=` attributes to `condition` elements in the sel4 xml.\r\n- [ ]  Write python code converting the new condition elements to c-preprocessor `#if` conditions.",
+  "created": "2022-02-20T20:16:33Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 789,
+  "base_sha": "d14d6c213901c2c2da6acd0bc8d8af132fdb4ae3",
+  "fix_at": "2022-03-22T07:33:39Z",
+  "files": [
+   [
+    ".github/workflows/xml_lint.yml",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/arm/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/x86/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/include/api/syscall.xml",
+    "modified"
+   ],
+   [
+    "libsel4/include/api/syscall.xsd",
+    "modified"
+   ],
+   [
+    "libsel4/include/interfaces/sel4.xml",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/tools/__init__.py",
+    "modified"
+   ],
+   [
+    "libsel4/tools/condition.py",
+    "added"
+   ],
+   [
+    "libsel4/tools/loader/__init__.py",
+    "added"
+   ],
+   [
+    "libsel4/tools/sel4_idl.dtd",
+    "removed"
+   ],
+   [
+    "libsel4/tools/sel4_idl.xsd",
+    "added"
+   ],
+   [
+    "libsel4/tools/syscall_stub_gen.py",
+    "modified"
+   ],
+   [
+    "manual/Makefile",
+    "modified"
+   ],
+   [
+    "manual/tools/gen_invocations.py",
+    "modified"
+   ],
+   [
+    "tools/condition.py",
+    "added"
+   ],
+   [
+    "tools/invocation_header_gen.py",
+    "modified"
+   ],
+   [
+    "tools/syscall_header_gen.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 749,
+  "title": "GCC 11.3 RISC-V ISA spec change from 2.2/20190608 to 20191213 might affect seL4",
+  "body": "In case we consider switching to GCC 11.3 or higher one day, we might run into this change causing problems:\r\n- https://gcc.gnu.org/gcc-11/changes.html\r\n- https://gcc.gnu.org/git/?p=gcc.git;a=commit;h=98416dbb0a62579d4a7a4a76bab51b5b52fec2cd\r\n\r\nThere is a mail on the RISC-V SW-Dev mailinglist (sw-dev@groups.riscv.org) that describes the details (see also https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/aE1ZeHHCYf4/m/v88QeovDAAAJ):\r\n\r\nIt’s Kito Cheng from the RISC-V GCC community, just sharing some news about the default ISA spec version that has been bumped to 20191213 on both RISC-V GCC and binutils recently, and that has one major incompatibility issue between current default ISA spec versions. The major incompatibility issue is the csr read/write (csrr*/csrw*) instructions and fence.i instruction has separated from the `I` extension, become two standalone extensions: Zicsr and Zifencei; so you might get error messages like that: unrecognized opcode `csrr`.\r\n# How to resolve those issues?\r\nHere is two solution to resolve:\r\n- First one is what we recommend, adding zicsr and/or zifencei to your -march option, e.g. -march=rv64imac become -march=rv64imac_zicsr_zifencei\r\n- The second one is a kind of workaround, using -misa-spec=2.2 to force RISC-V GCC using the older ISA spec version, however this is strongly  *NOT* recommended.\r\nIn case you want everything like before, you can add --with-isa-spec=2.2 build option for GCC and binutils, then the toolchain will default using the old version and work as an older GNU toolchain release.\r\n# Why GCC/binutils bump that?\r\nThe default ISA spec version was set to 2.2 for long time, however the spec is released at May, 2017, which is 5 years ago, and RISC-V has at least two ISA spec release after that, so we believe that’s time to bump, and we also raise the discussion on the RISC-V BoF at Linux plumber, we reach a consensus is that we should moving forward even that having incompatible issue.\r\n# Why bump that so late?\r\nWe worried about the incompatibility issue, but we realized that is unavoidable, and RISC-V is growing very quickly in the past year, so we believe it would be better to move forward now.\r\n# Why is there an incompatibility issue there? Why can't you avoid that?\r\nThat is because the RISC-V ISA spec has changed, we believe the toolchain should honor what spec written.\r\n# Which ISA spec versions are supported by GNU toolchain now?\r\nCurrently we support 2.2 20190608 and 20191213.\r\n2.2: https://github.com/riscv/riscv-isa-manual/releases/tag/riscv-user-2.2\r\n20190608: https://github.com/riscv/riscv-isa-manual/releases/tag/Ratified-IMFDQC-and-Priv-v1.11\r\n20191213: https://github.com/riscv/riscv-isa-manual/releases/tag/Ratified-IMAFDQC\r\n# Is there any newer ISA spec supported? It’s 2022!\r\n20191213 is already 2 years ago, but RISC-V didn’t have further formal ISA spec release after that, what we can promise is that RISC-V GNU toolchain will support soon if ISA spec has newer release.",
+  "created": "2022-01-24T16:34:10Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 776,
+  "base_sha": "ab32a373980f121de8f05777f7e3691bb43a7377",
+  "fix_at": "2022-03-06T21:40:34Z",
+  "files": [
+   [
+    "CMakeLists.txt",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 743,
+  "title": "There may be a comma missing here.",
+  "body": "https://github.com/seL4/seL4/blob/c3b4df0f30aa4476d6686cc338a0b6a46987dc8c/libsel4/sel4_arch_include/ia32/sel4/sel4_arch/syscalls.h#L147",
+  "created": "2022-01-12T01:31:05Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 757,
+  "base_sha": "8c16b4b94d73440d83fd6f9bf650b1a9683af16d",
+  "fix_at": "2022-01-30T22:56:27Z",
+  "files": [
+   [
+    "libsel4/sel4_arch_include/ia32/sel4/sel4_arch/syscalls.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 578,
+  "title": "Remove support for ARMv6 and KZM/imx31",
+  "body": "This has been advertised for over a year now:\r\n- https://lists.sel4.systems/hyperkitty/list/devel@sel4.systems/thread/EQ27WYPJIN3KKRGB4VNXUZKJYL65IZ6J/\r\n- https://sel4.discourse.group/t/should-we-continue-to-support-armv6-and-kzm-imx31/46\r\n\r\nThis platform is unavailable to purchase anywhere for many years now, and the KZM/ArmV6 specific parts of the kernel make it harder to understand the existing code and can be a maintenance burden (Eg the globals frame). \r\n\r\nFor the kernel this involves removing:\r\n- The KZM/imx31 platform\r\n- kernel drivers only used by this platform\r\n- Arm1136JF_S CPU\r\n- ArmV6 architecture\r\n\r\nWe will also remove any KZM platform support from user level libraries.",
+  "created": "2021-09-14T23:23:49Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 580,
+  "base_sha": "0cd595d802c22f075a020c92929c131e43a19b1f",
+  "fix_at": "2021-09-30T08:07:20Z",
+  "files": [
+   [
+    ".github/workflows/sel4test-deploy.yml",
+    "modified"
+   ],
+   [
+    ".github/workflows/sel4test-hw.yml",
+    "modified"
+   ],
+   [
+    ".github/workflows/sel4test-sim.yml",
+    "modified"
+   ],
+   [
+    "CHANGES",
+    "modified"
+   ],
+   [
+    "configs/seL4Config.cmake",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/hardware.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/machine.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/machine/hardware.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/machine/registerset.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/model/statedata.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/32/mode/object/structures.bf",
+    "modified"
+   ],
+   [
+    "include/arch/arm/arch/model/statedata.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/armv/armv6/armv/benchmark.h",
+    "removed"
+   ],
+   [
+    "include/arch/arm/armv/armv6/armv/context_switch.h",
+    "removed"
+   ],
+   [
+    "include/arch/arm/armv/armv6/armv/debug.h",
+    "removed"
+   ],
+   [
+    "include/arch/arm/armv/armv6/armv/machine.h",
+    "removed"
+   ],
+   [
+    "include/drivers/irq/imx31.h",
+    "removed"
+   ],
+   [
+    "include/drivers/timer/imx31-epit.bf",
+    "removed"
+   ],
+   [
+    "include/drivers/timer/imx31-epit.h",
+    "removed"
+   ],
+   [
+    "include/drivers/timer/imx31-gpt.h",
+    "removed"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch32/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_plat_include/imx31/sel4/plat/api/constants.h",
+    "removed"
+   ],
+   [
+    "manual/extra.bib",
+    "modified"
+   ],
+   [
+    "manual/parts/intro.tex",
+    "modified"
+   ],
+   [
+    "manual/parts/objects.tex",
+    "modified"
+   ],
+   [
+    "manual/references.bib",
+    "modified"
+   ],
+   [
+    "src/arch/arm/32/kernel/vspace.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/32/model/statedata.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/32/traps.S",
+    "modified"
+   ],
+   [
+    "src/arch/arm/armv/armv6/cache.c",
+    "removed"
+   ],
+   [
+    "src/arch/arm/armv/armv6/config.cmake",
+    "removed"
+   ],
+   [
+    "src/arch/arm/armv/armv6/machine_asm.S",
+    "removed"
+   ],
+   [
+    "src/arch/arm/armv/armv6/user_access.c",
+    "removed"
+   ],
+   [
+    "src/arch/arm/config.cmake",
+    "modified"
+   ],
+   [
+    "src/arch/arm/kernel/boot.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/machine/debug.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/machine/errata.c",
+    "modified"
+   ],
+   [
+    "src/drivers/serial/config.cmake",
+    "modified"
+   ],
+   [
+    "src/drivers/timer/config.cmake",
+    "modified"
+   ],
+   [
+    "src/drivers/timer/imx31-epit.c",
+    "removed"
+   ],
+   [
+    "src/drivers/timer/imx31-gpt.c",
+    "removed"
+   ],
+   [
+    "src/fastpath/fastpath.c",
+    "modified"
+   ],
+   [
+    "src/plat/imx31/config.cmake",
+    "removed"
+   ],
+   [
+    "src/plat/imx31/machine/hardware.c",
+    "removed"
+   ],
+   [
+    "src/plat/imx31/mcs-overlay-kzm.dts",
+    "removed"
+   ],
+   [
+    "src/plat/imx31/overlay-kzm.dts",
+    "removed"
+   ],
+   [
+    "tools/dts/kzm.dts",
+    "removed"
+   ],
+   [
+    "tools/dts/update-dts.sh",
+    "modified"
+   ],
+   [
+    "tools/hardware.yml",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 560,
+  "title": "Document constants needed to allocate scheduling contexts",
+  "body": "As far as I can tell the following:\r\n\r\n```\r\n/* Minimum size of a scheduling context (2^{n} bytes) */\r\n#define seL4_MinSchedContextBits 8\r\n#ifndef __ASSEMBLER__\r\n/* the size of a scheduling context, excluding extra refills */\r\n#define seL4_CoreSchedContextBytes (10 * sizeof(seL4_Word) + (6 * 8))\r\n/* the size of a single extra refill */\r\n#define seL4_RefillSizeBytes (2 * 8)\r\n```\r\n\r\nAre not documented in the user manual currently. However this is critical to being able to allocate a scheduling context object.\r\n\r\nIdeally this should at least be reference in section **2.4.2 Summary of Object Sizes**.",
+  "created": "2021-09-06T10:21:12Z",
+  "labels": [
+   "MCS",
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 1284,
+  "base_sha": "f52e102d5da00aca0f1957bfa7a019182bf0d7f5",
+  "fix_at": "2024-07-01T05:49:59Z",
+  "files": [
+   [
+    "manual/parts/objects.tex",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 558,
+  "title": "seL4_TCB_SetSpace is not documented for MCS",
+  "body": "The `SetSpace` call for MCS has different parameters than non-MCS kernels, however the documentation does not mention this.",
+  "created": "2021-09-06T09:04:51Z",
+  "labels": [
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 1125,
+  "base_sha": "9956101ba6000832c8e01a0cb0cb88f2102e57d9",
+  "fix_at": "2023-11-07T21:50:21Z",
+  "files": [
+   [
+    "libsel4/include/interfaces/sel4.xml",
+    "modified"
+   ],
+   [
+    "manual/Doxyfile",
+    "modified"
+   ],
+   [
+    "manual/tools/gen_invocations.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 530,
+  "title": "manual: Missing documentation for RISC-V seL4_IRQControl_GetTrigger",
+  "body": "This is defined in the IDL but doesn't show up in the manual. I think it is because the interface name and method name are identical to one that exists on arm.\r\n\r\nhttps://github.com/seL4/seL4/blob/12.1.0/libsel4/arch_include/riscv/interfaces/sel4arch.xml#L169",
+  "created": "2021-08-31T20:50:08Z",
+  "labels": [
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 1123,
+  "base_sha": "97588df01677e3a13f2d1a0d40cc1ba218cb444a",
+  "fix_at": "2023-11-07T05:12:34Z",
+  "files": [
+   [
+    "manual/Makefile",
+    "modified"
+   ],
+   [
+    "manual/tools/gen_invocations.py",
+    "modified"
+   ],
+   [
+    "manual/tools/parse_doxygen_xml.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 529,
+  "title": "Missing error code in ARMIRQIssueIRQHandlerTrigger",
+  "body": "Should this return path be setting an error code?\r\n\r\nhttps://github.com/seL4/seL4/blob/12.1.0/src/arch/arm/object/interrupt.c#L52",
+  "created": "2021-08-31T20:31:26Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 534,
+  "base_sha": "f46aac30b85e8c08cdb619db80997c56d2834481",
+  "fix_at": "2021-09-02T00:03:50Z",
+  "files": [
+   [
+    "src/arch/arm/object/interrupt.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 524,
+  "title": "seL4 License Implications",
+  "body": "Hi, I was looking into using seL4 for a small educational project. I was concerned about the license, but I came across [this helpful article](https://microkerneldude.wordpress.com/2019/12/09/what-does-sel4s-license-imply/) by Gernot Heiser. From what I gather, he's one of the leads(?) of the project, and I think the repository should include this link in either the README or LICENSE as it directly relates to seL4 and is very informative.",
+  "created": "2021-08-31T00:09:40Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 527,
+  "base_sha": "55cf30c8b11c851dded7e66b5f09e5f10af2adce",
+  "fix_at": "2021-08-31T04:31:11Z",
+  "files": [
+   [
+    "LICENSE.md",
+    "modified"
+   ],
+   [
+    "README.md",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 519,
+  "title": "make sure function prologue for idle_thread() is eliminated on Arm and RISC-V",
+  "body": "We're currently relying on compiler optimisations to remove the function prologue for the idle thread. This does work correctly in the tests so far with the recommended tool chains, but with specific compiler version and flags, the optimisation seems not to happen and its absence [can lead to incorrect behaviour](https://sel4.discourse.group/t/kernel-crash-on-x86-but-not-on-x86-64/398).\r\n\r\nPR #510 made this more robust for x86, we should do the same for arm and riscv.\r\n",
+  "created": "2021-08-30T00:25:33Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 1464,
+  "base_sha": "dfaef4b712842a6342d3c0982303f0159b0ae6c1",
+  "fix_at": "2025-08-19T08:06:25Z",
+  "files": [
+   [
+    "include/arch/arm/armv/armv7-a/armv/machine.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/armv/armv8-a/64/armv/machine.h",
+    "modified"
+   ],
+   [
+    "include/kernel/thread.h",
+    "modified"
+   ],
+   [
+    "src/arch/arm/32/config.cmake",
+    "modified"
+   ],
+   [
+    "src/arch/arm/32/idle.S",
+    "added"
+   ],
+   [
+    "src/arch/arm/32/idle.c",
+    "modified"
+   ],
+   [
+    "src/arch/arm/64/config.cmake",
+    "modified"
+   ],
+   [
+    "src/arch/arm/64/idle.S",
+    "added"
+   ],
+   [
+    "src/arch/arm/64/idle.c",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/config.cmake",
+    "modified"
+   ],
+   [
+    "src/arch/riscv/idle.S",
+    "added"
+   ],
+   [
+    "src/arch/riscv/idle.c",
+    "modified"
+   ],
+   [
+    "src/arch/x86/config.cmake",
+    "modified"
+   ],
+   [
+    "src/arch/x86/idle.S",
+    "added"
+   ],
+   [
+    "src/arch/x86/idle.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 499,
+  "title": "(minor) Improve seL4_ARM_PageUpperDirectory_Map  documentation",
+  "body": "Note: This is very minor.\r\n\r\nThe description of the operations describe some error conditions, however it is also an error if the vspace has yet to be assigned to an ASID pool. This detail is described in the parameters description, but it would help the user (at least it would have helped me!) if the failure code for this case was noted in the description; other error cases are described there.",
+  "created": "2021-08-22T05:22:13Z",
+  "labels": [
+   "docs"
+  ],
+  "via": "pull request",
+  "ref": 528,
+  "base_sha": "bb5efc43b17998d37f27a0b2f0d0b0f4ab627ff3",
+  "fix_at": "2021-10-17T04:02:45Z",
+  "files": [
+   [
+    "libsel4/arch_include/arm/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/riscv/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/x86/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/include/interfaces/sel4.xml",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch32/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/aarch64/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/x86_64/interfaces/sel4arch.xml",
+    "modified"
+   ],
+   [
+    "libsel4/tools/sel4_idl.dtd",
+    "modified"
+   ],
+   [
+    "libsel4/tools/syscall_stub_gen.py",
+    "modified"
+   ],
+   [
+    "manual/parts/api.tex",
+    "modified"
+   ],
+   [
+    "manual/tools/parse_doxygen_xml.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 472,
+  "title": "handleInterruptEntry() should call getActiveIRQ() after CONFIG_KERNEL_MCS checks",
+  "body": "Out of curiosity, is there a reason why `handleInterruptEntry()` calls `getActiveIRQ()` before doing the `CONFIG_KERNEL_MCS` handling?\r\n```\r\n    irq = getActiveIRQ();\r\n#ifdef CONFIG_KERNEL_MCS\r\n    if (SMP_TERNARY(clh_is_self_in_queue(), 1)) {\r\n        updateTimestamp();\r\n        checkBudget();\r\n    }\r\n```\r\nShouldn't the MSC handling happen first to avoid billing the thread too much? Checking which interrupt is pending can also wait a few more cycles.",
+  "created": "2021-07-29T18:36:09Z",
+  "labels": [
+   "verification",
+   "MCS",
+   "cleanup"
+  ],
+  "via": "pull request",
+  "ref": 993,
+  "base_sha": "621a1ddd762427405a8e4014103674146b37b6cb",
+  "fix_at": "2023-03-25T21:16:19Z",
+  "files": [
+   [
+    "src/api/syscall.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 245,
+  "title": "Some files in libsel4 are licensed as GPL",
+  "body": "Your LICENSE.md states your intent that, in general, user-level code should be licensed under a BSD license; however, some files in libsel4 are marked as GPL.\r\n\r\nWould it be possible to relicense these files under the BSD license?\r\n\r\n```\r\n$ cd libsel4\r\n$ grep -r -i GPL\r\narch_include/riscv/sel4/arch/objecttype.h: * SPDX-License-Identifier: GPL-2.0-only\r\narch_include/riscv/sel4/arch/simple_types.h: * SPDX-License-Identifier: GPL-2.0-only\r\narch_include/riscv/sel4/arch/syscalls.h: * SPDX-License-Identifier: GPL-2.0-only\r\narch_include/riscv/sel4/arch/types.h: * SPDX-License-Identifier: GPL-2.0-only\r\ninclude/sel4/functions.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv32/sel4/sel4_arch/faults.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv32/sel4/sel4_arch/types.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv32/sel4/sel4_arch/constants.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv64/sel4/sel4_arch/faults.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv64/sel4/sel4_arch/mapping.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv64/sel4/sel4_arch/objecttype.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv64/sel4/sel4_arch/types.h: * SPDX-License-Identifier: GPL-2.0-only\r\nsel4_arch_include/riscv64/sel4/sel4_arch/constants.h: * SPDX-License-Identifier: GPL-2.0-only\r\nCMakeLists.txt:# SPDX-License-Identifier: GPL-2.0-only\r\n```",
+  "created": "2020-09-04T03:07:15Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "5c1b81d9bb2db0e5f7801ce3442b8a18f96b6001",
+  "base_sha": "707af36400cae7586db37303a7327791ce2ef320",
+  "fix_at": "2020-09-04T20:30:01+08:00",
+  "files": [
+   [
+    "libsel4/CMakeLists.txt",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/riscv/sel4/arch/objecttype.h",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/riscv/sel4/arch/simple_types.h",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/riscv/sel4/arch/syscalls.h",
+    "modified"
+   ],
+   [
+    "libsel4/arch_include/riscv/sel4/arch/types.h",
+    "modified"
+   ],
+   [
+    "libsel4/include/sel4/functions.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv32/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv32/sel4/sel4_arch/faults.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv32/sel4/sel4_arch/types.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv64/sel4/sel4_arch/constants.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv64/sel4/sel4_arch/faults.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv64/sel4/sel4_arch/mapping.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv64/sel4/sel4_arch/objecttype.h",
+    "modified"
+   ],
+   [
+    "libsel4/sel4_arch_include/riscv64/sel4/sel4_arch/types.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 177,
+  "title": "Bug report: exceeded memory maps warning typos",
+  "body": "Hi,\r\n\r\nIn boot stage, when memory map entries exceed limitation, https://github.com/seL4/seL4/blob/master/src/arch/x86/kernel/boot_sys.c#L572 will give a warning. The warning used a false format \"%zd\", it could be \"%d\".\r\n\r\nAnd the preceding alternation to multiboot_mmap_length is too early, for the printf wants its original value. Thus line 571 should follow the printf statement.\r\n\r\nRegards.",
+  "created": "2020-01-02T11:00:03Z",
+  "labels": [
+   "help wanted"
+  ],
+  "via": "pull request",
+  "ref": 582,
+  "base_sha": "91bfdf4b1c641d538bcfc4f7c4ddb30b02183834",
+  "fix_at": "2021-09-20T07:22:52Z",
+  "files": [
+   [
+    "src/arch/x86/kernel/boot_sys.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 110,
+  "title": ".gitignore file doesn't do what you want",
+  "body": "The .gitignore file uses **.ext, but that's not valid according to the git manual. You want **/*.ext instead.\r\n\r\n(This causes ripgrep to throw a bunch of errors, but git silently treats the asterisks as literal characters.)",
+  "created": "2019-01-04T23:34:46Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "17706f02ced75092649783f18140b8b3ad5a72d2",
+  "base_sha": "d84e2bfae98925e798e2df19b5435044e19a65bf",
+  "fix_at": "2020-06-17T17:27:20+08:00",
+  "files": [
+   [
+    ".gitignore",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 69,
+  "title": "compile and link error for imx6 when benchmark interface is enabled",
+  "body": "ARCH=arm PLAT=imx6 CPU=cortex-a9 ARMV=armv7-a DEBUG=1 make\r\n\r\n```\r\n--- a/configs/imx6/autoconf.h\r\n+++ b/configs/imx6/autoconf.h\r\n@@ -41,6 +41,7 @@\r\n #define CONFIG_LIBSEL4DEBUG_FUNCTION_INSTRUMENTATION_NONE 1\r\n #define CONFIG_LIB_SEL4_UTILS 1\r\n #define CONFIG_LIB_SEL4_VSPACE 1\r\n+#define CONFIG_PRINTING 1\r\n #define CONFIG_LIB_PLATSUPPORT 1\r\n #define CONFIG_LIB_SEL4_ALLOCMAN 1\r\n #define CONFIG_HAVE_LIB_SEL4_SIMPLE_DEFAULT 1\r\n@@ -71,14 +72,14 @@\r\n #define CONFIG_HAVE_LIB_SEL4_SIMPLE 1\r\n #define CONFIG_ARCH_ARM 1\r\n #define CONFIG_HAVE_LIB_ELF 1\r\n-#define CONFIG_PLAT_SABRE 1\r\n+#define CONFIG_PLAT_WANDQ 1\r\n #define CONFIG_HAVE_LIB_PLATSUPPORT 1\r\n #define CONFIG_NUM_DOMAINS 16\r\n #define CONFIG_HAVE_LIB_UTILS 1\r\n #define CONFIG_USER_OPTIMISATION_O2 1\r\n #define CONFIG_LIB_CPIO 1\r\n #define CONFIG_RETYPE_FAN_OUT_LIMIT 256\r\n-#define CONFIG_ROOT_CNODE_SIZE_BITS 12\r\n+#define CONFIG_ROOT_CNODE_SIZE_BITS 14\r\n #define CONFIG_NUM_PRIORITIES 256\r\n #define CONFIG_TESTPRINTER_REGEX \".*\"\r\n #define CONFIG_APP_SEL4TEST 1\r\n@@ -93,3 +94,5 @@\r\n #define CONFIG_BUILDSYS_USE_CCACHE 1\r\n #define CONFIG_MAX_NUM_NODES 1\r\n #define CONFIG_KERNEL_STACK_BITS 12\r\n+#define CONFIG_ENABLE_BENCHMARKS 1\r\n+#define CONFIG_BENCHMARK_TRACK_UTILISATION 1\r\n```\r\nleads to:\r\n\r\n```\r\n [CC] kernel_final.s\r\nIn file included from ./include/plat/imx6/plat/machine/hardware.h:19:0,\r\n                 from ./include/arch/arm/arch/32/mode/machine.h:19,\r\n                 from ./include/machine.h:17,\r\n                 from ./include/api/syscall.h:14,\r\n                 from src/api/faults.c:16:\r\n./include/arch/arm/arch/benchmark_overflowHandler.h: In function ‘handleOverflowIRQ’:\r\n./include/arch/arm/arch/benchmark_overflowHandler.h:31:9: error: implicit declaration of function ‘armv_handleOverflowIRQ’ [-Werror=implicit-function-declaration]\r\n         armv_handleOverflowIRQ();\r\n         ^~~~~~~~~~~~~~~~~~~~~~\r\n./include/arch/arm/arch/benchmark_overflowHandler.h:31:9: error: nested extern declaration of ‘armv_handleOverflowIRQ’ [-Werror=nested-externs]\r\ncc1: all warnings being treated as errors\r\nMakefile:626: recipe for target 'kernel_final.s' failed\r\nmake: *** [kernel_final.s] Error 1\r\n```\r\nGuarding benchmark_overflowHandler.h with a #ifdef leads to following link error:\r\n\r\n```\r\n [LD] kernel.elf\r\nkernel.o: In function `benchmark_arch_utilisation_reset':\r\nsel4.git/./include/arch/arm/armv/armv7-a/armv/benchmark.h:20: undefined reference to `ccnt_num_overflows'\r\nsel4.git/./include/arch/arm/armv/armv7-a/armv/benchmark.h:20: undefined reference to `ccnt_num_overflows'\r\ncollect2: error: ld returned 1 exit status\r\nMakefile:643: recipe for target 'kernel.elf' failed\r\n```\r\n",
+  "created": "2017-09-04T11:25:40Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "90055957d782004ea9787910479115721ba48fa5",
+  "base_sha": "a3b0bd5c4f41029acad1d061f8431239b8c24353",
+  "fix_at": "2017-09-04T13:26:04+02:00",
+  "files": [
+   [
+    "include/arch/arm/arch/benchmark_overflowHandler.h",
+    "modified"
+   ],
+   [
+    "include/arch/arm/armv/armv7-a/armv/benchmark.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 68,
+  "title": "benchmark: support reading out idle cpu time on remote cpu",
+  "body": "",
+  "created": "2017-09-04T10:50:18Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 72,
+  "base_sha": "09ba9fc887491770af303909d4a08ac7718cf86e",
+  "fix_at": "2017-10-06T13:08:57Z",
+  "files": [
+   [
+    "libsel4/include/sel4/benchmark_utilisation_types.h",
+    "modified"
+   ],
+   [
+    "src/benchmark/benchmark_utilisation.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 66,
+  "title": "irq_t / interrupt_t implicit conversion",
+  "body": "```\r\nIn file included from seL4/src/api/faults.c:16:\r\nIn file included from seL4/include/api/syscall.h:15:\r\nIn file included from seL4/include/machine.h:18:\r\nIn file included from seL4/include/plat/pc99/plat/machine/hardware.h:15:\r\nseL4/include/plat/pc99/plat/machine/interrupt.h:53:17: warning: implicit conversion from enumeration type 'interrupt_t' (aka 'enum _interrupt_t') to different enumeration type 'irq_t' (aka 'enum _irq_t') [-Wenum-conversion]\r\n    irq_t ret = x86KSPendingInterrupt;\r\n          ~~~   ^~~~~~~~~~~~~~~~~~~~~\r\nseL4/include/plat/pc99/plat/machine/interrupt.h:78:29: warning: implicit conversion from enumeration type 'irq_t' (aka 'enum _irq_t') to different enumeration type 'interrupt_t' (aka 'enum _interrupt_t') [-Wenum-conversion]\r\n        x86KScurInterrupt = servicePendingIRQ();\r\n                          ~ ^~~~~~~~~~~~~~~~~~~\r\n```",
+  "created": "2017-08-25T00:49:23Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "2bf586fe3d4aeda0bfc2614d4101bdeca512e326",
+  "base_sha": "2a09ce83f7a62a455742902c473fdd54ec07db0d",
+  "fix_at": "2017-08-29T10:56:43+10:00",
+  "files": [
+   [
+    "include/plat/pc99/plat/machine/interrupt.h",
+    "modified"
+   ],
+   [
+    "src/arch/x86/32/c_traps.c",
+    "modified"
+   ],
+   [
+    "src/arch/x86/64/c_traps.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 57,
+  "title": "Thread code nitpick",
+  "body": "```\r\nsrc/kernel/thread.c:125:13: error: logical not is only applied to the left hand side of this comparison [-Werror,-Wlogical-not-parentheses]\r\n    if ((!!(!seL4_Fault_get_seL4_FaultType(sender->tcbFault) != seL4_Fault_NullFault))) {\r\n```\r\n\r\nI think there's a mess with `!` usage here.",
+  "created": "2017-01-25T21:56:41Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "ddeb9783d077a34d62c288b02c2963db34c28a7e",
+  "base_sha": "4cfbb68c62436186d966de0136ad7fb1e2d79f14",
+  "fix_at": "2017-01-30T09:46:40+11:00",
+  "files": [
+   [
+    "src/kernel/thread.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 56,
+  "title": "kernel/boot.c nitpick",
+  "body": "in allocate_bi_frame():\r\n\r\n```\r\n    /* create the bootinfo frame object */\r\n    pptr = alloc_region(BI_FRAME_SIZE_BITS); <--allocated BI_FRAME_SIZE_BITS\r\n    if (!pptr) {\r\n        printf(\"Kernel init failed: could not allocate bootinfo frame\\n\");\r\n        return 0;\r\n    }\r\n    clearMemory((void*)pptr, PAGE_BITS); <-- clear PAGE_BITS\r\n```\r\n\r\nIt allocates one size, but clears another. Per chance they are the same so the whole thing didn't blow up.",
+  "created": "2017-01-25T21:54:21Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "f3d62531b5e83a2ef948c4af567ad0febbf93692",
+  "base_sha": "a384329336a3c312b47bd888b095b2384064e2e5",
+  "fix_at": "2017-01-27T09:54:54+11:00",
+  "files": [
+   [
+    "src/kernel/boot.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 53,
+  "title": "Bug in invocation_header_gen.py on ia32?",
+  "body": "In file `tool/invocation_header_gen.py`, around line 80:\r\n\r\n```\r\nenum sel4_arch_invocation_label {\r\n    {{for label, condition in invocations}}\r\n    ...\r\n    {{label}} = nInvocationLabels,\r\n    ...\r\n    {{endfor}}\r\n    nSeL4ArchInvocationLabels\r\n}\r\n```\r\n\r\nOn ia32, becasue `seL4_arch_invocations` is an empty list, this will cause `nSeL4ArchInvocationLabels` to be declared as 0, rather than `nInvocationLabels` as intented.",
+  "created": "2016-12-31T22:38:45Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "4bfa5bb9793f7674696bb9066b2ed96d4f41b638",
+  "base_sha": "706eca6ae268496aeba10873d8646089b396c0d7",
+  "fix_at": "2017-01-04T10:40:25+11:00",
+  "files": [
+   [
+    "tools/invocation_header_gen.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 41,
+  "title": "Drilling down on that mystery async abort",
+  "body": "Further to #33, I decided to do a bit of digging to see if I could figure out where that async abort was coming from.\n\nLet's start with the some details:\n- element14 i.MX6Q hardware\n- U-Boot 2016.03-20505-g7e2d42d (latest Boundary Devices version, but the same happens with u-boot master)\n- Current sel4test master, kernel seL4/seL4@b25b826415a397ee92160724c0cb761a5377f0e1 and elfloader seL4/seL4_tools@79251ae58462ef2475e22e7a2ce0a6aa9cf8e38d\n\nAnd to recap, here's the async abort on return to user space (c.f. sel4test-driver's virt_entry) I'm seeing with an unmodified debug build:\n\n```\n=> fatload mmc 1:1 $loadaddr sel4test-driver-image-arm-imx6 && bootelf $loadaddr\nreading sel4test-driver-image-arm-imx6\n3065572 bytes read in 165 ms (17.7 MiB/s)\n## Starting application at 0x20000100 ...\n\nELF-loader started on CPU: ARM Ltd. Cortex-A9 r2p10\n  paddr=[20000100..202f041f]\nELF-loading image 'kernel'\n  paddr=[10000000..10037fff]\n  vaddr=[e0000000..e0037fff]\n  virt_entry=e0000000\nELF-loading image 'sel4test-driver'\n  paddr=[10038000..103fafff]\n  vaddr=[10000..3d2fff]\n  virt_entry=1de7c\nEnabling MMU and paging\nJumping to kernel-image entry point...\n\nDIDRv: 3, armv 70, coproc baseline only? no.\nCPU is in secure mode. Enabling debugging in secure user mode.\nBootstrapping kernel\nCaught cap fault in send phase at address 0x0\nwhile trying to handle:\nvm fault on data at address 0x7b63f3a2 with status 0x1c06\nin thread 0xffdfad00 \"rootserver\" at address 0x1de7c\n```\n\nOkay, so let's turn on async aborts everywhere and see what blows up. Step 1: Add `cpsie a` to the kernel's `_start` and see what happens:\n\n```\nBootstrapping kernel\n\nKERNEL DATA ABORT!\nFaulting instruction: 0xe0000338\nFAR: 0xeb25bbaa DFSR: 0x1c06\nhalting...\n```\n\nNice! Working backwards just to make sure the abort didn't exist earlier in the boot chain, I also initialised CPSR and turned on async abort interrupts in elfloader's `_start`. Same error. Nice!\n\nWhat's the faulting instruction?\n\n```\ne0000300 <initL2Cache>:\ne0000300:       e30330ff        movw    r3, #12543      ; 0x30ff\ne0000304:       e3a00000        mov     r0, #0\ne0000308:       e34f3ff0        movt    r3, #65520      ; 0xfff0\ne000030c:       e52de004        push    {lr}            ; (str lr, [sp, #-4]!)\ne0000310:       e1a02003        mov     r2, r3\ne0000314:       e3001121        movw    r1, #289        ; 0x121\ne0000318:       e3430c07        movt    r0, #15367      ; 0x3c07\ne000031c:       e3a0e203        mov     lr, #805306368  ; 0x30000000\ne0000320:       e30fcfff        movw    ip, #65535      ; 0xffff\ne0000324:       e5830005        str     r0, [r3, #5]\ne0000328:       e5831009        str     r1, [r3, #9]\ne000032c:       e583100d        str     r1, [r3, #13]\ne0000330:       e583ee61        str     lr, [r3, #3681] ; 0xe61\ne0000334:       e583c67d        str     ip, [r3, #1661] ; 0x67d\ne0000338:       e592367d        ldr     r3, [r2, #1661] ; 0x67d      /* !!! */\ne000033c:       e6ff3073        uxth    r3, r3\ne0000340:       e3530000        cmp     r3, #0\ne0000344:       1afffffb        bne     e0000338 <initL2Cache+0x38>\n...\n```\n\nFine, I'll be a jerk about it and disable the L2 cache. On the off chance it doesn't blow up elsewhere, we'll have narrowed things down at least.\n\nLo and behold!\n\n```\nBootstrapping kernel\n\n... 8< ... lots of test output ... 8< ...\n\n218/222 tests passed.\n*** FAILURES DETECTED ***\n```\n\nLooks like the imx6 platform doesn't have its own `initL2Cache` function, so I'll have to start digging into `src/arch/arm/machine/l2c_310.c`. (So far I'm a wee bit flummoxed by the difference between what's in `kernel_final.c` versus `kernel_final.s`.)\n\nGiven it's an async/imprecise abort, it's not necessarily that instruction that caused the problem, but at least we know something's going awry with the L2 cache. I might see what happens if I tell u-boot not to initialise or use it…\n",
+  "created": "2016-10-24T22:18:40Z",
+  "labels": [],
+  "via": "pull request",
+  "ref": 42,
+  "base_sha": "b25b826415a397ee92160724c0cb761a5377f0e1",
+  "fix_at": "2016-10-28T13:05:19Z",
+  "files": [
+   [
+    "src/arch/arm/machine/l2c_310.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 40,
+  "title": "Makefile PATH append doesn't tolerate spaces in paths",
+  "body": "The Makefile tries to add the tools directory to the path, but doesn't properly quote in the case that the original PATH has spaces in it. Fixed by quoting the variable assignment as follows:\n\n```\ndiff --git a/Makefile b/Makefile\nindex 2ab6292..737edfa 100644\n--- a/Makefile\n+++ b/Makefile\n@@ -158,7 +158,7 @@ default: all\n ### Tool setup\n ############################################################\n\n-PATH := ${SOURCE_ROOT}/tools:${PATH}\n+PATH := \"${SOURCE_ROOT}/tools:${PATH}\"\n export PATH\n\n PARSER = c-parser\n```\n",
+  "created": "2016-10-07T15:36:45Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "cc1fb892b8b649ea3010be867167473eca149752",
+  "base_sha": "77c4954a007b31071aa50eb48d757a07a284925c",
+  "fix_at": "2016-10-11T10:33:49+11:00",
+  "files": [
+   [
+    "Makefile",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 36,
+  "title": "x86: boot hangs due to unstable serial-console output",
+  "body": "On our test machine, nightly tests are unstable since we connected a custom USB-HID test device that acts rather dynamically with periodic connect-disconnect cycles. The symptom is that the kernel boot just hangs during PCI scan. I traced this down to `console_putchar()` in  _src/plat/pc99/machine/io.c_ which produces the hang by not returning, and for me the following code looked suspicious\n\n``` C\nwhile (!(in8(port + 5) & 0x60));\n```\n\nThe implementation checks if the THRE 0x20 or TEMT 0x40 flag was set in the UART. If I remove TEMT from the check all tests work as expected. Also, most other UART drivers I know of just check for THRE as the flag is defined as _the UART is ready to accept a new character for transmission_ (from http://archive.pcjs.org/pubs/pc/datasheets/8250A-UART.pdf).\n",
+  "created": "2016-09-09T09:00:05Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "af576aaee5d85050cb02e8c9acf518467b5ab679",
+  "base_sha": "0fb224b0952dd0859aeaa546f2223b61fef7d415",
+  "fix_at": "2016-09-12T10:03:25+02:00",
+  "files": [
+   [
+    "src/plat/pc99/machine/io.c",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 34,
+  "title": "x86: add support for position independent syscall bindings",
+  "body": "Required if one wants to use the bindings with shared libraries as done on Genode/seL4.\n",
+  "created": "2016-08-26T08:56:15Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "fbeb95edb927fa1c7f8cd9b0b33d3db1d7725339",
+  "base_sha": "e70cd7613bb3aed71d3df58c72146cc44a60190e",
+  "fix_at": "2016-08-26T10:58:30+02:00",
+  "files": [
+   [
+    "libsel4/sel4_arch_include/ia32/sel4/sel4_arch/syscalls.h",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 29,
+  "title": "syscall_stub_gen.py ... --word-size 32 ... invocation fails",
+  "body": "```\npython sel4/libsel4/tools/syscall_stub_gen.py --buffer -a ia32 --word-size 32 -o ...\n\nTraceback (most recent call last):\n  File \".../libsel4/tools/syscall_stub_gen.py\", line 821, in <module>\n    sys.exit(main())\n  File \".../libsel4/tools/syscall_stub_gen.py\", line 817, in main\n    generate_stub_file(args.arch, wordsize, args.files, args.output, args.buffer)\n  File \".../libsel4/tools/syscall_stub_gen.py\", line 725, in generate_stub_file\n    result.append(\"assert_size_correct(%s, %d);\" % (x.name, x.native_size_bits / 8))\nTypeError: unsupported operand type(s) for /: 'str' and 'int'\n```\n",
+  "created": "2016-07-06T14:03:45Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "9fc8194b1f89a0cb0f73cce32d413248a587e9d2",
+  "base_sha": "ffc15e95bbbcba10839a51c6392f341844f8d4d3",
+  "fix_at": "2016-07-06T16:03:58+02:00",
+  "files": [
+   [
+    "libsel4/tools/syscall_stub_gen.py",
+    "modified"
+   ]
+  ]
+ },
+ {
+  "issue": 28,
+  "title": "x86: support to read out serial i/o ports from BIOS data area",
+  "body": "On Genode/x86 we use for all of our 7 supported x86 micokernels the BIOS data area to read out the serial configuration. This eliminates for us the need to manually finding out the I/O ports, which is especially handy on native machines you don't have next to you. Also the support of external users becomes comfortable since most the time the serial output 'just' works. We combine this mechanism with a small chained bootloader like bender [0, 1] that scans for PCI serial cards or/and Intel AMT SerialOverLine, writes it to the BIOS data area and then starts the actual microkernel.\n\nWhat is your opinion about adding this BDA feature to seL4  in general ?\n\nhttps://github.com/alex-ab/genode/commit/4c1fe8b2dbe4d7fed4c9f60bfa00822621e3f333 depicts the required changes, we currently apply manually to our Genode/seL4 version. (I decided for now to add extra cmdline options, which however are not strictly necessary for us.)\n\n[0] https://github.com/genodelabs/genode/issues/768\n[1] https://github.com/genodelabs/genode/issues/1625\n",
+  "created": "2016-07-04T16:26:55Z",
+  "labels": [],
+  "via": "commit",
+  "ref": "d95f10a416dfa240257e35742e5d3589162afd71",
+  "base_sha": "8150e914c377bb2d94796c6857d08f64973a7295",
+  "fix_at": "2016-07-05T15:33:55+02:00",
+  "files": [
+   [
+    "src/arch/x86/kernel/cmdline.c",
+    "modified"
+   ]
+  ]
+ }
+]

@@ -1,0 +1,110 @@
+analysis ana_4b0ec8e9a719, snapshot snp_146247647180 (commit 91533f3f3b)
+understood as: Anladığım (kurallarla): q1 [konum] Portable id'ler ne işe yarıyor?
+plan links: Portable -> verinoda/portable_ids.py:94-111; id'ler -> verinoda/schemas/question_plan.v1.json:64-64
+q1 [met] locate: Portable id'ler ne işe yarıyor?
+  [statically_verified] `make_graph_portable()` is defined at verinoda/portable_ids.py:94-111  (clm_0faf993bda3b)
+  [statically_verified] `build()` is defined at verinoda/index.py:56-95  (clm_48355b6c1c52)
+  [statically_verified] `strip_root_from_ids()` is defined at verinoda/portable_ids.py:28-91  (clm_7f695f184d57)
+  [weak_inference] verinoda/portable_ids.py:3-4 contains: The upstream pipeline (``project_index``, never hand-edited: docs/UPSTREAM.md) makes every node's id  (clm_4f45f6e3da7c)
+  [weak_inference] verinoda/portable_ids.py:15-17 contains: (``/app``, ``C:\\code``: its folded name is an ordinary word as often as a path). A rewritten id  (clm_f0051b36b9f7)
+context (found on the way; not what answers):
+  [observed 0.80] `build()` calls `make_graph_portable()` (verinoda/index.py:82) (uncertain: call site verinoda/index.py:82: `make_graph_portable` is rebound locally at line 79 before the call)  (clm_4e46c34e6b13)
+  [strong_inference] `impact3d()` calls `fileNodeId()` (verinoda/ui/static/app.js:1479) (uncertain: which definition the call at verinoda/ui/static/app.js:1479 binds to is checked for Python only)  (clm_1b9022390b79)
+  [strong_inference] `flyTo()` calls `fileNodeId()` (verinoda/ui/static/app.js:1587) (uncertain: which definition the call at verinoda/ui/static/app.js:1587 binds to is checked for Python only)  (clm_e1ee79856657)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_4f45f6e3da7c: weak_inference -> weak_inference  
+critique clm_f0051b36b9f7: weak_inference -> weak_inference  
+critique clm_4e46c34e6b13: statically_verified -> observed  verinoda/index.py:82: `make_graph_portable` is rebound locally at line 79 before the call
+passages (what `verinoda query` gives for the question; search results, not claims):
+## verinoda/portable_ids.py:94-111 make_graph_portable
+  doc: Rewrite ``graph_file`` (graph.json) in place when some ids carry ``root``; ``{"changed": n}``. Written the way the upstream pipeline writes it (indent 2, key o…
+  calls: strip_root_from_ids@101
+  called by: build (verinoda/index.py:82)
+ 94 def make_graph_portable(graph_file: Path, root: Path) -> dict:
+ 95     """Rewrite ``graph_file`` (graph.json) in place when some ids carry ``root``; ``{"changed": n}``.
+ 96     Written the way the upstream pipeline writes it (indent 2, key order kept), so its own
+ 97     "the graph did not change" comparison on the next update still works."""
+ 98     p = Path(graph_file)
+ 99     data = json.loads(p.read_text(encoding="utf-8"))
+100     edges = data.get("links") if isinstance(data.get("links"), list) else data.get("edges") or []
+101     n = strip_root_from_ids(data.get("nodes") or [], edges, Path(root).resolve(), data.get("hyperedges"))
+102     if n:
+103         fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
+104         try:
+105             with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+106                 fh.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+107             os.replace(tmp, p)
+108         except BaseException:
+109             Path(tmp).unlink(missing_ok=True)
+110             raise
+111     return {"changed": n}
+## verinoda/index.py:56-95 def build(repo: Path, *, force: bool = False, changed: list[Path] | None = None, quiet: bool = True) -> dict
+  doc: Run the Graphify-derived AST pipeline; return graph stats.
+  calls: install_path_identity_memo@65, ensure_atlas@67, index_dir@68, _null@72, _without_report_questions@72, _without_upstream_html@72, graph_path@74, make_graph_portable@82, refresh_receiver_sidecar@92
+  called by: _build_index (verinoda/research.py:357); scan (verinoda/workflow.py:151); update (verinoda/workflow.py:241)
+  verinoda/index.py:80-93
+81     try:
+82         portable = make_graph_portable(gp, repo)
+83     except (OSError, ValueError) as exc:  # the ids stay as the pipeline wrote them
+84         portable = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+85 data = json.loads(gp.read_text(encoding="utf-8"))
+86 out = {"ok": bool(ok), "graph_path": str(gp), "nodes": len(data.get("nodes", [])),
+87        "edges": len(data.get("links", data.get("edges", []))), "log": buf.getvalue()[-2000:]}
+88 if portable is not None:
+89     out["portable_ids"] = portable
+90 if ok:
+91     try:
+92         out["receiver_calls"] = refresh_receiver_sidecar(repo)
+93     except (OSError, ValueError) as exc:  # the sidecar is derived data; load() recomputes it
+## verinoda/portable_ids.py:28-91 def strip_root_from_ids(nodes: list, edges: list, root: Path, hyperedges: list | None = None) -> int
+  doc: Rewrite, in place, the ids of ``nodes`` / ``edges`` (and hyperedge members) minted from an absolute path under ``root``. Returns how many ids changed.
+  called by: make_graph_portable (verinoda/portable_ids.py:101)
+  verinoda/portable_ids.py:38-46
+38 if len(parts) < 2:
+39     return 0
+40 slug = make_id(str(root))
+41 if not slug:
+42     return 0
+43 lead = slug + "_"
+44 mid = "_elem_" + slug + "_"
+45 owned = {n.get("id") for n in nodes if isinstance(n, dict) and n.get("source_file")}
+  verinoda/portable_ids.py:60-73
+61 remap: dict[str, str] = {}
+62 for i in touched:
+63     new = without_root(i)
+64     if new == i:
+65         continue
+66     if new in taken:
+67         new = f"{new}_unresolved"
+68     remap[i] = new
+69 changed = 0
+70 for n in nodes:
+71     if isinstance(n, dict) and n.get("id") in remap:
+72         n["id"] = remap[n["id"]]
+73         changed += 1
+## verinoda/portable_ids.py:3-8 (module level)
+3 The upstream pipeline (``project_index``, never hand-edited: docs/UPSTREAM.md) makes every node's id
+4 repo-relative, but an id with no file of its own keeps what it was minted from. The target of an
+5 import whose file does not exist (``require('./missing')``, resolved against the importer) and the
+6 element ids of a ``.dmf`` interface file (they embed the window's id) carry the scan root folded
+7 into ``_`` parts - ``c_users_me_src_proj_...``, the user name included - into graph.json and
+8 everything built from it: the search index, answers given to agents, exported pages.
+## verinoda/schemas/question_plan.v1.json:64-64 id
+64 "id": {
+## verinoda/schemas/question_plan.v1.json:3-3 $id
+3 "$id": "verinoda.question_plan/1",
+## verinoda/portable_ids.py:10-18 (module level)
+10 After each build Verinoda rewrites graph.json so those ids are the same on every machine. Only
+11 such ids are touched: one that STARTS with the root's folded form (the form an absolute path
+12 mints) and belongs to no node with a source file (a real node is already canonical), or one that
+13 holds the root right after ``_elem_`` (the ``.dmf`` form, on real nodes); such a node's ``label`` and
+14 ``norm_label``, minted from the same path, lose it too. Nothing under a root of one folder
+15 (``/app``, ``C:\\code``: its folded name is an ordinary word as often as a path). A rewritten id
+16 that would take one another thing already has (a missing ``./secrets`` beside the ``secrets``
+17 module) keeps apart as ``<id>_unresolved``.
+18 """
+verinoda/ui/static/app.js:1268-1274 function fileNodeId(x) { // a note of the page -> its file, as the graph view shows files
+verinoda/ui/static/app.js:1475-1497 async function impact3d(x)
+verinoda/ui/static/app.js:1585-1588 function flyTo(x)
+… 647 more candidates not shown: verinoda/ui/static/app.js:1262-1267 function focusCurrent() { // opened from a note: fly to its file; verinoda/ui/static/app.js:1498-1515 async function path3d(a, b); verinoda/ui/static/app.js:1308-1320 function select3d(n, { fly = true, push = true, keepWalk = false } = {}); verinoda/resources.py:61-72 _ID = r"(#?)([a-z0-9_.-]+):([a-z0-9_./-]*[a-z_][a-z0-9_./-]*)"
+next: verinoda query "…" --max-chars 12000

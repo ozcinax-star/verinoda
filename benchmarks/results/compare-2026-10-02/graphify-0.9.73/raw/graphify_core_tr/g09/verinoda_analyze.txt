@@ -1,0 +1,102 @@
+analysis ana_19369e1a6584, snapshot snp_62e9091e3a52 (commit e26f08098e)
+understood as: Anladığım (kurallarla): q1 [testler] Grafik dosyası boyut sınırını ve ortam değişkeniyle aşılmasını hangi testler kapsıyor? (karşılıklar: Grafik=graph, boyut=size, sınırını=limit, ortam değişkeniyle=env)
+q1 [met_with_inference] tests: Grafik dosyası boyut sınırını ve ortam değişkeniyle aşılmasını hangi testler kapsıyor?
+  [strong_inference] Test code statically reaches `_max_graph_file_bytes()` from: test_graph_size_cap_at_boundary_passes(), test_graph_size_cap_error_message_includes_size_and_cap(), test_graph_size_cap_missing_file_silently_returns(), test_graph_size_cap_over_limit_raises() {source_code:tests/test_security.py:288; source_code:tests/test_security.py:294; source_code:tests/test_security.py:302} (uncertain: static call reachability, not runtime coverage: a test may stop (raise, return, mock) before it runs this code)  (clm_a69ec4f89661)
+  [strong_inference] Test code statically reaches `check_graph_file_size_cap()` from: test_graph_size_cap_at_boundary_passes(), test_graph_size_cap_error_message_includes_size_and_cap(), test_graph_size_cap_missing_file_silently_returns(), test_graph_size_cap_over_limit_raises() {source_code:tests/test_security.py:288; source_code:tests/test_security.py:294; source_code:tests/test_security.py:302} (uncertain: static call reachability, not runtime coverage: a test may stop (raise, return, mock) before it runs this code)  (clm_08b7dc3c7d3d)
+context (found on the way; not what answers):
+  [statically_verified] `_max_graph_file_bytes()` is defined at graphify/security.py:35-66  (clm_5f0b954c2634)
+  [statically_verified] `check_graph_file_size_cap()` is defined at graphify/security.py:357-383  (clm_9b9ed0cbb05b)
+  [statically_verified] `check_graph_file_size_cap()` calls `_max_graph_file_bytes()` (graphify/security.py:373)  (clm_7d7f8dcbaa54)
+  [statically_verified] `_max_graph_file_bytes()` in graphify/security.py reads environment variable GRAPHIFY_MAX_GRAPH_BYTES (graphify/security.py:49)  (clm_e63b9cc18920)
+  [statically_verified] `_max_server_contexts()` in graphify/serve.py reads environment variable GRAPHIFY_MAX_CONTEXTS (graphify/serve.py:112)  (clm_8dd0f7d75cb2)
+  [statically_verified] `_resolve_max_tokens()` in graphify/llm.py reads environment variable GRAPHIFY_MAX_OUTPUT_TOKENS (graphify/llm.py:310)  (clm_ce3bdcfb56ab)
+  +2 more context claim(s) (--json lists them)
+  +3 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: testler->test, testler->test_security, testler->test_querylog (+13 more)
+## tests/test_security.py:294-299 test_graph_size_cap_over_limit_raises
+  calls: check_graph_file_size_cap@299
+294 def test_graph_size_cap_over_limit_raises(monkeypatch, tmp_path):
+295     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 16)
+296     p = tmp_path / "graph.json"
+297     p.write_text('{"nodes": [], "links": [], "padding": "x" * 50}', encoding="utf-8")
+298     with pytest.raises(ValueError, match="exceeds"):
+299         check_graph_file_size_cap(p)
+## graphify/security.py:35-66 def _max_graph_file_bytes() -> int
+  doc: Return the graph.json size cap in bytes.
+  called by: check_graph_file_size_cap (graphify/security.py:373); test_max_graph_bytes_default_when_unset (tests/test_security.py:243); test_max_graph_bytes_default_when_blank (tests/test_security.py:248); test_max_graph_bytes_plain_integer (tests/test_security.py:253); test_max_graph_bytes_mb_suffix_is_binary (tests/test_security.py:258); test_max_graph_bytes_gb_suffix_is_binary (tests/test_security.py:263); test_max_graph_bytes_suffix_is_case_insensitive (tests/test_security.py:268); test_max_graph_bytes_tolerates_space_before_suffix (tests/test_security.py:273) (+2)
+  const graphify/security.py:32: _MAX_GRAPH_FILE_BYTES = 512 * 1024 * 1024   # 512 MiB
+  graphify/security.py:37-45
+38 Honors the ``GRAPHIFY_MAX_GRAPH_BYTES`` environment variable so users with
+39 large codebases can raise the limit without editing source. The value may
+40 be plain bytes (``671088640``) or carry an ``MB`` / ``GB`` suffix
+41 (``640MB``, ``2GB`` — case-insensitive, binary multipliers: ``MB`` is
+42 1024*1024 and ``GB`` is 1024*1024*1024, i.e. MiB / GiB).
+43 Falls back to ``_MAX_GRAPH_FILE_BYTES`` (512 MiB) when the env var is unset,
+44 blank, or unparseable.
+  graphify/security.py:57-66
+57 elif text.endswith("MB"):
+58     multiplier = 1024 * 1024
+59     text = text[:-2].strip()
+60 try:
+61     value = int(text)
+62 except ValueError:
+63     return _MAX_GRAPH_FILE_BYTES
+64 if value <= 0:
+65     return _MAX_GRAPH_FILE_BYTES
+66 return value * multiplier
+## tests/test_security.py:288-291 test_graph_size_cap_under_limit_returns_none
+  calls: check_graph_file_size_cap@291
+288 def test_graph_size_cap_under_limit_returns_none(tmp_path):
+289     p = tmp_path / "graph.json"
+290     p.write_text('{"nodes": [], "links": []}', encoding="utf-8")
+291     assert check_graph_file_size_cap(p) is None
+## graphify/security.py:357-383 def check_graph_file_size_cap(path: Path) -> None
+  graphify/security.py:364-368
+365 The cap is resolved on every call via :func:`_max_graph_file_bytes`, so the
+366 ``GRAPHIFY_MAX_GRAPH_BYTES`` env var can be set before import and still
+367 apply.
+## tests/test_security.py:233-234 test_graph_size_cap_default_is_512_mib
+233 def test_graph_size_cap_default_is_512_mib():
+234     assert _MAX_GRAPH_FILE_BYTES == 512 * 1024 * 1024
+## tests/test_security.py:314-323 test_graph_size_cap_at_boundary_passes
+314 def test_graph_size_cap_at_boundary_passes(monkeypatch, tmp_path):
+315     # Boundary: equal to cap is allowed; strictly greater is rejected.
+316     p = tmp_path / "graph.json"
+317     payload = "A" * 32
+318     p.write_text(payload, encoding="utf-8")
+319     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 32)
+320     assert check_graph_file_size_cap(p) is None
+321     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 31)
+322     with pytest.raises(ValueError):
+323         check_graph_file_size_cap(p)
+## tests/test_security.py:302-311 test_graph_size_cap_error_message_includes_size_and_cap
+302 def test_graph_size_cap_error_message_includes_size_and_cap(monkeypatch, tmp_path):
+303     monkeypatch.setattr("graphify.security._MAX_GRAPH_FILE_BYTES", 8)
+304     p = tmp_path / "graph.json"
+305     p.write_text("AAAAAAAAAAAAAAAA", encoding="utf-8")  # 16 bytes
+306     with pytest.raises(ValueError) as excinfo:
+307         check_graph_file_size_cap(p)
+308     msg = str(excinfo.value)
+309     assert "16" in msg  # observed size
+310     assert "8" in msg   # cap
+311     assert "byte" in msg.lower()
+tests/test_security.py:237-239 # ---------------------------------------------------------------------------
+graphify/cli.py:1064-4842 def dispatch_command(cmd: str) -> None
+tests/test_security.py:326-330 def test_graph_size_cap_missing_file_silently_returns(tmp_path)
+tests/test_security.py:333-342 def test_graph_size_cap_unreadable_directory_silently_returns(monkeypatch, tmp_path)
+graphify/exporters/html.py:17-30 def _viz_node_limit() -> int
+tests/test_security.py:246-248 def test_max_graph_bytes_default_when_blank(monkeypatch)
+tests/test_security.py:283-285 def test_max_graph_bytes_nonpositive_falls_back(monkeypatch, nonpositive)
+tests/test_security.py:241-243 def test_max_graph_bytes_default_when_unset(monkeypatch)
+tests/test_security.py:277-279 def test_max_graph_bytes_unparseable_falls_back(monkeypatch, bad)
+tests/test_security.py:251-253 def test_max_graph_bytes_plain_integer(monkeypatch)
+tests/test_security.py:271-273 def test_max_graph_bytes_tolerates_space_before_suffix(monkeypatch)
+tests/test_security.py:261-263 def test_max_graph_bytes_gb_suffix_is_binary(monkeypatch)
+tests/test_security.py:266-268 def test_max_graph_bytes_suffix_is_case_insensitive(monkeypatch)
+tests/test_security.py:256-258 def test_max_graph_bytes_mb_suffix_is_binary(monkeypatch)
+tests/test_security.py:99-115 def test_safe_fetch_raises_on_size_exceeded()
+tests/test_querylog.py:74-81 def test_disable_env(tmp_path, monkeypatch)
+tests/test_querylog.py:84-91 def test_disable_env_true(tmp_path, monkeypatch)
+… 2082 more candidates not shown: tests/test_security.py:13-24 check_graph_file_size_cap,; graphify/llm.py:3157-3169 def backend_detection_env_vars() -> tuple[str, ...]; graphify/llm.py:308-318 def _resolve_max_tokens(default: int) -> int; graphify/extract.py:6605-6745 _extract_parallel
+next: verinoda query "…" --max-chars 12000

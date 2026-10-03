@@ -1,0 +1,277 @@
+$ grep -rniE 'emberforge|reset|command|down|data|pack' .   # 288 matching lines in 51 files
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:1: package net.ashvale.emberforge.util;
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:3: import net.ashvale.emberforge.EmberForge;
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:4: import net.minecraft.commands.CommandSourceStack;
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:8: /** Runs the mod's data-pack functions from code. */
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:10: public static final String RESET_FORGES = "emberforge:debug/reset_forges";
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:15: /** Runs the reset function at the source's position; false when the data pack does not provide it. */
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16: public static boolean resetForges(CommandSourceStack source) {
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:18: ResourceLocation id = ResourceLocation.parse(RESET_FORGES);
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:20: EmberForge.LOGGER.warn("Function {} is missing; is the mod's data pack disabled?", id);
+src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:23: server.getCommands().performPrefixedCommand(source, "function " + RESET_FORGES);
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:1: package net.ashvale.emberforge.command
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:3: import com.mojang.brigadier.CommandDispatcher
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:4: import net.ashvale.emberforge.block.EmberForgeBlockEntity
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:5: import net.ashvale.emberforge.config.EmberConfig
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:6: import net.ashvale.emberforge.util.ForgeFunctions
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:7: import net.minecraft.commands.CommandSourceStack
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:8: import net.minecraft.commands.Commands
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:9: import net.minecraft.commands.arguments.coordinates.BlockPosArgument
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:13: /** /emberforge reset and /emberforge heat <pos>. */
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:14: object ForgeCommands {
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:16: fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:18: Commands.literal("emberforge")
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:20: Commands.literal("reset")
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:21: .requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:22: .executes { ctx -> if (ForgeFunctions.resetForges(ctx.source)) 1 else 0 }
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:25: Commands.literal("heat")
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:27: Commands.argument("pos", BlockPosArgument.blockPos())
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:34: private fun reportHeat(source: CommandSourceStack, pos: BlockPos): Int {
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:35: val forge = source.level.getBlockEntity(pos) as? EmberForgeBlockEntity
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:37: source.sendFailure(Component.translatable("command.emberforge.heat.not_a_forge"))
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:40: source.sendSuccess({ Component.translatable("command.emberforge.heat", forge.heat) }, false)
+README.md:1: # Emberforge (example mod)
+README.md:10: `emberforge:forging` recipes. Right-click opens it; a Forge Hammer stokes it.
+README.md:13: - `/emberforge reset` and `/emberforge heat <pos>` for operators.
+README.md:18: - `src/main/kotlin` - Kotlin code (heat rules, forge screen, commands); needs Kotlin for Forge
+README.md:19: - `src/main/resources/data/emberforge` - recipes, tags, loot tables, worldgen, advancement, functions
+README.md:20: - `src/main/resources/assets/emberforge` - blockstates, models, `en_us` / `tr_tr` translations
+README.md:21: - `config/emberforge-common.toml` - the default common config, for reference
+src/main/java/net/ashvale/emberforge/config/EmberConfig.java:1: package net.ashvale.emberforge.config;
+src/main/java/net/ashvale/emberforge/config/EmberConfig.java:6: * Common settings. NeoForge writes them to config/emberforge-common.toml on first start;
+... (248 more matching lines not shown)
+
+==> src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:1-26 <==
+     1	package net.ashvale.emberforge.util;
+     2	
+     3	import net.ashvale.emberforge.EmberForge;
+     4	import net.minecraft.commands.CommandSourceStack;
+     5	import net.minecraft.resources.ResourceLocation;
+     6	import net.minecraft.server.MinecraftServer;
+     7	
+     8	/** Runs the mod's data-pack functions from code. */
+     9	public final class ForgeFunctions {
+    10	    public static final String RESET_FORGES = "emberforge:debug/reset_forges";
+    11	
+    12	    private ForgeFunctions() {
+    13	    }
+    14	
+    15	    /** Runs the reset function at the source's position; false when the data pack does not provide it. */
+    16	    public static boolean resetForges(CommandSourceStack source) {
+    17	        MinecraftServer server = source.getServer();
+    18	        ResourceLocation id = ResourceLocation.parse(RESET_FORGES);
+    19	        if (server.getFunctions().get(id).isEmpty()) {
+    20	            EmberForge.LOGGER.warn("Function {} is missing; is the mod's data pack disabled?", id);
+    21	            return false;
+    22	        }
+    23	        server.getCommands().performPrefixedCommand(source, "function " + RESET_FORGES);
+    24	        return true;
+    25	    }
+    26	}
+
+==> src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:1-43 <==
+     1	package net.ashvale.emberforge.command
+     2	
+     3	import com.mojang.brigadier.CommandDispatcher
+     4	import net.ashvale.emberforge.block.EmberForgeBlockEntity
+     5	import net.ashvale.emberforge.config.EmberConfig
+     6	import net.ashvale.emberforge.util.ForgeFunctions
+     7	import net.minecraft.commands.CommandSourceStack
+     8	import net.minecraft.commands.Commands
+     9	import net.minecraft.commands.arguments.coordinates.BlockPosArgument
+    10	import net.minecraft.core.BlockPos
+    11	import net.minecraft.network.chat.Component
+    12	
+    13	/** /emberforge reset and /emberforge heat <pos>. */
+    14	object ForgeCommands {
+    15	    @JvmStatic
+    16	    fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+    17	        dispatcher.register(
+    18	            Commands.literal("emberforge")
+    19	                .then(
+    20	                    Commands.literal("reset")
+    21	                        .requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }
+    22	                        .executes { ctx -> if (ForgeFunctions.resetForges(ctx.source)) 1 else 0 }
+    23	                )
+    24	                .then(
+    25	                    Commands.literal("heat")
+    26	                        .then(
+    27	                            Commands.argument("pos", BlockPosArgument.blockPos())
+    28	                                .executes { ctx -> reportHeat(ctx.source, BlockPosArgument.getLoadedBlockPos(ctx, "pos")) }
+    29	                        )
+    30	                )
+    31	        )
+    32	    }
+    33	
+    34	    private fun reportHeat(source: CommandSourceStack, pos: BlockPos): Int {
+    35	        val forge = source.level.getBlockEntity(pos) as? EmberForgeBlockEntity
+    36	        if (forge == null) {
+    37	            source.sendFailure(Component.translatable("command.emberforge.heat.not_a_forge"))
+    38	            return 0
+    39	        }
+    40	        source.sendSuccess({ Component.translatable("command.emberforge.heat", forge.heat) }, false)
+    41	        return forge.heat
+    42	    }
+    43	}
+
+==> README.md:1-22 <==
+     1	# Emberforge (example mod)
+     2	
+     3	A small, fictional NeoForge 1.21.1 mod used as a test corpus for Verinoda. It builds on
+     4	paper only: textures (`.png`) are left out so the example stays plain text, and nothing
+     5	here has been run in a game.
+     6	
+     7	Adds:
+     8	
+     9	- **Ember Forge** - a block that burns fuel into heat and slowly forges its input with
+    10	  `emberforge:forging` recipes. Right-click opens it; a Forge Hammer stokes it.
+    11	- **Cinder Ore** - generated in a few overworld biomes; forged into two Cinder Ingots
+    12	  (a furnace gives one).
+    13	- `/emberforge reset` and `/emberforge heat <pos>` for operators.
+    14	
+    15	Layout:
+    16	
+    17	- `src/main/java` - Java code (registries, block, block entity, menu, recipe, network, events)
+    18	- `src/main/kotlin` - Kotlin code (heat rules, forge screen, commands); needs Kotlin for Forge
+    19	- `src/main/resources/data/emberforge` - recipes, tags, loot tables, worldgen, advancement, functions
+    20	- `src/main/resources/assets/emberforge` - blockstates, models, `en_us` / `tr_tr` translations
+    21	- `config/emberforge-common.toml` - the default common config, for reference
+    22	- `src/test/java` - JUnit tests
+
+==> src/main/java/net/ashvale/emberforge/config/EmberConfig.java:1-41 <==
+     1	package net.ashvale.emberforge.config;
+     2	
+     3	import net.neoforged.neoforge.common.ModConfigSpec;
+     4	
+     5	/**
+     6	 * Common settings. NeoForge writes them to config/emberforge-common.toml on first start;
+     7	 * the spec is registered in the EmberForge constructor.
+     8	 */
+     9	public final class EmberConfig {
+    10	    public static final ModConfigSpec.IntValue HEAT_PER_FUEL;
+    11	    public static final ModConfigSpec.IntValue MAX_HEAT;
+    12	    public static final ModConfigSpec.IntValue STOKE_HEAT;
+    13	    public static final ModConfigSpec.IntValue DECAY_INTERVAL;
+    14	    public static final ModConfigSpec.BooleanValue ALLOW_RESET_COMMAND;
+    15	    public static final ModConfigSpec SPEC;
+    16	
+    17	    static {
+    18	        ModConfigSpec.Builder b = new ModConfigSpec.Builder();
+    19	
+    20	        b.comment("Ember Forge heat settings").push("forge");
+    21	        HEAT_PER_FUEL = b.comment("Heat added by one fuel item (blaze rods count double)")
+    22	                .defineInRange("heat_per_fuel", 40, 1, 400);
+    23	        MAX_HEAT = b.comment("Upper limit of a forge's heat")
+    24	                .defineInRange("max_heat", 200, 50, 1000);
+    25	        STOKE_HEAT = b.comment("Heat added by the Stoke button or a Forge Hammer hit")
+    26	                .defineInRange("stoke_heat", 15, 0, 100);
+    27	        DECAY_INTERVAL = b.comment("Ticks between two losses of 1 heat")
+    28	                .defineInRange("decay_interval_ticks", 20, 1, 1200);
+    29	        b.pop();
+    30	
+    31	        b.comment("Debug helpers").push("debug");
+    32	        ALLOW_RESET_COMMAND = b.comment("Allow operators to use /emberforge reset")
+    33	                .define("allow_reset_command", true);
+    34	        b.pop();
+    35	
+    36	        SPEC = b.build();
+    37	    }
+    38	
+    39	    private EmberConfig() {
+    40	    }
+    41	}
+
+==> src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:1-93 <==
+     1	package net.ashvale.emberforge.menu;
+     2	
+     3	import net.ashvale.emberforge.block.EmberForgeBlockEntity;
+     4	import net.ashvale.emberforge.registry.ModBlocks;
+     5	import net.ashvale.emberforge.registry.ModMenus;
+     6	import net.ashvale.emberforge.registry.ModTags;
+     7	import net.minecraft.core.BlockPos;
+     8	import net.minecraft.network.RegistryFriendlyByteBuf;
+     9	import net.minecraft.world.entity.player.Inventory;
+    10	import net.minecraft.world.entity.player.Player;
+    11	import net.minecraft.world.inventory.AbstractContainerMenu;
+    12	import net.minecraft.world.inventory.ContainerData;
+    13	import net.minecraft.world.inventory.ContainerLevelAccess;
+    14	import net.minecraft.world.inventory.SimpleContainerData;
+    15	import net.minecraft.world.inventory.Slot;
+    16	import net.minecraft.world.item.ItemStack;
+    17	import net.neoforged.neoforge.items.IItemHandler;
+    18	import net.neoforged.neoforge.items.ItemStackHandler;
+    19	import net.neoforged.neoforge.items.SlotItemHandler;
+    20	
+    21	public class EmberForgeMenu extends AbstractContainerMenu {
+    22	    private final ContainerLevelAccess access;
+    23	    private final ContainerData data;
+    24	    private final BlockPos pos;
+    25	
+    26	    /** Client side, from the open-menu packet (the server writes the forge position into it). */
+    27	    public EmberForgeMenu(int containerId, Inventory inventory, RegistryFriendlyByteBuf buf) {
+    28	        this(containerId, inventory, buf.readBlockPos(), new ItemStackHandler(3), new SimpleContainerData(4));
+    29	    }
+    30	
+    31	    /** Server side, from EmberForgeBlockEntity.createMenu. */
+    32	    public EmberForgeMenu(int containerId, Inventory inventory, EmberForgeBlockEntity forge, ContainerData data) {
+    33	        this(containerId, inventory, forge.getBlockPos(), forge.getItems(), data);
+    34	    }
+    35	
+    36	    private EmberForgeMenu(int containerId, Inventory inventory, BlockPos pos, IItemHandler items, ContainerData data) {
+    37	        super(ModMenus.EMBER_FORGE.get(), containerId);
+    38	        this.pos = pos;
+    39	        this.data = data;
+    40	        this.access = ContainerLevelAccess.create(inventory.player.level(), pos);
+    41	
+    42	        addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_INPUT, 56, 17));
+    43	        addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_FUEL, 56, 53) {
+    44	            @Override
+    45	            public boolean mayPlace(ItemStack stack) {
+    46	                return stack.is(ModTags.FORGE_FUELS);
+    47	            }
+    48	        });
+    49	        addSlot(new SlotItemHandler(items, EmberForgeBlockEntity.SLOT_OUTPUT, 116, 35) {
+    50	            @Override
+    51	            public boolean mayPlace(ItemStack stack) {
+    52	                return false;
+    53	            }
+    54	        });
+    55	        for (int row = 0; row < 3; row++) {
+    56	            for (int col = 0; col < 9; col++) {
+    57	                addSlot(new Slot(inventory, col + row * 9 + 9, 8 + col * 18, 84 + row * 18));
+    58	            }
+    59	        }
+    60	        for (int col = 0; col < 9; col++) {
+    61	            addSlot(new Slot(inventory, col, 8 + col * 18, 142));
+    62	        }
+    63	        addDataSlots(data);
+    64	    }
+    65	
+    66	    public BlockPos getPos() {
+    67	        return pos;
+    68	    }
+    69	
+    70	    public int getHeat() {
+    71	        return data.get(0);
+    72	    }
+    73	
+    74	    public int getMaxHeat() {
+    75	        return data.get(1);
+    76	    }
+    77	
+    78	    /** How many of {@code width} pixels of the progress arrow are filled. */
+    79	    public int progressWidth(int width) {
+    80	        int time = data.get(3);
+    81	        return time == 0 ? 0 : data.get(2) * width / time;
+    82	    }
+    83	
+    84	    @Override
+    85	    public ItemStack quickMoveStack(Player player, int index) {
+    86	        return ItemStack.EMPTY; // shift-click is not supported yet
+    87	    }
+    88	
+    89	    @Override
+    90	    public boolean stillValid(Player player) {
+    91	        return stillValid(access, player, ModBlocks.EMBER_FORGE.get());
+    92	    }
+    93	}

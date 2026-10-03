@@ -1,0 +1,89 @@
+expanded: summon key->summonkey
+## src/client/java/com/example/glowmod/client/GlowModClient.java:25-31 GlowModClient.onEndTick
+  calls: SummonWispPayload@28
+  runs: at the end of every client tick (registered at src/client/java/com/example/glowmod/client/GlowModClient.java:22)
+25 private static void onEndTick(MinecraftClient client) {
+26     while (summonKey.wasPressed()) {
+27         if (client.crosshairTarget instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) {
+28             ClientPlayNetworking.send(new SummonWispPayload(hit.getBlockPos()));
+29         }
+30     }
+31 }
+## src/client/java/com/example/glowmod/client/GlowModClient.java:18-23 GlowModClient.onInitializeClient
+18 @Override
+19 public void onInitializeClient() {
+20     summonKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+21             "key.glowmod.summon_wisp", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_G, "category.glowmod"));
+22     ClientTickEvents.END_CLIENT_TICK.register(GlowModClient::onEndTick);
+23 }
+## src/client/java/com/example/glowmod/client/GlowModClient.java:15-32 GlowModClient
+15 public class GlowModClient implements ClientModInitializer {
+16     private static KeyBinding summonKey;
+18     @Override
+19     public void onInitializeClient() {
+20         summonKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+21                 "key.glowmod.summon_wisp", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_G, "category.glowmod"));
+22         ClientTickEvents.END_CLIENT_TICK.register(GlowModClient::onEndTick);
+23     }
+25     private static void onEndTick(MinecraftClient client) {
+26         while (summonKey.wasPressed()) {
+27             if (client.crosshairTarget instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) {
+28                 ClientPlayNetworking.send(new SummonWispPayload(hit.getBlockPos()));
+29             }
+30         }
+31     }
+32 }
+## src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30 ServerNetworking.onSummonWisp
+  calls: get@25, spawn@29?
+  runs: when the client sends that packet (registered at src/main/java/com/example/glowmod/network/ServerNetworking.java:17)
+20 private static void onSummonWisp(SummonWispPayload payload, ServerPlayNetworking.Context context) {
+21     ServerPlayerEntity player = context.player();
+22     if (!player.getMainHandStack().isOf(ModItems.LANTERN_STAFF)) {
+23         return;
+24     }
+25     if (!player.getBlockPos().isWithinDistance(payload.pos(), GlowConfig.get().maxSummonDistance())) {
+26         GlowMod.LOGGER.warn("{} asked for a wisp too far away at {}", player.getName().getString(), payload.pos());
+27         return;
+28     }
+29     Wisp.spawn(player.getServerWorld(), payload.pos().up());
+30 }
+## src/main/java/com/example/glowmod/entity/Wisp.java:28-36 Wisp.spawn
+  called by: wisp (src/main/java/com/example/glowmod/command/GlowCommands.java:29)?; etkinlestir (src/main/java/com/example/glowmod/event/LanternEvents.java:30)?; onSummonWisp (src/main/java/com/example/glowmod/network/ServerNetworking.java:29)?; baslat (src/main/java/com/example/glowmod/ritual/Ritual.java:29)?; onChunkLoad (src/main/java/com/example/glowmod/world/WispSpawner.java:31)?; wispAppearsWhereAsked (src/gametest/java/com/example/glowmod/test/WispTests.java:16)?
+  runs: when a player right-clicks a block (registered at src/main/java/com/example/glowmod/event/LanternEvents.java:19)
+28 public static Wisp spawn(ServerWorld world, BlockPos pos) {
+29     Wisp wisp = ModEntities.WISP.create(world);
+30     if (wisp == null) {
+31         return null;
+32     }
+33     wisp.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0.0F, 0.0F);
+34     world.spawnEntity(wisp);
+35     return wisp;
+36 }
+## src/main/java/com/example/glowmod/network/SummonWispPayload.java:11-21 SummonWispPayload
+  called by: onEndTick (src/client/java/com/example/glowmod/client/GlowModClient.java:28)
+11 public record SummonWispPayload(BlockPos pos) implements CustomPayload {
+12     public static final CustomPayload.Id<SummonWispPayload> ID =
+13             new CustomPayload.Id<>(Identifier.of(GlowMod.MOD_ID, "summon_wisp"));
+14     public static final PacketCodec<RegistryByteBuf, SummonWispPayload> CODEC =
+15             PacketCodec.tuple(BlockPos.PACKET_CODEC, SummonWispPayload::pos, SummonWispPayload::new);
+17     @Override
+18     public Id<? extends CustomPayload> getId() {
+19         return ID;
+20     }
+21 }
+## src/main/java/com/example/glowmod/world/WispSpawner.java:18-20 WispSpawner.register
+  called by: onInitialize (src/main/java/com/example/glowmod/GlowMod.java:26)
+18 public static void register() {
+19     ServerChunkEvents.CHUNK_LOAD.register(WispSpawner::onChunkLoad);
+20 }
+src/main/java/com/example/glowmod/world/WispSpawner.java:22-33 private static void onChunkLoad(ServerWorld world, WorldChunk chunk)
+src/main/java/com/example/glowmod/world/WispSpawner.java:14-34 public final class WispSpawner
+src/main/java/com/example/glowmod/network/SummonWispPayload.java:10-10 /** Client -> server: "call a wisp at this block". */
+src/main/java/com/example/glowmod/network/ServerNetworking.java:15-18 public static void register()
+src/main/java/com/example/glowmod/command/GlowCommands.java:27-36 private static int wisp(CommandContext<ServerCommandSource> ctx)
+src/main/java/com/example/glowmod/GlowMod.java:19-30 @Override public void onInitialize()
+src/main/java/com/example/glowmod/world/WispSpawner.java:15-16 private WispSpawner()
+src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 {
+src/main/resources/assets/glowmod/lang/en_us.json:1-11 {
+… 80 more candidates not shown: src/main/java/com/example/glowmod/ritual/Ritual.java:21-31 public static void baslat(ServerWorld world, BlockPos altar); README.md:1-26 # Glow Mod (example); src/main/java/com/example/glowmod/repair/RepairScheduler.java:23-26 public static void register(); src/main/resources/glowmod.yml:16-18 network:
+next: verinoda query "…" --max-chars 12000

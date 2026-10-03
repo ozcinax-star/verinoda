@@ -1,0 +1,422 @@
+[
+ {
+  "id": "classify-js-import",
+  "area": "A",
+  "review": "kept",
+  "reasons": "No leak: the prompt names no private helpers. It says to reuse the existing resolution machinery, and the six-step precedence it lays out is behaviour the test depends on (relative/missing, tsconfig via references with JSONC, alias matched with no target giving missing, baseUrl fallback, package.json imports, workspace exports with types->dist falling back to default, the @/ convention, external). The prompt specifies everything the test checks, including the ValueError on an empty specifier and the return types. I wrote an implementation from the prompt alone, using the existing helpers, and it passed all 7 tests on three runs. Without it, every test fails on import. The test is deterministic and checks behaviour only. The one assumption is that no tsconfig, jsconfig or workspace package.json sits above the pytest tmp dir, which is reasonable.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".......                                                                  [100%]\n7 passed in 0.53s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "python-from-import-targets",
+  "area": "A",
+  "review": "kept",
+  "reasons": "No leak: the prompt names no helper and describes only the observable rules. It covers everything the test checks: the tuple shape and order, 1-based statement lines, `as` aliases, `__future__` and star imports skipped, nested imports included, scan-root namespace projection (Company.Apps.Team.lib), src-layout ancestors, submodule targets for package/namespace dirs, the package __init__ for non-submodule names, None for a namespace non-submodule and for stdlib, Path return type, and [] when there are no from-imports. My implementation written from the prompt passed all 4 tests, and every expected tuple, line numbers included, checked out against the parser's behaviour. The test is deterministic, uses only tmp_path layouts, and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "....                                                                     [100%]\n4 passed in 0.40s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "triage-extraction",
+  "area": "A",
+  "review": "kept",
+  "reasons": "No leak: the prompt points at the pipeline's dispatch and error handling in general terms without naming them. It specifies everything the test checks: the five fixed keys, `str(path)` values in input order, one bucket per path, precedence error > skipped > nodes > empty, a concrete example for each bucket (all of them appear in the test), passing root through, never touching the cache (no graphify-out anywhere), and the result for empty input. My implementation from the prompt passed all 3 tests, and the extractors behave as the prompt states: the ghost .py and the broken Cargo.toml produce an error, data JSON and a virtual-workspace Cargo.toml are skipped, the nameless pyproject is empty, MATLAB .m and .txt have no extractor, and the bash shebang file is extracted. The test is deterministic; it uses chdir into tmp and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "...                                                                      [100%]\n3 passed in 0.99s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "python-symbol-ids",
+  "area": "A",
+  "review": "kept",
+  "reasons": "No leak: the prompt names no private helper. It mentions only the public `make_id`, which the test itself imports. The collision rules (a single public member keeps the plain id, every other member gets a salted id starting with plain id + '_') are observable behaviour the test checks, not implementation steps. The exact salt is not spelled out, but the prompt requires the values to equal the Python extractor's node ids, and the test checks this against `extract_python`. So it is well defined and can be found from the code. Every key the test checks is covered: module-level plain, async and decorated functions; direct methods of module-level classes; nested functions and nested-class methods excluded; `__` excluded because it normalizes to an empty id; the default stem matching the extractor; {} for a file with no functions. My implementation from the prompt passed all 5 tests. The test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.92s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "kotlin-annotation-index",
+  "area": "A",
+  "review": "kept",
+  "reasons": "No leak: the prompt says to reuse the existing Kotlin helpers but names none, and describes only the output contract. Everything the test checks is specified: which declarations count (classes/objects, top-level and member functions and properties, companion members keyed under the enclosing class, val/var constructor parameters only), local declarations ignored, only a declaration's own modifier list counts (so `class Service @Inject constructor(` gives no Service entry, which I confirmed in the tree-sitter parse), the key format with or without a package, and the value rules (dedup keeping source order, use-site targets dropped, qualified names reduced to the last segment, bracketed lists expanded). My implementation from the prompt, built on the Kotlin grammar graphify already uses, passed all 3 tests. The test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "...                                                                      [100%]\n3 passed in 0.38s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "explain_surprise",
+  "area": "B",
+  "review": "kept",
+  "reasons": "No leak: the prompt points to 'the scoring used when ranking cross-file surprising connections' but does not name _surprise_score, _node_community_map or edge_data, and it does not walk through the rules. The spec covers everything the test checks: argument order, using the first parallel edge on multigraphs, '' for a missing or None source_file, community map semantics including None, degrees taken on the full G, scoring even when the edge would be filtered out, the None returns, the exact keys, label falling back to id, the relation and confidence defaults, and the default 'why'. A version written only from the prompt plus the code passed all 7 tests (verified by injecting it into the module at runtime; the clone stayed clean). The test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".......                                                                  [100%]\n7 passed in 0.56s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "summarize_communities",
+  "area": "B",
+  "review": "kept",
+  "reasons": "No leak: the prompt describes what 'real' means as GRAPH_REPORT.md defines it (not file hubs, method/function stubs, concept or rationale nodes) and says to reuse the existing predicates. It does not name _is_file_node, _is_concept_node or cohesion_score. The spec covers everything the test checks: ascending id order, int or string label keys with the 'Community {cid}' default, ignoring ids missing from G (size 4 when 'ghost' is listed), the real-node count, shown = real >= min_community_size, cohesion on the present nodes only (0.67, not the 0.4 you get if the ghost counts) rounded to 2, the first 3 real labels as the sample, and [] for empty input. The test numbers check out against the code: community 0 cohesion is 8/21 = 0.38 with the self-loop excluded, and 'process()' is real because its degree is above 1. A version written from the prompt passed all 5 tests. The test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.79s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "plan_wiki_filenames",
+  "area": "B",
+  "review": "kept",
+  "reasons": "No leak: the prompt says the names must match to_wiki and lists the behaviours that matter (sanitising, the per-directory length budget, case-insensitive collisions, assignment order, the reserved index name, default labels). It does not name _safe_filename, _SLUG_SUFFIX_RESERVE or stem_filename_budget. Each of these is behaviour the test observes, which a solver confirms by reading to_wiki. The spec also covers dropping stale members, communities left empty, skipping missing god-node ids, keeping index.md out of the result, the ValueError cases and the return shape. Expected names check out against the code: 'Parser'/'parser' collide case-insensitively, the reserved 'index' gives index_2, 'a/b: c (x)' becomes 'a-b-_c_x', and the god node 'Parser' becomes Parser_3. A version written from the prompt passed all 5 tests, including the comparison with to_wiki's actual output. The test is deterministic: tmp_path lengths stay well inside the Windows MAX_PATH budget for these short labels, and it checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.62s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "preview_id_collisions",
+  "area": "B",
+  "review": "kept",
+  "reasons": "No leak: the prompt refers to 'the project's existing order-independent collision ranking', 'the project's existing rule' for same-source entities and 'the existing this-node's-file-defines-its-id check'. It does not name _collision_rank, _same_source_entity or _defines_id. The spec covers ignoring empty or missing ids, the survivor (rank, root semantics, earlier record wins a tie), merged vs isolated (the existing rule treats two empty source_files as not the same source, which explains the 'dup' case: isolated [7], merged []), the definition of lost and the referencing-record exception, sorting by id, leaving out single-record ids, no mutation and no printing. The expected values check out against the code: the archive lifecycle penalty without root and the reversed-segment tiebreak with root. A version written from the prompt passed all 5 tests, including agreement with deduplicate_entities' survivors. The test is deterministic: the relative 'b/y.md' fails to relativize against the tmp root whatever the cwd. It checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.35s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "merge_repo_graphs",
+  "area": "B",
+  "review": "kept",
+  "reasons": "No leak: the prompt says to reuse the project's machinery for repo namespacing and attaching hyperedges. It does not name prefix_graph_for_global or attach_hyperedges, and it does not describe their internals step by step. What it does give is the observable contract, which the spec needs. The spec covers everything the test checks: ValueError for a length mismatch or duplicate tags; a plain nx.Graph result with parallel edges collapsed; '<tag>::<id>' ids, unchanged external ids and no repo attribute on externals; repo and local_id; rewriting _src/_tgt; the cumulative community offset (1 + the largest shifted int so far, which gives 2/4/6 in the test) with local_community only on shifted nodes and non-int values left alone; the hyperedge union in input order, prefixed, deduplicated by id, id-less ones dropped, and no key when there are none; inputs left unmodified. A version written from the prompt passed all 7 tests. The test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".......                                                                  [100%]\n7 passed in 0.90s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "adopt_legacy_semantic_entries",
+  "area": "C",
+  "review": "kept",
+  "reasons": "No leak: the prompt describes the flat layout and the per-prompt namespace and says to fingerprint 'the way the cache already fingerprints prompts' without naming _resolve_prompt_fp, cache_dir or _os_replace_with_fallback. The spec covers everything the test checks: return counts, the collision rule (flat entry kept, not overwritten, not counted), ignoring *.tmp files, kind isolation, CRLF/trailing-space normalisation of prompt_file, idempotence (a second call returns 0), and the no-op cases. Loading through load_cached(prompt=..., allow_legacy=False) and the fingerprint directory count follow from 'the prompt's namespace' being where save_cached(prompt=...) writes. The test is deterministic and checks behaviour only. A straightforward implementation (resolve the fingerprint, check that the flat directory exists, glob *.json, skip names that already exist in the destination, replace) passed all 3 tests.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "...                                                                      [100%]\n3 passed in 0.23s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "split_slice_to_fit",
+  "area": "C",
+  "review": "kept",
+  "reasons": "The halving rule (cut just after the first newline at or after (start+end)//2 if that cut is strictly inside the slice, otherwise cut at the midpoint, using the same text the offsets index) is spelled out as behaviour. This is needed for the exact spans the test asserts, and it does not name bisect_slice or unit_source_text. Both worked examples match the code: (0,10),(10,15),(15,20) and (0,5)..(15,20). Also specified: ValueError for max_chars < 1, returning [fs] itself when it fits, returning [fs] for an unreadable file, contiguity and preserved index/total. The test is deterministic. Recursive halving with the module's existing bisect passed all 6 tests.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "......                                                                   [100%]\n6 passed in 0.12s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "extract_package_manifests",
+  "area": "C",
+  "review": "kept",
+  "reasons": "No leak: it refers to 'this module's existing single-manifest extraction' and its reported error/skipped results without naming helpers. The spec covers every assertion: the five keys, the empty result, generator input, silently ignored non-manifests, errors and skipped keyed by str(path) with the message passed through ('manifest read error', 'manifest parse error', 'virtual workspace root Cargo.toml'), first-wins node dedup (version and source_file), edge dedup by (source, target, relation) keeping new keys from later duplicates, first-appearance order, and sorted external targets. The test is deterministic. A direct implementation over extract_package_manifest passed all 3 tests.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "...                                                                      [100%]\n3 passed in 0.12s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "plan_ingest",
+  "area": "C",
+  "review": "kept",
+  "reasons": "No helper names. The spec points to the classification and file names ingest() uses, and the examples confirm the host-based rule. Checked against the code: tweet, github and webpage all use the URL-derived name (_fetch_tweet computes it from the original URL, not the rewritten host). The arxiv rule needs a new-style id, otherwise the URL-derived name. The image suffix is kept as written. YouTube returns None. Scheme rejection is case-insensitive and includes a URL with no scheme. No network or DNS, which rules out calling validate_url, and the prompt says so explicitly. The 80-character cap and the 'HTTP://Example.org/' -> 'Example_org.md' case follow from 'exactly the same URL-derived name'. The test is deterministic (the socket monkeypatch only guards against network use). A reference sketch passed all 15 test cases.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "...............                                                          [100%]\n15 passed in 0.13s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "hook_block_states",
+  "area": "C",
+  "review": "kept",
+  "reasons": "No leak: it says to compare against the block 'this version of graphify installs' while ignoring the pinned interpreter path and the optional GRAPHIFY_VIZ_NODE_LIMIT export line. It does not name _comparable_block, _PINNED_LINE_RE or _user_hooks_dir. The Husky '_' parent rule is stated as behaviour. All five states are defined in a way that matches the test (missing, foreign, incomplete when the end marker does not follow the start, current, stale), and the return shape is exact. The test builds fixtures from the public module templates, uses no git and does not read .graphifyrc, so it is deterministic. An implementation that normalises the pinned and viz lines in both the installed block and the template passed all 5 tests.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.20s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "serve-describe-node",
+  "area": "D",
+  "review": "kept",
+  "reasons": "No leak: the prompt points to the existing get_node/get_neighbors behaviour and names only ToolError, which the test imports, not _node_arg, _resolve_single_node or _find_node_tiers. Spec is complete. It covers the key precedence label > node_id > id with empty values falling through, case-insensitive tiered resolution including path::symbol, the 'No node matching' and 'Ambiguous' messages, the exact return keys, the label and source_file fallbacks, degree, the 'related' default and per-parallel-edge multigraph counting. I checked the test's numbers against the code: degree 5 for a_render, and degree 2 with outgoing calls:2 for main_run in the MultiDiGraph. A plain implementation (resolve like get_node, then count over out_edges/in_edges with data) passed all 8 tests. The test is deterministic and only checks behaviour.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "........                                                                 [100%]\n8 passed in 0.64s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "watch-classify-batch",
+  "area": "D",
+  "review": "kept",
+  "reasons": "No leak: the prompt describes the watcher's filtering and batch decisions as behaviour and does not name _load_graphifyignore, _is_ignored, _read_build_gitignore, _batch_triggers_rebuild or _batch_needs_llm_flag. Spec is complete. It covers the ignore sources, including the gitignore:false build config at graphify-out/.graphify_build.json (I checked that filename in watch.py), the case-insensitive suffix check, dot components, the graphify-out component, anchoring relative paths on watch_path.resolve(), order-preserving dedup, and the rebuild/needs_llm rules including deleted documents and the empty batch. A reference that reuses the watcher's filters passed all 6 tests. The tests use tmp_path and check behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "......                                                                   [100%]\n6 passed in 0.31s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "llm-plan-extraction-chunks",
+  "area": "D",
+  "review": "kept",
+  "reasons": "No leak: the prompt says to reproduce extract_corpus_parallel's chunking (the per-file char cap, packing grouped by sorted parent directory, the same per-unit estimates and chunk-closing rules) without naming _FILE_CHAR_CAP, _pack_chunks_by_tokens, _estimate_file_tokens or expand_oversized_files. The test does use those internals, but only to compute expected values, not to check that they were called, so this is not an implementation-detail check. Spec is complete. It covers str coercion, the order and form of 'files' (root-relative POSIX, a slice reporting its parent file, first-appearance order), the units, slices and case-insensitive images counts, estimated_tokens as the packer's per-unit sum, ValueError for token_budget<=0, and [] for an empty list. I checked against extract_corpus_parallel and _pack_chunks_by_tokens, and the reference passed all 3 tests. The test is deterministic on a tmp_path corpus.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "...                                                                      [100%]\n3 passed in 0.28s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "terraform-redact-attributes",
+  "area": "D",
+  "review": "kept",
+  "reasons": "No leak: the prompt says to build on the module's existing redaction machinery but does not name _redact_value, _SENSITIVE_KEY_RE, _REDACTED or _PAIRED_VALUE_KEYS. Its four rules are a behavioural spec that matches the extractor exactly: the regex word list, recursion into maps and lists, the case-insensitive name/value pairing over value/valueFrom/value_from, and the variable/output label-or-sensitive rule for default and value. It also states the marker string, that the input is not mutated, and that the result is a new dict, and these are the test's other checks. The reference (_redact_value per key plus the block rule) passed all 5 tests. The test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.21s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "sql-scan-triggers",
+  "area": "D",
+  "review": "kept",
+  "reasons": "No leak: the prompt describes the recognised statement shape, the masking rules (line comments, nested block comments, single-quoted strings, and skipping a match that starts inside a delimited identifier) and the identifier normalisation. It does not name _scan_sql, _TRIGGER_RECOVERY_RX or _norm_ident. Spec is complete. It covers the exact name text including qualifiers, delimiters and spacing, the normalised table taken from the first ON after the name, the 1-based line of CREATE, source order, and [] when there are no triggers. Every assertion in the test, including the nested comment, the bracketed fake trigger and the multi-line 'audit . trg_x' case, follows from that text. The reference (the masked scan plus the trigger recovery regex and identifier normalisation) passed all 3 tests. The test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "...                                                                      [100%]\n3 passed in 0.20s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "get-column-types",
+  "area": "E",
+  "review": "kept",
+  "reasons": "Leak: no internal helper is named. 'Use the project's existing type-mapping machinery' only points at existing behaviour; it does not name get_sqlalchemy_type, _get_sqlmodel_field_value or the _compat helpers, and gives no steps. Spec: the prompt covers everything the test checks: the name and signature, field-definition order, the identity of sa_column.type and of an sa_type instance, creating an instance with no arguments when the mapping gives a class (Integer, AutoString, Text), AutoString length from max_length or None, Enum values, Numeric precision and scale, the UTCDateTime and NaiveDatetime rules (including the Annotated form), silently leaving out list and dict fields, and {} for a model without fields. Verified: I wrote a solution from the prompt alone in a throwaway copy of the package (wrapping get_sqlalchemy_type and catching ValueError, with an sa_column check first). It passes 5/5; on the clean clone the test errors at import. Sanity: the test is deterministic and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.90s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "get-relationship-targets",
+  "area": "E",
+  "review": "kept",
+  "reasons": "Leak: neither get_relationship_to nor __sqlmodel_relationships__ is named. 'The same way SQLModel itself resolves relationship targets' and the note that SQLModel may rewrite annotations describe existing, discoverable behaviour; the note is needed to make the requirement clear, and it gives no steps. Spec: the prompt covers everything the test checks: declaration order, the class __name__ versus a forward-reference string, list, Optional and Mapped wrappers, sa_relationship relationships (whose annotation is not wrapped in Mapped), values of type str, column fields left out, and {} for link, plain and non-table models. Verified: a solution from the prompt alone (iterate the class's own relationships, unwrap Mapped, reuse the existing resolver, take __name__ when the result is a class) passes 5/5; on the clean clone the test errors at import. Sanity: deterministic and checks behaviour only. The test's table names are prefixed with Rt, so they do not clash with the other hidden test files.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.89s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "sqlmodel-update-exclude",
+  "area": "E",
+  "review": "kept",
+  "reasons": "Leak: the prompt names no helper (model_fields_set and similar are not mentioned) and describes only behaviour. Spec: everything the test checks is stated: the signature, the unchanged default behaviour (unset fields of the model are copied too), exclude_unset for SQLModel and plain Pydantic models (including fields explicitly set to None), exclude_unset having no effect for dicts, exclude_none for models and dicts, update always applying even when its value is None, update winning over obj, update keys that are not fields being ignored, the two flags combined, and persistence on a table model. Verified: a solution from the prompt alone passes 9/9; on the clean clone 8 of 9 fail. Sanity: deterministic (it uses a tmp_path sqlite file) and checks behaviour only.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".........                                                                [100%]\n9 passed in 1.08s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "field-comment",
+  "area": "E",
+  "review": "kept",
+  "reasons": "Leak: FieldInfoMetadata, _get_sqlmodel_field_value and get_column_from_field are not named. The sentence 'Store the option the same way SQLModel stores its other column-related Field options' is a general pointer to an existing pattern that a solver can find in the code; it gives no steps. Spec: everything the test checks is stated: Column.comment set or None, the other options still working (max_length, primary_key, index, foreign_key with ondelete), the Annotated metadata case, sa_column_kwargs['comment'] winning while other kwargs still apply, the exact RuntimeError message raised when Field() is called with sa_column, sa_column without comment keeping the column's own comment, comment absent from the JSON schema while description stays, and non-table models accepting it. The typing overloads are asked for but not tested, which is harmless. Verified: a solution from the prompt alone passes 7/7; on the clean clone 6 of 7 fail. Sanity: deterministic and checks behaviour only. The sqlite test only creates the table and checks the column attribute, which is not flaky.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".......                                                                  [100%]\n7 passed in 1.00s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "table-model-construct",
+  "area": "E",
+  "review": "kept",
+  "reasons": "Leak: partial_init, sqlmodel_table_construct and finish_init are not named. 'Reuse the project's existing machinery for setting up table instances without validation' is a general pointer that gives no steps. Spec: everything the test checks is stated: the signature with _fields_set first and positional, non-table behaviour matching Pydantic (a fresh default_factory value per call), a transient SQLAlchemy state that can be committed, no validation, defaults filled in, values accepted by name or alias, model_fields_set following field names or exactly _fields_set, unknown keys leaving no attribute and no model_dump entry, relationships set through SQLAlchemy with back_populates updated, the relationship name not in model_fields_set, persistence of the related object and its foreign key, and independent instances. Verified: a solution from the prompt alone passes 6/6 (non-table: super().model_construct; table: cls() under partial init, then the existing table-construct helper on a copy of values); on the clean clone 4 of 6 fail. Sanity: deterministic (tmp_path sqlite) and checks behaviour only. All five hidden files also pass together in one pytest session, twice.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "......                                                                   [100%]\n6 passed in 1.05s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "utc_datetime_naive_as_utc",
+  "area": "F",
+  "review": "kept",
+  "reasons": "The prompt doesn't leak anything. It gives the behaviour, signature and repr, and doesn't name internal helpers or give implementation steps. It covers everything the test checks: the keyword-only flag (TypeError), the naive_as_utc attribute, impl.timezone=True, both repr strings, bind behaviour for naive, aware and None values, round trip, where-clause comparison, and that the default still rejects naive values with StatementError. I wrote an independent implementation from the prompt alone (patched in memory, no files edited) and all 7 tests pass. On the unmodified baseline the tests fail. The tests are deterministic and test behaviour.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".......                                                                  [100%]\n7 passed in 0.96s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "utc_now_expression",
+  "area": "F",
+  "review": "kept",
+  "reasons": "No leak: the prompt describes the result (an SQL now()/CURRENT_TIMESTAMP function whose type is SQLModel's default UTC datetime type). The test's isinstance(expr.type, UTCDateTime) check is a stated, observable requirement. The prompt specifies everything the test checks: the sqlmodel.utc_now re-export identity, a fresh object per call, an aware UTC result from select, comparison with a default datetime column, and use as a server_default with refresh. Two independent implementations pass all 5 tests: func.now(type_=UTCDateTime()) and func.current_timestamp(type_=UTCDateTime()). The baseline fails. The time checks use a ±5s window around the current time, which is deterministic in practice.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.96s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "session_count",
+  "area": "F",
+  "review": "kept",
+  "reasons": "The prompt gives the full signature and every row-affecting case the test checks: WHERE, DISTINCT, GROUP BY, LIMIT/OFFSET with the concrete 3 and 1 examples, ORDER BY ignored, 0 for no matches, params, pending objects via autoflush, a plain int return, and an unmodified statement. The test also checks for exactly one SQL statement containing 'count('. That is close to an implementation detail, but the prompt states it explicitly as a requirement (one `SELECT count(...)` query, rows not loaded). It is the observable contract of a DB-side count, so I kept the test and didn't change the prompt. The prompt names no internal helpers. An independent subquery-based implementation passes all 7 tests, and the baseline fails. The tests are deterministic.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".......                                                                  [100%]\n7 passed in 0.96s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "select_columns",
+  "area": "F",
+  "review": "kept",
+  "reasons": "No leak: the prompt doesn't mention _compat.is_table_model_class or the select generator internals. It only says the model must be declared with table=True. It specifies everything the test checks: TypeError for non-table models and arbitrary types, with or without field names; SelectOfScalar for zero or one field and Select (not SelectOfScalar) for two or more; tuple order; None for NULLs; ValueError naming the offending field for unknown names and relationship names; and chaining with where/order_by. An independent implementation (a mapper column_attrs check, then sqlmodel.select) passes all 6 tests, and the baseline fails. The tests are deterministic and check behaviour.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": "......                                                                   [100%]\n6 passed in 0.95s\n"
+  },
+  "kept": true
+ },
+ {
+  "id": "async_stream_exec",
+  "area": "F",
+  "review": "kept",
+  "reasons": "No real leak. The prompt refers to 'the same streaming execution options SQLAlchemy's async session uses for stream' as a behavioural requirement, without naming _STREAM_OPTIONS or greenlet_spawn. It specifies everything the test checks: the signature, AsyncScalarResult for SelectOfScalar (entities or single column), AsyncResult (not AsyncScalarResult) for multi-column selects with tuple rows, params, empty results, and the async iteration and partitions APIs. The test harness is unusual: it uses AsyncSession() with a sync SQLite engine bound to sync_session. That is deterministic and works for any implementation that goes through sync_session in a greenlet, as the existing exec does. Two different implementations pass all 5 tests: sync_session.execute wrapped in AsyncResult(...).scalars(), and sync_session.exec wrapped in AsyncScalarResult or AsyncResult. The baseline fails.",
+  "mechanical": {
+   "fails_without": true,
+   "patch_applies": true,
+   "passes_with": true,
+   "apply_error": "",
+   "after_tail": ".....                                                                    [100%]\n5 passed in 0.96s\n"
+  },
+  "kept": true
+ }
+]

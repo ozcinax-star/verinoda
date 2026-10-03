@@ -1,0 +1,85 @@
+analysis ana_b2813b566e3d, snapshot snp_22edce792516 (commit b0b7687fa6)
+understood as: Understood (rules): q1 [impact] How is a claim marked stale when its cited files change?
+plan links: claim -> repoatlas/analysis.py:213-247; marked -> repoatlas/cli.py:63-73; stale -> repoatlas/claims.py:1022-1092; cited -> repoatlas/entail.py:301-311
+q1 [met_with_inference] impact: How is a claim marked stale when its cited files change?
+  [weak_inference 0.20] Changing repoatlas/claims.py, repoatlas/feedback.py possibly affects tests/test_analysis.py, tests/test_claims.py, tests/test_critique.py, tests/test_feedback.py, tests/test_snapshot_stale.py, tests/test_mcp.py, tests/test_experiments.py, repoatlas/cli.py; tests to run: tests/test_analysis.py, tests/test_architecture_map.py, tests/test_benchmark.py, tests/test_claims.py, tests/test_cli.py, tests/test_critique.py, tests/test_experiments.py, tests/test_feedback.py, tests/test_mcp.py, tests/test_memory.py, tests/test_question_plan.py, tests/test_references_classify.py, tests/test_references_resolve.py, tests/test_research.py, tests/test_retrieval.py, tests/test_runtime_trace.py, tests/test_safety.py, tests/test_search_index.py, tests/test_snapshot_cache.py, tests/test_snapshot_stale.py, tests/test_staleness_harness.py, tests/test_workflow_index.py {graph_edge:repoatlas_mcp_server_atlastools -[uses]-> repoatlas_claims_claims; graph_edge:repoatlas_analysis_recorder -[uses]-> repoatlas_claims_claims; graph_edge:repoatlas_cli_cmd_claim -[calls]-> repoatlas_claims_claims} (uncertain: dynamic/reflective dependents are missed; a dependent is 'possibly affected', not proven broken)  (clm_0955b97e596f)
+context (found on the way; not what answers):
+  [statically_verified] `invalidate_stale()` is defined at repoatlas/claims.py:1022-1092  (clm_576ba34ba347)
+  [statically_verified] `_stale_reason()` is defined at repoatlas/feedback.py:664-673  (clm_87392e3d7e02)
+  [statically_verified] `update()` calls `invalidate_stale()` (repoatlas/workflow.py:210)  (clm_1ac1092f0822)
+  [statically_verified] `test_a_new_commit_that_changes_a_file_marks_its_claims_stale()` calls `update()` (tests/test_snapshot_stale.py:169)  (clm_1720db491919)
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_0955b97e596f: strong_inference -> weak_inference  support is only non-verifying evidence: graph_edge; support is only graph edges (EXTRACTED, INFERRED); a graph edge is an extraction, not a 
+passages (what `verinoda query` gives for the question; search results, not claims):
+## repoatlas/claims.py:1022-1092 def invalidate_stale(store: Store, new_snapshot: dict | None, *, actor: str = "repoatlas", files: dict[str, str] | None = None, repo: Path | None = None, report: dict | None = None) -> list[dict]
+  doc: Mark claims stale when something they depend on changed since their snapshot.
+  calls: snapshot_files@1037?, latest_snapshot@1041?, Claims@1046, all@1047?, assess_change@1056, set_status@1063?, record_location@1076, record_transition@1080?
+  called by: replay (repoatlas/benchmark/staleness.py:405); scan (repoatlas/workflow.py:144); update (repoatlas/workflow.py:210); _current_snapshot (repoatlas/workflow.py:244); _index_refused (repoatlas/workflow.py:44); test_shift_edit_rebinds_symbol_claims_instead_of_staling_them (tests/test_snapshot_stale.py:446)
+  const repoatlas/claims.py:69: VERIFIED = {"observed", "experiment_verified", "statically_verified", "primary_source_verified"}
+  const repoatlas/claims.py:944: ACTIVE = ("observed", "experiment_verified", "statically_verified", "primary_source_verified",
+  repoatlas/claims.py:1026-1035
+1027 ``files`` (path -> sha256) compares against a working tree that has no
+1028 recorded snapshot (e.g. the index refused to rebuild); ``new_snapshot``
+1029 may then be None and nothing is re-bound. A claim whose files changed but
+1030 whose dependencies and cited evidence did not is re-bound to
+1031 ``new_snapshot`` without a status change (recorded in its history).
+1032 ``report`` (optional) receives counts: checked, stale, rebound, ms.
+1033 """
+1034 import time
+  repoatlas/claims.py:1059-1072
+1059 if res["stale"]:
+1060     n = len(res["changed"]) or len(res["facets"])
+1061     what = ", ".join(sorted({f["dep"].partition(":")[2] + (f"#{f['facet']}" if f.get("facet") else "")
+1062                              for f in res["facets"] if f.get("dep")})[:4])
+1063     cl.set_status(
+1064         c["id"], "stale",
+1065         reason=f"{n} file(s) changed since snapshot {sid}" + commit_note
+1066                + (f"; changed: {what}" if what else "")
+1067                + (" (working tree; no new snapshot recorded)" if files is not None else ""),
+1068         actor=actor, payload={"changed": res["changed"], "facets": res["facets"][:20],
+1069                               "new_snapshot": new_sid},
+1070     )
+1071     changed_claims.append({"id": c["id"], "text": c["text"], "changed": res["changed"],
+1072                            "facets": res["facets"][:20]})
+## tests/test_snapshot_stale.py:181-191 test_deleting_a_cited_file_marks_its_claims_stale
+  calls: update@184, _status@188, verify@189
+181 def test_deleting_a_cited_file_marks_its_claims_stale(proj):
+182     repo, st, cl, claims = proj
+183     (repo / "orders" / "repository.py").unlink()
+184     res = workflow.update(st, repo)
+185     assert res["changed"]["removed"] == ["orders/repository.py"]
+186     assert {s["id"] for s in res["stale"]} == {claims["repository"]["id"]}
+187     assert res["stale"][0]["changed"] == [{"file": "orders/repository.py", "change": "removed"}]
+188     assert _status(cl, claims)["repository"] == "stale"
+189     v = workflow.verify(st, repo, claims["repository"]["id"])
+190     assert v["after"]["status"] == "stale"
+191     assert v["source_checks"][0]["reason"] == "file no longer exists: orders/repository.py"
+## tests/test_snapshot_stale.py:140-161 test_modifying_a_cited_file_marks_exactly_its_claims_stale
+  calls: _hist_len@142, _edit@143, update@144, _status@150
+140 def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj):
+141     repo, st, cl, claims = proj
+142     hist = _hist_len(cl, claims)
+143     _edit(repo, "orders/pricing.py", 'i["price"] * i["qty"]', 'i["price"] * i["qty"] * 2')
+144     res = workflow.update(st, repo)
+145     assert res["mode"] == "incremental" and res["changed"]["modified"] == ["orders/pricing.py"]
+146     stale_ids = {s["id"] for s in res["stale"]}
+147     assert stale_ids == {claims["pricing"]["id"], claims["pricing_inference"]["id"]}
+148     for s in res["stale"]:
+149         assert s["changed"] == [{"file": "orders/pricing.py", "change": "modified"}]
+150     st_now = _status(cl, claims)
+151     assert st_now["pricing"] == st_now["pricing_inference"] == "stale"
+152     assert st_now["service"] == st_now["repository"] == st_now["config"] == "statically_verified"
+153     after = _hist_len(cl, claims)
+154     for k in ("service", "repository", "config"):
+155         assert after[k] == hist[k], f"{k} history must be untouched"
+156     h = cl.show(claims["pricing"]["id"])["history"][-1]
+157     assert h["to_status"] == "stale" and "changed since snapshot" in h["reason"]
+158     assert cl.get(claims["pricing"]["id"])["confidence"] == CONFIDENCE_CAP["stale"]
+159     # A second update is a no-op and does not touch history again.
+160     assert workflow.update(st, repo)["mode"] == "noop"
+161     assert _hist_len(cl, claims) == after
+## repoatlas/feedback.py:664-673 def _stale_reason(claim: dict, evs: list[dict], store: Store) -> str | None
+  calls: history@670?, _short@672
+  called by: process (repoatlas/feedback.py:936)
+… 1417 more candidates not shown: tests/test_snapshot_stale.py:164-178 def test_a_new_commit_that_changes_a_file_marks_its_claims_stale(proj); repoatlas/workflow.py:157-219 def update(store: Store, repo: Path) -> dict; repoatlas/mcp/server.py:799-802 ; repoatlas/workflow.py:248-337 verify
+next: verinoda query "…" --max-chars 12000

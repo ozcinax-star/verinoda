@@ -1,0 +1,15 @@
+{
+ "repo": "home-assistant/core",
+ "base": "<BIG>/base",
+ "sha": "92c6588493aa6fc8f7b06dc43c8331c969b3653e",
+ "pinned_at": "2026-08-14T21:58:03Z",
+ "until": "2026-10-01",
+ "source_prefix": "homeassistant/",
+ "seed": 20261002,
+ "want": 40,
+ "per_group_max": 2,
+ "gold_max": 4,
+ "changed_max": 12,
+ "issue_min": 150,
+ "issue_max": 4000
+}

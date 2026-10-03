@@ -1,0 +1,107 @@
+analysis ana_7800bcfb6836, snapshot snp_146247647180 (commit 91533f3f3b)
+understood as: Anladığım (kurallarla): q1 [davranış] kullanıcının doğrudan bu grafiği açmasının bir yolu yok mu (karşılıklar: kullanıcının=user, grafiği=graph, açmasının=open, yolu=path)
+q1 [not_supported] behaviour: kullanıcının doğrudan bu grafiği açmasının bir yolu yok mu
+  unknown: a behaviour question needs a checkable proposition; the claims above only say where the code is; next: write done_when.proposition as 'A before B in F' or 'regex:<pattern> in:<glob>' in the plan and re-run
+claims:
+  [statically_verified] `open_for()` is defined at verinoda/search_index.py:1055-1121  (clm_502e22ff2ae1)
+  [statically_verified] `._get()` is defined at verinoda/references/transport.py:189-239  (clm_07c034afd16d)
+  [statically_verified] `serve()` is defined at verinoda/ui/server.py:341-361  (clm_7e006b004557)
+  [statically_verified] verinoda/question_plan.py:119 contains: "locate": "konum", "define": "tanım", "flow": "akış", "callers": "çağıranlar", "dataflow": "veri yolu",  (clm_3bb1ff7dd2b3)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: kullanıcının->kullan, doğrudan->dogru, grafiği->grafi (+5 more)
+## verinoda/ui/static/app.js:1955-1965 route
+  calls: showGraph@1957, stopTour@1959, openNote@1962, renderAnswer@1963
+  called by: followIndex (verinoda/ui/static/app.js:1948); cancel (verinoda/ui/static/app.js:536); writeUserNote (verinoda/ui/static/app.js:556); renderHome (verinoda/ui/static/app.js:634)
+1955 function route() {
+1956   const h = location.hash || "#/";
+1957   if (h === "#/graph") { showGraph(); return; }
+1958   $("#graphview").hidden = true;
+1959   if (G3) { stopTour(); G3.setActive(false); }
+1960   $("#tooltip").hidden = true;
+1961   beforeGraph = h;
+1962   if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)));
+1963   else if (h.startsWith("#/q/") && !OFFLINE) renderAnswer(decodeURIComponent(h.slice(4)));
+1964   else renderHome();
+1965 }
+## verinoda/ui/server.py:252-317 def _get(self, *, head: bool) -> None
+  calls: _host_ok@253, _json@254, _static@260, _send@263, _relations@281, _flag@282
+  called by: do_HEAD (verinoda/ui/server.py:167); do_GET (verinoda/ui/server.py:170)
+  const verinoda/ui/server.py:31: STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
+  const verinoda/ui/server.py:57: TOKEN_META = '<meta name="verinoda-token" content="">'
+  verinoda/ui/server.py:269-282
+269 nid = (qs.get("id") or [""])[0]
+270 try:
+271     route = url.path[len("/api/"):]
+272     if route == "stats":
+273         obj = atlas.stats()
+274     elif route == "tree":
+275         obj = atlas.tree()
+276     elif route == "search":
+277         obj = atlas.search((qs.get("q") or [""])[0])
+278     elif route == "note":
+279         obj = atlas.note(nid)
+280     elif route == "local":
+281         obj = atlas.local_graph(nid, int((qs.get("depth") or ["1"])[0] or 1), _relations(qs),
+282                                 tests=_flag(qs, "tests", True), external=_flag(qs, "external", False),
+  verinoda/ui/server.py:287-300
+287     obj = atlas.impact(nid, int((qs.get("depth") or ["3"])[0] or 3), tests=_flag(qs, "tests", True))
+288 elif route == "version":
+289     obj = {"key": atlas.version(), "watch": None if watcher is None else
+290            {"running": watcher.running, "updates": watcher.updates, "error": watcher.error}}
+291 elif route == "changes":
+292     obj = atlas.changes()
+293 elif route == "answer":
+294     obj = atlas.answer((qs.get("q") or [""])[0])
+295 elif route == "path":
+296     obj = atlas.path((qs.get("from") or [""])[0], (qs.get("to") or [""])[0])
+297 elif route == "global":
+298     obj = atlas.global_graph(tests=_flag(qs, "tests", True), data=_flag(qs, "data", True),
+299                              relations=_relations(qs))
+300 else:
+## verinoda/ui/static/app.js:194-205 (module level)
+194   island: "Başka bölgelerle bağlantısı yok.",
+195   impact: "{name} değişirse {files} dosyada {n} not etkilenebilir (en çok üç bağlantı geri).",
+196 },
+197 verb: { focus: "Uç", open: "Aç" },
+198 cmd: { graph: "Graf görünümünü aç", to3d: "Grafı 3D göster", to2d: "Grafı düz (2D) göster", tour: "Projenin bölgelerinde tur at",
+199   changes: "İndeksten sonra değişenleri göster", fit: "Hepsini göster", home: "Başlangıç sayfası", lang: "English" },
+200 pal: { commands: "Komutlar", ask: "Soru", notes: "Notlar", regions: "Bölgeler", try: "Dene" },
+201 ex: { focus: "3D'de bir nota uç", region: "projenin bir bölümüne odaklan", impact: "bir değişiklik neyi etkileyebilir",
+202   path: "iki not nasıl bağlı: yol A ile B", open: "bir notu oku", ask: "koddan cevaplanan bir soru" },
+203 palNoMatch: "İki addan biriyle eşleşen not yok.", step1: "doğrudan", stepN: "{n} adım öte", spaceK: "Boşluk",
+204 keys: { general: "Her yerde", palette: "Komut çubuğu", search: "Arama kutusu", graph: "Graf görünümü", esc: "Kapat, temizle, geri dön", help: "Bu liste",
+205   graphH: "Graf görünümü", view: "2D / 3D", dragK: "sürükle", drag: "Döndür (3D) ya da kaydır (2D)", rdragK: "sağ sürükle", rdrag: "Yana kaydır",
+## verinoda/ui/static/app.js:536-536 cancel
+536 const save = () => writeUserNote(n, area.value), cancel = () => route();
+## verinoda/ui/static/app.js:1934-1950 followIndex
+1934 async function followIndex(first = false) { // first: the key of the index the page was drawn from, even in a hidden tab
+1935   if (OFFLINE || (document.hidden && !first)) return;
+1936   let r;
+1937   try { r = await api("/api/version"); } catch (_) { return; }
+1938   if (r.watch && r.watch.running) toast(t("updating"), true);
+1939   if (indexKey === null) { indexKey = r.key; return; }
+1940   if (r.key === indexKey) { if (!(r.watch && r.watch.running) && $("#toast") && $("#toast").textContent === t("updating")) $("#toast").hidden = true; return;…
+1941   indexKey = r.key;
+1942   previewCache.clear();
+1943   globalKey = null;
+1944   loadTree();
+1945   const h = location.hash || "#/";
+1946   if (h === "#/graph") showGraph();
+1947   else if (h.startsWith("#/n/")) openNote(decodeURIComponent(h.slice(4)), true);
+1948   else route();
+1949   toast(t("refreshed"));
+1950 }
+## verinoda/ui/static/app.js:549-557 writeUserNote
+549 async function writeUserNote(n, text, keep = false) {
+550   try { await apiPost("/api/usernote", { id: n.id, text, keep }); }
+551   catch (e) {
+552     const box = $("#sec-mynote") || main;
+553     box.append(el("div", { class: "empty error", text: `${e.status || ""} ${e.message}` }));
+554     return;
+555   }
+556   route(); // the note again, from the server
+557 }
+## verinoda/question_plan.py:119-123 "locate": "konum", "define": "tanım", "flow": "akış", "callers": "çağıranlar", "dataflow": "veri yolu",
+… 1289 more candidates not shown: verinoda/ui/static/app.js:1555-1566 // -- the command bar (Ctrl+K): say what to do, in Turkish or English --------------; verinoda/search_index.py:1055-1121 open_for; verinoda/ui/static/app.js:324-344 openNote; verinoda/ui/server.py:341-361 serve
+next: verinoda query "…" --max-chars 12000

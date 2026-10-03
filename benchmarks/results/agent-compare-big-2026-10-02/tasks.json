@@ -1,0 +1,763 @@
+{
+ "filters": {
+  "candidates": 323,
+  "passed_filters": 84,
+  "dropped": {
+   "more than 12 files changed": 1,
+   "issue body length outside 150-4000": 29,
+   "the issue names a gold file's path": 50,
+   "gold files not 1-4 at the pinned commit": 159
+  }
+ },
+ "tasks": [
+  {
+   "id": "pr179120",
+   "pr": 179120,
+   "issue": 168933,
+   "title": "Remove name field from `islamic_prayer_times` config flow",
+   "body": "The `islamic_prayer_times` integration includes a name field in its config flow schema. Config flows should not ask users to provide a name. The name is either derived from discovery or from the integration manifest.\n\nRemove the name field from the config flow, per the `hass-config-flow-name-field` pylint rule.\n\nPart of home-assistant/epics#47, which contains more information, including migration instructions.",
+   "gold": [
+    "homeassistant/components/islamic_prayer_times/config_flow.py"
+   ],
+   "groups": [
+    "islamic_prayer_times"
+   ],
+   "labels": [
+    "integration: islamic_prayer_times",
+    "code-quality",
+    "no-stale"
+   ],
+   "issue_created": "2026-04-23T16:03:04Z",
+   "merged_at": "2026-08-24T18:21:34Z"
+  },
+  {
+   "id": "pr180472",
+   "pr": 180472,
+   "issue": 136341,
+   "title": "Home Assistant Cloud Integration",
+   "body": "### The problem\n\nAfter disconnecting from Nabu Casa account (I'm exposing HA in VPN only) I removed the `default_config:` in `configuration.yaml` and didn't add the `cloud:` integration to disable it.\nAfter reboot I still have the Home Assistant Cloud Integration loaded with 3 entities.\nHow can I remove the Home Assistant Cloud Integration? What about the related entities?\n\nIn addition, although I changed the external URL in the iOS companion app and reset the Widgets, the app was always trying to leverage Nabu Casa webhooks: \n\n`2025-01-23 11:01:00.838 [Verbose] [main] [ClientEventStore.swift:7] ClientEventStore > Adding client event: ClientEvent(id: \"CE3391CA-8274-425D-BE68-7AE0C7FD4BD7\", text: \"Webhook failed, server Via Marche, with status code 503 - URL: hooks.nabu.casa\", type: Shared.ClientEvent.EventType.networkRequest, jsonPayload: [:], date: 2025-01-23 10:01:00 +0000)`\n\nI had to remove and recreate the server to have the Widgets (scripts) working again.\n\n![Image](https://github.com/user-attachments/assets/c2e6df6e-3cfb-40f4-a2bc-971b15be062b)\n![Image](https://github.com/user-attachments/assets/7359cb6b-7d9d-4888-a877-0572aa68c8e6)\n\n### What version of Home Assistant Core has the issue?\n\ncore-2025.1.3\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nHome Assistant Cloud\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/cloud\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/cloud/__init__.py"
+   ],
+   "groups": [
+    "cloud"
+   ],
+   "labels": [
+    "integration: cloud",
+    "no-stale"
+   ],
+   "issue_created": "2025-01-23T14:00:07Z",
+   "merged_at": "2026-08-28T13:57:32Z"
+  },
+  {
+   "id": "pr173270",
+   "pr": 173270,
+   "issue": 173199,
+   "title": "Mitsubishi Integration not showing most devices or any entities",
+   "body": "### The problem\n\n**Reproduction:**\n* Click \"Add Hub\" in Integration and log into Mitsubishi Comfort account\n    * Note: this takes a *very* long time, which makes me think it might be a timeout issue.\n* One of two mini-splits on the LAN show up as a device (other is missing entirely)\n    * Note: In case relevant, the account has 3 locations, one of which is on the LAN.\n* The one device that shows up (of two expected) has no entities\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.6.1\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nMitsubishi Comfort\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/mitsubishi_comfort\n\n### Diagnostics information\n\nThe relevant part is this:\n\n2026-06-06 22:02:32.750 DEBUG (MainThread) [homeassistant.components.mitsubishi_comfort] Device Bed A has no known LAN address yet\n2026-06-06 22:02:32.750 DEBUG (MainThread) [homeassistant.components.mitsubishi_comfort] Device Bed B has no known LAN address yet\n2026-06-06 22:02:32.750 DEBUG (MainThread) [homeassistant.components.mitsubishi_comfort] Device Bed C has no known LAN address yet\n2026-06-06 22:02:32.750 DEBUG (MainThread) [homeassistant.components.mitsubishi_comfort] Device H Living Room has no known LAN address yet\n2026-06-06 22:02:32.750 DEBUG (MainThread) [homeassistant.components.mitsubishi_comfort] Device Studio has no known LAN address yet\n2026-06-06 22:02:32.750 DEBUG (MainThread) [homeassistant.components.mitsubishi_comfort] Device Bedroom has no known LAN address yet\n2026-06-06 22:02:32.750 DEBUG (MainThread) [homeassistant.components.mitsubishi_comfort] Device Living Room has no known LAN address yet\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/mitsubishi_comfort/__init__.py",
+    "homeassistant/components/mitsubishi_comfort/config_flow.py",
+    "homeassistant/components/mitsubishi_comfort/const.py"
+   ],
+   "groups": [
+    "mitsubishi_comfort"
+   ],
+   "labels": [
+    "integration: mitsubishi_comfort"
+   ],
+   "issue_created": "2026-06-07T05:05:04Z",
+   "merged_at": "2026-08-30T18:41:01Z"
+  },
+  {
+   "id": "pr180408",
+   "pr": 180408,
+   "issue": 170610,
+   "title": "Fix swallowed exceptions in dlna_dmr action handlers",
+   "body": "The `dlna_dmr` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `media_player.py`:**\n- `async_media_next_track` (media_player.py)\n- `async_media_pause` (media_player.py)\n- `async_media_play` (media_player.py)\n- `async_media_previous_track` (media_player.py)\n- `async_media_seek` (media_player.py)\n- `async_media_stop` (media_player.py)\n- `async_mute_volume` (media_player.py)\n- `async_play_media` (media_player.py)\n- `async_select_sound_mode` (media_player.py)\n- `async_set_repeat` (media_player.py)\n- `async_set_shuffle` (media_player.py)\n- `async_set_volume_level` (media_player.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/dlna_dmr/media_player.py"
+   ],
+   "groups": [
+    "dlna_dmr"
+   ],
+   "labels": [
+    "integration: dlna_dmr",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T13:57:34Z",
+   "merged_at": "2026-08-28T05:26:10Z"
+  },
+  {
+   "id": "pr179351",
+   "pr": 179351,
+   "issue": 178809,
+   "title": "Home Assistant Signal Messenger integration does not trigger push notifications for \"Note to Self\"",
+   "body": "**Configuration**\n```\nnotify:\n  - name: signal_name\n    platform: signal_messenger\n    url: \"http://127.0.0.1:8080\"\n    number: \"+49XXXXXXXXXX\"\n    recipients:\n      - \"+49XXXXXXXXXX\"\n```\n**Problem**\n\nWhen sending a message to my own Signal account (\"Note to Self\") using the Home Assistant notify.signal_name service:\n\n✅ The message is delivered successfully.\n❌ No push notification is shown on the phone.\n\n**Comparison**\nUsing Home Assistant Signal integration\n```\naction: notify.signal_name\ndata:\n  message: \"Test\"\n```\n\nResult:\n\nMessage arrives in Note to Self but ❌No push notification.\n\nUsing the REST API directly\n```\ncurl -X POST \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"message\":\"Test\",\n    \"number\":\"+49XXXXXXXXXX\",\n    \"recipients\":[\"+49XXXXXXXXXX\"],\n    \"notify_self\":true\n  }' \\\n  http://127.0.0.1:8080/v2/send\n```\nor\n```\nrest_command:\n  signal_name:\n    url: \"http://127.0.0.1:8080/v2/send\"\n    method: POST\n    headers:\n      Content-Type: application/json\n    payload: >\n      {\n        \"message\": {{ message | tojson }},\n        \"number\": \"+49XXXXXXXXXX\",\n        \"recipients\": [\"+49XXXXXXXXXX\"],\n        \"notify_self\": true\n      }\n```\nResult:\n\nMessage arrives in Note to Self and ✅Push notification is received\n\nIf I send the same request with `\"notify_self\": false` the message is delivered but ❌no push notification is generated.\n\n**Conclusion**\n\nThe REST API behaves correctly and supports notify_self.\n\nThe Home Assistant signal_messenger integration appears to send self-messages without enabling notify_self (or uses an API endpoint that does not support it), resulting in messages that arrive but do not generate a push notification.\n\nCould the integration be updated to support notify_self (or otherwise preserve the previous behaviour for self messages)?\n\n### What version of Home Assistant Core has the issue?\n\n2028.8.0\n\n### What was the last working version of Home Assistant Core?\n\n2028.7.4\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nsignal messenger\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/signal_messenger\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\nconfiguration.yaml:\nnotify:\n  - name: signal_name\n    platform: signal_messenger\n    url: \"http://127.0.0.1:8080\"\n    number: \"+49XXXXXXXXXX\"\n    recipients:\n      - \"+49XXXXXXXXXX\"\n\nAutomation:\naction: notify.signal_name\ndata:\n  message: \"Test\"\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/signal_messenger/notify.py"
+   ],
+   "groups": [
+    "signal_messenger"
+   ],
+   "labels": [
+    "integration: signal_messenger"
+   ],
+   "issue_created": "2026-08-12T13:29:29Z",
+   "merged_at": "2026-08-18T21:26:49Z"
+  },
+  {
+   "id": "pr180505",
+   "pr": 180505,
+   "issue": 177697,
+   "title": "integration 'iotawatt' attempts to attach a device to an entity without a unique ID",
+   "body": "### The problem\n\nTesting the August 2026 beta core release generates the following warning:\n```\nLogger: homeassistant.helpers.frame\nSource: helpers/frame.py:305\nFirst occurred: 13:54:19 (1 occurrence)\nLast logged: 13:54:19\n\nDetected that integration 'iotawatt' attempts to attach a device to an entity without a unique ID. This will stop working in Home Assistant 2027.8.0, please create a bug report at https://github.com/home-assistant/core/issues?q=is%3Aopen+is%3Aissue+label%3A%22integration%3A+iotawatt%22\n```\n\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.08.0b2\n\n### What was the last working version of Home Assistant Core?\n\ncore-2026.07.4\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nIotaWatt \n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/iotawatt/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/iotawatt/sensor.py"
+   ],
+   "groups": [
+    "iotawatt"
+   ],
+   "labels": [
+    "integration: iotawatt"
+   ],
+   "issue_created": "2026-07-31T03:59:48Z",
+   "merged_at": "2026-08-28T15:47:16Z"
+  },
+  {
+   "id": "pr172657",
+   "pr": 172657,
+   "issue": 142173,
+   "title": "HomeWizard P1 Meter has empty gas meter device after migration",
+   "body": "### The problem\n\nMy house has both an electricity and a gas meter. Using the HomeWizard P1 plug, I’ve integrated them into Home Assistant. Today, I noticed a duplicate gas meter device that has no entities.\n\nThe serial number of the duplicate is almost identical to my working gas meter device, with a small difference:\n- Working gas meter: G0123456789001234\n- Empty gas meter: gas_meter_G0123456789001234\n\n### What version of Home Assistant Core has the issue?\n\ncore-2025.4.0\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nHomewizard\n\n### Link to integration documentation on our website\n\n_No response_\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/homewizard/sensor.py"
+   ],
+   "groups": [
+    "homewizard"
+   ],
+   "labels": [
+    "integration: homewizard"
+   ],
+   "issue_created": "2025-04-03T11:06:26Z",
+   "merged_at": "2026-10-02T18:01:37Z"
+  },
+  {
+   "id": "pr166748",
+   "pr": 166748,
+   "issue": 166672,
+   "title": "history_stats counting time when binary_sensor is off",
+   "body": "### The problem\n\nThis may be related to an HA reboot, which occurred at the same time the binary sensor turned off. Despite being off, the history_stats still counted time during this period . In the screenshot below, the time 9:44 pm clearly shows the stats increasing, while at the same time, the binary_sensor is \"Not running\" which should be excluded. \n\n### What version of Home Assistant Core has the issue?\n\n2026.3.4\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nhistory_stats\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/history_stats/\n\n### Diagnostics information\n\n<img width=\"928\" height=\"727\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/07973cad-95b7-46cf-a573-28e8eb7b9d3d\" />\n\n\n\n### Example YAML snippet\n\n```yaml\n- platform: history_stats                                                                                        \n    name: \"York Blower Lifetime Runtime\"                                                                           \n    unique_id: york_blower_lifetime_total_hrs                                                                      \n    entity_id: binary_sensor.york_blower_running                                                                   \n    state: \"on\"                                                                                                    \n    type: time                                                                                                     \n    start: \"{{ now() - timedelta(days=365) }}\"                                                                     \n    end: \"{{ now() }}\"\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/history_stats/coordinator.py",
+    "homeassistant/components/history_stats/data.py"
+   ],
+   "groups": [
+    "history_stats"
+   ],
+   "labels": [
+    "integration: history_stats"
+   ],
+   "issue_created": "2026-03-27T07:42:35Z",
+   "merged_at": "2026-08-26T17:35:42Z"
+  },
+  {
+   "id": "pr179239",
+   "pr": 179239,
+   "issue": 115827,
+   "title": "Cover toggle OpenGarage cover toggle fails",
+   "body": "### The problem\n\nCalling `cover.toggle` on my OpenGarage entity frequently results in a silent failure. The garage door does not respond to the toggle and there are no associated error logs. Running `cover.close` works just fine, and HA always has the correct state of the garage door (open or closed), so it's not confused about the door state.\r\n\r\nThis seems to be somewhat time dependent: if I haven't used HA to open the garage in a while, `cover.toggle` is likely to fail. But once it starts working, it works consistently for some period of time (hours) before it starts to fail again.\r\n\r\nI've looked through the implementations of [cover](https://github.com/home-assistant/core/tree/dev/homeassistant/components/cover) and [opengarage](https://github.com/home-assistant/core/tree/dev/homeassistant/components/opengarage), and there's one thing I find suspicious. The cover toggle code was https://github.com/home-assistant/core/pull/59233 to only [toggle closed if the last toggle direction was open](https://github.com/home-assistant/core/blob/e19c6ac0118f81a2b2b5a8e9ab6f741c48c064ee/homeassistant/components/cover/__init__.py#L442).\r\n\r\nThis matches my experience of having much more trouble toggling closed than toggling open (I can't recall if toggling open is a problem). But I can't deterministically trigger the bug based on this logic, i.e., by toggling the cover closed, then manually opening outside of HA, then trying to toggle closed again. I don't understand how integrations store state such as `self._cover_is_last_toggle_direction_open` over time, possibly there's some time-based aspect to how this is updated.\n\n### What version of Home Assistant Core has the issue?\n\ncore-2024.4.3\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant Container\n\n### Integration causing the issue\n\nopengarage\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/opengarage\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n_No response_\n\n### Anything in the logs that might be useful for us?\n\n_No response_\n\n### Additional information\n\nThe previous issue was marked as stale, but it's very much still an active bug: https://github.com/home-assistant/core/issues/91863\r\n\r\nI'd appreciate if an integration maintainer (@Danielhiversen ?) could at least take a look this time. I've already gotten as far as I can trying to debug it.",
+   "gold": [
+    "homeassistant/components/opengarage/cover.py"
+   ],
+   "groups": [
+    "opengarage"
+   ],
+   "labels": [
+    "integration: opengarage",
+    "stale"
+   ],
+   "issue_created": "2024-04-18T22:28:04Z",
+   "merged_at": "2026-08-24T21:02:41Z"
+  },
+  {
+   "id": "pr180559",
+   "pr": 180559,
+   "issue": 178082,
+   "title": "bluesound flood log files with errors:  'ConfigEntry' object has no attribute 'runtime_data'",
+   "body": "### The problem\n\nMany errors in the log file for:\n`AttributeError: 'ConfigEntry' object has no attribute 'runtime_data'`\n\nsee diagnostics file for details.\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.7.4\n\n### What was the last working version of Home Assistant Core?\n\nunkown\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nbluesound\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/bluesound\n\n### Diagnostics information\n\n[home-assistant_bluesound_2026-08-03T11-34-56.581Z.log](https://github.com/user-attachments/files/30659383/home-assistant_bluesound_2026-08-03T11-34-56.581Z.log)\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/bluesound/media_player.py"
+   ],
+   "groups": [
+    "bluesound"
+   ],
+   "labels": [
+    "integration: bluesound"
+   ],
+   "issue_created": "2026-08-03T11:39:10Z",
+   "merged_at": "2026-08-28T23:49:48Z"
+  },
+  {
+   "id": "pr182747",
+   "pr": 182747,
+   "issue": 170617,
+   "title": "Fix swallowed exceptions in ifttt action handlers",
+   "body": "The `ifttt` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `__init__.py`:**\n- `trigger_service` (__init__.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/ifttt/__init__.py"
+   ],
+   "groups": [
+    "ifttt"
+   ],
+   "labels": [
+    "integration: ifttt",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T13:59:34Z",
+   "merged_at": "2026-09-20T14:47:38Z"
+  },
+  {
+   "id": "pr182734",
+   "pr": 182734,
+   "issue": 177100,
+   "title": "\"Subscribed to Xbox Game Pass\" binary sensor is not functioning correctly",
+   "body": "### The problem\n\nEven though I am subscribed to Game Pass (ultimate) on my own account, \"Subscribed to Xbox Game Pass\" is showing as \"Off\"\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.7.3\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nXbox\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/xbox/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/xbox/binary_sensor.py",
+    "homeassistant/components/xbox/entity.py"
+   ],
+   "groups": [
+    "xbox"
+   ],
+   "labels": [
+    "integration: xbox"
+   ],
+   "issue_created": "2026-07-23T00:05:53Z",
+   "merged_at": "2026-09-20T07:02:58Z"
+  },
+  {
+   "id": "pr182949",
+   "pr": 182949,
+   "issue": 160322,
+   "title": "Sony Bravia TV - Unable to add second device - Device is already configured",
+   "body": "### The problem\n\nHello,\n\nI have 2 Sony Bravia TVs in one household. Models KD-65XF9005 and KD-55XF9005 - yes, they are the same models, just in different sizes.\n\nAfter installing the Sony Bravia TV integration and adding the first TV (KD-65XF9005) I am not able to add the second TV due to message \"Device is already configured\".\n\nI am using IP address for the connection with PSK.\n\n### What version of Home Assistant Core has the issue?\n\n2025.12.5\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nSony Bravia TV\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/braviatv\n\n### Diagnostics information\n\n[config_entry-braviatv-01KE7PPT00910G6HTQVKF4WHZH.json](https://github.com/user-attachments/files/24438914/config_entry-braviatv-01KE7PPT00910G6HTQVKF4WHZH.1.json)\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/braviatv/__init__.py",
+    "homeassistant/components/braviatv/config_flow.py",
+    "homeassistant/components/braviatv/diagnostics.py"
+   ],
+   "groups": [
+    "braviatv"
+   ],
+   "labels": [
+    "integration: braviatv"
+   ],
+   "issue_created": "2026-01-05T18:48:06Z",
+   "merged_at": "2026-10-02T08:22:44Z"
+  },
+  {
+   "id": "pr177416",
+   "pr": 177416,
+   "issue": 170699,
+   "title": "Fix swallowed exceptions in pushover action handlers",
+   "body": "The `pushover` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `notify.py`:**\n- `(see source)` (notify.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/pushover/notify.py"
+   ],
+   "groups": [
+    "pushover"
+   ],
+   "labels": [
+    "integration: pushover",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T18:02:44Z",
+   "merged_at": "2026-08-30T19:14:46Z"
+  },
+  {
+   "id": "pr178471",
+   "pr": 178471,
+   "issue": 162174,
+   "title": "flume  water sensor integration incorrect battery status",
+   "body": "### The problem\n\nThe integration reports low battery forever if the battery has every been low.\n\nA perfectly good solution was proposed in issue 143300, but this was closed without comment.  Please review and consider using the current battery level rather than the \"stuck\" low battery notification method in use currently.\n\n### What version of Home Assistant Core has the issue?\n\n2026.1.3\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nflume\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/flume/\n\n### Diagnostics information\n\nThis is not that type of bug -- the wrong data is being used to populate the result, so this is always wrong.\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\nReally, just look at the other closed issue -- the author provides the device endpoint detail that produces the battery level. I do understand that Flume themselves should fix their API to clear the notification being referenced (perhaps), but it seems more likely that the notification is just not the right data to use here.",
+   "gold": [
+    "homeassistant/components/flume/binary_sensor.py",
+    "homeassistant/components/flume/const.py",
+    "homeassistant/components/flume/coordinator.py"
+   ],
+   "groups": [
+    "flume"
+   ],
+   "labels": [
+    "integration: flume"
+   ],
+   "issue_created": "2026-02-03T19:57:32Z",
+   "merged_at": "2026-08-26T17:28:31Z"
+  },
+  {
+   "id": "pr180226",
+   "pr": 180226,
+   "issue": 148931,
+   "title": "Ecobee integration: Unrecognized model number: attisPro",
+   "body": "### The problem\n\nConnected an Ecobee PRO to my account. HA is reporting that the model number is not recognized, although it seems to work (at least for the basic stuff).\nError log says to include this:\n`Unrecognized model number: attisPro`\n\n### What version of Home Assistant Core has the issue?\n\ncore-2025.7.2\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nEcobee\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/ecobee/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\nModel number for ecobee thermostat **** not recognized. Please visit this link to open a new issue: https://github.com/home-assistant/core/issues and include the following information: Unrecognized model number: attisPro\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/ecobee/const.py"
+   ],
+   "groups": [
+    "ecobee"
+   ],
+   "labels": [
+    "integration: ecobee"
+   ],
+   "issue_created": "2025-07-17T03:50:45Z",
+   "merged_at": "2026-08-26T05:01:38Z"
+  },
+  {
+   "id": "pr180420",
+   "pr": 180420,
+   "issue": 178295,
+   "title": "Unexpected error updating listener 548521831120 for WiZ RGBWW Tunable 9058DE",
+   "body": "### The problem\n\nLogger: homeassistant.components.wiz.coordinator\nQuelle: helpers/update_coordinator.py:202\nIntegration: WiZ ([Dokumentation](https://www.home-assistant.io/integrations/wiz), [Probleme](https://github.com/home-assistant/core/issues?q=is%3Aissue+is%3Aopen+label%3A%22integration%3A+wiz%22))\nErstmals aufgetreten: 5. August 2026 um 23:47:42 (1 Vorkommnis)\nZuletzt protokolliert: 5. August 2026 um 23:47:42\nUnexpected error updating listener 548521831120 for WiZ RGBWW Tunable 9058DE\n\nTraceback (most recent call last):\n  File \"/usr/src/homeassistant/homeassistant/helpers/update_coordinator.py\", line 202, in async_update_listeners\n    update_callback()\n    ~~~~~~~~~~~~~~~^^\n  File \"/usr/src/homeassistant/homeassistant/components/wiz/entity.py\", line 48, in _handle_coordinator_update\n    super()._handle_coordinator_update()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/usr/src/homeassistant/homeassistant/helpers/update_coordinator.py\", line 667, in _handle_coordinator_update\n    self.async_write_ha_state()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/usr/src/homeassistant/homeassistant/helpers/entity.py\", line 1061, in async_write_ha_state\n    self._async_write_ha_state()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/usr/src/homeassistant/homeassistant/helpers/entity.py\", line 1213, in _async_write_ha_state\n    ) = self.__async_calculate_state()\n        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"/usr/src/homeassistant/homeassistant/helpers/entity.py\", line 1121, in __async_calculate_state\n    if state_attributes := self.state_attributes:\n                           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/src/homeassistant/homeassistant/components/light/__init__.py\", line 1048, in state_attributes\n    raise HomeAssistantError(\n        f\"{self.entity_id} ({type(self)}) does not report a color mode\"\n    )\nhomeassistant.exceptions.HomeAssistantError: light.wiz_ambilight (<class 'homeassistant.components.wiz.light.WizBulbEntity'>) does not report a color mode\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.8.0\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nWiZ\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/wiz/\n\n### Diagnostics information\n\n[config_entry-wiz-01KWFQSQMCP9DA1009HFWSGAFM.json](https://github.com/user-attachments/files/30763566/config_entry-wiz-01KWFQSQMCP9DA1009HFWSGAFM.json)\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/wiz/light.py"
+   ],
+   "groups": [
+    "wiz"
+   ],
+   "labels": [
+    "integration: wiz"
+   ],
+   "issue_created": "2026-08-05T22:13:14Z",
+   "merged_at": "2026-08-27T15:43:32Z"
+  },
+  {
+   "id": "pr177519",
+   "pr": 177519,
+   "issue": 158535,
+   "title": "Traccar Server stops updating after a while",
+   "body": "### The problem\n\nSince I had to update the authentication key to an API key that the integration stops updating the status from Traccar Server after some time (hard to tell how long, but it's something like a couple of hours).\nIf I refresh the integration it starts working again for a while.\n\nIt was working fine until 2025.11 was released.\n\nI was also using a specific HA user in Traccar, but I've also tried with an admin user and the same issue happens.\n\nI don't have any logs in HA that would help understand what's happening.\n\n### What version of Home Assistant Core has the issue?\n\ncore-2025.12.2\n\n### What was the last working version of Home Assistant Core?\n\ncore-2025.10.4\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nTraccar Server\n\n### Link to integration documentation on our website\n\n_No response_\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\nI had Traccar server [v6.10.0](https://github.com/traccar/traccar/releases/tag/v6.10.0) when the 2025.11 was released. I've since updated it to [v6.11.1](https://github.com/traccar/traccar/releases/tag/v6.11.1) and I still have the same issue.",
+   "gold": [
+    "homeassistant/components/traccar_server/coordinator.py"
+   ],
+   "groups": [
+    "traccar_server"
+   ],
+   "labels": [
+    "integration: traccar_server"
+   ],
+   "issue_created": "2025-12-10T11:59:40Z",
+   "merged_at": "2026-08-18T20:20:57Z"
+  },
+  {
+   "id": "pr176774",
+   "pr": 176774,
+   "issue": 176760,
+   "title": "SMTP does not recognise image attachments generated with action: camera.snapshot",
+   "body": "### The problem\n\nImages generated by action: camera.snapshot are not recognised as images when attached to email notifications. as a result they are attached as application/octet-stream instead of image/jpeg.\n\n### What version of Home Assistant Core has the issue?\n\n2026.7.2\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nSMTP\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/smtp/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\naction: notify.mail_sender\ndata:\n  message: Doorphone Motion Detected\n  data:\n    images:\n      - /config/www/snapshots/doorphone.jpg\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\nWARNING [homeassistant.components.smtp.helpers]\nAttachment /config/www/snapshots/doorphone.jpg has an unknown MIME type. Falling back to file\n```\n\n### Additional information\n\nRoot cause\nhomeassistant.components.smtp.helpers.py _attach_file() does:\n\n  attachment = MIMEImage(file_bytes)\n\nwhich raises:\n\n   TypeError: Could not guess image MIME subtype\n\nfor valid JPEGs.\n\nThe JPEG starts:\n\nffd8fffe00104c61766336322e32382e31303200...\n\ni.e. JPEG SOI followed by a COM marker containing:\n\nLavc62.28.102\n\nThe file is valid and opens correctly with other applications.\n\nWorkaround\nFallback using mimetypes:\n\ntry:\n    attachment = MIMEImage(file_bytes)\nexcept TypeError:\n    ctype, _ = mimetypes.guess_type(atch_name)\n    if ctype and ctype.startswith(\"image/\"):\n        attachment = MIMEImage(\n            file_bytes,\n            _subtype=ctype.split(\"/\", 1)[1],\n        )\n    else:\n        attachment = MIMEApplication(\n            file_bytes,\n            Name=os.path.basename(atch_name),\n        )\n\nIn addition, the warning text is slightly misleading. The MIME type is known (image/jpeg from the filename); the problem is that MIMEImage cannot infer the subtype from the binary data. That distinction will probably help avoid people chasing the wrong cause.",
+   "gold": [
+    "homeassistant/components/smtp/helpers.py"
+   ],
+   "groups": [
+    "smtp"
+   ],
+   "labels": [
+    "integration: smtp"
+   ],
+   "issue_created": "2026-07-18T07:42:59Z",
+   "merged_at": "2026-09-02T15:06:07Z"
+  },
+  {
+   "id": "pr177499",
+   "pr": 177499,
+   "issue": 176037,
+   "title": "Anglian Water integration - No Longer Working?",
+   "body": "### The problem\n\nSo as pointed out by @klaasnicolaas within my original post https://github.com/home-assistant/home-assistant.io/issues/46739 I have to make a bug report here or something? - Anyway...\n\nI believe the Anglian Water Integration for home assistant no longer works, as when I type in my Anglian Water account details - The same details that's within my password manager and that I use to login to my water account via web browser and mobile app - comes back with an error \"Invalid authentication\" - I don't have MFA or two factor enabled on the account. \n\nI have had this integration working before but up until recently it stopped working asking me to reauthenticate and since then I haven't been able to. I've removed the integration and tried adding it back but still the same error message.\n\n @pantherale0 - Can you offer any help or advice to what's going on here?\n\n<img width=\"641\" height=\"517\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d487a70f-44fb-4069-ae39-138e7ad49392\" />\n\n### What version of Home Assistant Core has the issue?\n\n2026.7.1\n\n### What was the last working version of Home Assistant Core?\n\n2025.9.2\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nAnglian Water\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/anglian_water/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\nLogger: homeassistant.components.recorder.table_managers.statistics_meta\nSource: components/recorder/table_managers/statistics_meta.py:386\nIntegration: Recorder (documentation, issues)\nFirst occurred: 22:19:53 (1 occurrence)\nLast logged: 22:19:53\n\nCannot rename statistic_id `sensor.water_meter_latest_reading_cost_2` to `sensor.water_meter_latest_reading_cost` because the new statistic_id is already in use\n\nLogger: homeassistant.components.recorder.entity_registry\nSource: components/recorder/entity_registry.py:70\nIntegration: Recorder (documentation, issues)\nFirst occurred: 22:19:53 (1 occurrence)\nLast logged: 22:19:53\n\nCannot migrate history for entity_id `sensor.water_meter_latest_reading_cost_2` to `sensor.water_meter_latest_reading_cost` because the new entity_id is already in use\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/anglian_water/__init__.py",
+    "homeassistant/components/anglian_water/config_flow.py"
+   ],
+   "groups": [
+    "anglian_water"
+   ],
+   "labels": [
+    "integration: anglian_water"
+   ],
+   "issue_created": "2026-07-08T21:44:16Z",
+   "merged_at": "2026-08-24T20:26:33Z"
+  },
+  {
+   "id": "pr180357",
+   "pr": 180357,
+   "issue": 178391,
+   "title": "Unable to save network settings if there are no trusted proxies",
+   "body": "### The problem\n\nAttempting to save the network settings in the UI without any trusted proxies defined gives the following error:\n\n```\nsome but not all values in the same group of inclusion 'proxy'[<proxy>]. Got None\n```\n\nReproducing is pretty easy, just delete any IPs/CIDRs from the Trusted Proxies and attempt to save the network settings. Even if Trust X-Forwarded-For is disabled, having an empty list of Trusted proxies results in an error upon save.\n\nLuckily, the workaround is pretty easy, just add a single CIDR (such as 172.30.33.0/24) to the list of Trusted proxies in the UI and then you will be able to save the settings, but in scenarios where we don't need/want X-Forwarded-For, we should be able to save the settings without any trusted proxies defined.\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.8.0\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nhttp\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/http/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n2026-08-06 13:37:16.075 ERROR (MainThread) [homeassistant.components.websocket_api.http.connection] [2422856591088] Error handling message: some but not all values in the same group of inclusion 'proxy' @ data['config'][<proxy>]. Got None (invalid_format)\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/http/config.py",
+    "homeassistant/components/http/websocket_api.py"
+   ],
+   "groups": [
+    "http"
+   ],
+   "labels": [
+    "integration: http"
+   ],
+   "issue_created": "2026-08-06T18:38:23Z",
+   "merged_at": "2026-08-27T09:03:40Z"
+  },
+  {
+   "id": "pr181538",
+   "pr": 181538,
+   "issue": 170694,
+   "title": "Fix swallowed exceptions in huawei_lte action handlers",
+   "body": "The `huawei_lte` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `notify.py`:**\n- `send_message` (notify.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/huawei_lte/notify.py"
+   ],
+   "groups": [
+    "huawei_lte"
+   ],
+   "labels": [
+    "integration: huawei_lte",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T18:01:09Z",
+   "merged_at": "2026-09-07T15:28:56Z"
+  },
+  {
+   "id": "pr181869",
+   "pr": 181869,
+   "issue": 170671,
+   "title": "Fix swallowed exceptions in mochad action handlers",
+   "body": "The `mochad` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `light.py`, `switch.py`:**\n- `turn_off` (light.py)\n- `turn_on` (light.py)\n- `turn_off` (switch.py)\n- `turn_on` (switch.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/mochad/light.py",
+    "homeassistant/components/mochad/switch.py"
+   ],
+   "groups": [
+    "mochad"
+   ],
+   "labels": [
+    "integration: mochad",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T15:50:12Z",
+   "merged_at": "2026-09-13T12:14:42Z"
+  },
+  {
+   "id": "pr180353",
+   "pr": 180353,
+   "issue": 170670,
+   "title": "Fix swallowed exceptions in mjpeg action handlers",
+   "body": "The `mjpeg` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `camera.py`:**\n- `async_camera_image` (camera.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/mjpeg/camera.py"
+   ],
+   "groups": [
+    "mjpeg"
+   ],
+   "labels": [
+    "integration: mjpeg",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T15:49:55Z",
+   "merged_at": "2026-08-29T14:30:03Z"
+  },
+  {
+   "id": "pr178490",
+   "pr": 178490,
+   "issue": 178064,
+   "title": "LiteLLM does not remember \"Assist\" check setting",
+   "body": "### The problem\n\nHello!\n\nRunning HA Core 2026.8.0b3, and using LiteLLM. I wanted to mention, no mater what I do, I cannot un-check the \"Assist\" option. I can uncheck, press submit, it says changes are sucessfully saved, but when I return, its checked again.\n\nAt first I thought it was a caching/frontend problem, but it shows the same an another device.\n\n<img width=\"481\" height=\"557\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d677b2fe-85fb-40dd-8034-fdaed3d527c4\" />\n\nanyways, thanks for the integration!\n\n### What version of Home Assistant Core has the issue?\n\n2026.8.0b3\n\n### What was the last working version of Home Assistant Core?\n\nn/a\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nLiteLLM\n\n### Link to integration documentation on our website\n\nhttps://rc.home-assistant.io/integrations/litellm\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/litellm/config_flow.py"
+   ],
+   "groups": [
+    "litellm"
+   ],
+   "labels": [
+    "integration: litellm"
+   ],
+   "issue_created": "2026-08-03T08:19:55Z",
+   "merged_at": "2026-08-21T19:20:17Z"
+  },
+  {
+   "id": "pr180024",
+   "pr": 180024,
+   "issue": 162615,
+   "title": "Recorder purge_entities does not purge history for group.* entity_id (group states remain untouched)",
+   "body": "### The problem\n\nWhen calling `recorder.purge_entities` with `entity_id` containing a `group.*` entity, Home Assistant does not delete any rows for that group entity from the `states` table. The group entity has its own entry in `states_meta` and a very large number of `states` rows, including rows older than the requested retention period. The purge task runs and deletes rows for other entities, but never targets the group’s `metadata_id`, so the group’s history remains unchanged.\n\nThis appears to be caused by group expansion during entity_id processing, where the group entity_id is expanded to its members and the group entity_id itself is not included in the purge target set.\n\n`components / recorder / services.py / _async_handle_purge_entities_service(...)` generates the list of entities by calling `homeassistant.helpers.service.async_extract_entity_ids(service)` and leaves `expand_group` parameter to the default value, which is `True`:\n`async def async_extract_entity_ids(service_call: ServiceCall, expand_group: bool = True) -> set[str]:...`\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.2.1\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nrecorder\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/recorder/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\naction: recorder.purge_entities\ndata:\n  keep_days: 14\n  entity_id: group.paradox_zones_open\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n2026-02-09 09:05:03.897 DEBUG (Recorder) [homeassistant.components.recorder.core] Processing task: PurgeEntitiesTask(entity_filter=<functools._lru_cache_wrapper object at 0x7fa6c037fab0>, purge_before=datetime.datetime(2026, 1, 26, 7, 5, 3, 897254, tzinfo=datetime.timezone.utc))\n2026-02-09 09:05:03.906 DEBUG (Recorder) [homeassistant.components.recorder.purge] Purging entity data for [1390, 410, 1359, 395, 400, 1369, 1361, 1362, 405, 1389, 1392, 1391]\n```\n\n### Additional information\n\n`SELECT metadata_id FROM states_meta WHERE entity_id = 'group.paradox_zones_open';` => `metadata_id = 11`",
+   "gold": [
+    "homeassistant/components/recorder/services.py"
+   ],
+   "groups": [
+    "recorder"
+   ],
+   "labels": [
+    "integration: recorder"
+   ],
+   "issue_created": "2026-02-09T07:08:28Z",
+   "merged_at": "2026-08-25T10:57:00Z"
+  },
+  {
+   "id": "pr171908",
+   "pr": 171908,
+   "issue": 156827,
+   "title": "ISY integration doesn't provide power management attributes",
+   "body": "### The problem\n\nUsing z-wave power plug with monitoring. I see values in ISY but not in HA. Note that this works with custom hacs ISY repo. But that, itself, is no longer working after 2025.11.0.\n\n<img width=\"964\" height=\"276\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/8faafec4-8465-48e4-9f3d-b53ef8a0b907\" />\n\n### What version of Home Assistant Core has the issue?\n\ncore-2025.11.2\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nUniversal Devices ISY/IoX\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/isy994/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/isy994/helpers.py"
+   ],
+   "groups": [
+    "isy994"
+   ],
+   "labels": [
+    "integration: isy994",
+    "stale"
+   ],
+   "issue_created": "2025-11-18T18:35:36Z",
+   "merged_at": "2026-08-21T19:50:33Z"
+  },
+  {
+   "id": "pr182851",
+   "pr": 182851,
+   "issue": 173319,
+   "title": "Home Connect: Error \"The unit has changed\" for temperature sensor in oven",
+   "body": "### The problem\n\nIt looks like something in the Home Connect backend is flapping back and forth on the unit for the oven temperature sensor.\n\nEvery day or so, I get an alert in Home Assistant for my Thermador PRD486WIGU oven connected to Home Assistant using the `home_connect` integration:\n\n```\nThe unit has changed\n\nThe unit of 'Kitchen Oven Right Cavity Current oven cavity temperature' (sensor.kitchen_oven_right_cavity_current_oven_cavity_temperature) changed to '°F' which can't be converted to the previously stored unit, ''.\nIf the historic statistic values have a wrong unit, you can update the units of the old values. The values will not be updated.\nOtherwise you can choose to delete all historic statistic values, and start over.\n```\n\nIt changes back and forth between `'ºF'` and `''`.\n\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.6.1\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nhome_connect\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/home_connect/\n\n### Diagnostics information\n\n[config_entry-home_connect-01KQFK66B1NJDYR2AJZZRSJFH2.json](https://github.com/user-attachments/files/28727701/config_entry-home_connect-01KQFK66B1NJDYR2AJZZRSJFH2.json)\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/home_connect/sensor.py"
+   ],
+   "groups": [
+    "home_connect"
+   ],
+   "labels": [
+    "integration: home_connect"
+   ],
+   "issue_created": "2026-06-08T22:11:55Z",
+   "merged_at": "2026-09-25T06:33:27Z"
+  },
+  {
+   "id": "pr172278",
+   "pr": 172278,
+   "issue": 114266,
+   "title": "HmIP-ShutterGroup does not fully close the shutters",
+   "body": "### The problem\n\nAfter updating shutter devices (HmIP-FBL) in HomematicIP native App to version 1.10.16 homematicIP shutter group entities do not fully close the shutters anymore. \r\n\r\nThis happens when closing a shutter group through Lovelace UI or calling the service cover.close_cover. \r\nBehaviour: Shutters close 100% (fully closed like it should be), but shortly after slats turn to 0% which means they are open (horizontally aligned). \r\n\r\nThis does not happen if one calls the service for a single shutter. It's just happening with HmIP shutter group entities. \n\n### What version of Home Assistant Core has the issue?\n\ncore-2024-3\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nhomematicip_cloud\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/homematicip_cloud/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\nservice: cover.close_cover\r\ndata: {}\r\ntarget:\r\n  entity_id: cover.groundfloor_shuttergroup\n```\n\n\n### Anything in the logs that might be useful for us?\n\n```txt\nNo log entries\n```\n\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/homematicip_cloud/cover.py"
+   ],
+   "groups": [
+    "homematicip_cloud"
+   ],
+   "labels": [
+    "integration: homematicip_cloud",
+    "stale"
+   ],
+   "issue_created": "2024-03-26T20:27:10Z",
+   "merged_at": "2026-08-28T06:42:06Z"
+  },
+  {
+   "id": "pr179219",
+   "pr": 179219,
+   "issue": 170022,
+   "title": "Remove authentication support for hassio/Supervisor user",
+   "body": "### Description\n\nWith Supervisor using the Unix socket to communicate with Core, we don't use a in-band authentication anymore. This makes the refresh token actually a liability: If someone gets hold of it, they get full admin access through the regular http port.\n\nSo far the TCP/IP communication was still preferred. Only with https://github.com/home-assistant/supervisor/pull/6815 Unix socket communication will become the default for Core 2026.5.1 and newer.\n\nLet's remove the refresh token and don't hand it to the Supervisor anymore.\n\n### Additional context\n\n_No response_",
+   "gold": [
+    "homeassistant/components/hassio/__init__.py"
+   ],
+   "groups": [
+    "hassio"
+   ],
+   "labels": [
+    "no-stale"
+   ],
+   "issue_created": "2026-05-07T16:21:20Z",
+   "merged_at": "2026-08-21T09:49:31Z"
+  },
+  {
+   "id": "pr183498",
+   "pr": 183498,
+   "issue": 176707,
+   "title": "enphase_envoy: transient uint32-max (2^32 Wh) consumption readings permanently corrupt long-term energy statistics",
+   "body": "## The problem\n\nThe Envoy consumption CT occasionally returns a transient garbage reading of\n~`4294967296` Wh (exactly uint32 max) for daily consumption. The\n`sensor.envoy_<serial>_energy_consumption_today` entity (kWh,\n`total_increasing`) then reports a state of ~`4,294,629 kWh` for one update\ncycle before returning to normal (~hundreds of kWh).\n\nBecause the statistic is `total_increasing`, the recorder treats the spike\nas real consumption and bakes ~4.29 million kWh into the statistic's\ncumulative `sum` **permanently**. When the counter drops back, HA treats it\nas a normal counter reset, so the spike is never reversed. Each occurrence\nadds another ~4.29e6 kWh step. The Energy dashboard and any consumer of the\nconsumption statistic are unusable afterwards without manual DB surgery.\n\n## Evidence (from my recorder DB, HA 2026.7.2)\n\nAll spike deltas cluster at 2^32 Wh = 4,294,967.296 kWh (minus the real\nconsumption in the hour):\n\n| Serial | spike events | example event (local time) | hourly `sum` delta (kWh) | baked-in error (kWh) |\n|---|---|---|---|---|\n| 202442014493 | 2 | 2025-05-05 08:00 | 4,294,684.702 | 8,576,091 |\n| 202504003374 | 18 | 2025-08-19 21:00 | 4,294,963.763 | 77,304,135 |\n| 202428004328 | 1 | 2025-12-16 10:00 | 4,294,356.343 | 4,294,356 |\n| 482543015950 | 1 | 2026-05-31 00:00 | 4,294,629.126 | 4,294,629 |\n\nExample raw statistics rows (serial 482543015950, metadata_id 5651):\nstate jumps `276 → 4,294,629.126 → ~277` in adjacent hours; `sum` steps up\nby 4,294,629 and stays there for every subsequent row (897 rows and\ncounting).\n\nFour different Envoy serials (hardware swaps) all exhibit it, across\nthree firmware builds in the 8.3 line (8.3.5167, 8.3.5286, 8.3.5289) — it is a device/firmware artifact, not a\none-off. Notably the **lifetime** (MWh-scaled) statistics from the same\ndevice are clean; only the \"today\" Wh-scaled consumption endpoint produces\nthe uint32-max readings.\n\n## Suggested guard\n\nThe integration (or pyenphase) should reject physically implausible values\nbefore they reach the state machine, e.g.:\n\n- Reject/skip an update where daily consumption ≥ 2^32 − ε Wh (a sentinel\n  for a failed CT read), or\n- Reject deltas that exceed a plausible bound (e.g. >1 MWh change in a\n  single poll for a residential \"today\" counter), returning the previous\n  value / marking unavailable for that cycle.\n\nPrecedent: other energy integrations clamp or drop known firmware sentinel\nvalues rather than publishing them into `total_increasing` statistics,\nbecause a single bad publish is unrecoverable without manual statistics\nsurgery.\n\n## Environment\n\n- Home Assistant Core 2026.7.2 (recorder on SQLite)\n- Integration: `enphase_envoy` (core)\n- Hardware: Envoy metered w/ consumption CTs + Enpower/IQ batteries;\n  4 serials over the install's life (RMA swaps): 202442014493,\n  202504003374, 202428004328, 482543015950 (current)\n- Firmware (per serial, from HA device registry): 202442014493 + 202504003374 = 8.3.5167; 202428004328 = 8.3.5286; 482543015950 (current) = 8.3.5289\n\n## Diagnostics\n\nHappy to attach integration diagnostics and the raw statistics rows for the\nspike windows on request.\n",
+   "gold": [
+    "homeassistant/components/enphase_envoy/const.py",
+    "homeassistant/components/enphase_envoy/sensor.py"
+   ],
+   "groups": [
+    "enphase_envoy"
+   ],
+   "labels": [
+    "needs-more-information",
+    "integration: enphase_envoy"
+   ],
+   "issue_created": "2026-07-17T14:58:15Z",
+   "merged_at": "2026-09-29T11:46:12Z"
+  },
+  {
+   "id": "pr182952",
+   "pr": 182952,
+   "issue": 144826,
+   "title": "Aranet addon/integration unable to switch bq/m3 to pCI/L",
+   "body": "### The problem\n\nHello everyone...\nI looked for a more subject related location to ask for this feature on the Aranet integration, but this seems to be it...so i apologize if i am in the wrong spot. \nThe Aranet Radon device has to units of displaying the radon concentration in an area...and you can wap back and forth between them on the device. But i am unable to change the unit in the integration...\nDid i miss a spot where that is possible, or is that not implemented?\nI would prefer seeing pCI/L instead of the BQ/m3\nThx for any thoughts\n\n### What version of Home Assistant Core has the issue?\n\n2025.5.1\n\n### What was the last working version of Home Assistant Core?\n\n2025.5.1\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nAranet \n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/aranet/\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/aranet/sensor.py"
+   ],
+   "groups": [
+    "aranet"
+   ],
+   "labels": [
+    "integration: aranet"
+   ],
+   "issue_created": "2025-05-13T13:17:30Z",
+   "merged_at": "2026-09-23T10:36:01Z"
+  },
+  {
+   "id": "pr181042",
+   "pr": 181042,
+   "issue": 170636,
+   "title": "Fix swallowed exceptions in roomba action handlers",
+   "body": "The `roomba` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `vacuum.py`:**\n- `async_set_fan_speed` (vacuum.py) (2 occurrences)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/roomba/vacuum.py"
+   ],
+   "groups": [
+    "roomba"
+   ],
+   "labels": [
+    "integration: roomba",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T14:05:13Z",
+   "merged_at": "2026-09-02T06:20:08Z"
+  },
+  {
+   "id": "pr179564",
+   "pr": 179564,
+   "issue": 178698,
+   "title": "Broken discovery logic for Aqara Matter bridges with AC exposed",
+   "body": "### The problem\n\nThis is a follow-up issue mentioned during today's Matter SyncUp meeting.\n\n<img width=\"945\" height=\"822\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/ffe0d433-c760-4b3b-b19e-416e043ca644\" />\n\nHome Assistant treats the Aqara M3 Hub and the Thermostat endpoint as a single device, so the bridge’s own page disappears. As a result, users cannot reach additional functions such as sharing the device with other ecosystems.\n\n<img width=\"845\" height=\"840\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/b0b2d736-0f0a-40d1-b018-1964e453e0a8\" />\n\nIf users click on the link (Connected via Aqara Hub M3), Home Assistant leads user to the same current page, which is a loop.\n\nThe issue has been there since last year, but I can't recall which was the last version it worked correctly.\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.8.0b6\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nMatter\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/matter/\n\n### Diagnostics information\n\n[matter-8688f0fa81484be23dad574cf1fd53e4-Air Conditioner-cbc474a17d1458e66a7d4b7b7ecc1ab1.json](https://github.com/user-attachments/files/30911759/matter-8688f0fa81484be23dad574cf1fd53e4-Air.Conditioner-cbc474a17d1458e66a7d4b7b7ecc1ab1.json)\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/matter/adapter.py"
+   ],
+   "groups": [
+    "matter"
+   ],
+   "labels": [
+    "integration: matter"
+   ],
+   "issue_created": "2026-08-10T19:56:23Z",
+   "merged_at": "2026-08-24T19:51:46Z"
+  },
+  {
+   "id": "pr182756",
+   "pr": 182756,
+   "issue": 170621,
+   "title": "Fix swallowed exceptions in lifx_cloud action handlers",
+   "body": "The `lifx_cloud` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `scene.py`:**\n- `async_activate` (scene.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/lifx_cloud/scene.py"
+   ],
+   "groups": [
+    "lifx_cloud"
+   ],
+   "labels": [
+    "integration: lifx_cloud",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T14:00:49Z",
+   "merged_at": "2026-09-20T14:27:31Z"
+  },
+  {
+   "id": "pr173899",
+   "pr": 173899,
+   "issue": 173777,
+   "title": "Derivative Sensor is marked Unavailable after each midnight until a second sample is received that day",
+   "body": "### The problem\n\nI realise there was MUCH discussion in the past about how to calculate and show 0 rate of change when Home Assistant only reports changes of data. I believe this is fixed for almost all cases.\n\nBut in the case of a base cumulative sensor that briefly goes Unavailable when it resets to zero at midnight (such as the 7 sensors like `grid_exported_from_battery`, from the Teslemetry integration), there is a problem. \n\nPlease look at the attached Excel.\n\nAt midnight, the cumulative sensor shows Unavailable until 00:05, when a valid value is sent. \n\nFor my example of misbehaviour for `grid_exported_from_battery`, the valid value is 0 as the battery won't export any kWh to the grid until 16:00\n\nUnfortunately, **the Derivative sensor** based on this cumulative sensor **remains Unavailable all day until 16:05**, when a second valid value comes in. **I believe it should show 0 rate of change from 00:05 through 16:00** (rather than Unavailable): there is no updated value in HA, so it can be assumed that the cumulative value is still zero, so the rate of change should be zero.\n\nLooking later in the data, we see correct behaviour around 17:00 when the export ends abruptly. The derivative tails off across the 20-minute time window as you might expect. (In reality the power doesn't actually tail off, it stops suddenly, but I understand this representation).\n\nAnd we also see good behaviour after the brief Unavailable periods at 17:31 and 17:37: When the cumulative sensor goes Unavailable, the Derivative goes Unavailable as expected. When the cumulative sensor comes back, with the same value as before, the Derivative is correctly set to zero. \n\nThis shows that the code doesn't need two valid values after **every** Unavailable period, **just the one at midnight** - so I think the issue may have something to do with the handling of the cumulative sensor's reset to zero being simultaneous with dealing with Unavailable. Unlike an Unavailable period during the day, the code has a previous valid value to fall back on. On the midnight reset, it may have discarded the pre-midnight value when it received the 00:05 zero. \n\nHappy to clarify anything if this is not clear.\n\n[Derivative Sensor problem.xlsx](https://github.com/user-attachments/files/28931090/Derivative.Sensor.problem.xlsx)\n\n### What version of Home Assistant Core has the issue?\n\ncore-2026.5.4\n\n### What was the last working version of Home Assistant Core?\n\n_No response_\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nDerivative Sensor\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/derivative\n\n### Diagnostics information\n\n<img width=\"396\" height=\"647\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/ed1a005c-f0cc-4f5d-bb9a-59c254998ebd\" />\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/derivative/sensor.py"
+   ],
+   "groups": [
+    "derivative"
+   ],
+   "labels": [
+    "integration: derivative"
+   ],
+   "issue_created": "2026-06-14T17:05:40Z",
+   "merged_at": "2026-08-21T19:11:17Z"
+  },
+  {
+   "id": "pr177417",
+   "pr": 177417,
+   "issue": 170698,
+   "title": "Fix swallowed exceptions in nfandroidtv action handlers",
+   "body": "The `nfandroidtv` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `notify.py`:**\n- `(see source)` (notify.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/nfandroidtv/notify.py"
+   ],
+   "groups": [
+    "nfandroidtv"
+   ],
+   "labels": [
+    "integration: nfandroidtv",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T18:02:25Z",
+   "merged_at": "2026-08-20T07:44:35Z"
+  },
+  {
+   "id": "pr182630",
+   "pr": 182630,
+   "issue": 148315,
+   "title": "Fetching large remote calendar causes HA to crash",
+   "body": "### The problem\n\nThe last weeks, I was unable to add my Outlook 365 work calendar (`https://outlook.office365.com/owa/calendar/[...]/[...]/calendar.ics`) with the Remote Calendar integration, due to the issue described in #147010 . This was fixed with #147024 .\n\nAfter the fix got merged, I confirmed that the fix was part of the latest HA update from the release notes and I updated Home Assistant Home Assistant to 2025.7.1, I tried to add the calendar again.\n\nIt was loading for a while, until HA reported \"Lost Connection. Trying to reconnect.\" Home Assistant was gone for a few minutes, before it came back up and was responding again. I don't know, if it was \"frozen\" or actually restarted. After it was back up, I saw that the new integration entry was created successfully.\n\n### What version of Home Assistant Core has the issue?\n\ncore-2025.7.1\n\n### What was the last working version of Home Assistant Core?\n\ncore-2025.7.1\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nremote_calendar\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/remote_calendar\n\n### Diagnostics information\n\n_No response_\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n2025-07-07 10:27:10.045 WARNING (MainThread) [homeassistant.components.calendar] Setup of calendar platform remote_calendar is taking over 10 seconds.\n2025-07-07 10:28:43.497 WARNING (MainThread) [homeassistant.helpers.entity] Updating state for calendar.work_jonas (<class 'homeassistant.components.remote_calendar.calendar.RemoteCalendarEntity'>) took 91.061 seconds. Please create a bug report at https://github.com/home-assistant/core/issues?q=is%3Aopen+is%3Aissue+label%3A%22integration%3A+remote_calendar%22\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/remote_calendar/calendar.py"
+   ],
+   "groups": [
+    "remote_calendar"
+   ],
+   "labels": [
+    "integration: remote_calendar"
+   ],
+   "issue_created": "2025-07-07T08:40:44Z",
+   "merged_at": "2026-09-20T15:29:30Z"
+  },
+  {
+   "id": "pr181645",
+   "pr": 181645,
+   "issue": 170631,
+   "title": "Fix swallowed exceptions in openhome action handlers",
+   "body": "The `openhome` integration catches exceptions in action handlers but only logs them instead of re-raising. This means the user gets no feedback in the UI when an action fails, and automations continue executing as if the action succeeded.\n\n**Affected methods in `media_player.py`:**\n- `async_media_next_track` (media_player.py)\n- `async_media_pause` (media_player.py)\n- `async_media_play` (media_player.py)\n- `async_media_previous_track` (media_player.py)\n- `async_media_stop` (media_player.py)\n- `async_mute_volume` (media_player.py)\n- `async_play_media` (media_player.py)\n- `async_select_source` (media_player.py)\n- `async_set_volume_level` (media_player.py)\n- `async_turn_off` (media_player.py)\n- `async_turn_on` (media_player.py)\n- `async_volume_down` (media_player.py)\n- `async_volume_up` (media_player.py)\n\n**How to fix:**\n\nReplace the `except` blocks that only log with ones that raise `HomeAssistantError`:\n\n```python\n# Before (bad)\nexcept SomeError as err:\n    _LOGGER.error(\"Failed: %s\", err)\n\n# After (good)\nexcept SomeError as err:\n    raise HomeAssistantError(\n        translation_domain=DOMAIN,\n        translation_key=\"failed_to_turn_on\",\n    ) from err\n```\n\nAdd the corresponding translation keys to `strings.json`. After fixing, remove the `# pylint: disable-next=home-assistant-action-swallowed-exception` comments.\n\nPart of home-assistant/epics#64",
+   "gold": [
+    "homeassistant/components/openhome/media_player.py"
+   ],
+   "groups": [
+    "openhome"
+   ],
+   "labels": [
+    "integration: openhome",
+    "no-stale"
+   ],
+   "issue_created": "2026-05-14T14:03:44Z",
+   "merged_at": "2026-09-08T16:45:34Z"
+  },
+  {
+   "id": "pr183942",
+   "pr": 183942,
+   "issue": 159997,
+   "title": "Miele supercooling / superfreeze toggles no longer work.",
+   "body": "### The problem\n\nThe supercooling & superfreeze buttons no longer seem to work for fridges & freezers.\nThe API call seems to be sent to Miele but the state of the button does not change. The state of de device itself does change however.\n\n<img width=\"708\" height=\"426\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/16cfdc73-e041-437a-bd9a-eb4b21ae2a93\" />\n\n### What version of Home Assistant Core has the issue?\n\n2025.12.5\n\n### What was the last working version of Home Assistant Core?\n\n2025.12.3\n\n### What type of installation are you running?\n\nHome Assistant OS\n\n### Integration causing the issue\n\nMiele\n\n### Link to integration documentation on our website\n\nhttps://www.home-assistant.io/integrations/miele/\n\n### Diagnostics information\n\nDiagnostics file:\n\n[miele-01JWV8NRENFAZA9DWAE2E6XEQJ-Freezer-8c89a507dbb9c8777f657c1b46ece0ad.json](https://github.com/user-attachments/files/24383867/miele-01JWV8NRENFAZA9DWAE2E6XEQJ-Freezer-8c89a507dbb9c8777f657c1b46ece0ad.json)\n\n### Example YAML snippet\n\n```yaml\n\n```\n\n### Anything in the logs that might be useful for us?\n\n```txt\n\n```\n\n### Additional information\n\n_No response_",
+   "gold": [
+    "homeassistant/components/miele/switch.py"
+   ],
+   "groups": [
+    "miele"
+   ],
+   "labels": [
+    "integration: miele"
+   ],
+   "issue_created": "2025-12-30T14:53:12Z",
+   "merged_at": "2026-10-01T19:34:24Z"
+  }
+ ]
+}

@@ -1,0 +1,83 @@
+analysis ana_b072c17f275c, snapshot snp_22edce792516 (commit b0b7687fa6)
+understood as: Understood (rules): q1 [config] Where does RepoAtlas decide whether an experiment command needs a container?
+plan links: experiment -> repoatlas/cli.py:392-420; command -> repoatlas/agents/installer.py:212-216; container -> repoatlas/research.py:1161-1163
+q1 [met] config: Where does RepoAtlas decide whether an experiment command needs a container?
+  [statically_verified] `(module)` in repoatlas/runtime/calltrace_plugin.py reads environment variable REPOATLAS_ARTIFACTS (repoatlas/runtime/calltrace_plugin.py:78) (uncertain: no symbol in the index is named `RepoAtlas` (the name occurs at repoatlas/__init__.py:1); linked by text_hit to agents/__init__.py, not by its name)  (clm_54d2c1b00869)
+  [statically_verified] `run_benchmark()` in repoatlas/benchmark/runner.py reads environment variable REPOATLAS_BENCH_MODEL (repoatlas/benchmark/runner.py:311) (uncertain: no symbol in the index is named `RepoAtlas` (the name occurs at repoatlas/__init__.py:1); linked by text_hit to agents/__init__.py, not by its name)  (clm_952553e22610)
+  [strong_inference] `_fake_upstream` reads setting `repoatlas.project_index.__main__` (tests/test_cli.py:283) (uncertain: a string-keyed read found by a pattern: which setting object answers it is not traced; no symbol in the index is named `RepoAtlas` (the name occurs at repoatlas/__init__.py:1); linked by text_hit to agents/__init__.py, not by its name)  (clm_461a9f0331eb)
+context (found on the way; not what answers):
+  [statically_verified] `run()` is defined at repoatlas/experiments.py:365-550 (uncertain: no symbol in the index is named `RepoAtlas` (the name occurs at repoatlas/__init__.py:1); linked by text_hit to agents/__init__.py, not by its name)  (clm_6f7147f039d0)
+  [statically_verified] `cmd_experiment()` is defined at repoatlas/cli.py:392-420 (uncertain: no symbol in the index is named `RepoAtlas` (the name occurs at repoatlas/__init__.py:1); linked by text_hit to agents/__init__.py, not by its name)  (clm_613516ec4757)
+  +2 context claim(s) the critique refuted (--json lists them)
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: repo->repositori, command->cmd, experiment
+## repoatlas/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass", timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto", commit: str | N…
+  doc: Run one experiment and record it (and its evidence) in the store.
+  calls: load_config@380, _strip_quotes@384, policy@392, container_runtime@393, new_id@402, now@405, ExperimentRefused@418, runs_dir@420, _copy_repo@426, _scrubbed_env@427, _container_argv@457, _posix_limits@473 (+8)
+  called by: _run_tests (repoatlas/analysis.py:1674); cmd_experiment (repoatlas/cli.py:402); observe (repoatlas/runtime/trace.py:559); verify (repoatlas/workflow.py:283); test_allowlisted_pytest_passes_in_a_copy_with_process_isolation (tests/test_experiments.py:143); test_parent_secrets_are_not_visible_to_the_child (tests/test_experiments.py:177); test_timeout_kills_the_process_tree_and_is_recorded (tests/test_experiments.py:200); test_non_allowlisted_command_is_refused_without_container (tests/test_experiments.py:222) (+10)
+  const repoatlas/experiments.py:87: KILL_DRAIN_TIMEOUT = 15  # seconds to collect output after killing a timed-out tree
+  const repoatlas/experiments.py:89: MAX_LOG_BYTES = 5 * 1024 * 1024
+  repoatlas/experiments.py:408-419
+408 if isolation == "container" and not runtime:
+409     reason = "container isolation was requested and no container runtime (docker/podman) is available"
+410 else:
+411     reason = (f"command classified '{kind}' and no container runtime (docker/podman) is available; "
+412               "RepoAtlas does not run non-allowlisted commands with process isolation only")
+413 if why_risky:
+414     reason = f"{reason} (why '{kind}': {why_risky})"
+415 store.insert("experiments", {**base, "cwd": str(repo), "isolation": "none",
+416                              "status": "refused", "summary": reason,
+417                              "environment": {"policy": {"kind": kind, "reason": why_risky}}})
+418 raise ExperimentRefused(reason)
+  repoatlas/experiments.py:437-450
+437     "env_allowlisted": True, "resource_limits": os.name != "nt" or level == "container",
+438     "network_isolated": level == "container", "fs_reads_confined": level == "container",
+439     # Process isolation checks the command's own path arguments (policy), but the tests it
+440     # runs are arbitrary code and can still write anywhere the user can.
+441     "fs_writes_confined": level == "container",
+442     "path_args_confined": kind == "allowlisted" or level == "container",
+443 }
+444 limits = (["the network is not isolated",
+445            "the tests run as the user: they can read and write files outside the copy"]
+446           if level == "process" else [])
+447 container_name = f"repoatlas-{eid}"
+448 if level == "container":
+449     extra: list[str] = []
+450     for k, v in (env_extra or {}).items():
+## repoatlas/cli.py:392-420 def cmd_experiment(args) -> int
+  calls: _repo@395, _store@402, run@402, _emit@405
+  repoatlas/cli.py:394-407
+395 repo = _repo(args)
+396 argv = args.command
+397 if argv and argv[0] == "--":
+398     argv = argv[1:]
+399 if not argv:
+400     raise SystemExit("error: give the command after --")
+401 try:
+402     res = experiments.run(_store(repo, create=True), repo, argv, hypothesis=args.hypothesis, expect=args.expect,
+403                           timeout=args.timeout, claim_id=args.claim, isolation=args.isolation)
+404 except experiments.ExperimentRefused as exc:
+405     _emit(args, {"status": "refused", "reason": str(exc)}, lambda r: print(f"refused: {r['reason']}"))
+406     return 3
+## tests/test_experiments.py:217-230 test_non_allowlisted_command_is_refused_without_container
+  calls: container_runtime@219, run@222, runs_dir@230
+  const tests/test_experiments.py:33: PYTEST = ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+217 def test_non_allowlisted_command_is_refused_without_container(proj):
+218     repo, st = proj
+219     if experiments.container_runtime():
+220         pytest.skip("a container runtime is available; risky commands would run in a container")
+221     with pytest.raises(experiments.ExperimentRefused, match="no container runtime"):
+222         experiments.run(st, repo, ["python", "-c", "open('PWNED', 'w').write('x')"], hypothesis="h")
+223     with pytest.raises(experiments.ExperimentRefused):
+224         experiments.run(st, repo, "pytest -q; echo hi", hypothesis="shell metacharacters")
+225     with pytest.raises(experiments.ExperimentRefused):  # container requested explicitly, none available
+226         experiments.run(st, repo, PYTEST, hypothesis="h", isolation="container")
+227     rows = st.all("SELECT * FROM experiments ORDER BY created_at")
+228     assert [r["status"] for r in rows] == ["refused"] * 3 and {r["isolation"] for r in rows} == {"none"}
+229     assert not (repo / "PWNED").exists()
+230     assert not runs_dir(repo).exists() or not any(runs_dir(repo).iterdir())
+## tests/test_cli.py:227-247 def test_experiment_run_allowlisted_and_refused(repo)
+## repoatlas/mcp/server.py:311-327 def _check(self, need: str) -> None
+… 1345 more candidates not shown: tests/test_experiments.py:402-431 test_container_run_is_named_and_killed_by_name_on_timeout; repoatlas/paths.py:28-39 DEFAULT_CONFIG; repoatlas/runtime/calltrace_plugin.py:3-6 ; repoatlas/experiments.py:37-39 
+next: verinoda query "…" --max-chars 12000

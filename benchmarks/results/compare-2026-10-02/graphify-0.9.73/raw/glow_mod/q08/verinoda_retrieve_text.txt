@@ -1,0 +1,102 @@
+expanded: lantern staff->lantern_staff
+## src/main/resources/data/glowmod/recipe/lantern_staff.json:1-18 glowmod:lantern_staff
+  names: `glowmod:ember_shard` (line 10, id) -> src/main/resources/assets/glowmod/models/item/ember_shard.json; `glowmod:lantern_staff` (line 15, id, kind not stated: inferred) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json
+ 1 {
+ 2   "type": "minecraft:crafting_shaped",
+ 3   "category": "equipment",
+ 4   "pattern": [
+ 5     " EL",
+ 6     " SE",
+ 7     "S  "
+ 8   ],
+ 9   "key": {
+10     "E": { "item": "glowmod:ember_shard" },
+11     "L": { "item": "minecraft:soul_lantern" },
+12     "S": { "item": "minecraft:stick" }
+13   },
+14   "result": {
+15     "id": "glowmod:lantern_staff",
+16     "count": 1
+17   }
+18 }
+## src/main/resources/assets/glowmod/models/item/lantern_staff.json:1-6 glowmod:item/lantern_staff
+  named by: ModItems (src/main/java/com/example/glowmod/item/ModItems.java:13) as `lantern_staff` (bare name, inferred); glowmod:en_us (src/main/resources/assets/glowmod/lang/en_us.json:2) as `glowmod:lantern_staff`; glowmod:tr_tr (src/main/resources/assets/glowmod/lang/tr_tr.json:2) as `glowmod:lantern_staff` (+1 more)
+1 {
+2   "parent": "minecraft:item/handheld",
+3   "textures": {
+4     "layer0": "glowmod:item/lantern_staff"
+5   }
+6 }
+## src/main/java/com/example/glowmod/item/ModItems.java:12-32 ModItems
+  names: `lantern_staff` (line 13, bare name, inferred) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `ember_shard` (line 14, bare name, inferred) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+12 public final class ModItems {
+13     public static final Item LANTERN_STAFF = register("lantern_staff", new Item(new Item.Settings().maxCount(1)));
+14     public static final Item EMBER_SHARD = register("ember_shard", new Item(new Item.Settings()));
+15     public static final Item WISP_HEART = register("wisp_heart", new Item(new Item.Settings().rarity(Rarity.UNCOMMON)));
+17     private ModItems() {
+18     }
+20     private static Item register(String name, Item item) {
+21         return Registry.register(Registries.ITEM, Identifier.of(GlowMod.MOD_ID, name), item);
+22     }
+24     /** Loads the class (so the fields above register) and puts the items into the creative tabs. */
+25     public static void initialize() {
+26         ItemGroupEvents.modifyEntriesEvent(ItemGroups.TOOLS).register(entries -> entries.add(LANTERN_STAFF));
+27         ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
+28             entries.add(EMBER_SHARD);
+29             entries.add(WISP_HEART);
+30         });
+31     }
+32 }
+## src/main/java/com/example/glowmod/event/LanternEvents.java:18-34 LanternEvents.etkinlestir
+18 public static void etkinlestir() {
+19     UseBlockCallback.EVENT.register((player, world, hand, hit) -> {
+20         if (world.isClient() || !player.getStackInHand(hand).isOf(ModItems.LANTERN_STAFF)) {
+21             return ActionResult.PASS;
+22         }
+23         BlockPos pos = hit.getBlockPos();
+24         if (!world.getBlockState(pos).isOf(Blocks.SOUL_LANTERN)) {
+25             return ActionResult.PASS;
+26         }
+27         if (player.getItemCooldownManager().isCoolingDown(ModItems.LANTERN_STAFF)) {
+28             return ActionResult.FAIL;
+29         }
+30         Wisp.spawn((ServerWorld) world, pos.up());
+31         player.getItemCooldownManager().set(ModItems.LANTERN_STAFF, STAFF_COOLDOWN_TICKS);
+32         return ActionResult.SUCCESS;
+33     });
+34 }
+## src/main/java/com/example/glowmod/event/LanternEvents.java:11-35 LanternEvents
+  src/main/java/com/example/glowmod/event/LanternEvents.java:11-13
+11 public final class LanternEvents {
+12     private static final int STAFF_COOLDOWN_TICKS = 100;
+## src/main/resources/assets/glowmod/lang/en_us.json:1-11 glowmod:en_us
+  names: `glowmod:lantern_staff` (line 2, lang) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `glowmod:ember_shard` (line 3, lang) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+ 1 {
+ 2   "item.glowmod.lantern_staff": "Lantern Staff",
+ 3   "item.glowmod.ember_shard": "Ember Shard",
+ 4   "item.glowmod.wisp_heart": "Wisp Heart",
+ 5   "entity.glowmod.wisp": "Wisp",
+ 6   "key.glowmod.summon_wisp": "Call a Wisp",
+ 7   "category.glowmod": "Glow Mod",
+ 8   "command.glowmod.wisp.spawned": "A wisp appears.",
+ 9   "command.glowmod.wisp.failed": "The wisp would not come.",
+10   "command.glowmod.reload.done": "Glow Mod settings reloaded."
+11 }
+## src/main/resources/assets/glowmod/lang/tr_tr.json:1-11 glowmod:tr_tr
+  names: `glowmod:lantern_staff` (line 2, lang) -> src/main/resources/assets/glowmod/models/item/lantern_staff.json; `glowmod:ember_shard` (line 3, lang) -> src/main/resources/assets/glowmod/models/item/ember_shard.json (+1)
+ 1 {
+ 2   "item.glowmod.lantern_staff": "Fener Asası",
+ 3   "item.glowmod.ember_shard": "Kor Kırığı",
+ 4   "item.glowmod.wisp_heart": "Wisp Kalbi",
+ 5   "entity.glowmod.wisp": "Wisp",
+ 6   "key.glowmod.summon_wisp": "Wisp Çağır",
+ 7   "category.glowmod": "Glow Mod",
+ 8   "command.glowmod.wisp.spawned": "Bir wisp belirdi.",
+ 9   "command.glowmod.wisp.failed": "Wisp gelmedi.",
+10   "command.glowmod.reload.done": "Glow Mod ayarları yeniden yüklendi."
+11 }
+src/main/java/com/example/glowmod/event/LanternEvents.java:14-15 private LanternEvents()
+src/main/java/com/example/glowmod/GlowMod.java:19-30 @Override public void onInitialize()
+src/main/resources/assets/glowmod/models/item/ember_shard.json:1-6 {
+… 61 more candidates not shown: README.md:1-26 # Glow Mod (example); src/main/java/com/example/glowmod/entity/Wisp.java:28-36 public static Wisp spawn(ServerWorld world, BlockPos pos); src/main/java/com/example/glowmod/network/ServerNetworking.java:20-30 private static void onSummonWisp(SummonWispPayload; reference/original-plugin/plugin.yml:5-5 description: Wisps and a lantern staff for Paper se…
+next: verinoda query "…" --max-chars 12000

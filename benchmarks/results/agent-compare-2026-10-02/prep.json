@@ -1,0 +1,104 @@
+{
+ "glow_mod": {
+  "in_sample": false,
+  "pin": null,
+  "none": {
+   "files": 37
+  },
+  "gold_failures": [],
+  "verinoda": {
+   "files": 37
+  },
+  "verinoda_index_s": 4.5,
+  "graphify": {
+   "files": 37
+  },
+  "graphify_update": {
+   "rc": 0,
+   "s": 7.0,
+   "tail": "d updated in graphify-out\nCode graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.\nTip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.\n"
+  }
+ },
+ "forge_mod": {
+  "in_sample": false,
+  "pin": null,
+  "none": {
+   "files": 55
+  },
+  "gold_failures": [],
+  "verinoda": {
+   "files": 55
+  },
+  "verinoda_index_s": 3.9,
+  "graphify": {
+   "files": 55
+  },
+  "graphify_update": {
+   "rc": 0,
+   "s": 8.5,
+   "tail": "d updated in graphify-out\nCode graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.\nTip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.\n"
+  }
+ },
+ "heldout_repoatlas": {
+  "in_sample": false,
+  "pin": null,
+  "none": {
+   "files": 106
+  },
+  "gold_failures": [],
+  "verinoda": {
+   "files": 106
+  },
+  "verinoda_index_s": 48.3,
+  "graphify": {
+   "files": 106
+  },
+  "graphify_update": {
+   "rc": 0,
+   "s": 31.5,
+   "tail": "d updated in graphify-out\nCode graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.\nTip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.\n"
+  }
+ },
+ "graphify_core": {
+  "in_sample": true,
+  "pin": null,
+  "none": {
+   "files": 226
+  },
+  "gold_failures": [],
+  "verinoda": {
+   "files": 226
+  },
+  "verinoda_index_s": 50.5,
+  "graphify": {
+   "files": 226
+  },
+  "graphify_update": {
+   "rc": 0,
+   "s": 28.8,
+   "tail": "d updated in graphify-out\nCode graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.\nTip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.\n"
+  }
+ },
+ "verinoda_user_tr": {
+  "in_sample": true,
+  "pin": "3bd1b94a5cfcd8689d423bcb0dafa06974f8769f",
+  "none": {
+   "files": 78
+  },
+  "gold_failures": [
+   "u01.detect: token 'copies.detect' does not occur in the corpus"
+  ],
+  "verinoda": {
+   "files": 78
+  },
+  "verinoda_index_s": 39.2,
+  "graphify": {
+   "files": 78
+  },
+  "graphify_update": {
+   "rc": 0,
+   "s": 19.8,
+   "tail": "d updated in graphify-out\nCode graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.\nTip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.\n"
+  }
+ }
+}

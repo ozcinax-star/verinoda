@@ -1,0 +1,74 @@
+analysis ana_53978e61a43f, snapshot snp_b028577064a0 (commit 6dea3523c4)
+understood as: Anladığım (kurallarla): q1 [akış] Sipariş oluşturma API'sinden veritabanı yazımına kadar çağrı yolu nedir? (karşılıklar: Sipariş=order, oluşturma=create, veritabanı=database, yazımına=save)
+plan links: API'sinden -> orders/api.py:1-8
+q1 [met] flow: Sipariş oluşturma API'sinden veritabanı yazımına kadar çağrı yolu nedir?
+  [statically_verified] Call path get_repo() -> OrderRepository -> .__init__() reaches persistence (db-connection, sql-write) at orders/repository.py:9 {source_code:orders/api.py:12; source_code:orders/repository.py:10; source_code:orders/repository.py:12} (uncertain: endpoints linked from the question words 'API'sinden' and 'oluşturma yazımına')  (clm_07227e5adeab)
+  [statically_verified] Call path create_order_handler() -> get_repo() -> OrderRepository -> .__init__() reaches persistence (db-connection, sql-write) at orders/repository.py:9 {source_code:orders/api.py:18; source_code:orders/api.py:12; source_code:orders/repository.py:10; source_code:orders/repository.py:12} (uncertain: endpoints linked from the question words 'API'sinden' and 'oluşturma yazımına')  (clm_c56219265259)
+  [strong_inference] Call path create_order_handler() -> place_order() -> .save() reaches persistence (orm-write, sql-write) at orders/repository.py:15 {source_code:orders/api.py:18; source_code:orders/service.py:22; source_code:orders/repository.py:17; source_code:orders/repository.py:19} (uncertain: endpoints linked from the question words 'API'sinden' and 'oluşturma yazımına'; at least one hop is INFERRED)  (clm_3c632cec7ed6)
+context (found on the way; not what answers):
+  [primary_source_verified] `orders_app` is defined at README.md:1-5  (clm_aae7bc874540)
+  [strong_inference] `place_order()` calls `.save()` (orders/service.py:22) {qualifies:static_resolution:orders/service.py:22 dynamic} (uncertain: method call `.save()` at line 22; the receiver's type is not resolved statically; edge derived by verinoda.receiver (type-annotation resolution))  (clm_b7cbf22f556c)
+  [statically_verified] `get_order_handler()` calls `get_repo()` (orders/api.py:25)  (clm_37c740765bfe)
+  +4 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: siparis->order, olusturma->creat, veritabani->databas (+4 more)
+## orders/api.py:16-21 create_order_handler
+  calls: get_repo@18, place_order@18
+16 def create_order_handler(payload: dict) -> tuple[int, dict]:
+17     try:
+18         order_id = place_order(get_repo(), payload["customer"], payload["items"])
+19     except ValidationError as exc:
+20         return 400, {"error": str(exc)}
+21     return 201, {"id": order_id}
+## README.md:1-5 orders_app
+1 # orders_app
+3 Example service for Verinoda. `orders/api.py` handlers call `orders/service.py`,
+4 which prices orders via `orders/pricing.py` and persists them through
+5 `orders/repository.py` (SQLite, see docs/adr/0001-sqlite-persistence.md).
+## orders/repository.py:15-20 OrderRepository.save
+  called by: place_order (orders/service.py:22)?
+15 def save(self, customer: str, total: float) -> int:
+16     cur = self.conn.execute(
+17         "INSERT INTO orders (customer, total) VALUES (?, ?)", (customer, total)
+18     )
+19     self.conn.commit()
+20     return cur.lastrowid
+## docs/adr/0001-sqlite-persistence.md:1-7 ADR 0001: SQLite for order persistence
+1 # ADR 0001: SQLite for order persistence
+3 Status: accepted
+5 We persist orders in SQLite through `OrderRepository` only. No other module
+6 may open a database connection. Chosen for zero-ops local development; a
+7 server database can replace it behind the same repository interface.
+## orders/config.py:5-7 DATABASE_URL MAX_ITEMS_PER_ORDER DISCOUNT_THRESHOLD
+5 DATABASE_URL = os.environ.get("ORDERS_DATABASE_URL", "orders.db")
+6 MAX_ITEMS_PER_ORDER = int(os.environ.get("ORDERS_MAX_ITEMS", "50"))
+7 DISCOUNT_THRESHOLD = float(os.environ.get("ORDERS_DISCOUNT_THRESHOLD", "100.0"))
+## orders/repository.py:9-13 OrderRepository.__init__
+ 9 def __init__(self, url: str = DATABASE_URL):
+10     self.conn = sqlite3.connect(url)
+11     self.conn.execute(
+12         "CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, total REAL)"
+13     )
+## orders/service.py:19-22 place_order
+19 def place_order(repo: OrderRepository, customer: str, items: list[dict]) -> int:
+20     validate_items(items)
+21     total = compute_total(items)
+22     return repo.save(customer, total)
+orders/config.py:10-15 def load_settings() -> dict
+orders/api.py:9-13 def get_repo() -> OrderRepository
+orders/api.py:24-28 def get_order_handler(order_id: int) -> tuple[int, dict]
+orders/repository.py:8-26 class OrderRepository
+orders/service.py:12-16 def validate_items(items: list[dict]) -> None
+tests/test_service.py:13-15 def test_empty_order_rejected()
+orders/service.py:25-26 def fetch_order(repo: OrderRepository, order_id: int)
+tests/test_service.py:7-10 def test_place_and_fetch_roundtrip()
+orders/service.py:8-9 class ValidationError(ValueError)
+orders/pricing.py:6-8 def compute_total(items: list[dict]) -> float
+orders/repository.py:22-26 def get(self, order_id: int)
+orders/pricing.py:11-15 def apply_discount(subtotal: float) -> float
+tests/test_pricing.py:12-13 def test_compute_total()
+pyproject.toml:1-8 [project] name = "orders-app" version = "0.1.0" requires-python = ">=3.10" [tool.pytest.ini_options] testpaths = ["test…
+tests/test_pricing.py:4-5 def test_discount_applies_above_threshold()
+tests/test_pricing.py:8-9 def test_no_discount_below_threshold()
+orders/__init__.py:1-1 """Tiny order service used as the Verinoda end-to-end example."""
+(calls / called by: static call graph, '?' = inferred edge; may be incomplete)

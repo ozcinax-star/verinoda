@@ -1,0 +1,2109 @@
+{
+ "overall": {
+  "arms": {
+   "none": {
+    "found": 107,
+    "facts": 113,
+    "sessions": 51
+   },
+   "graphify_first": {
+    "found": 111,
+    "facts": 113,
+    "sessions": 51
+   },
+   "verinoda_first": {
+    "found": 109,
+    "facts": 113,
+    "sessions": 51
+   }
+  },
+  "pairs": {
+   "graphify_first-none": {
+    "wins": 3,
+    "ties": 47,
+    "losses": 1,
+    "sum_diff": 4,
+    "n": 51
+   },
+   "verinoda_first-none": {
+    "wins": 2,
+    "ties": 47,
+    "losses": 2,
+    "sum_diff": 2,
+    "n": 51
+   }
+  }
+ },
+ "by_repo": {
+  "Graphify-Labs__graphify": {
+   "arms": {
+    "none": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 6
+    },
+    "graphify_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 6
+    },
+    "verinoda_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 6
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 0,
+     "ties": 6,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 6
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 6,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 6
+    }
+   }
+  },
+  "axios__axios": {
+   "arms": {
+    "none": {
+     "found": 11,
+     "facts": 12,
+     "sessions": 5
+    },
+    "graphify_first": {
+     "found": 12,
+     "facts": 12,
+     "sessions": 5
+    },
+    "verinoda_first": {
+     "found": 11,
+     "facts": 12,
+     "sessions": 5
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 1,
+     "ties": 4,
+     "losses": 0,
+     "sum_diff": 1,
+     "n": 5
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    }
+   }
+  },
+  "expressjs__express": {
+   "arms": {
+    "none": {
+     "found": 12,
+     "facts": 12,
+     "sessions": 5
+    },
+    "graphify_first": {
+     "found": 12,
+     "facts": 12,
+     "sessions": 5
+    },
+    "verinoda_first": {
+     "found": 12,
+     "facts": 12,
+     "sessions": 5
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    }
+   }
+  },
+  "fastapi__full-stack-fastapi-template": {
+   "arms": {
+    "none": {
+     "found": 9,
+     "facts": 10,
+     "sessions": 5
+    },
+    "graphify_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    },
+    "verinoda_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 1,
+     "ties": 4,
+     "losses": 0,
+     "sum_diff": 1,
+     "n": 5
+    },
+    "verinoda_first-none": {
+     "wins": 1,
+     "ties": 4,
+     "losses": 0,
+     "sum_diff": 1,
+     "n": 5
+    }
+   }
+  },
+  "fastapi__sqlmodel": {
+   "arms": {
+    "none": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    },
+    "graphify_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    },
+    "verinoda_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    }
+   }
+  },
+  "gin-gonic__gin": {
+   "arms": {
+    "none": {
+     "found": 13,
+     "facts": 13,
+     "sessions": 5
+    },
+    "graphify_first": {
+     "found": 13,
+     "facts": 13,
+     "sessions": 5
+    },
+    "verinoda_first": {
+     "found": 13,
+     "facts": 13,
+     "sessions": 5
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    }
+   }
+  },
+  "google__gson": {
+   "arms": {
+    "none": {
+     "found": 6,
+     "facts": 10,
+     "sessions": 4
+    },
+    "graphify_first": {
+     "found": 9,
+     "facts": 10,
+     "sessions": 4
+    },
+    "verinoda_first": {
+     "found": 9,
+     "facts": 10,
+     "sessions": 4
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 1,
+     "ties": 3,
+     "losses": 0,
+     "sum_diff": 3,
+     "n": 4
+    },
+    "verinoda_first-none": {
+     "wins": 1,
+     "ties": 3,
+     "losses": 0,
+     "sum_diff": 3,
+     "n": 4
+    }
+   }
+  },
+  "guzzle__guzzle": {
+   "arms": {
+    "none": {
+     "found": 13,
+     "facts": 13,
+     "sessions": 6
+    },
+    "graphify_first": {
+     "found": 12,
+     "facts": 13,
+     "sessions": 6
+    },
+    "verinoda_first": {
+     "found": 11,
+     "facts": 13,
+     "sessions": 6
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 1,
+     "sum_diff": -1,
+     "n": 6
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 4,
+     "losses": 2,
+     "sum_diff": -2,
+     "n": 6
+    }
+   }
+  },
+  "junegunn__fzf": {
+   "arms": {
+    "none": {
+     "found": 13,
+     "facts": 13,
+     "sessions": 5
+    },
+    "graphify_first": {
+     "found": 13,
+     "facts": 13,
+     "sessions": 5
+    },
+    "verinoda_first": {
+     "found": 13,
+     "facts": 13,
+     "sessions": 5
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    }
+   }
+  },
+  "sharkdp__bat": {
+   "arms": {
+    "none": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    },
+    "graphify_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    },
+    "verinoda_first": {
+     "found": 10,
+     "facts": 10,
+     "sessions": 5
+    }
+   },
+   "pairs": {
+    "graphify_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    },
+    "verinoda_first-none": {
+     "wins": 0,
+     "ties": 5,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 5
+    }
+   }
+  }
+ },
+ "per_question": {
+  "Graphify-Labs__graphify/q1": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-build-from-json",
+     "build-calls-build-from-json"
+    ],
+    "tokens": 1076,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-build-from-json",
+     "build-calls-build-from-json"
+    ],
+    "tokens": 945,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-build-from-json",
+     "build-calls-build-from-json"
+    ],
+    "tokens": 871,
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q2": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "cluster-calls-partition",
+     "cluster-reaches-leiden",
+     "query-communities"
+    ],
+    "tokens": 847,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "cluster-calls-partition",
+     "cluster-reaches-leiden",
+     "query-communities"
+    ],
+    "tokens": 812,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "cluster-calls-partition",
+     "cluster-reaches-leiden",
+     "query-communities"
+    ],
+    "tokens": 806,
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q3": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "cluster-calls-cohesion"
+    ],
+    "tokens": 535,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "cluster-calls-cohesion"
+    ],
+    "tokens": 567,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "cluster-calls-cohesion"
+    ],
+    "tokens": 504,
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q4": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-god-nodes",
+     "query-god-nodes"
+    ],
+    "tokens": 672,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-god-nodes",
+     "query-god-nodes"
+    ],
+    "tokens": 598,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-god-nodes",
+     "query-god-nodes"
+    ],
+    "tokens": 650,
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-extract-python"
+    ],
+    "tokens": 1344,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-extract-python"
+    ],
+    "tokens": 1365,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-extract-python"
+    ],
+    "tokens": 1216,
+    "failed": false
+   }
+  },
+  "Graphify-Labs__graphify/q6": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "main-calls-run-cli"
+    ],
+    "tokens": 1048,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "main-calls-run-cli"
+    ],
+    "tokens": 1115,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "main-calls-run-cli"
+    ],
+    "tokens": 772,
+    "failed": false
+   }
+  },
+  "axios__axios/q1": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "request-calls-private",
+     "private-request-merges-config",
+     "def-merge-config"
+    ],
+    "tokens": 1485,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "request-calls-private",
+     "private-request-merges-config",
+     "def-merge-config"
+    ],
+    "tokens": 1612,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "request-calls-private",
+     "private-request-merges-config",
+     "def-merge-config"
+    ],
+    "tokens": 1431,
+    "failed": false
+   }
+  },
+  "axios__axios/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-interceptors",
+     "request-reaches-adapter"
+    ],
+    "tokens": 1462,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-interceptors",
+     "request-reaches-adapter"
+    ],
+    "tokens": 1239,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-interceptors",
+     "request-reaches-adapter"
+    ],
+    "tokens": 1268,
+    "failed": false
+   }
+  },
+  "axios__axios/q3": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "def-dispatch-request",
+     "dispatch-checks-cancel",
+     "request-reaches-adapter",
+     "def-get-adapter"
+    ],
+    "tokens": 1103,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "def-dispatch-request",
+     "dispatch-checks-cancel",
+     "request-reaches-adapter",
+     "def-get-adapter"
+    ],
+    "tokens": 1272,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "def-dispatch-request",
+     "dispatch-checks-cancel",
+     "request-reaches-adapter",
+     "def-get-adapter"
+    ],
+    "tokens": 1209,
+    "failed": false
+   }
+  },
+  "axios__axios/q4": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "create-instance-binds"
+    ],
+    "tokens": 846,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "create-instance-binds"
+    ],
+    "tokens": 750,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "create-instance-binds"
+    ],
+    "tokens": 709,
+    "failed": false
+   }
+  },
+  "axios__axios/q5": {
+   "none": {
+    "found": 1,
+    "total": 2,
+    "found_ids": [
+     "def-get-adapter"
+    ],
+    "tokens": 911,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 2,
+    "found_ids": [
+     "def-get-adapter"
+    ],
+    "tokens": 1060,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-http-adapter",
+     "def-get-adapter"
+    ],
+    "tokens": 1174,
+    "failed": false
+   }
+  },
+  "expressjs__express/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "query-json-response",
+     "json-calls-stringify",
+     "def-stringify",
+     "json-calls-send"
+    ],
+    "tokens": 820,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "query-json-response",
+     "json-calls-stringify",
+     "def-stringify",
+     "json-calls-send"
+    ],
+    "tokens": 768,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "query-json-response",
+     "json-calls-stringify",
+     "def-stringify",
+     "json-calls-send"
+    ],
+    "tokens": 732,
+    "failed": false
+   }
+  },
+  "expressjs__express/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sendfile-calls-helper",
+     "render-reaches-tryrender"
+    ],
+    "tokens": 1049,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sendfile-calls-helper",
+     "render-reaches-tryrender"
+    ],
+    "tokens": 1011,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "sendfile-calls-helper",
+     "render-reaches-tryrender"
+    ],
+    "tokens": 1013,
+    "failed": false
+   }
+  },
+  "expressjs__express/q3": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-create-application"
+    ],
+    "tokens": 410,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-create-application"
+    ],
+    "tokens": 324,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-create-application"
+    ],
+    "tokens": 262,
+    "failed": false
+   }
+  },
+  "expressjs__express/q4": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "route-posts",
+     "route-posts@v2",
+     "route-user-edit-put",
+     "route-user-edit-put@v2"
+    ],
+    "tokens": 402,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "route-posts",
+     "route-posts@v2",
+     "route-user-edit-put",
+     "route-user-edit-put@v2"
+    ],
+    "tokens": 392,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "route-posts",
+     "route-posts@v2",
+     "route-user-edit-put",
+     "route-user-edit-put@v2"
+    ],
+    "tokens": 390,
+    "failed": false
+   }
+  },
+  "expressjs__express/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-accepts"
+    ],
+    "tokens": 520,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-accepts"
+    ],
+    "tokens": 490,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-accepts"
+    ],
+    "tokens": 564,
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "route-login-access-token",
+     "login-calls-authenticate",
+     "def-authenticate",
+     "login-reaches-verify-password"
+    ],
+    "tokens": 591,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "route-login-access-token",
+     "login-calls-authenticate",
+     "def-authenticate",
+     "login-reaches-verify-password"
+    ],
+    "tokens": 614,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "route-login-access-token",
+     "login-calls-authenticate",
+     "def-authenticate",
+     "login-reaches-verify-password"
+    ],
+    "tokens": 597,
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q2": {
+   "none": {
+    "found": 1,
+    "total": 2,
+    "found_ids": [
+     "query-jwt"
+    ],
+    "tokens": 873,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-jwt",
+     "def-get-current-user"
+    ],
+    "tokens": 677,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-jwt",
+     "def-get-current-user"
+    ],
+    "tokens": 785,
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q3": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "frontend-login-calls-sdk"
+    ],
+    "tokens": 439,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "frontend-login-calls-sdk"
+    ],
+    "tokens": 537,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "frontend-login-calls-sdk"
+    ],
+    "tokens": 449,
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q4": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "users-create-calls-crud",
+     "schema-user-table"
+    ],
+    "tokens": 992,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "users-create-calls-crud",
+     "schema-user-table"
+    ],
+    "tokens": 827,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "users-create-calls-crud",
+     "schema-user-table"
+    ],
+    "tokens": 918,
+    "failed": false
+   }
+  },
+  "fastapi__full-stack-fastapi-template/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "route-read-item"
+    ],
+    "tokens": 380,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "route-read-item"
+    ],
+    "tokens": 425,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "route-read-item"
+    ],
+    "tokens": 353,
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "metaclass-new-calls-column",
+     "def-get-column-from-field",
+     "column-calls-satype",
+     "query-field-to-column"
+    ],
+    "tokens": 1094,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "metaclass-new-calls-column",
+     "def-get-column-from-field",
+     "column-calls-satype",
+     "query-field-to-column"
+    ],
+    "tokens": 1504,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "metaclass-new-calls-column",
+     "def-get-column-from-field",
+     "column-calls-satype",
+     "query-field-to-column"
+    ],
+    "tokens": 1474,
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "class-sqlmodel",
+     "schema-hero-table"
+    ],
+    "tokens": 493,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "class-sqlmodel",
+     "schema-hero-table"
+    ],
+    "tokens": 617,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "class-sqlmodel",
+     "schema-hero-table"
+    ],
+    "tokens": 561,
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q3": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "model-validate-calls-compat",
+     "model-validate-reaches-compat"
+    ],
+    "tokens": 692,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "model-validate-calls-compat",
+     "model-validate-reaches-compat"
+    ],
+    "tokens": 662,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "model-validate-calls-compat",
+     "model-validate-reaches-compat"
+    ],
+    "tokens": 725,
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q4": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-field-impl"
+    ],
+    "tokens": 929,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-field-impl"
+    ],
+    "tokens": 1081,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "def-field-impl"
+    ],
+    "tokens": 752,
+    "failed": false
+   }
+  },
+  "fastapi__sqlmodel/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-session-exec"
+    ],
+    "tokens": 745,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-session-exec"
+    ],
+    "tokens": 764,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-session-exec"
+    ],
+    "tokens": 945,
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q1": {
+   "none": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "def-default",
+     "default-calls-new",
+     "default-calls-recovery",
+     "default-calls-recovery@v2"
+    ],
+    "tokens": 926,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "def-default",
+     "default-calls-new",
+     "default-calls-recovery",
+     "default-calls-recovery@v2"
+    ],
+    "tokens": 785,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 4,
+    "total": 4,
+    "found_ids": [
+     "def-default",
+     "default-calls-new",
+     "default-calls-recovery",
+     "default-calls-recovery@v2"
+    ],
+    "tokens": 772,
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q2": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "recovery-calls-writer",
+     "query-recovery",
+     "default-calls-recovery"
+    ],
+    "tokens": 800,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "recovery-calls-writer",
+     "query-recovery",
+     "default-calls-recovery"
+    ],
+    "tokens": 757,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "recovery-calls-writer",
+     "query-recovery",
+     "default-calls-recovery"
+    ],
+    "tokens": 774,
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q3": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "servehttp-calls-handle",
+     "request-reaches-tree",
+     "request-reaches-tree@v2"
+    ],
+    "tokens": 583,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "servehttp-calls-handle",
+     "request-reaches-tree",
+     "request-reaches-tree@v2"
+    ],
+    "tokens": 599,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "servehttp-calls-handle",
+     "request-reaches-tree",
+     "request-reaches-tree@v2"
+    ],
+    "tokens": 628,
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q4": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "get-registers-route",
+     "query-radix-tree"
+    ],
+    "tokens": 1170,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "get-registers-route",
+     "query-radix-tree"
+    ],
+    "tokens": 1310,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "get-registers-route",
+     "query-radix-tree"
+    ],
+    "tokens": 1295,
+    "failed": false
+   }
+  },
+  "gin-gonic__gin/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "context-json-method"
+    ],
+    "tokens": 291,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "context-json-method"
+    ],
+    "tokens": 265,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "context-json-method"
+    ],
+    "tokens": 215,
+    "failed": false
+   }
+  },
+  "google__gson/q1": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "query-json-reader",
+     "peek-calls-dopeek",
+     "def-dopeek"
+    ],
+    "tokens": 1445,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "query-json-reader",
+     "peek-calls-dopeek",
+     "def-dopeek"
+    ],
+    "tokens": 1473,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "query-json-reader",
+     "peek-calls-dopeek",
+     "def-dopeek"
+    ],
+    "tokens": 1534,
+    "failed": false
+   }
+  },
+  "google__gson/q2": {
+   "none": {
+    "found": 0,
+    "total": 3,
+    "found_ids": [],
+    "tokens": 1215,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "tojson-calls-getadapter",
+     "fromjson-calls-getadapter",
+     "getadapter-calls-factory-create"
+    ],
+    "tokens": 1170,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "tojson-calls-getadapter",
+     "fromjson-calls-getadapter",
+     "getadapter-calls-factory-create"
+    ],
+    "tokens": 1122,
+    "failed": false
+   }
+  },
+  "google__gson/q3": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "parsestring-reaches-streams"
+    ],
+    "tokens": 1553,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "parsestring-reaches-streams"
+    ],
+    "tokens": 1241,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "parsestring-reaches-streams"
+    ],
+    "tokens": 1184,
+    "failed": false
+   }
+  },
+  "google__gson/q4": {
+   "none": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "query-reflective",
+     "boundfields-calls-create"
+    ],
+    "tokens": 1401,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "query-reflective",
+     "boundfields-calls-create"
+    ],
+    "tokens": 1278,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 3,
+    "found_ids": [
+     "query-reflective",
+     "boundfields-calls-create"
+    ],
+    "tokens": 1605,
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q1": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "send-calls-sendasync",
+     "sendasync-calls-transfer",
+     "def-transfer"
+    ],
+    "tokens": 470,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "send-calls-sendasync",
+     "sendasync-calls-transfer",
+     "def-transfer"
+    ],
+    "tokens": 571,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "send-calls-sendasync",
+     "sendasync-calls-transfer",
+     "def-transfer"
+    ],
+    "tokens": 548,
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "send-reaches-apply-options",
+     "def-transfer"
+    ],
+    "tokens": 976,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 2,
+    "found_ids": [
+     "send-reaches-apply-options"
+    ],
+    "tokens": 1195,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 2,
+    "found_ids": [
+     "send-reaches-apply-options"
+    ],
+    "tokens": 1104,
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q3": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "requestasync-calls-transfer",
+     "sendasync-calls-transfer"
+    ],
+    "tokens": 846,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "requestasync-calls-transfer",
+     "sendasync-calls-transfer"
+    ],
+    "tokens": 800,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "requestasync-calls-transfer",
+     "sendasync-calls-transfer"
+    ],
+    "tokens": 915,
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q4": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "stack-create-chooses-handler",
+     "def-choose-handler",
+     "stack-create-pushes-redirect"
+    ],
+    "tokens": 733,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "stack-create-chooses-handler",
+     "def-choose-handler",
+     "stack-create-pushes-redirect"
+    ],
+    "tokens": 843,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "stack-create-chooses-handler",
+     "def-choose-handler",
+     "stack-create-pushes-redirect"
+    ],
+    "tokens": 783,
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q5": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-redirects",
+     "stack-create-pushes-redirect"
+    ],
+    "tokens": 1031,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 2,
+    "found_ids": [
+     "stack-create-pushes-redirect"
+    ],
+    "tokens": 1468,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-redirects",
+     "stack-create-pushes-redirect"
+    ],
+    "tokens": 1103,
+    "failed": false
+   }
+  },
+  "guzzle__guzzle/q6": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-cookies"
+    ],
+    "tokens": 1121,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-cookies"
+    ],
+    "tokens": 1195,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-cookies"
+    ],
+    "tokens": 1341,
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q1": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "def-run",
+     "main-calls-run",
+     "main-calls-run@v2"
+    ],
+    "tokens": 447,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "def-run",
+     "main-calls-run",
+     "main-calls-run@v2"
+    ],
+    "tokens": 576,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "def-run",
+     "main-calls-run",
+     "main-calls-run@v2"
+    ],
+    "tokens": 414,
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q2": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "query-options",
+     "parse-calls-parse",
+     "run-calls-postprocess"
+    ],
+    "tokens": 347,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "query-options",
+     "parse-calls-parse",
+     "run-calls-postprocess"
+    ],
+    "tokens": 478,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "query-options",
+     "parse-calls-parse",
+     "run-calls-postprocess"
+    ],
+    "tokens": 414,
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q3": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "run-calls-newmatcher",
+     "run-calls-newmatcher@v2",
+     "matcher-loop-scan"
+    ],
+    "tokens": 1260,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "run-calls-newmatcher",
+     "run-calls-newmatcher@v2",
+     "matcher-loop-scan"
+    ],
+    "tokens": 1244,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "run-calls-newmatcher",
+     "run-calls-newmatcher@v2",
+     "matcher-loop-scan"
+    ],
+    "tokens": 1293,
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q4": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "pattern-matchitem",
+     "pattern-matchitem@v2"
+    ],
+    "tokens": 1079,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "pattern-matchitem",
+     "pattern-matchitem@v2"
+    ],
+    "tokens": 914,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "pattern-matchitem",
+     "pattern-matchitem@v2"
+    ],
+    "tokens": 883,
+    "failed": false
+   }
+  },
+  "junegunn__fzf/q5": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-fuzzy-algo",
+     "def-fuzzymatchv2"
+    ],
+    "tokens": 639,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-fuzzy-algo",
+     "def-fuzzymatchv2"
+    ],
+    "tokens": 527,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "query-fuzzy-algo",
+     "def-fuzzymatchv2"
+    ],
+    "tokens": 576,
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q1": {
+   "none": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "main-reaches-run-controller",
+     "def-run-controller",
+     "run-controller-new"
+    ],
+    "tokens": 651,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "main-reaches-run-controller",
+     "def-run-controller",
+     "run-controller-new"
+    ],
+    "tokens": 711,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 3,
+    "total": 3,
+    "found_ids": [
+     "main-reaches-run-controller",
+     "def-run-controller",
+     "run-controller-new"
+    ],
+    "tokens": 691,
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q2": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "struct-controller",
+     "controller-run-delegates"
+    ],
+    "tokens": 802,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "struct-controller",
+     "controller-run-delegates"
+    ],
+    "tokens": 831,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "struct-controller",
+     "controller-run-delegates"
+    ],
+    "tokens": 847,
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q3": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "run-reaches-print-file-ranges",
+     "print-file-calls-header"
+    ],
+    "tokens": 996,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "run-reaches-print-file-ranges",
+     "print-file-calls-header"
+    ],
+    "tokens": 889,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "run-reaches-print-file-ranges",
+     "print-file-calls-header"
+    ],
+    "tokens": 850,
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q4": {
+   "none": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-interactive-print-line",
+     "query-highlight"
+    ],
+    "tokens": 1153,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-interactive-print-line",
+     "query-highlight"
+    ],
+    "tokens": 1004,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 2,
+    "total": 2,
+    "found_ids": [
+     "def-interactive-print-line",
+     "query-highlight"
+    ],
+    "tokens": 1094,
+    "failed": false
+   }
+  },
+  "sharkdp__bat/q5": {
+   "none": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-pager"
+    ],
+    "tokens": 1028,
+    "failed": false
+   },
+   "verinoda_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-pager"
+    ],
+    "tokens": 1125,
+    "failed": false
+   },
+   "graphify_first": {
+    "found": 1,
+    "total": 1,
+    "found_ids": [
+     "query-pager"
+    ],
+    "tokens": 957,
+    "failed": false
+   }
+  }
+ },
+ "decision": {
+  "graphify_first-none": {
+   "n": 51,
+   "found_diff": 4,
+   "found_diff_ci95": [
+    -1,
+    12
+   ],
+   "input": {
+    "ratio": 1.144,
+    "ci95": [
+     1.078,
+     1.216
+    ],
+    "n": 51
+   },
+   "output": {
+    "ratio": 0.889,
+    "ci95": [
+     0.814,
+     0.98
+    ],
+    "n": 51
+   },
+   "tool_calls": {
+    "ratio": 0.984,
+    "ci95": [
+     0.909,
+     1.068
+    ],
+    "n": 51
+   }
+  },
+  "verinoda_first-none": {
+   "n": 51,
+   "found_diff": 2,
+   "found_diff_ci95": [
+    -4,
+    10
+   ],
+   "input": {
+    "ratio": 1.139,
+    "ci95": [
+     1.056,
+     1.228
+    ],
+    "n": 51
+   },
+   "output": {
+    "ratio": 0.838,
+    "ci95": [
+     0.78,
+     0.906
+    ],
+    "n": 51
+   },
+   "tool_calls": {
+    "ratio": 0.937,
+    "ci95": [
+     0.856,
+     1.026
+    ],
+    "n": 51
+   }
+  }
+ }
+}

@@ -1,0 +1,20 @@
+Graph: graphify-out/graph.json (246 nodes) | Traversal: BFS depth=2 | Start: ['HeatMath', '.addHeat()'] | Context: call (heuristic) | 10 nodes found
+
+NODE HeatMath [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L9 community=EmberForgeBlockEntity]
+NODE .addHeat() [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L21 community=EmberForgeBlockEntity]
+NODE .serverTick() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L75 community=EmberForgeBlockEntity]
+NODE .stoke() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L140 community=EmberForgeBlockEntity]
+NODE .heatStaysBetweenZeroAndTheMaximum() [src=src/test/java/net/ashvale/emberforge/HeatMathTest.java loc=L21 community=EmberForgeBlockEntity]
+NODE .cooled() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L123 community=EmberForgeBlockEntity]
+NODE .progressPerTick() [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L31 community=EmberForgeBlockEntity]
+NODE .canOutput() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L127 community=EmberForgeBlockEntity]
+NODE .finish() [src=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java loc=L133 community=EmberForgeBlockEntity]
+NODE .heatForFuel() [src=src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt loc=L14 community=EmberForgeBlockEntity]
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .addHeat() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L82
+EDGE .stoke() --calls [EXTRACTED context=call]--> .addHeat() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L141
+EDGE .heatStaysBetweenZeroAndTheMaximum() --calls [EXTRACTED context=call]--> .addHeat() at=src/test/java/net/ashvale/emberforge/HeatMathTest.java:L23
+EDGE .serverTick() --calls [INFERRED context=call]--> .canOutput() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L94
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .cooled() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L107
+EDGE .serverTick() --calls [INFERRED context=call]--> .finish() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L99
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .heatForFuel() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L79
+EDGE .serverTick() --calls [EXTRACTED context=call]--> .progressPerTick() at=src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:L97

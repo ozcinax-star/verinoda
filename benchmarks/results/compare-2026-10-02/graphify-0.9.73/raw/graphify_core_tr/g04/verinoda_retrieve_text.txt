@@ -1,0 +1,84 @@
+expanded: Graphify AST->graphify_ast, cikarim->remov, cikarim->extract (+10 more)
+## graphify/cache.py:1379-1680 def save_semantic_cache( nodes: list[dict], edges: list[dict], hyperedges: list[dict] | None = None, root: Path = Path("."), merge_existing: bool = False, allowed_source_files: Iterable[str | Path] |…
+  doc: Save semantic extraction results to cache, keyed by source_file.
+  calls: _semantic_source_matcher@1443, load_cached@1633, _group_has_partial_marker@1655, save_cached@1665
+  called by: dispatch_command (graphify/cli.py:4111); extract_corpus_parallel (graphify/llm.py:2684)
+  graphify/cache.py:1393-1397
+1394 Groups nodes and edges by source_file, then saves one cache entry per file
+1395 under cache/semantic/ (separate from AST entries in cache/ast/) to prevent
+1396 hash-key collisions (#582).
+  graphify/cache.py:1523-1531
+1523 # stamp it partial — leaving a prior clean slice looking complete (#1950
+1524 # empty-parse gap). Seed an empty group for each named partial file that
+1525 # isn't already present, so the loop merges its existing entry and stamps
+1526 # it partial. Keyed by walked path (deduped against present groups).
+1527 _present = {source_path(k) for k in by_file}
+1528 for _pp in partial_paths:
+1529     if _pp not in _present:
+1530         by_file[str(_pp)]  # defaultdict: create an empty {nodes,edges,hyperedges}
+## graphify/cache.py:45-69 _cleanup_stale_ast_entries
+  doc: Remove AST cache entries left behind by other graphify versions.
+  called by: cache_dir (graphify/cache.py:958)
+  const graphify/cache.py:42: _cleaned_ast_dirs: set[str] = set()
+  graphify/cache.py:45-47
+45 def _cleanup_stale_ast_entries(ast_base: Path, current_dir: Path) -> None:
+46     """Remove AST cache entries left behind by other graphify versions.
+  graphify/cache.py:59-69
+60 for child in ast_base.iterdir():
+61     if child == current_dir:
+62         continue
+63     try:
+64         if child.is_dir() and child.name.startswith("v"):
+65             shutil.rmtree(child, ignore_errors=True)
+66         elif child.suffix == ".json":
+67             child.unlink()
+68     except OSError:
+69         pass
+## graphify/detect.py:2450-2588 def detect_incremental( root: Path, manifest_path: str = _MANIFEST_PATH, *, follow_symlinks: bool | None = None, google_workspace: bool | None = None, kind: str = "semantic", extra_excludes: list[str…
+  doc: Like detect(), but returns only new or modified files since the last run.
+  calls: detect@2482, load_manifest@2492, _nfc@2510, _os_path@2512, _md5_file@2544, _mtime_may_hide_a_rewrite@2545
+  called by: dispatch_command (graphify/cli.py:3506)
+  const graphify/detect.py:33: _MANIFEST_PATH = str(out_path("manifest.json"))
+  graphify/detect.py:2473-2476
+2474 Backwards compatible with legacy manifests storing plain float mtime values
+2475 or {mtime, hash} dicts (treated as ast_hash only; semantic_hash = miss).
+  graphify/detect.py:2521-2534
+2521 # cannot verify content — any mtime delta forces a re-extract,
+2522 # and the next save promotes the entry into the dict schema.
+2523 if isinstance(stored, (int, float)):
+2524     changed = current_mtime != stored
+2525 elif isinstance(stored, dict):
+2526     # Normalise legacy {mtime, hash} to new schema
+2527     if "hash" in stored and "ast_hash" not in stored:
+2528         stored = {"mtime": stored.get("mtime", 0), "ast_hash": stored["hash"], "semantic_hash": ""}
+2529     hash_key = "semantic_hash" if kind == "semantic" else "ast_hash"
+2530     stored_hash = stored.get(hash_key, "")
+2531     # Missing semantic_hash means update ran but extract hasn't — always re-extract
+2532     if not stored_hash:
+2533         changed = True
+2534     else:
+## graphify/cache.py:965-1068 def load_cached(path: Path, root: Path = Path("."), kind: str = "ast", cache_root: Path | None = None, prompt: "str | Path | None" = None, prompt_file: "str | Path | None" = None, allow_legacy: bool …
+  graphify/cache.py:971-975
+972 Cache key: SHA256 of file contents.
+973 Cache value: stored as graphify-out/cache/{kind}/{hash}.json (AST entries
+974 under the per-version subdirectory, see :func:`cache_dir`).
+## graphify/build.py:872-1484 def build_from_json(extraction: dict, *, directed: bool = False, root: str | Path | None = None) -> nx.Graph
+  graphify/build.py:1107-1120
+1107 # Two AST nodes on the same key (same file, same label) is an
+1108 # ambiguous collision.
+1109 if key in _loc_nodes and G.nodes[_loc_nodes[key]].get("_origin") == "ast":
+1110     _loc_collisions.add(key)
+1111 # AST-origin nodes always overwrite a prior non-AST entry.
+1112 _loc_nodes[key] = nid
+1113 # #3344: a self-referential semantic pass (e.g. re-extracting a
+1114 # saved graphify-out/memory/*.md query answer) mints a NEW
+1115 # non-AST node for every bare file path/basename it mentions in
+1116 # prose ("App.tsx", "customer-app/index.ts"), stamped with
+1117 # source_file = the memory doc being read, NOT the file named in
+1118 # the prose. That wrong source_file means such a ghost can never
+1119 # hit the (sf, label) key above — same underlying bug as #1145,
+1120 # just with the (source_file, label) *pair* broken instead of
+## graphify/build.py:1876-2313 def build_merge( new_chunks: list[dict], graph_path: str | Path | None = None, prune_sources: list[str] | None = None, *, directed: bool | None = None, dedup: bool = True, dedup_llm_backend: str | No…
+## graphify/cache.py:933-962 def cache_dir(root: Path = Path("."), kind: str = "ast", prompt_fp: str | None = None) -> Path
+… 1948 more candidates not shown: graphify/extract.py:6787-8247 extract; graphify/cache.py:1071-1140 save_cached; graphify/llm.py:2550-2850 extract_corpus_parallel; graphify/cache.py:22-31 
+next: verinoda query "…" --max-chars 12000

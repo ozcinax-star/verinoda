@@ -1,0 +1,114 @@
+Graph: graphify-out/graph.json (194 nodes) | Traversal: BFS depth=2 | Start: ['.wispAppearsWhereAsked()', '.tick()', '.onEndTick()'] | 39 nodes found
+
+[i] Complete answer over budget: all 39 nodes and 71 edges shown (~4850 tokens vs the requested ~2000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE .wispAppearsWhereAsked() [src=src/gametest/java/com/example/glowmod/test/WispTests.java loc=L14 community=Wisp]
+NODE .tick() [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L33 community=Ritual.java]
+NODE .onEndTick() [src=src/client/java/com/example/glowmod/client/GlowModClient.java loc=L25 community=GlowModClient.java]
+NODE SummonWispPayload [src=src/main/java/com/example/glowmod/network/SummonWispPayload.java loc=L11 community=GlowModClient.java]
+NODE RepairScheduler [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L14 community=Ritual.java]
+NODE .get() [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L21 community=Ritual.java]
+NODE GlowModClient [src=src/client/java/com/example/glowmod/client/GlowModClient.java loc=L15 community=GlowModClient.java]
+NODE WispTests [src=src/gametest/java/com/example/glowmod/test/WispTests.java loc=L11 community=Wisp]
+NODE net.minecraft.server.MinecraftServer [src= loc= community=Ritual.java]
+NODE net.minecraft.test.GameTest [src= loc= community=Wisp]
+NODE net.minecraft.test.TestContext [src= loc= community=Wisp]
+NODE net.minecraft.client.MinecraftClient [src= loc= community=GlowModClient.java]
+NODE GlowMod.java [src=src/main/java/com/example/glowmod/GlowMod.java loc=L1 community=GlowMod.java]
+NODE Ritual.java [src=src/main/java/com/example/glowmod/ritual/Ritual.java loc=L1 community=Ritual.java]
+NODE RepairScheduler.java [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L1 community=Ritual.java]
+NODE net.minecraft.util.math.BlockPos [src= loc= community=Wisp]
+NODE GlowModClient.java [src=src/client/java/com/example/glowmod/client/GlowModClient.java loc=L1 community=GlowModClient.java]
+NODE GlowConfig [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L15 community=GlowCommands.java]
+NODE WispTests.java [src=src/gametest/java/com/example/glowmod/test/WispTests.java loc=L1 community=Wisp]
+NODE Datapack.java [src=src/main/java/com/example/glowmod/util/Datapack.java loc=L1 community=Ritual.java]
+NODE SummonWispPayload.java [src=src/main/java/com/example/glowmod/network/SummonWispPayload.java loc=L1 community=GlowModClient.java]
+NODE .kaydet() [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L28 community=Ritual.java]
+NODE .baslat() [src=src/main/java/com/example/glowmod/ritual/Ritual.java loc=L21 community=Ritual.java]
+NODE Pending [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L15 community=Ritual.java]
+NODE .onSummonWisp() [src=src/main/java/com/example/glowmod/network/ServerNetworking.java loc=L20 community=Ritual.java]
+NODE .getId() [src=src/main/java/com/example/glowmod/network/SummonWispPayload.java loc=L17 community=GlowModClient.java]
+NODE .onChunkLoad() [src=src/main/java/com/example/glowmod/world/WispSpawner.java loc=L22 community=WispSpawner.java]
+NODE net.minecraft.network.packet.CustomPayload [src= loc= community=GlowModClient.java]
+NODE .deadWispLeavesItsHeart() [src=src/gametest/java/com/example/glowmod/test/WispTests.java loc=L22 community=Wisp]
+NODE .temizle() [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L42 community=Ritual.java]
+NODE Id [src= loc= community=GlowModClient.java]
+NODE net.fabricmc.api.ClientModInitializer [src= loc= community=GlowModClient.java]
+NODE net.fabricmc.fabric.api.gametest.v1.FabricGameTest [src= loc= community=Wisp]
+NODE net.minecraft.client.option.KeyBinding [src= loc= community=GlowModClient.java]
+NODE net.minecraft.network.codec.PacketCodec [src= loc= community=GlowModClient.java]
+NODE net.minecraft.network.RegistryByteBuf [src= loc= community=GlowModClient.java]
+NODE .onInitializeClient() [src=src/client/java/com/example/glowmod/client/GlowModClient.java loc=L18 community=GlowModClient.java]
+NODE .register() [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L23 community=Ritual.java]
+NODE .RepairScheduler() [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L20 community=Ritual.java]
+EDGE .onEndTick() --calls [EXTRACTED context=call]--> SummonWispPayload at=src/client/java/com/example/glowmod/client/GlowModClient.java:L28
+EDGE .onEndTick() --references [EXTRACTED context=parameter_type]--> net.minecraft.client.MinecraftClient at=src/client/java/com/example/glowmod/client/GlowModClient.java:L25
+EDGE GlowModClient --method [EXTRACTED]--> .onEndTick() at=src/client/java/com/example/glowmod/client/GlowModClient.java:L25
+EDGE .wispAppearsWhereAsked() --references [EXTRACTED context=attribute]--> net.minecraft.test.GameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L14
+EDGE .wispAppearsWhereAsked() --references [EXTRACTED context=parameter_type]--> net.minecraft.test.TestContext at=src/gametest/java/com/example/glowmod/test/WispTests.java:L14
+EDGE WispTests --method [EXTRACTED]--> .wispAppearsWhereAsked() at=src/gametest/java/com/example/glowmod/test/WispTests.java:L14
+EDGE .tick() --calls [EXTRACTED context=call]--> .get() at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L34
+EDGE .tick() --references [EXTRACTED context=parameter_type]--> net.minecraft.server.MinecraftServer at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L33
+EDGE RepairScheduler --method [EXTRACTED]--> .tick() at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L33
+EDGE .onSummonWisp() --calls [EXTRACTED context=call]--> .get() at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L25
+EDGE .kaydet() --calls [EXTRACTED context=call]--> .get() at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L29
+EDGE .baslat() --calls [EXTRACTED context=call]--> .get() at=src/main/java/com/example/glowmod/ritual/Ritual.java:L24
+EDGE .onChunkLoad() --calls [EXTRACTED context=call]--> .get() at=src/main/java/com/example/glowmod/world/WispSpawner.java:L23
+EDGE GlowConfig --method [EXTRACTED]--> .get() at=src/main/java/com/example/glowmod/config/GlowConfig.java:L21
+EDGE SummonWispPayload --references [EXTRACTED context=field]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L11
+EDGE SummonWispPayload --references [EXTRACTED context=field]--> Id at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L12
+EDGE SummonWispPayload --references [EXTRACTED context=field]--> net.minecraft.network.codec.PacketCodec at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L14
+EDGE SummonWispPayload --references [EXTRACTED context=generic_arg]--> net.minecraft.network.RegistryByteBuf at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L14
+EDGE GlowModClient.java --imports [EXTRACTED context=import]--> SummonWispPayload at=src/client/java/com/example/glowmod/client/GlowModClient.java:L3
+EDGE .onSummonWisp() --references [EXTRACTED context=parameter_type]--> SummonWispPayload at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L20
+EDGE SummonWispPayload.java --contains [EXTRACTED]--> SummonWispPayload at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L11
+EDGE SummonWispPayload --implements [EXTRACTED]--> net.minecraft.network.packet.CustomPayload at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L11
+EDGE SummonWispPayload --method [EXTRACTED]--> .getId() at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L17
+EDGE RepairScheduler.java --contains [EXTRACTED]--> RepairScheduler at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L14
+EDGE RepairScheduler --contains [EXTRACTED]--> Pending at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L15
+EDGE GlowMod.java --imports [EXTRACTED]--> RepairScheduler at=src/main/java/com/example/glowmod/GlowMod.java:L9
+EDGE Ritual.java --imports [EXTRACTED]--> RepairScheduler at=src/main/java/com/example/glowmod/ritual/Ritual.java:L5
+EDGE RepairScheduler --method [EXTRACTED]--> .RepairScheduler() at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L20
+EDGE RepairScheduler --method [EXTRACTED]--> .register() at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L23
+EDGE RepairScheduler --method [EXTRACTED]--> .kaydet() at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L28
+EDGE RepairScheduler --method [EXTRACTED]--> .temizle() at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L42
+EDGE GlowModClient --references [EXTRACTED context=field]--> net.minecraft.client.option.KeyBinding at=src/client/java/com/example/glowmod/client/GlowModClient.java:L16
+EDGE GlowModClient.java --contains [EXTRACTED]--> GlowModClient at=src/client/java/com/example/glowmod/client/GlowModClient.java:L15
+EDGE GlowModClient --implements [EXTRACTED]--> net.fabricmc.api.ClientModInitializer at=src/client/java/com/example/glowmod/client/GlowModClient.java:L15
+EDGE GlowModClient --method [EXTRACTED]--> .onInitializeClient() at=src/client/java/com/example/glowmod/client/GlowModClient.java:L18
+EDGE RepairScheduler.java --imports [EXTRACTED context=import]--> net.minecraft.server.MinecraftServer at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L9
+EDGE Datapack.java --imports [EXTRACTED context=import]--> net.minecraft.server.MinecraftServer at=src/main/java/com/example/glowmod/util/Datapack.java:L4
+EDGE .temizle() --references [EXTRACTED context=parameter_type]--> net.minecraft.server.MinecraftServer at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L42
+EDGE WispTests --references [EXTRACTED context=field]--> net.minecraft.util.math.BlockPos at=src/gametest/java/com/example/glowmod/test/WispTests.java:L12
+EDGE WispTests.java --contains [EXTRACTED]--> WispTests at=src/gametest/java/com/example/glowmod/test/WispTests.java:L11
+EDGE WispTests --implements [EXTRACTED]--> net.fabricmc.fabric.api.gametest.v1.FabricGameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L11
+EDGE WispTests --method [EXTRACTED]--> .deadWispLeavesItsHeart() at=src/gametest/java/com/example/glowmod/test/WispTests.java:L22
+EDGE .deadWispLeavesItsHeart() --references [EXTRACTED context=attribute]--> net.minecraft.test.GameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L22
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.minecraft.test.GameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L7
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.minecraft.test.TestContext at=src/gametest/java/com/example/glowmod/test/WispTests.java:L8
+EDGE .deadWispLeavesItsHeart() --references [EXTRACTED context=parameter_type]--> net.minecraft.test.TestContext at=src/gametest/java/com/example/glowmod/test/WispTests.java:L22
+EDGE GlowModClient.java --imports [EXTRACTED context=import]--> net.minecraft.client.MinecraftClient at=src/client/java/com/example/glowmod/client/GlowModClient.java:L8
+EDGE .getId() --references [EXTRACTED context=return_type]--> Id at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L17
+EDGE GlowModClient.java --imports [EXTRACTED context=import]--> net.fabricmc.api.ClientModInitializer at=src/client/java/com/example/glowmod/client/GlowModClient.java:L4
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.fabricmc.fabric.api.gametest.v1.FabricGameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L6
+EDGE GlowModClient.java --imports [EXTRACTED context=import]--> net.minecraft.client.option.KeyBinding at=src/client/java/com/example/glowmod/client/GlowModClient.java:L9
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> net.minecraft.network.codec.PacketCodec at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L5
+EDGE .getId() --references [EXTRACTED context=generic_arg]--> net.minecraft.network.packet.CustomPayload at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L17
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> net.minecraft.network.packet.CustomPayload at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L6
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> net.minecraft.network.RegistryByteBuf at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L4
+EDGE Pending --references [EXTRACTED context=field]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L15
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/gametest/java/com/example/glowmod/test/WispTests.java:L9
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L8
+EDGE RepairScheduler.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L11
+EDGE Ritual.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/ritual/Ritual.java:L11
+EDGE .kaydet() --references [EXTRACTED context=parameter_type]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L28
+EDGE .baslat() --references [EXTRACTED context=parameter_type]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/ritual/Ritual.java:L21
+EDGE GlowMod.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/GlowMod.java:L4
+EDGE RepairScheduler.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L3
+EDGE Ritual.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/ritual/Ritual.java:L3
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> RepairScheduler.java at=src/main/java/com/example/glowmod/GlowMod.java:L9
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> GlowMod.java at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L3
+EDGE Datapack.java --imports [EXTRACTED context=import]--> GlowMod.java at=src/main/java/com/example/glowmod/util/Datapack.java:L3
+EDGE Ritual.java --imports [EXTRACTED context=import]--> RepairScheduler.java at=src/main/java/com/example/glowmod/ritual/Ritual.java:L5
+EDGE .kaydet() --calls [EXTRACTED context=call]--> Pending at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L30
+EDGE Ritual.java --imports [EXTRACTED context=import]--> Datapack.java at=src/main/java/com/example/glowmod/ritual/Ritual.java:L6

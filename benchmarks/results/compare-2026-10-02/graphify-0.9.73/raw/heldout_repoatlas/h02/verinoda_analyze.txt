@@ -1,0 +1,102 @@
+analysis ana_c51b9a7c93bb, snapshot snp_22edce792516 (commit b0b7687fa6)
+understood as: Understood (rules): q1 [config] Which environment variables are passed to experiment commands | q2 [locate] where is that decided?
+plan links: environment -> repoatlas/benchmark/runner.py:85-113; passed -> tests/test_claims.py:150-159; experiment -> repoatlas/cli.py:392-420; commands -> repoatlas/agents/installer.py:212-216
+q1 [unmet] config: Which environment variables are passed to experiment commands
+q2 [met] locate: where is that decided?
+  [statically_verified] `decide()` is defined at repoatlas/feedback.py:424-600  (clm_a41b37770e9d)
+  [statically_verified] `run()` is defined at repoatlas/experiments.py:365-550  (clm_6f7147f039d0)
+  [statically_verified] `cmd_experiment()` is defined at repoatlas/cli.py:392-420  (clm_613516ec4757)
+context (found on the way; not what answers):
+  [statically_verified] `test_decide_ignores_trivial_differences()` calls `decide()` (tests/test_feedback.py:263)  (clm_46794af5203a)
+  [statically_verified] `process()` calls `decide()` (repoatlas/feedback.py:938)  (clm_968ff6e79f6b)
+  [statically_verified] `test_floating_pin_is_disclosed_in_a_confirmed_verdict()` calls `process()` (tests/test_feedback.py:476)  (clm_f7f59a6fba94)
+  +3 context claim(s) the critique refuted (--json lists them)
+  +3 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+expanded: environ->env, command->cmd, experiment
+## repoatlas/cli.py:392-420 def cmd_experiment(args) -> int
+  calls: _repo@395, _store@402, run@402, _emit@405
+  repoatlas/cli.py:394-407
+395 repo = _repo(args)
+396 argv = args.command
+397 if argv and argv[0] == "--":
+398     argv = argv[1:]
+399 if not argv:
+400     raise SystemExit("error: give the command after --")
+401 try:
+402     res = experiments.run(_store(repo, create=True), repo, argv, hypothesis=args.hypothesis, expect=args.expect,
+403                           timeout=args.timeout, claim_id=args.claim, isolation=args.isolation)
+404 except experiments.ExperimentRefused as exc:
+405     _emit(args, {"status": "refused", "reason": str(exc)}, lambda r: print(f"refused: {r['reason']}"))
+406     return 3
+## tests/test_critique.py:602-623 test_config_claim_on_a_line_that_reads_another_variable_is_refuted
+  doc: orders_app q03.n.repo_env: the repository does not read an environment variable itself.
+  calls: challenge@615
+602 def test_config_claim_on_a_line_that_reads_another_variable_is_refuted(plain):
+603     """orders_app q03.n.repo_env: the repository does not read an environment variable itself."""
+604     repo, st, cl = plain
+606     def cfg(var, at):
+607         path, _, ln = at.rpartition(":")
+608         ev = evmod.source_evidence(repo, path, int(ln), commit=None, meta={"env": var})
+609         return cl.create(f"`x` in {path} reads environment variable {var} ({at})", project="orders_app",
+610                          snapshot=None, status="statically_verified", evidence=[(ev, "supports")], kind="config",
+611                          subjects=[path], spec={"env": var})
+613     ok = cfg("ORDERS_DATABASE_URL", "orders/config.py:5")
+614     assert ok["status"] == "statically_verified"
+615     assert critique.challenge(st, repo, ok["id"])["after"]["status"] == "statically_verified"
+616     for var, at, words in (("ORDERS_MAX_ITEMS", "orders/config.py:5", "reads ORDERS_DATABASE_URL"),
+617                            ("ORDERS_DATABASE_URL", "orders/repository.py:9", "no environment read")):
+618         bad = cfg(var, at)
+619         assert bad["status"] not in ("statically_verified",)
+620         res = critique.challenge(st, repo, bad["id"])
+621         probe = next(f for f in res["findings"] if f["check"] == "config_read")
+622         assert probe["strength"] == "definitive" and words in probe["detail"]
+623         assert res["after"]["status"] == "contradicted"
+## tests/test_search_index.py:221-228 test_abbreviations_are_expanded_and_reported
+  calls: _query@222, retrieve@226
+221 def test_abbreviations_are_expanded_and_reported(mini):
+222     q = _query(mini, "Which environment variables are allowed?")
+223     exp = {(e["from"], e["to"], e["via"]) for e in q.expansions}
+224     assert ("environ", "env", "abbreviation") in exp
+225     assert q.weights["env"] == search_index.EXPANSION_WEIGHT < q.weights["environ"] == 1.0
+226     res = retrieval.retrieve(mini, "Which environment variables are allowed?")
+227     assert any(e.startswith("environ->env") for e in res["budget"]["expansions"])
+228     assert res["items"][0]["symbol"] in ("_scrubbed_env()", "(module level)")
+## tests/test_analysis.py:218-223 test_config_question_cites_env_reads
+218 def test_config_question_cites_env_reads(proj):
+219     repo, st = proj
+220     res = analysis.analyze(st, repo, "Which environment variable sets the discount threshold?")
+221     cfg = [c for c in res["claims"] if "reads environment variable" in c["text"]]
+222     assert any("ORDERS_DISCOUNT_THRESHOLD" in c["text"] and "orders/config.py:7" in c["text"] for c in cfg)
+223     assert all(c["status"] == "statically_verified" for c in cfg)
+## tests/test_search_index.py:31-33 (module level)
+31 def _scrubbed_env():
+32     """Keep only the allowed environment variables."""
+33     return {k: v for k, v in os.environ.items() if k in ENV_ALLOW}
+## repoatlas/doctor.py:3-4 (module level)
+3 Never prints secret values: environment variables are reported as set/unset.
+4 """
+## tests/test_analysis.py:450-470 test_config_claims_rank_env_vars_by_the_question_words_they_carry
+450 def test_config_claims_rank_env_vars_by_the_question_words_they_carry(tmp_path):
+451     """Many variables share the project prefix; the ones naming the question's words come first."""
+452     reads = "".join(f'    a{i} = os.environ.get("TOOL_{name}")\n' for i, name in enumerate(
+453         ["ALPHA", "BETA", "CACHE_DIR", "DEBUG", "EDITOR", "FORMAT"]))
+454     repo = _mini(tmp_path / "cfg", {
+455         "tool/settings.py": "import os\n\n\ndef load():\n" + reads + "    return a0\n",
+456         "tool/querylog.py": "import os\n\n\ndef log_path():\n"
+457                             '    if os.environ.get("TOOL_QUERY_LOG_DISABLE"):\n        return None\n'
+458                             '    return os.environ.get("TOOL_QUERY_LOG")\n',
+459     })
+460     workflow.init(repo)
+461     st = open_store(repo)
+462     try:
+463         workflow.scan(st, repo)
+464         res = analysis.analyze(st, repo, "Which environment variables control the tool's query log?")
+465         cfg = [c["text"] for c in res["claims"] if "reads environment variable" in c["text"]]
+466         assert cfg[:2] and all("TOOL_QUERY_LOG" in t for t in cfg[:2]), cfg
+467         # a "where" answer is not needed for the location claims to appear alongside another intent
+468         assert any(" is defined at tool/querylog.py:4-" in c["text"] for c in res["claims"])
+469     finally:
+470         st.close()
+… 995 more candidates not shown: repoatlas/experiments.py:365-550 def run( store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: s; tests/test_question_plan.py:248-259 ("Where is graphify query output cut to fit the token budget?", ["locate"]),; repoatlas/agents/templates/claude_SKILL.md:100-145 ## Commands (examples; always add --json when you read the result); repoatlas/a…
+next: verinoda query "…" --max-chars 12000

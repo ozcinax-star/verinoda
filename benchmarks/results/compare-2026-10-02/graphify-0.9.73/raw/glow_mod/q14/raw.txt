@@ -1,0 +1,167 @@
+$ grep -rniE 'original|paper|plugin|wisp|spawned|called' .   # 129 matching lines in 29 files
+README.md:9: What it adds: a wisp mob, three items (lantern staff, ember shard, wisp heart),
+README.md:20: - `datapack/` - a standalone data pack for map makers (a copy of the wisp death function)
+README.md:21: - `reference/original-plugin/` - excerpts of the Paper plugin this mod was ported
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:1: package com.example.glowplugin;
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:12: import org.bukkit.plugin.Plugin;
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:14: /** Paper has no custom entities, so a wisp is a named Allay with a marker key. */
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:15: public final class Wisp {
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:16: private Wisp() {
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:19: public static Allay spawn(Plugin plugin, Location location) {
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:21: allay.customName(Component.text("Wisp", NamedTextColor.AQUA));
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:22: allay.getPersistentDataContainer().set(new NamespacedKey(plugin, "wisp"), PersistentDataType.BYTE, (byte) 1);
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:26: public static boolean isWisp(Plugin plugin, org.bukkit.entity.Entity entity) {
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:27: return entity.getPersistentDataContainer().has(new NamespacedKey(plugin, "wisp"), PersistentDataType.BYTE);
+reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:32: stack.editMeta(meta -> meta.displayName(Component.text("Wisp Heart", NamedTextColor.AQUA)));
+reference/original-plugin/config.yml:1: # GlowPlugin settings
+reference/original-plugin/config.yml:2: wisp:
+reference/original-plugin/config.yml:3: # wisps called by one ritual
+reference/original-plugin/config.yml:5: # chance that a swamp chunk gets a wisp when it loads at night
+reference/original-plugin/plugin.yml:1: name: GlowPlugin
+reference/original-plugin/plugin.yml:3: main: com.example.glowplugin.GlowPlugin
+reference/original-plugin/plugin.yml:5: description: Wisps and a lantern staff for Paper servers
+reference/original-plugin/plugin.yml:8: description: Glow admin command (wisp, reload)
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:1: package com.example.glowplugin;
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:11: public final class WispListener implements Listener {
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:12: private final GlowPlugin plugin;
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:14: public WispListener(GlowPlugin plugin) {
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:15: this.plugin = plugin;
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:25: Wisp.spawn(plugin, block.getLocation().add(0.5, 1, 0.5));
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:31: if (Wisp.isWisp(plugin, event.getEntity())) {
+reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:33: event.getDrops().add(Wisp.heart());
+src/main/java/com/example/glowmod/command/GlowCommands.java:4: import com.example.glowmod.entity.Wisp;
+src/main/java/com/example/glowmod/command/GlowCommands.java:13: /** /glow wisp | ritual | reload (operators only). */
+src/main/java/com/example/glowmod/command/GlowCommands.java:22: .then(CommandManager.literal("wisp").executes(GlowCommands::wisp))
+src/main/java/com/example/glowmod/command/GlowCommands.java:27: private static int wisp(CommandContext<ServerCommandSource> ctx) {
+src/main/java/com/example/glowmod/command/GlowCommands.java:29: Wisp wisp = Wisp.spawn(source.getWorld(), BlockPos.ofFloored(source.getPosition()));
+src/main/java/com/example/glowmod/command/GlowCommands.java:30: if (wisp == null) {
+src/main/java/com/example/glowmod/command/GlowCommands.java:31: source.sendError(Text.translatable("command.glowmod.wisp.failed"));
+src/main/java/com/example/glowmod/command/GlowCommands.java:34: source.sendFeedback(() -> Text.translatable("command.glowmod.wisp.spawned"), false);
+reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java:1: package com.example.glowplugin;
+reference/original-plugin/src/main/java/com/example/glowplugin/GlowPlugin.java:3: import org.bukkit.plugin.java.JavaPlugin;
+... (89 more matching lines not shown)
+
+==> README.md:1-26 <==
+     1	# Glow Mod (example)
+     2	
+     3	A small, fictional Fabric mod for Minecraft 1.21.1, used as a public example and
+     4	benchmark corpus for Verinoda's support of mod repositories (Java code plus data
+     5	pack, assets and YAML configuration linked by resource ids). It has not been
+     6	compiled or run in a game; textures (`.png`) are left out on purpose, so the
+     7	item models point at files that do not exist here.
+     8	
+     9	What it adds: a wisp mob, three items (lantern staff, ember shard, wisp heart),
+    10	a lantern ritual, the `/glow` operator command and one client key binding.
+    11	
+    12	Layout:
+    13	
+    14	- `src/main/java/com/example/glowmod/` - common (server + client) code
+    15	- `src/client/java/` - client-only code
+    16	- `src/gametest/java/` - Fabric game tests
+    17	- `src/main/resources/data/glowmod/` - data pack: functions, recipe, loot table
+    18	- `src/main/resources/assets/glowmod/` - item models and translations
+    19	- `src/main/resources/glowmod.yml` - default settings, copied to `config/` on first start
+    20	- `datapack/` - a standalone data pack for map makers (a copy of the wisp death function)
+    21	- `reference/original-plugin/` - excerpts of the Paper plugin this mod was ported
+    22	  from, kept for comparison; it is not built
+    23	
+    24	Some identifiers are Turkish (`etkinlestir` = enable, `baslat` = start,
+    25	`kaydet` = record, `temizle` = clean up, `alaniAc` = clear the area), as in the
+    26	private mod this example imitates.
+
+==> reference/original-plugin/src/main/java/com/example/glowplugin/Wisp.java:1-35 <==
+     1	package com.example.glowplugin;
+     2	
+     3	import net.kyori.adventure.text.Component;
+     4	import net.kyori.adventure.text.format.NamedTextColor;
+     5	import org.bukkit.Location;
+     6	import org.bukkit.Material;
+     7	import org.bukkit.NamespacedKey;
+     8	import org.bukkit.entity.Allay;
+     9	import org.bukkit.entity.EntityType;
+    10	import org.bukkit.inventory.ItemStack;
+    11	import org.bukkit.persistence.PersistentDataType;
+    12	import org.bukkit.plugin.Plugin;
+    13	
+    14	/** Paper has no custom entities, so a wisp is a named Allay with a marker key. */
+    15	public final class Wisp {
+    16	    private Wisp() {
+    17	    }
+    18	
+    19	    public static Allay spawn(Plugin plugin, Location location) {
+    20	        Allay allay = (Allay) location.getWorld().spawnEntity(location, EntityType.ALLAY);
+    21	        allay.customName(Component.text("Wisp", NamedTextColor.AQUA));
+    22	        allay.getPersistentDataContainer().set(new NamespacedKey(plugin, "wisp"), PersistentDataType.BYTE, (byte) 1);
+    23	        return allay;
+    24	    }
+    25	
+    26	    public static boolean isWisp(Plugin plugin, org.bukkit.entity.Entity entity) {
+    27	        return entity.getPersistentDataContainer().has(new NamespacedKey(plugin, "wisp"), PersistentDataType.BYTE);
+    28	    }
+    29	
+    30	    public static ItemStack heart() {
+    31	        ItemStack stack = new ItemStack(Material.GLOWSTONE_DUST);
+    32	        stack.editMeta(meta -> meta.displayName(Component.text("Wisp Heart", NamedTextColor.AQUA)));
+    33	        return stack;
+    34	    }
+    35	}
+
+==> reference/original-plugin/config.yml:1-9 <==
+     1	# GlowPlugin settings
+     2	wisp:
+     3	  # wisps called by one ritual
+     4	  ritual-count: 3
+     5	  # chance that a swamp chunk gets a wisp when it loads at night
+     6	  natural-chance: 0.05
+     7	repair:
+     8	  # blocks restored per tick after a ritual
+     9	  blocks-per-tick: 4
+
+==> reference/original-plugin/plugin.yml:1-9 <==
+     1	name: GlowPlugin
+     2	version: 1.4.2
+     3	main: com.example.glowplugin.GlowPlugin
+     4	api-version: '1.20'
+     5	description: Wisps and a lantern staff for Paper servers
+     6	commands:
+     7	  glow:
+     8	    description: Glow admin command (wisp, reload)
+     9	    permission: glow.admin
+
+==> reference/original-plugin/src/main/java/com/example/glowplugin/WispListener.java:1-36 <==
+     1	package com.example.glowplugin;
+     2	
+     3	import org.bukkit.Material;
+     4	import org.bukkit.block.Block;
+     5	import org.bukkit.event.EventHandler;
+     6	import org.bukkit.event.Listener;
+     7	import org.bukkit.event.block.Action;
+     8	import org.bukkit.event.entity.EntityDeathEvent;
+     9	import org.bukkit.event.player.PlayerInteractEvent;
+    10	
+    11	public final class WispListener implements Listener {
+    12	    private final GlowPlugin plugin;
+    13	
+    14	    public WispListener(GlowPlugin plugin) {
+    15	        this.plugin = plugin;
+    16	    }
+    17	
+    18	    @EventHandler
+    19	    public void onInteract(PlayerInteractEvent event) {
+    20	        Block block = event.getClickedBlock();
+    21	        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || block == null || block.getType() != Material.SOUL_LANTERN) {
+    22	            return;
+    23	        }
+    24	        if (event.getItem() != null && event.getItem().getType() == Material.BLAZE_ROD) {
+    25	            Wisp.spawn(plugin, block.getLocation().add(0.5, 1, 0.5));
+    26	        }
+    27	    }
+    28	
+    29	    @EventHandler
+    30	    public void onDeath(EntityDeathEvent event) {
+    31	        if (Wisp.isWisp(plugin, event.getEntity())) {
+    32	            event.getDrops().clear();
+    33	            event.getDrops().add(Wisp.heart());
+    34	        }
+    35	    }
+    36	}

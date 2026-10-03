@@ -1,0 +1,27 @@
+{
+ "repo": "home-assistant/core",
+ "commit": "92c6588493aa6fc8f7b06dc43c8331c969b3653e",
+ "tracked_files": 27078,
+ "graphify": {
+  "version": "0.9.73",
+  "command": "graphify update . (AST graph, no LLM) then graphify claude install",
+  "seconds": 4234,
+  "nodes": 333673,
+  "edges": 914148,
+  "communities": 8418,
+  "graph_json_mb": 534,
+  "warm_query_seconds": 50
+ },
+ "verinoda": {
+  "version": "0.4.0 at this branch's build",
+  "command": "verinoda setup . --agents claude (init, scan, project skill, MCP)",
+  "seconds": 3248,
+  "files": 27075,
+  "nodes": 334253,
+  "edges": 909222,
+  "graph_json_mb": 434,
+  "warm_query_seconds": 29,
+  "query_memory_mb": 1800
+ },
+ "note": "The two builds ran at the same time on a 16-core, 32 GB machine, so their times are under mutual load."
+}

@@ -1,0 +1,92 @@
+analysis ana_9e803115cf54, snapshot snp_f67fe74d1a63 (commit 0bb6af3963)
+understood as: Understood (rules): q1 [flow] How does pressing the Stoke button in the forge screen end up adding heat on the server?
+plan links: Stoke -> src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144; forge -> src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:34-115; screen -> src/main/java/net/ashvale/emberforge/client/ClientSetup.java:15-18; heat -> src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:166-168; server -> src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120
+q1 [met_with_inference] flow: How does pressing the Stoke button in the forge screen end up adding heat on the server?
+  [weak_inference] Data path .serverTick() reaches persistence (saved-data-write (dirty flag)) at src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75 {source_code:src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:118} (uncertain: entry point and sink detection are heuristics)  (clm_dd5344c8fb79)
+context (found on the way; not what answers):
+  [statically_verified] `StokeForgePayload` is defined at src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:10-19  (clm_646c16db05a8)
+  [weak_inference 0.30] `.requestStoke()` calls `StokeForgePayload` (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:26) (uncertain: )  (clm_468dcfa0d4ad)
+  [weak_inference 0.30] `.init()` calls `.requestStoke()` (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19) (uncertain: )  (clm_ad704ac16991)
+  [weak_inference 0.30] `.init()` calls `.init()` (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:17) (uncertain: )  (clm_1eba70251c55)
+  [strong_inference] src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:118 touches storage (saved-data-write (dirty flag)): setChanged(level, pos, state); (uncertain: which storage operation a line is comes from a pattern over the source)  (clm_65fbe8a87edf)
+  +2 verified claim(s) about lines the passages below print (--json lists them)
+critique clm_dd5344c8fb79: weak_inference -> weak_inference  
+critique clm_468dcfa0d4ad: strong_inference -> weak_inference  src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:26: line 26 names `StokeForgePayload` but has no call to it
+critique clm_ad704ac16991: strong_inference -> weak_inference  src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19: line 19 names `requestStoke` but has no call to it
+critique clm_1eba70251c55: strong_inference -> weak_inference  src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:17: line 17 names `init` but has no call to it
+passages (what `verinoda query` gives for the question; search results, not claims):
+## src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:10-19 StokeForgePayload
+  called by: requestStoke (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:26)
+10 public record StokeForgePayload(BlockPos pos) implements CustomPacketPayload {
+11     public static final Type<StokeForgePayload> TYPE = new Type<>(EmberForge.id("stoke_forge"));
+12     public static final StreamCodec<ByteBuf, StokeForgePayload> STREAM_CODEC =
+13             BlockPos.STREAM_CODEC.map(StokeForgePayload::new, StokeForgePayload::pos);
+15     @Override
+16     public Type<? extends CustomPacketPayload> type() {
+17         return TYPE;
+18     }
+19 }
+## src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:9-9 (module level)
+9 /** Client to server: the player pressed Stoke in the forge screen at {@code pos}. */
+## src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25-27 EmberForgeScreen.requestStoke
+  calls: StokeForgePayload@26
+  called by: init (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:19)
+25 private fun requestStoke() {
+26     PacketDistributor.sendToServer(StokeForgePayload(menu.pos))
+27 }
+## src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:16-23 EmberForgeScreen.init
+  calls: init@17, requestStoke@19
+  called by: init (src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:17)
+16 override fun init() {
+17     super.init()
+18     addRenderableWidget(
+19         Button.builder(Component.translatable("gui.emberforge.stoke")) { requestStoke() }
+20             .bounds(leftPos + 120, topPos + 58, 44, 16)
+21             .build()
+22     )
+23 }
+## src/main/java/net/ashvale/emberforge/config/EmberConfig.java:9-41 public final class EmberConfig
+  src/main/java/net/ashvale/emberforge/config/EmberConfig.java:19-30
+20 b.comment("Ember Forge heat settings").push("forge");
+21 HEAT_PER_FUEL = b.comment("Heat added by one fuel item (blaze rods count double)")
+22         .defineInRange("heat_per_fuel", 40, 1, 400);
+23 MAX_HEAT = b.comment("Upper limit of a forge's heat")
+24         .defineInRange("max_heat", 200, 50, 1000);
+25 STOKE_HEAT = b.comment("Heat added by the Stoke button or a Forge Hammer hit")
+26         .defineInRange("stoke_heat", 15, 0, 100);
+27 DECAY_INTERVAL = b.comment("Ticks between two losses of 1 heat")
+28         .defineInRange("decay_interval_ticks", 20, 1, 1200);
+29 b.pop();
+## src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:13-44 EmberForgeScreen
+  src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:13-15
+13 class EmberForgeScreen(menu: EmberForgeMenu, inventory: Inventory, title: Component) :
+14     AbstractContainerScreen<EmberForgeMenu>(menu, inventory, title) {
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge)
+  calls: heatForFuel@79, addHeat@82, canOutput@94?, progressPerTick@97, finish@99?, cooled@107
+  runs: every tick of that block entity (registered at src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:72)
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:77-85
+78 ItemStack fuel = forge.items.getStackInSlot(SLOT_FUEL);
+79 int fuelHeat = HeatMath.heatForFuel(fuel);
+80 if (fuelHeat > 0 && forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()) {
+81     forge.items.extractItem(SLOT_FUEL, 1, false);
+82     forge.heat = HeatMath.addHeat(forge.heat, fuelHeat);
+83     changed = true;
+84 }
+src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41 static void handleStoke(StokeForgePayload payload, IPayloadContext context)
+config/emberforge-common.toml:5-23 [forge]
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144 public void stoke(Player player)
+src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:29-34 override fun renderBg(graphics: GuiGraphics, partialTick: Float, mouseX: Int, mouseY: Int)
+src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:36-39 override fun render(graphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTick: Float)
+src/main/java/net/ashvale/emberforge/client/ClientSetup.java:15-18 @SubscribeEvent public static void registerScreens(RegisterMenuScreensEvent event)
+src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:21-25 @SubscribeEvent public static void register(RegisterPayloadHandlersEvent event)
+src/main/java/net/ashvale/emberforge/config/EmberConfig.java:39-40 private EmberConfig()
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider
+src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:21-93 public class EmberForgeMenu extends AbstractContainerMenu
+src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:21-22 @JvmStatic fun addHeat(current: Int, amount: Int): Int = addHeat(current, amount, EmberConfig.MAX_HEAT.get())
+src/test/java/net/ashvale/emberforge/ForgeTickTest.java:21-24 @Test void stokePayloadUsesTheModNamespace()
+src/main/resources/assets/emberforge/lang/en_us.json:1-17 {
+src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:31-35 @JvmStatic fun progressPerTick(heat: Int, minHeat: Int): Int
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:123-125 public static int cooled(int heat, long gameTime, int decayInterval)
+src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:14-19 @JvmStatic fun heatForFuel(stack: ItemStack): Int
+… 100 more candidates not shown: build.gradle:35-43 runs; src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:9-36 object HeatMath; src/main/java/net/ashvale/emberforge/util/ForgeFunctions.java:16-25 public static boolean resetForges(CommandSourceStack; src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:70-72 public int getHeat()
+next: verinoda query "…" --max-chars 12000

@@ -1,0 +1,1 @@
+$ grep -rniE 'sipariş|servisini|hangi|ortam|değişkenleri|yapılandırıyor|bunlar|nerede|okunuyor' .   # 0 matching lines in 0 files

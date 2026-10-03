@@ -623,3 +623,16 @@ def test_a_final_answer_from_any_command_is_scored_for_facts_and_wrong_statement
          "negatives": [{"id": "n1", "statement": "it writes to a cache", "assertion_regex": "writes? (?:it )?to a cache"}]}
     wrong = score_answer(q, "The order goes to OrderRepository.save. It writes to a cache first.")
     assert wrong["answer_negatives"] == ["n1"] and wrong["answer_correct"] is False
+
+
+def test_verinoda_user_tr_gold_verifies_against_its_pinned_corpus(tmp_path):
+    """Every fact's locators and text tokens must exist in the pinned corpus, or the harness refuses the set."""
+    qs = json.loads(builtin_sets()["verinoda_user_tr"].read_text(encoding="utf-8"))
+    pin = qs["corpus"]["git_commit"]
+    probe = subprocess.run(["git", "cat-file", "-t", pin], cwd=ROOT, capture_output=True, text=True)
+    if probe.returncode != 0:
+        pytest.skip(f"commit {pin[:7]} is not in this clone (shallow?)")
+    corpus = ap.prepare_workdir(ROOT, tmp_path / "corpus", include=qs["corpus"]["include"],
+                                exclude=qs["corpus"]["exclude"], commit=pin)
+    res = mx.validate_gold(tmp_path / "corpus", qs["questions"], corpus_files=corpus["files"])
+    assert res["ok"], res["failures"]

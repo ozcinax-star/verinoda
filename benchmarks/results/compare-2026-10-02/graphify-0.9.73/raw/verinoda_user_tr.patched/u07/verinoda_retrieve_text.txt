@@ -1,0 +1,77 @@
+## verinoda/index.py:98-119 _without_upstream_html
+  doc: No upstream Graphify ``graph.html`` from a build (an old one is removed by the pipeline itself).
+  called by: build (verinoda/index.py:72)
+ 98 class _without_upstream_html:
+ 99     """No upstream Graphify ``graph.html`` from a build (an old one is removed by the pipeline itself).
+101     That page loaded vis-network from a CDN when opened; ``verinoda ui`` and ``verinoda ui --export``
+102     show the project's graph without anything from outside. On the Python standard library as a
+103     project it cost about a second and 3 MB per build. The upstream switch is used:
+104     ``GRAPHIFY_VIZ_NODE_LIMIT=0`` for the build, unless the variable is set (a positive number keeps
+105     the page).
+106     """
+108     VAR = "GRAPHIFY_VIZ_NODE_LIMIT"
+110     def __enter__(self):
+111         self.ours = self.VAR not in os.environ
+112         if self.ours:
+113             os.environ[self.VAR] = "0"
+114         return self
+116     def __exit__(self, *a):
+117         if self.ours:
+118             os.environ.pop(self.VAR, None)
+119         return False
+## verinoda/cli.py:1449-1753 def build_parser() -> argparse.ArgumentParser
+  called by: main (verinoda/cli.py:1762)
+  const verinoda/cli.py:33: CLAIM_ADD_STATUSES = (*_CLAIM_ORDER, "contradicted")
+  const verinoda/cli.py:37: CLAIM_ADD_KINDS = ("general", "location", "relation", "config")
+  verinoda/cli.py:1495-1508
+1495 sp.add_argument("--port", type=_port, default=0, help="port on 127.0.0.1 (default: a free one)")
+1496 sp.add_argument("--no-browser", action="store_true", help="print the address, do not open a browser")
+1497 sp.add_argument("--graph", action="store_true", help="open on the graph view instead of the start page")
+1498 sp.add_argument("--export", nargs="?", const="", default=None, metavar="FILE",
+1499                 help="write the graph and the file notes as one HTML file that opens without a server "
+1500                      "(no code in it; default .verinoda/index/verinoda-graph.html) and exit")
+1501 sp.add_argument("--open", action="store_true", help="with --export: open the written file in the browser")
+1502 sp.add_argument("--read-only", action="store_true", help="do not let the page write notes of your own")
+1503 sp.add_argument("--watch", action="store_true",
+1504                 help="run `verinoda update` when files change; the page follows the index either way")
+1505 sp = add("notes", cmd_notes, "your own notes on the code and whether the code changed since they were written",
+1506          repo=False)
+1507 sp.add_argument("path", nargs="?", help="project root (default: nearest dir with .verinoda or .git)")
+1508 sp.add_argument("--repo", help="project root (the same as PATH, as for the other commands)")
+  verinoda/cli.py:1667-1679
+1667                 help="symbols to report reach for (and to select tests by, when no TEST_ID is given)")
+1668 sp.add_argument("--terms", nargs="+", action="extend", metavar="WORD",
+1669                 help="extra words that select tests by name")
+1670 sp.add_argument("--timeout", type=float, help="seconds (default: twice the experiment timeout)")
+1671 sp.add_argument("--mode", choices=TRACE_MODES, default="auto",
+1672                 help="tracer: auto (sys.monitoring, else setprofile), monitoring, setprofile, off (baseline)")
+1673 sp = add("resolve-call", cmd_resolve_call, "precise resolution of one call site: which definition does "
+1674                                            "TARGET on PATH:LINE bind to? (exit 3: no precise answer)")
+1675 sp.add_argument("site", metavar="PATH:LINE")
+1676 sp.add_argument("target", metavar="TARGET", help="the called name (label, Class.method or name)")
+1677 sp.add_argument("--target", dest="target_at", metavar="PATH:LINE",
+1678                 help="the definition the graph claims; adds a confirms/refutes/undetermined verdict")
+## verinoda/ui/export.py:273-289 write
+  doc: Build and write the file (whole or not at all); returns where it went and what it holds.
+  calls: target_path@275, build@276, render@277
+  called by: cmd_ui (verinoda/cli.py:508)
+273 def write(repo: Path | str, out: Path | str | None = None) -> dict:
+274     """Build and write the file (whole or not at all); returns where it went and what it holds."""
+275     path = target_path(repo, out)
+276     data = build(repo)
+277     html = render(data)
+278     path.parent.mkdir(parents=True, exist_ok=True)
+279     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+280     try:
+281         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+282             fh.write(html)
+283         os.replace(tmp, path)
+284     except BaseException:
+285         Path(tmp).unlink(missing_ok=True)
+286         raise
+287     return {"path": str(path.resolve()), "bytes": len(html.encode("utf-8")), "notes": len(data["notes"]),
+288             "graph_files": min(len(data["global"]["nodes"]), MAX_GLOBAL_NODES),
+289             "graph_links": len(data["global"]["edges"])}
+## verinoda/research.py:614-634 def html_to_text(html_text: str) -> tuple[str, str]
+… 484 more candidates not shown: verinoda/ui/export.py:226-229 _json_for_html; verinoda/index.py:56-95 build; verinoda/index.py:110-114 _without_upstream_html.__enter__; verinoda/index.py:116-119 _without_upstream_html.__exit__
+next: verinoda query "…" --max-chars 12000

@@ -1,0 +1,3694 @@
+{
+ "overall": {
+  "arms": {
+   "none": {
+    "sessions": 57,
+    "failed": 0,
+    "found": 213,
+    "pinpointed": 195,
+    "facts": 218,
+    "all_facts_questions": 52,
+    "tokens_mean": 671,
+    "tool_calls_mean": 5.9,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   },
+   "verinoda": {
+    "sessions": 57,
+    "failed": 0,
+    "found": 208,
+    "pinpointed": 187,
+    "facts": 218,
+    "all_facts_questions": 47,
+    "tokens_mean": 666,
+    "tool_calls_mean": 6.3,
+    "index_calls_mean": 0.1,
+    "used_index_tool": 6,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   },
+   "graphify": {
+    "sessions": 57,
+    "failed": 0,
+    "found": 207,
+    "pinpointed": 190,
+    "facts": 218,
+    "all_facts_questions": 50,
+    "tokens_mean": 655,
+    "tool_calls_mean": 6.3,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   }
+  },
+  "pairs": {
+   "verinoda-none": {
+    "wins": 1,
+    "ties": 50,
+    "losses": 6,
+    "sum_diff": -5,
+    "n": 57
+   },
+   "graphify-none": {
+    "wins": 3,
+    "ties": 49,
+    "losses": 5,
+    "sum_diff": -6,
+    "n": 57
+   },
+   "verinoda-graphify": {
+    "wins": 3,
+    "ties": 48,
+    "losses": 6,
+    "sum_diff": 1,
+    "n": 57
+   }
+  }
+ },
+ "out_of_sample": {
+  "arms": {
+   "none": {
+    "sessions": 36,
+    "failed": 0,
+    "found": 149,
+    "pinpointed": 140,
+    "facts": 151,
+    "all_facts_questions": 34,
+    "tokens_mean": 606,
+    "tool_calls_mean": 5.5,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   },
+   "verinoda": {
+    "sessions": 36,
+    "failed": 0,
+    "found": 145,
+    "pinpointed": 135,
+    "facts": 151,
+    "all_facts_questions": 30,
+    "tokens_mean": 607,
+    "tool_calls_mean": 5.9,
+    "index_calls_mean": 0.1,
+    "used_index_tool": 2,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   },
+   "graphify": {
+    "sessions": 36,
+    "failed": 0,
+    "found": 149,
+    "pinpointed": 140,
+    "facts": 151,
+    "all_facts_questions": 34,
+    "tokens_mean": 609,
+    "tool_calls_mean": 5.8,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   }
+  },
+  "pairs": {
+   "verinoda-none": {
+    "wins": 0,
+    "ties": 32,
+    "losses": 4,
+    "sum_diff": -4,
+    "n": 36
+   },
+   "graphify-none": {
+    "wins": 0,
+    "ties": 36,
+    "losses": 0,
+    "sum_diff": 0,
+    "n": 36
+   },
+   "verinoda-graphify": {
+    "wins": 0,
+    "ties": 32,
+    "losses": 4,
+    "sum_diff": -4,
+    "n": 36
+   }
+  }
+ },
+ "in_sample": {
+  "arms": {
+   "none": {
+    "sessions": 21,
+    "failed": 0,
+    "found": 64,
+    "pinpointed": 55,
+    "facts": 67,
+    "all_facts_questions": 18,
+    "tokens_mean": 783,
+    "tool_calls_mean": 6.7,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   },
+   "verinoda": {
+    "sessions": 21,
+    "failed": 0,
+    "found": 63,
+    "pinpointed": 52,
+    "facts": 67,
+    "all_facts_questions": 17,
+    "tokens_mean": 766,
+    "tool_calls_mean": 7.0,
+    "index_calls_mean": 0.2,
+    "used_index_tool": 4,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   },
+   "graphify": {
+    "sessions": 21,
+    "failed": 0,
+    "found": 58,
+    "pinpointed": 50,
+    "facts": 67,
+    "all_facts_questions": 16,
+    "tokens_mean": 735,
+    "tool_calls_mean": 7.1,
+    "index_calls_mean": 0.0,
+    "used_index_tool": 0,
+    "reported_outside": 0,
+    "reported_forbidden": 0
+   }
+  },
+  "pairs": {
+   "verinoda-none": {
+    "wins": 1,
+    "ties": 18,
+    "losses": 2,
+    "sum_diff": -1,
+    "n": 21
+   },
+   "graphify-none": {
+    "wins": 3,
+    "ties": 13,
+    "losses": 5,
+    "sum_diff": -6,
+    "n": 21
+   },
+   "verinoda-graphify": {
+    "wins": 3,
+    "ties": 16,
+    "losses": 2,
+    "sum_diff": 5,
+    "n": 21
+   }
+  }
+ },
+ "by_set": {
+  "forge_mod": {
+   "arms": {
+    "none": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 67,
+     "pinpointed": 60,
+     "facts": 68,
+     "all_facts_questions": 13,
+     "tokens_mean": 556,
+     "tool_calls_mean": 5.6,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "verinoda": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 66,
+     "pinpointed": 59,
+     "facts": 68,
+     "all_facts_questions": 12,
+     "tokens_mean": 571,
+     "tool_calls_mean": 5.1,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "graphify": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 67,
+     "pinpointed": 60,
+     "facts": 68,
+     "all_facts_questions": 13,
+     "tokens_mean": 596,
+     "tool_calls_mean": 5.4,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {
+    "verinoda-none": {
+     "wins": 0,
+     "ties": 13,
+     "losses": 1,
+     "sum_diff": -1,
+     "n": 14
+    },
+    "graphify-none": {
+     "wins": 0,
+     "ties": 14,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 14
+    },
+    "verinoda-graphify": {
+     "wins": 0,
+     "ties": 13,
+     "losses": 1,
+     "sum_diff": -1,
+     "n": 14
+    }
+   }
+  },
+  "glow_mod": {
+   "arms": {
+    "none": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 49,
+     "pinpointed": 47,
+     "facts": 50,
+     "all_facts_questions": 13,
+     "tokens_mean": 502,
+     "tool_calls_mean": 4.7,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "verinoda": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 48,
+     "pinpointed": 46,
+     "facts": 50,
+     "all_facts_questions": 12,
+     "tokens_mean": 522,
+     "tool_calls_mean": 4.8,
+     "index_calls_mean": 0.1,
+     "used_index_tool": 1,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "graphify": {
+     "sessions": 14,
+     "failed": 0,
+     "found": 49,
+     "pinpointed": 48,
+     "facts": 50,
+     "all_facts_questions": 13,
+     "tokens_mean": 494,
+     "tool_calls_mean": 5.6,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {
+    "verinoda-none": {
+     "wins": 0,
+     "ties": 13,
+     "losses": 1,
+     "sum_diff": -1,
+     "n": 14
+    },
+    "graphify-none": {
+     "wins": 0,
+     "ties": 14,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 14
+    },
+    "verinoda-graphify": {
+     "wins": 0,
+     "ties": 13,
+     "losses": 1,
+     "sum_diff": -1,
+     "n": 14
+    }
+   }
+  },
+  "graphify_core": {
+   "arms": {
+    "none": {
+     "sessions": 9,
+     "failed": 0,
+     "found": 36,
+     "pinpointed": 32,
+     "facts": 37,
+     "all_facts_questions": 8,
+     "tokens_mean": 691,
+     "tool_calls_mean": 6.4,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "verinoda": {
+     "sessions": 9,
+     "failed": 0,
+     "found": 36,
+     "pinpointed": 30,
+     "facts": 37,
+     "all_facts_questions": 8,
+     "tokens_mean": 714,
+     "tool_calls_mean": 6.3,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "graphify": {
+     "sessions": 9,
+     "failed": 0,
+     "found": 31,
+     "pinpointed": 26,
+     "facts": 37,
+     "all_facts_questions": 7,
+     "tokens_mean": 680,
+     "tool_calls_mean": 5.6,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {
+    "verinoda-none": {
+     "wins": 0,
+     "ties": 9,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 9
+    },
+    "graphify-none": {
+     "wins": 1,
+     "ties": 6,
+     "losses": 2,
+     "sum_diff": -5,
+     "n": 9
+    },
+    "verinoda-graphify": {
+     "wins": 2,
+     "ties": 6,
+     "losses": 1,
+     "sum_diff": 5,
+     "n": 9
+    }
+   }
+  },
+  "heldout_repoatlas": {
+   "arms": {
+    "none": {
+     "sessions": 8,
+     "failed": 0,
+     "found": 33,
+     "pinpointed": 33,
+     "facts": 33,
+     "all_facts_questions": 8,
+     "tokens_mean": 875,
+     "tool_calls_mean": 6.5,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "verinoda": {
+     "sessions": 8,
+     "failed": 0,
+     "found": 31,
+     "pinpointed": 30,
+     "facts": 33,
+     "all_facts_questions": 6,
+     "tokens_mean": 818,
+     "tool_calls_mean": 9.1,
+     "index_calls_mean": 0.1,
+     "used_index_tool": 1,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "graphify": {
+     "sessions": 8,
+     "failed": 0,
+     "found": 33,
+     "pinpointed": 32,
+     "facts": 33,
+     "all_facts_questions": 8,
+     "tokens_mean": 830,
+     "tool_calls_mean": 7.0,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {
+    "verinoda-none": {
+     "wins": 0,
+     "ties": 6,
+     "losses": 2,
+     "sum_diff": -2,
+     "n": 8
+    },
+    "graphify-none": {
+     "wins": 0,
+     "ties": 8,
+     "losses": 0,
+     "sum_diff": 0,
+     "n": 8
+    },
+    "verinoda-graphify": {
+     "wins": 0,
+     "ties": 6,
+     "losses": 2,
+     "sum_diff": -2,
+     "n": 8
+    }
+   }
+  },
+  "verinoda_user_tr": {
+   "arms": {
+    "none": {
+     "sessions": 12,
+     "failed": 0,
+     "found": 28,
+     "pinpointed": 23,
+     "facts": 30,
+     "all_facts_questions": 10,
+     "tokens_mean": 851,
+     "tool_calls_mean": 6.9,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "verinoda": {
+     "sessions": 12,
+     "failed": 0,
+     "found": 27,
+     "pinpointed": 22,
+     "facts": 30,
+     "all_facts_questions": 9,
+     "tokens_mean": 806,
+     "tool_calls_mean": 7.4,
+     "index_calls_mean": 0.3,
+     "used_index_tool": 4,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    },
+    "graphify": {
+     "sessions": 12,
+     "failed": 0,
+     "found": 27,
+     "pinpointed": 24,
+     "facts": 30,
+     "all_facts_questions": 9,
+     "tokens_mean": 776,
+     "tool_calls_mean": 8.3,
+     "index_calls_mean": 0.0,
+     "used_index_tool": 0,
+     "reported_outside": 0,
+     "reported_forbidden": 0
+    }
+   },
+   "pairs": {
+    "verinoda-none": {
+     "wins": 1,
+     "ties": 9,
+     "losses": 2,
+     "sum_diff": -1,
+     "n": 12
+    },
+    "graphify-none": {
+     "wins": 2,
+     "ties": 7,
+     "losses": 3,
+     "sum_diff": -1,
+     "n": 12
+    },
+    "verinoda-graphify": {
+     "wins": 1,
+     "ties": 10,
+     "losses": 1,
+     "sum_diff": 0,
+     "n": 12
+    }
+   }
+  }
+ },
+ "per_question": {
+  "forge_mod/q01": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q01.network",
+     "q01.hammer"
+    ],
+    "tokens": 393,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q01.network",
+     "q01.hammer"
+    ],
+    "tokens": 389,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q01.network",
+     "q01.hammer"
+    ],
+    "tokens": 573,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q02": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "q02.fuel",
+     "q02.source",
+     "q02.stoke",
+     "q02.overload",
+     "q02.test"
+    ],
+    "tokens": 481,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "q02.fuel",
+     "q02.source",
+     "q02.stoke",
+     "q02.overload",
+     "q02.test"
+    ],
+    "tokens": 361,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 3,
+    "total": 5,
+    "found_ids": [
+     "q02.fuel",
+     "q02.source",
+     "q02.stoke",
+     "q02.overload",
+     "q02.test"
+    ],
+    "tokens": 398,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q03": {
+   "none": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 3,
+    "total": 6,
+    "found_ids": [
+     "q03.type",
+     "q03.serializer",
+     "q03.codec",
+     "q03.lookup",
+     "q03.ingots",
+     "q03.hammer"
+    ],
+    "tokens": 819,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 2,
+    "total": 6,
+    "found_ids": [
+     "q03.type",
+     "q03.serializer",
+     "q03.codec",
+     "q03.lookup",
+     "q03.ingots",
+     "q03.hammer"
+    ],
+    "tokens": 899,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 1,
+    "total": 6,
+    "found_ids": [
+     "q03.type",
+     "q03.serializer",
+     "q03.codec",
+     "q03.lookup",
+     "q03.ingots",
+     "q03.hammer"
+    ],
+    "tokens": 803,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q04": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q04.file",
+     "q04.key",
+     "q04.heat",
+     "q04.slot",
+     "q04.tick"
+    ],
+    "tokens": 458,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q04.file",
+     "q04.key",
+     "q04.heat",
+     "q04.slot",
+     "q04.tick"
+    ],
+    "tokens": 456,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q04.file",
+     "q04.key",
+     "q04.heat",
+     "q04.slot",
+     "q04.tick"
+    ],
+    "tokens": 470,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q05": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q05.modifier",
+     "q05.biomes",
+     "q05.placed",
+     "q05.configured"
+    ],
+    "tokens": 467,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q05.modifier",
+     "q05.biomes",
+     "q05.placed",
+     "q05.configured"
+    ],
+    "tokens": 594,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q05.modifier",
+     "q05.biomes",
+     "q05.placed",
+     "q05.configured"
+    ],
+    "tokens": 681,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q06": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q06.declare",
+     "q06.toml",
+     "q06.heatmath",
+     "q06.fuel",
+     "q06.sync"
+    ],
+    "tokens": 573,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q06.declare",
+     "q06.toml",
+     "q06.heatmath",
+     "q06.fuel",
+     "q06.sync"
+    ],
+    "tokens": 649,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "q06.declare",
+     "q06.toml",
+     "q06.heatmath",
+     "q06.fuel",
+     "q06.sync"
+    ],
+    "tokens": 653,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q07": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "q07.declare",
+     "q07.toml",
+     "q07.check",
+     "q07.registered"
+    ],
+    "tokens": 360,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "q07.declare",
+     "q07.toml",
+     "q07.check",
+     "q07.registered"
+    ],
+    "tokens": 396,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q07.declare",
+     "q07.toml",
+     "q07.check",
+     "q07.registered"
+    ],
+    "tokens": 366,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q08": {
+   "none": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 2,
+    "total": 6,
+    "found_ids": [
+     "q08.unlit",
+     "q08.lit",
+     "q08.model",
+     "q08.lit_model",
+     "q08.item",
+     "q08.lit_state"
+    ],
+    "tokens": 539,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 3,
+    "total": 6,
+    "found_ids": [
+     "q08.unlit",
+     "q08.lit",
+     "q08.model",
+     "q08.lit_model",
+     "q08.item",
+     "q08.lit_state"
+    ],
+    "tokens": 519,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 2,
+    "total": 6,
+    "found_ids": [
+     "q08.unlit",
+     "q08.lit",
+     "q08.model",
+     "q08.lit_model",
+     "q08.item",
+     "q08.lit_state"
+    ],
+    "tokens": 579,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q09": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 3,
+    "total": 5,
+    "found_ids": [
+     "q09.tr",
+     "q09.en",
+     "q09.block",
+     "q09.item",
+     "q09.container"
+    ],
+    "tokens": 469,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 5,
+    "total": 5,
+    "found_ids": [
+     "q09.tr",
+     "q09.en",
+     "q09.block",
+     "q09.item",
+     "q09.container"
+    ],
+    "tokens": 413,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 5,
+    "total": 5,
+    "found_ids": [
+     "q09.tr",
+     "q09.en",
+     "q09.block",
+     "q09.item",
+     "q09.container"
+    ],
+    "tokens": 435,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q10": {
+   "none": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 3,
+    "total": 6,
+    "found_ids": [
+     "q10.button",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler",
+     "q10.stoke"
+    ],
+    "tokens": 730,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 3,
+    "total": 6,
+    "found_ids": [
+     "q10.button",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler",
+     "q10.stoke"
+    ],
+    "tokens": 800,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 6,
+    "pinpointed": 5,
+    "shown": 3,
+    "total": 6,
+    "found_ids": [
+     "q10.button",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler",
+     "q10.stoke"
+    ],
+    "tokens": 754,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q11": {
+   "none": {
+    "found": 6,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 6,
+    "found_ids": [
+     "q11.ticker",
+     "q11.fuel",
+     "q11.source",
+     "q11.forge",
+     "q11.cool",
+     "q11.lit"
+    ],
+    "tokens": 760,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 6,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 6,
+    "found_ids": [
+     "q11.ticker",
+     "q11.fuel",
+     "q11.source",
+     "q11.forge",
+     "q11.cool",
+     "q11.lit"
+    ],
+    "tokens": 683,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 6,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 6,
+    "found_ids": [
+     "q11.ticker",
+     "q11.fuel",
+     "q11.source",
+     "q11.forge",
+     "q11.cool",
+     "q11.lit"
+    ],
+    "tokens": 694,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q12": {
+   "none": {
+    "found": 6,
+    "pinpointed": 4,
+    "shown": 4,
+    "total": 6,
+    "found_ids": [
+     "q12.command",
+     "q12.run",
+     "q12.id",
+     "q12.fill",
+     "q12.nbt",
+     "q12.messages"
+    ],
+    "tokens": 841,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 3,
+    "shown": 4,
+    "total": 6,
+    "found_ids": [
+     "q12.command",
+     "q12.id",
+     "q12.fill",
+     "q12.nbt",
+     "q12.messages"
+    ],
+    "tokens": 841,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 6,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 6,
+    "found_ids": [
+     "q12.command",
+     "q12.run",
+     "q12.id",
+     "q12.fill",
+     "q12.nbt",
+     "q12.messages"
+    ],
+    "tokens": 929,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q13": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q13.advancement",
+     "q13.trigger",
+     "q13.tag"
+    ],
+    "tokens": 368,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q13.advancement",
+     "q13.trigger",
+     "q13.tag"
+    ],
+    "tokens": 448,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q13.advancement",
+     "q13.trigger",
+     "q13.tag"
+    ],
+    "tokens": 434,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "forge_mod/q14": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q14.be",
+     "q14.menu",
+     "q14.serializer",
+     "q14.bus"
+    ],
+    "tokens": 527,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q14.be",
+     "q14.menu",
+     "q14.serializer",
+     "q14.bus"
+    ],
+    "tokens": 547,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q14.be",
+     "q14.menu",
+     "q14.serializer",
+     "q14.bus"
+    ],
+    "tokens": 580,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q01": {
+   "none": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 2,
+    "total": 6,
+    "found_ids": [
+     "q01.command",
+     "q01.lantern",
+     "q01.ritual",
+     "q01.chunk",
+     "q01.network",
+     "q01.gametest"
+    ],
+    "tokens": 645,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 0,
+    "total": 6,
+    "found_ids": [
+     "q01.command",
+     "q01.lantern",
+     "q01.ritual",
+     "q01.chunk",
+     "q01.network",
+     "q01.gametest"
+    ],
+    "tokens": 767,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 0,
+    "total": 6,
+    "found_ids": [
+     "q01.command",
+     "q01.lantern",
+     "q01.ritual",
+     "q01.chunk",
+     "q01.network",
+     "q01.gametest"
+    ],
+    "tokens": 771,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q02": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q02.init",
+     "q02.reload"
+    ],
+    "tokens": 355,
+    "failed": false,
+    "tool_calls": 2,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q02.init",
+     "q02.reload"
+    ],
+    "tokens": 328,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "q02.init",
+     "q02.reload"
+    ],
+    "tokens": 302,
+    "failed": false,
+    "tool_calls": 2,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q03": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q03.ondeath",
+     "q03.namespace",
+     "q03.heart",
+     "q03.loot"
+    ],
+    "tokens": 657,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q03.ondeath",
+     "q03.namespace",
+     "q03.heart",
+     "q03.loot"
+    ],
+    "tokens": 646,
+    "failed": false,
+    "tool_calls": 14,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q03.ondeath",
+     "q03.namespace",
+     "q03.heart",
+     "q03.loot"
+    ],
+    "tokens": 675,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q04": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q04.baslat",
+     "q04.helper",
+     "q04.execute",
+     "q04.command"
+    ],
+    "tokens": 487,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q04.baslat",
+     "q04.helper",
+     "q04.execute",
+     "q04.command"
+    ],
+    "tokens": 508,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 1,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q04.baslat",
+     "q04.helper",
+     "q04.execute",
+     "q04.command"
+    ],
+    "tokens": 524,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q05": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 3,
+    "total": 3,
+    "found_ids": [
+     "q05.start",
+     "q05.self",
+     "q05.java"
+    ],
+    "tokens": 523,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 3,
+    "total": 3,
+    "found_ids": [
+     "q05.start",
+     "q05.self",
+     "q05.java"
+    ],
+    "tokens": 488,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 3,
+    "total": 3,
+    "found_ids": [
+     "q05.start",
+     "q05.self",
+     "q05.java"
+    ],
+    "tokens": 512,
+    "failed": false,
+    "tool_calls": 10,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q06": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q06.load",
+     "q06.copy",
+     "q06.default_file",
+     "q06.fallback",
+     "q06.caller"
+    ],
+    "tokens": 822,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q06.load",
+     "q06.copy",
+     "q06.default_file",
+     "q06.fallback",
+     "q06.caller"
+    ],
+    "tokens": 673,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q06.load",
+     "q06.copy",
+     "q06.default_file",
+     "q06.fallback",
+     "q06.caller"
+    ],
+    "tokens": 588,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q07": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q07.yml",
+     "q07.use"
+    ],
+    "tokens": 547,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q07.yml",
+     "q07.use"
+    ],
+    "tokens": 598,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q07.yml",
+     "q07.use"
+    ],
+    "tokens": 512,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q08": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q08.file",
+     "q08.keys",
+     "q08.pattern"
+    ],
+    "tokens": 292,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q08.file",
+     "q08.keys",
+     "q08.pattern"
+    ],
+    "tokens": 261,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q08.file",
+     "q08.keys",
+     "q08.pattern"
+    ],
+    "tokens": 280,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q09": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q09.model",
+     "q09.en",
+     "q09.tr",
+     "q09.item"
+    ],
+    "tokens": 224,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "q09.model",
+     "q09.en",
+     "q09.tr",
+     "q09.item"
+    ],
+    "tokens": 212,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "q09.model",
+     "q09.en",
+     "q09.tr",
+     "q09.item"
+    ],
+    "tokens": 190,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q10": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 3,
+    "total": 5,
+    "found_ids": [
+     "q10.key",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler"
+    ],
+    "tokens": 656,
+    "failed": false,
+    "tool_calls": 10,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q10.key",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler"
+    ],
+    "tokens": 841,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 1,
+    "total": 5,
+    "found_ids": [
+     "q10.key",
+     "q10.send",
+     "q10.payload",
+     "q10.register",
+     "q10.handler"
+    ],
+    "tokens": 713,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q11": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q11.hook",
+     "q11.restore",
+     "q11.clear"
+    ],
+    "tokens": 427,
+    "failed": false,
+    "tool_calls": 2,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q11.hook",
+     "q11.restore",
+     "q11.clear"
+    ],
+    "tokens": 557,
+    "failed": false,
+    "tool_calls": 2,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q11.hook",
+     "q11.restore",
+     "q11.clear"
+    ],
+    "tokens": 464,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q12": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q12.helper",
+     "q12.fields",
+     "q12.init"
+    ],
+    "tokens": 322,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q12.helper",
+     "q12.fields",
+     "q12.init"
+    ],
+    "tokens": 365,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q12.helper",
+     "q12.fields",
+     "q12.init"
+    ],
+    "tokens": 358,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q13": {
+   "none": {
+    "found": 3,
+    "pinpointed": 1,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q13.check",
+     "q13.spawn",
+     "q13.cooldown"
+    ],
+    "tokens": 505,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "q13.check",
+     "q13.spawn",
+     "q13.cooldown"
+    ],
+    "tokens": 577,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "q13.check",
+     "q13.spawn",
+     "q13.cooldown"
+    ],
+    "tokens": 573,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "glow_mod/q14": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 2,
+    "total": 2,
+    "found_ids": [
+     "q14.spawn",
+     "q14.listener"
+    ],
+    "tokens": 566,
+    "failed": false,
+    "tool_calls": 2,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 1,
+    "pinpointed": 0,
+    "shown": 2,
+    "total": 2,
+    "found_ids": [
+     "q14.listener"
+    ],
+    "tokens": 490,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 2,
+    "total": 2,
+    "found_ids": [
+     "q14.spawn",
+     "q14.listener"
+    ],
+    "tokens": 453,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g01": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "g01.func",
+     "g01.ratio",
+     "g01.cut",
+     "g01.caller"
+    ],
+    "tokens": 609,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "g01.func",
+     "g01.ratio",
+     "g01.cut",
+     "g01.caller"
+    ],
+    "tokens": 657,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "g01.func",
+     "g01.ratio",
+     "g01.cut",
+     "g01.caller"
+    ],
+    "tokens": 618,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g02": {
+   "none": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 5,
+    "total": 6,
+    "found_ids": [
+     "g02.entry",
+     "g02.terms",
+     "g02.score",
+     "g02.seeds",
+     "g02.traverse",
+     "g02.render"
+    ],
+    "tokens": 713,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 5,
+    "total": 6,
+    "found_ids": [
+     "g02.entry",
+     "g02.terms",
+     "g02.score",
+     "g02.seeds",
+     "g02.traverse",
+     "g02.render"
+    ],
+    "tokens": 787,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 5,
+    "total": 6,
+    "found_ids": [
+     "g02.terms",
+     "g02.score",
+     "g02.seeds",
+     "g02.traverse",
+     "g02.render"
+    ],
+    "tokens": 628,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g03": {
+   "none": {
+    "found": 4,
+    "pinpointed": 2,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "g03.disable",
+     "g03.path",
+     "g03.enable",
+     "g03.responses"
+    ],
+    "tokens": 306,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "g03.disable",
+     "g03.path",
+     "g03.enable",
+     "g03.responses"
+    ],
+    "tokens": 290,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "g03.disable",
+     "g03.path",
+     "g03.enable",
+     "g03.responses"
+    ],
+    "tokens": 419,
+    "failed": false,
+    "tool_calls": 2,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g04": {
+   "none": {
+    "found": 3,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "g04.dir",
+     "g04.load",
+     "g04.save"
+    ],
+    "tokens": 779,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "g04.dir",
+     "g04.load",
+     "g04.save"
+    ],
+    "tokens": 707,
+    "failed": false,
+    "tool_calls": 10,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "g04.dir",
+     "g04.key",
+     "g04.load",
+     "g04.save"
+    ],
+    "tokens": 772,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g05": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "g05.env",
+     "g05.default",
+     "g05.check"
+    ],
+    "tokens": 275,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "g05.env",
+     "g05.default",
+     "g05.check"
+    ],
+    "tokens": 400,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 2,
+    "total": 3,
+    "found_ids": [
+     "g05.env",
+     "g05.default",
+     "g05.check"
+    ],
+    "tokens": 265,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g06": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "g06.reason",
+     "g06.fallback",
+     "g06.list"
+    ],
+    "tokens": 733,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 2,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "g06.reason",
+     "g06.fallback",
+     "g06.list"
+    ],
+    "tokens": 704,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 2,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "g06.reason",
+     "g06.fallback",
+     "g06.list"
+    ],
+    "tokens": 670,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g07": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "g07.query",
+     "g07.bench",
+     "g07.cli",
+     "g07.mcp"
+    ],
+    "tokens": 755,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 0,
+    "total": 4,
+    "found_ids": [
+     "g07.query",
+     "g07.bench",
+     "g07.cli",
+     "g07.mcp"
+    ],
+    "tokens": 847,
+    "failed": false,
+    "tool_calls": 11,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "g07.query",
+     "g07.bench",
+     "g07.cli",
+     "g07.mcp"
+    ],
+    "tokens": 725,
+    "failed": false,
+    "tool_calls": 11,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g08": {
+   "none": {
+    "found": 6,
+    "pinpointed": 6,
+    "shown": 2,
+    "total": 6,
+    "found_ids": [
+     "g08.entry",
+     "g08.detect",
+     "g08.extract",
+     "g08.build",
+     "g08.cluster",
+     "g08.write"
+    ],
+    "tokens": 1168,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 6,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 6,
+    "found_ids": [
+     "g08.entry",
+     "g08.detect",
+     "g08.extract",
+     "g08.build",
+     "g08.cluster",
+     "g08.write"
+    ],
+    "tokens": 1067,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 1,
+    "pinpointed": 0,
+    "shown": 1,
+    "total": 6,
+    "found_ids": [
+     "g08.entry"
+    ],
+    "tokens": 1170,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "graphify_core/g09": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "g09.default",
+     "g09.env",
+     "g09.over"
+    ],
+    "tokens": 885,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "g09.default",
+     "g09.env",
+     "g09.over"
+    ],
+    "tokens": 969,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "g09.default",
+     "g09.env",
+     "g09.over"
+    ],
+    "tokens": 855,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h01": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "h01.kill",
+     "h01.call",
+     "h01.container",
+     "h01.drain"
+    ],
+    "tokens": 589,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "h01.kill",
+     "h01.call",
+     "h01.container",
+     "h01.drain"
+    ],
+    "tokens": 556,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 3,
+    "total": 4,
+    "found_ids": [
+     "h01.kill",
+     "h01.call",
+     "h01.container",
+     "h01.drain"
+    ],
+    "tokens": 532,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h02": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "h02.allow",
+     "h02.scrub",
+     "h02.set",
+     "h02.path"
+    ],
+    "tokens": 714,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "h02.allow",
+     "h02.scrub",
+     "h02.set",
+     "h02.path"
+    ],
+    "tokens": 680,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "h02.allow",
+     "h02.scrub",
+     "h02.set",
+     "h02.path"
+    ],
+    "tokens": 760,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h03": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 5,
+    "total": 5,
+    "found_ids": [
+     "h03.cli",
+     "h03.build",
+     "h03.rebuild",
+     "h03.snapshot",
+     "h03.stale"
+    ],
+    "tokens": 723,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "h03.cli",
+     "h03.build",
+     "h03.snapshot",
+     "h03.stale"
+    ],
+    "tokens": 552,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 5,
+    "total": 5,
+    "found_ids": [
+     "h03.cli",
+     "h03.build",
+     "h03.rebuild",
+     "h03.snapshot",
+     "h03.stale"
+    ],
+    "tokens": 675,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h04": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "h04.source",
+     "h04.check",
+     "h04.url",
+     "h04.feedback",
+     "h04.research"
+    ],
+    "tokens": 971,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "h04.check",
+     "h04.url",
+     "h04.feedback",
+     "h04.research"
+    ],
+    "tokens": 1235,
+    "failed": false,
+    "tool_calls": 22,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 4,
+    "shown": 4,
+    "total": 5,
+    "found_ids": [
+     "h04.source",
+     "h04.check",
+     "h04.url",
+     "h04.feedback",
+     "h04.research"
+    ],
+    "tokens": 1037,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h05": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 2,
+    "total": 4,
+    "found_ids": [
+     "h05.inv",
+     "h05.changed",
+     "h05.files",
+     "h05.caller"
+    ],
+    "tokens": 1214,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "h05.inv",
+     "h05.changed",
+     "h05.files",
+     "h05.caller"
+    ],
+    "tokens": 986,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 1,
+    "total": 4,
+    "found_ids": [
+     "h05.inv",
+     "h05.changed",
+     "h05.files",
+     "h05.caller"
+    ],
+    "tokens": 1095,
+    "failed": false,
+    "tool_calls": 10,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h06": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 2,
+    "total": 2,
+    "found_ids": [
+     "h06.trigger",
+     "h06.rule"
+    ],
+    "tokens": 745,
+    "failed": false,
+    "tool_calls": 10,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 2,
+    "total": 2,
+    "found_ids": [
+     "h06.trigger",
+     "h06.rule"
+    ],
+    "tokens": 721,
+    "failed": false,
+    "tool_calls": 10,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 1,
+    "total": 2,
+    "found_ids": [
+     "h06.trigger",
+     "h06.rule"
+    ],
+    "tokens": 535,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h07": {
+   "none": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 0,
+    "total": 4,
+    "found_ids": [
+     "h07.level",
+     "h07.classify",
+     "h07.runtime",
+     "h07.refuse"
+    ],
+    "tokens": 710,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 0,
+    "total": 4,
+    "found_ids": [
+     "h07.level",
+     "h07.classify",
+     "h07.runtime",
+     "h07.refuse"
+    ],
+    "tokens": 775,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 4,
+    "pinpointed": 4,
+    "shown": 0,
+    "total": 4,
+    "found_ids": [
+     "h07.level",
+     "h07.classify",
+     "h07.runtime",
+     "h07.refuse"
+    ],
+    "tokens": 769,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "heldout_repoatlas/h08": {
+   "none": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "h08.modify",
+     "h08.commit",
+     "h08.delete",
+     "h08.watch",
+     "h08.cli"
+    ],
+    "tokens": 1336,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "h08.modify",
+     "h08.commit",
+     "h08.delete",
+     "h08.watch",
+     "h08.cli"
+    ],
+    "tokens": 1043,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 1,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 5,
+    "pinpointed": 5,
+    "shown": 0,
+    "total": 5,
+    "found_ids": [
+     "h08.modify",
+     "h08.commit",
+     "h08.delete",
+     "h08.watch",
+     "h08.cli"
+    ],
+    "tokens": 1241,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u01": {
+   "none": {
+    "found": 3,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u01.detect",
+     "u01.share",
+     "u01.names"
+    ],
+    "tokens": 1301,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u01.detect",
+     "u01.names"
+    ],
+    "tokens": 998,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 1,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u01.share",
+     "u01.names"
+    ],
+    "tokens": 836,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u02": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u02.graph",
+     "u02.export"
+    ],
+    "tokens": 570,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u02.graph",
+     "u02.export",
+     "u02.write"
+    ],
+    "tokens": 644,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u02.graph",
+     "u02.export",
+     "u02.write"
+    ],
+    "tokens": 557,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u03": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u03.version",
+     "u03.route",
+     "u03.poll"
+    ],
+    "tokens": 883,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u03.version",
+     "u03.route",
+     "u03.poll"
+    ],
+    "tokens": 832,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 1,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u03.version",
+     "u03.route",
+     "u03.poll"
+    ],
+    "tokens": 877,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u04": {
+   "none": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u04.dir",
+     "u04.save"
+    ],
+    "tokens": 536,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u04.dir",
+     "u04.save"
+    ],
+    "tokens": 649,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 1,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 1,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u04.dir"
+    ],
+    "tokens": 627,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u05": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u05.rels",
+     "u05.cap"
+    ],
+    "tokens": 836,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u05.rels",
+     "u05.cap"
+    ],
+    "tokens": 632,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "u05.rels",
+     "u05.impact",
+     "u05.cap"
+    ],
+    "tokens": 795,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u06": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u06.scrubber",
+     "u06.scrub"
+    ],
+    "tokens": 803,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u06.scrubber",
+     "u06.scrub"
+    ],
+    "tokens": 778,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u06.scrubber",
+     "u06.scrub"
+    ],
+    "tokens": 741,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u07": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u07.switch",
+     "u07.var"
+    ],
+    "tokens": 564,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u07.switch",
+     "u07.var"
+    ],
+    "tokens": 645,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u07.switch",
+     "u07.var"
+    ],
+    "tokens": 566,
+    "failed": false,
+    "tool_calls": 8,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u08": {
+   "none": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u08.judge",
+     "u08.met"
+    ],
+    "tokens": 884,
+    "failed": false,
+    "tool_calls": 9,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u08.judge",
+     "u08.met"
+    ],
+    "tokens": 807,
+    "failed": false,
+    "tool_calls": 12,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u08.judge",
+     "u08.met"
+    ],
+    "tokens": 918,
+    "failed": false,
+    "tool_calls": 13,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u09": {
+   "none": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u09.update",
+     "u09.full",
+     "u09.affected"
+    ],
+    "tokens": 1515,
+    "failed": false,
+    "tool_calls": 20,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u09.update",
+     "u09.full",
+     "u09.affected"
+    ],
+    "tokens": 1547,
+    "failed": false,
+    "tool_calls": 19,
+    "index_tool_calls": 1,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 3,
+    "pinpointed": 3,
+    "shown": 0,
+    "total": 3,
+    "found_ids": [
+     "u09.update",
+     "u09.full",
+     "u09.affected"
+    ],
+    "tokens": 1108,
+    "failed": false,
+    "tool_calls": 22,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u10": {
+   "none": {
+    "found": 3,
+    "pinpointed": 2,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "u10.csp",
+     "u10.reject",
+     "u10.token"
+    ],
+    "tokens": 970,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "u10.csp",
+     "u10.token"
+    ],
+    "tokens": 760,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 1,
+    "total": 3,
+    "found_ids": [
+     "u10.csp",
+     "u10.token"
+    ],
+    "tokens": 830,
+    "failed": false,
+    "tool_calls": 4,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u11": {
+   "none": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u11.strip",
+     "u11.file"
+    ],
+    "tokens": 663,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u11.strip",
+     "u11.file"
+    ],
+    "tokens": 688,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 1,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u11.strip",
+     "u11.file"
+    ],
+    "tokens": 710,
+    "failed": false,
+    "tool_calls": 3,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  },
+  "verinoda_user_tr/u12": {
+   "none": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u12.sig",
+     "u12.burst"
+    ],
+    "tokens": 686,
+    "failed": false,
+    "tool_calls": 5,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "verinoda": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u12.sig",
+     "u12.burst"
+    ],
+    "tokens": 688,
+    "failed": false,
+    "tool_calls": 6,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   },
+   "graphify": {
+    "found": 2,
+    "pinpointed": 2,
+    "shown": 0,
+    "total": 2,
+    "found_ids": [
+     "u12.sig",
+     "u12.burst"
+    ],
+    "tokens": 753,
+    "failed": false,
+    "tool_calls": 7,
+    "index_tool_calls": 0,
+    "stayed_inside": true,
+    "used_forbidden_tool": false
+   }
+  }
+ }
+}

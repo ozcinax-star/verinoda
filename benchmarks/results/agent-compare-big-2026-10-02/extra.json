@@ -1,0 +1,574 @@
+{
+ "noise_floor": {
+  "none": {
+   "n": 40,
+   "diff": -1.1667,
+   "ci95": [
+    -3.6667,
+    0.6667
+   ],
+   "wins": 1,
+   "ties": 37,
+   "losses": 2,
+   "input": {
+    "ratio": 1.038,
+    "ci95": [
+     0.916,
+     1.181
+    ]
+   },
+   "output": {
+    "ratio": 0.996,
+    "ci95": [
+     0.867,
+     1.145
+    ]
+   },
+   "turns": {
+    "ratio": 0.991,
+    "ci95": [
+     0.891,
+     1.11
+    ]
+   },
+   "seconds": {
+    "ratio": 0.573,
+    "ci95": [
+     0.372,
+     0.81
+    ]
+   },
+   "cost": {
+    "ratio": 1.591,
+    "ci95": [
+     1.422,
+     1.781
+    ]
+   }
+  },
+  "graphify": {
+   "n": 40,
+   "diff": 0.1667,
+   "ci95": [
+    -1.0,
+    1.5
+   ],
+   "wins": 1,
+   "ties": 38,
+   "losses": 1,
+   "input": {
+    "ratio": 0.955,
+    "ci95": [
+     0.867,
+     1.041
+    ]
+   },
+   "output": {
+    "ratio": 0.95,
+    "ci95": [
+     0.863,
+     1.043
+    ]
+   },
+   "turns": {
+    "ratio": 1.015,
+    "ci95": [
+     0.945,
+     1.09
+    ]
+   },
+   "seconds": {
+    "ratio": 0.447,
+    "ci95": [
+     0.329,
+     0.608
+    ]
+   },
+   "cost": {
+    "ratio": 1.525,
+    "ci95": [
+     1.387,
+     1.675
+    ]
+   }
+  },
+  "verinoda_mod": {
+   "n": 40,
+   "diff": 0.5,
+   "ci95": [
+    0.0,
+    1.5
+   ],
+   "wins": 1,
+   "ties": 39,
+   "losses": 0,
+   "input": {
+    "ratio": 1.001,
+    "ci95": [
+     0.931,
+     1.071
+    ]
+   },
+   "output": {
+    "ratio": 1.008,
+    "ci95": [
+     0.92,
+     1.101
+    ]
+   },
+   "turns": {
+    "ratio": 1.05,
+    "ci95": [
+     0.985,
+     1.118
+    ]
+   },
+   "seconds": {
+    "ratio": 0.412,
+    "ci95": [
+     0.354,
+     0.483
+    ]
+   },
+   "cost": {
+    "ratio": 1.645,
+    "ci95": [
+     1.531,
+     1.782
+    ]
+   }
+  },
+  "verinoda_setup": {
+   "n": 40,
+   "diff": 0.0,
+   "ci95": [
+    0.0,
+    0.0
+   ],
+   "wins": 0,
+   "ties": 40,
+   "losses": 0,
+   "input": {
+    "ratio": 1.009,
+    "ci95": [
+     0.908,
+     1.108
+    ]
+   },
+   "output": {
+    "ratio": 1.022,
+    "ci95": [
+     0.941,
+     1.101
+    ]
+   },
+   "turns": {
+    "ratio": 1.033,
+    "ci95": [
+     0.963,
+     1.112
+    ]
+   },
+   "seconds": {
+    "ratio": 0.397,
+    "ci95": [
+     0.341,
+     0.466
+    ]
+   },
+   "cost": {
+    "ratio": 1.63,
+    "ci95": [
+     1.468,
+     1.81
+    ]
+   }
+  }
+ },
+ "run1": {
+  "summary": {
+   "none": {
+    "tasks": 40,
+    "recall": 35.83,
+    "solved": 32,
+    "hit1": 35,
+    "precision": 0.657,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 210,
+    "input_tokens": 3534557,
+    "output_tokens": 37057,
+    "cost_usd": 2.43,
+    "seconds": 970,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "graphify": {
+    "tasks": 40,
+    "recall": 37.0,
+    "solved": 34,
+    "hit1": 36,
+    "precision": 0.677,
+    "sessions_using_tool": 2,
+    "tool_calls": 2,
+    "turns": 201,
+    "input_tokens": 3295309,
+    "output_tokens": 34992,
+    "cost_usd": 2.45,
+    "seconds": 790,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_mod": {
+    "tasks": 40,
+    "recall": 37.33,
+    "solved": 34,
+    "hit1": 38,
+    "precision": 0.675,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 212,
+    "input_tokens": 3507425,
+    "output_tokens": 37575,
+    "cost_usd": 2.59,
+    "seconds": 775,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_setup": {
+    "tasks": 40,
+    "recall": 37.83,
+    "solved": 35,
+    "hit1": 37,
+    "precision": 0.7,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 216,
+    "input_tokens": 3582612,
+    "output_tokens": 38237,
+    "cost_usd": 2.57,
+    "seconds": 742,
+    "network_sessions": 0,
+    "unanswered": 0
+   }
+  }
+ },
+ "run2": {
+  "summary": {
+   "none": {
+    "tasks": 40,
+    "recall": 37.0,
+    "solved": 34,
+    "hit1": 36,
+    "precision": 0.68,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 212,
+    "input_tokens": 3403856,
+    "output_tokens": 37222,
+    "cost_usd": 1.53,
+    "seconds": 1693,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "graphify": {
+    "tasks": 40,
+    "recall": 36.83,
+    "solved": 33,
+    "hit1": 37,
+    "precision": 0.683,
+    "sessions_using_tool": 3,
+    "tool_calls": 3,
+    "turns": 198,
+    "input_tokens": 3449280,
+    "output_tokens": 36845,
+    "cost_usd": 1.6,
+    "seconds": 1768,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_mod": {
+    "tasks": 40,
+    "recall": 36.83,
+    "solved": 33,
+    "hit1": 35,
+    "precision": 0.676,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 202,
+    "input_tokens": 3503187,
+    "output_tokens": 37293,
+    "cost_usd": 1.57,
+    "seconds": 1882,
+    "network_sessions": 0,
+    "unanswered": 0
+   },
+   "verinoda_setup": {
+    "tasks": 40,
+    "recall": 37.83,
+    "solved": 35,
+    "hit1": 35,
+    "precision": 0.688,
+    "sessions_using_tool": 0,
+    "tool_calls": 0,
+    "turns": 209,
+    "input_tokens": 3550452,
+    "output_tokens": 37424,
+    "cost_usd": 1.58,
+    "seconds": 1869,
+    "network_sessions": 0,
+    "unanswered": 0
+   }
+  }
+ },
+ "pooled": {
+  "decisions": {
+   "verinoda_mod - none": {
+    "n": 40,
+    "diff": 0.6667,
+    "ci95": [
+     -0.5,
+     2.0
+    ],
+    "wins": 3,
+    "ties": 36,
+    "losses": 1,
+    "input": {
+     "ratio": 1.01,
+     "ci95": [
+      0.945,
+      1.087
+     ]
+    },
+    "output": {
+     "ratio": 1.008,
+     "ci95": [
+      0.955,
+      1.067
+     ]
+    },
+    "turns": {
+     "ratio": 0.981,
+     "ci95": [
+      0.939,
+      1.027
+     ]
+    },
+    "seconds": {
+     "ratio": 0.998,
+     "ci95": [
+      0.767,
+      1.294
+     ]
+    },
+    "cost": {
+     "ratio": 1.054,
+     "ci95": [
+      0.995,
+      1.121
+     ]
+    }
+   },
+   "graphify - none": {
+    "n": 40,
+    "diff": 0.5,
+    "ci95": [
+     0.0,
+     1.5
+    ],
+    "wins": 1,
+    "ties": 39,
+    "losses": 0,
+    "input": {
+     "ratio": 0.972,
+     "ci95": [
+      0.904,
+      1.045
+     ]
+    },
+    "output": {
+     "ratio": 0.967,
+     "ci95": [
+      0.896,
+      1.042
+     ]
+    },
+    "turns": {
+     "ratio": 0.945,
+     "ci95": [
+      0.89,
+      1.007
+     ]
+    },
+    "seconds": {
+     "ratio": 0.961,
+     "ci95": [
+      0.723,
+      1.271
+     ]
+    },
+    "cost": {
+     "ratio": 1.025,
+     "ci95": [
+      0.965,
+      1.088
+     ]
+    }
+   },
+   "verinoda_mod - graphify": {
+    "n": 40,
+    "diff": 0.1667,
+    "ci95": [
+     -0.5833,
+     1.0
+    ],
+    "wins": 2,
+    "ties": 37,
+    "losses": 1,
+    "input": {
+     "ratio": 1.039,
+     "ci95": [
+      0.973,
+      1.11
+     ]
+    },
+    "output": {
+     "ratio": 1.042,
+     "ci95": [
+      0.977,
+      1.111
+     ]
+    },
+    "turns": {
+     "ratio": 1.038,
+     "ci95": [
+      0.983,
+      1.093
+     ]
+    },
+    "seconds": {
+     "ratio": 1.039,
+     "ci95": [
+      0.849,
+      1.269
+     ]
+    },
+    "cost": {
+     "ratio": 1.028,
+     "ci95": [
+      0.974,
+      1.085
+     ]
+    }
+   }
+  },
+  "secondary": {
+   "verinoda_mod - verinoda_setup": {
+    "n": 40,
+    "diff": -0.75,
+    "ci95": [
+     -2.0,
+     0.0
+    ],
+    "wins": 0,
+    "ties": 38,
+    "losses": 2,
+    "input": {
+     "ratio": 0.983,
+     "ci95": [
+      0.911,
+      1.058
+     ]
+    },
+    "output": {
+     "ratio": 0.99,
+     "ci95": [
+      0.915,
+      1.065
+     ]
+    },
+    "turns": {
+     "ratio": 0.974,
+     "ci95": [
+      0.92,
+      1.025
+     ]
+    },
+    "seconds": {
+     "ratio": 1.018,
+     "ci95": [
+      0.905,
+      1.142
+     ]
+    },
+    "cost": {
+     "ratio": 1.003,
+     "ci95": [
+      0.944,
+      1.063
+     ]
+    }
+   }
+  }
+ },
+ "tool_users": {
+  "run1": {
+   "graphify": {
+    "sessions_using_tool": 2,
+    "recall_users": 2.0,
+    "none_on_the_same_tasks": 2.0,
+    "recall_non_users": 35.0,
+    "none_on_the_non_user_tasks": 33.83,
+    "non_users": 38
+   },
+   "verinoda_mod": {
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 37.33,
+    "none_on_the_non_user_tasks": 35.83,
+    "non_users": 40
+   },
+   "verinoda_setup": {
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 37.83,
+    "none_on_the_non_user_tasks": 35.83,
+    "non_users": 40
+   }
+  },
+  "run2": {
+   "graphify": {
+    "sessions_using_tool": 3,
+    "recall_users": 2.5,
+    "none_on_the_same_tasks": 2.5,
+    "recall_non_users": 34.33,
+    "none_on_the_non_user_tasks": 34.5,
+    "non_users": 37
+   },
+   "verinoda_mod": {
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 36.83,
+    "none_on_the_non_user_tasks": 37.0,
+    "non_users": 40
+   },
+   "verinoda_setup": {
+    "sessions_using_tool": 0,
+    "recall_users": 0,
+    "none_on_the_same_tasks": 0,
+    "recall_non_users": 37.83,
+    "none_on_the_non_user_tasks": 37.0,
+    "non_users": 40
+   }
+  }
+ },
+ "pooled_recall": {
+  "none": 36.42,
+  "graphify": 36.92,
+  "verinoda_mod": 37.08,
+  "verinoda_setup": 37.83
+ }
+}

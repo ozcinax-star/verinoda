@@ -1,0 +1,104 @@
+expanded: bağlantıları->baglantilar, etki->impact, etki->effect (+6 more)
+## verinoda/search_index.py:334-338 _connect
+  called by: _open_for_write (verinoda/search_index.py:867)
+334 def _connect(db: Path | str, *, timeout: float = 30.0) -> sqlite3.Connection:
+335     conn = sqlite3.connect(str(db), timeout=timeout)
+336     conn.execute("PRAGMA journal_mode = WAL" if str(db) != ":memory:" else "PRAGMA journal_mode = MEMORY")
+337     conn.execute("PRAGMA synchronous = NORMAL")
+338     return conn
+## verinoda/search_index.py:1011-1015 Handle.connect
+  called by: copies_of (verinoda/search_index.py:1909)?; describe_links (verinoda/search_index.py:1954)?; unindexed_matching (verinoda/search_index.py:1990)?; stale_files (verinoda/search_index.py:2120)?
+1011 def connect(self) -> sqlite3.Connection:
+1012     if self.memory is not None:
+1013         return self.memory
+1014     pinned = getattr(self._pin, "conn", None)
+1015     return pinned if pinned is not None else sqlite3.connect(self.db, timeout=30)
+## verinoda/search_index.py:863-891 _open_for_write
+  doc: Open (creating when needed) and say whether the index must be built from scratch.
+  calls: _connect@867, _meta@868
+  called by: update (verinoda/search_index.py:909)
+  const verinoda/search_index.py:72: SCHEMA_VERSION = 4
+  const verinoda/search_index.py:73: TOKENIZER_VERSION = 2
+  verinoda/search_index.py:863-875
+863 def _open_for_write(db: Path, rebuild: bool) -> tuple[sqlite3.Connection, bool]:
+864     """Open (creating when needed) and say whether the index must be built from scratch."""
+865     fresh = rebuild or not db.exists()
+866     if db.exists() and not fresh:
+867         conn = _connect(db)
+868         m = _meta(conn)
+869         if m.get("schema_version") != SCHEMA_VERSION or m.get("tokenizer_version") != TOKENIZER_VERSION:
+870             fresh = True
+871         else:
+872             conn.executescript(_SCHEMA)
+873             return conn, False
+874         conn.close()
+875     if fresh and db.exists():
+  verinoda/search_index.py:880-891
+880             pass
+881         except OSError:  # held open elsewhere: empty it in place instead
+882             conn = _connect(db)
+883             for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+884                 conn.execute(f"DROP TABLE IF EXISTS {name}")
+885             conn.commit()
+886             conn.close()
+887             break
+888 db.parent.mkdir(parents=True, exist_ok=True)
+889 conn = _connect(db)
+890 conn.executescript(_SCHEMA)
+891 return conn, True
+## verinoda/search_index.py:1022-1034 Handle.pinned
+1022 def pinned(self):
+1023     """This thread's reads share one connection until the block ends (a batch of many small
+1024     lookups, such as an export's notes, would otherwise open and close one per lookup)."""
+1025     if self.memory is not None or getattr(self._pin, "conn", None) is not None:
+1026         yield
+1027         return
+1028     conn = sqlite3.connect(self.db, timeout=30)
+1029     self._pin.conn = conn
+1030     try:
+1031         yield
+1032     finally:
+1033         self._pin.conn = None
+1034         conn.close()
+## verinoda/doctor.py:208-281 def _search_index(repo: Path, gp: Path, checks: list[dict]) -> dict
+  verinoda/doctor.py:221-234
+221     return info
+222 try:
+223     conn = sqlite3.connect(str(db), timeout=5)
+224     try:
+225         meta = {k: json.loads(v) for k, v in conn.execute("SELECT key, value FROM meta")}
+226         rows = conn.execute("SELECT file, sha256, size, mtime_ns FROM files").fetchall()
+227         try:  # schema v3+: repository files left out of the index, by reason
+228             skipped = conn.execute("SELECT reason, COUNT(*) FROM unindexed GROUP BY reason "
+229                                    "ORDER BY COUNT(*) DESC, reason").fetchall()
+230         except sqlite3.Error:
+231             skipped = None
+232     finally:
+233         conn.close()
+234 except (sqlite3.Error, ValueError) as exc:
+## verinoda/search_index.py:2150-2173 dump
+2150 def dump(db: Path) -> dict:
+2151     """Canonical content of an index, independent of uid/pid numbering (tests compare builds)."""
+2152     conn = sqlite3.connect(str(db))
+2153     try:
+2154         units = {r[0]: r[1:] for r in conn.execute(
+2155             "SELECT uid, file, nid, kind, name, qual, a, b, own, sig, doc, consts, name_len, terms, raw FROM units")}
+2156         ukey = {uid: (r[0], r[5], r[6], r[2], r[3]) for uid, r in units.items()}
+2157         passages = {r[0]: (ukey[r[1]], r[2], r[3], r[4]) for r in conn.execute("SELECT pid, uid, a, b, len FROM passages")}
+2158         def key(row):
+2159             return tuple("" if v is None else v for v in row)
+2161         return {
+2162             "units": sorted(units.values(), key=key),
+2163             "passages": sorted(passages.values(), key=lambda r: (key(r[0]), r[1:])),
+2164             "body": sorted(((t, passages[pid], tf) for t, pid, tf in conn.execute("SELECT term, pid, tf FROM body")),
+2165                            key=lambda r: (r[0], key(r[1][0]), r[1][1:], r[2])),
+2166             "names": sorted(((t, ukey[uid], tf) for t, uid, tf in conn.execute("SELECT term, uid, tf FROM names")),
+2167                             key=lambda r: (r[0], key(r[1]), r[2])),
+2168             "paths": sorted(conn.execute("SELECT term, file, tf FROM paths").fetchall()),
+2169             "df": sorted(conn.execute("SELECT term, df FROM df").fetchall()),
+2170             "totals": {k: v for k, v in _meta(conn).items() if k in ("n_units", "n_passages", "sum_plen", "sum_name_len")},
+2171         }
+2172     finally:
+2173         conn.close()
+… 501 more candidates not shown: verinoda/search_index.py:341-345 def _meta(conn: sqlite3.Connection) -> dict; verinoda/search_index.py:1017-1019 def release(self, conn: sqlite3.Connection) -> None; verinoda/search_index.py:1907-1913 copies_of; verinoda/question_plan.py:119-123 
+next: verinoda query "…" --max-chars 12000

@@ -1,0 +1,1892 @@
+{
+ "Graphify-Labs__graphify/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 336790,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 40633,
+   "cache_read_input_tokens": 296145,
+   "input_tokens": 12,
+   "output_tokens": 2778
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 0
+ },
+ "Graphify-Labs__graphify/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 472135,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 8,
+  "tokens": {
+   "cache_creation_input_tokens": 40257,
+   "cache_read_input_tokens": 431862,
+   "input_tokens": 16,
+   "output_tokens": 1675
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q1:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 352386,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 40732,
+   "cache_read_input_tokens": 311642,
+   "input_tokens": 12,
+   "output_tokens": 67
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 273961,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 35575,
+   "cache_read_input_tokens": 238376,
+   "input_tokens": 10,
+   "output_tokens": 1822
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "Graphify-Labs__graphify/q2:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 221092,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 36390,
+   "cache_read_input_tokens": 184694,
+   "input_tokens": 8,
+   "output_tokens": 2090
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 165982,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 37395,
+   "cache_read_input_tokens": 128581,
+   "input_tokens": 6,
+   "output_tokens": 1579
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 289599,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 38649,
+   "cache_read_input_tokens": 250940,
+   "input_tokens": 10,
+   "output_tokens": 3095
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 0
+ },
+ "Graphify-Labs__graphify/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 291729,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 40324,
+   "cache_read_input_tokens": 251395,
+   "input_tokens": 10,
+   "output_tokens": 2113
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 367471,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 42431,
+   "cache_read_input_tokens": 325028,
+   "input_tokens": 12,
+   "output_tokens": 3575
+  },
+  "tool_calls": 10,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 336683,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 37893,
+   "cache_read_input_tokens": 298778,
+   "input_tokens": 12,
+   "output_tokens": 1991
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "Graphify-Labs__graphify/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 403839,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 40349,
+   "cache_read_input_tokens": 363476,
+   "input_tokens": 14,
+   "output_tokens": 1847
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 400239,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 38769,
+   "cache_read_input_tokens": 361456,
+   "input_tokens": 14,
+   "output_tokens": 1855
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 348382,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 38060,
+   "cache_read_input_tokens": 310310,
+   "input_tokens": 12,
+   "output_tokens": 2310
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 0
+ },
+ "Graphify-Labs__graphify/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 704104,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 12,
+  "tokens": {
+   "cache_creation_input_tokens": 37090,
+   "cache_read_input_tokens": 666990,
+   "input_tokens": 24,
+   "output_tokens": 2089
+  },
+  "tool_calls": 12,
+  "verinoda_cli": 1
+ },
+ "Graphify-Labs__graphify/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 408092,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 39408,
+   "cache_read_input_tokens": 368670,
+   "input_tokens": 14,
+   "output_tokens": 1604
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "axios__axios/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 216737,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 33268,
+   "cache_read_input_tokens": 183461,
+   "input_tokens": 8,
+   "output_tokens": 890
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "axios__axios/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 290859,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 39426,
+   "cache_read_input_tokens": 251423,
+   "input_tokens": 10,
+   "output_tokens": 1354
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "axios__axios/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 254662,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 28942,
+   "cache_read_input_tokens": 225710,
+   "input_tokens": 10,
+   "output_tokens": 2555
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "axios__axios/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 225672,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 38568,
+   "cache_read_input_tokens": 187096,
+   "input_tokens": 8,
+   "output_tokens": 2251
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "axios__axios/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 291722,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 65252,
+   "cache_read_input_tokens": 226460,
+   "input_tokens": 10,
+   "output_tokens": 1956
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "axios__axios/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 266379,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 30962,
+   "cache_read_input_tokens": 235407,
+   "input_tokens": 10,
+   "output_tokens": 845
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "expressjs__express/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 149561,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 27296,
+   "cache_read_input_tokens": 122259,
+   "input_tokens": 6,
+   "output_tokens": 1122
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "expressjs__express/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 208631,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 29827,
+   "cache_read_input_tokens": 178796,
+   "input_tokens": 8,
+   "output_tokens": 823
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "expressjs__express/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 265245,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 31324,
+   "cache_read_input_tokens": 233911,
+   "input_tokens": 10,
+   "output_tokens": 2042
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 0
+ },
+ "expressjs__express/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 209379,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 31705,
+   "cache_read_input_tokens": 177666,
+   "input_tokens": 8,
+   "output_tokens": 1351
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "expressjs__express/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 263028,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 30817,
+   "cache_read_input_tokens": 232201,
+   "input_tokens": 10,
+   "output_tokens": 1378
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "expressjs__express/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 152906,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 28982,
+   "cache_read_input_tokens": 123918,
+   "input_tokens": 6,
+   "output_tokens": 935
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 1
+ },
+ "fastapi__full-stack-fastapi-template/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 151917,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 29829,
+   "cache_read_input_tokens": 122082,
+   "input_tokens": 6,
+   "output_tokens": 1471
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 0
+ },
+ "fastapi__full-stack-fastapi-template/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 211722,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 32513,
+   "cache_read_input_tokens": 179201,
+   "input_tokens": 8,
+   "output_tokens": 1538
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "fastapi__full-stack-fastapi-template/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 276182,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 35184,
+   "cache_read_input_tokens": 240988,
+   "input_tokens": 10,
+   "output_tokens": 1627
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 1
+ },
+ "fastapi__full-stack-fastapi-template/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 213510,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 32819,
+   "cache_read_input_tokens": 180683,
+   "input_tokens": 8,
+   "output_tokens": 1703
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "fastapi__full-stack-fastapi-template/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 261835,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 32754,
+   "cache_read_input_tokens": 229071,
+   "input_tokens": 10,
+   "output_tokens": 2245
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 0
+ },
+ "fastapi__full-stack-fastapi-template/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 272817,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 33059,
+   "cache_read_input_tokens": 239748,
+   "input_tokens": 10,
+   "output_tokens": 1649
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "fastapi__full-stack-fastapi-template/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 273774,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 33797,
+   "cache_read_input_tokens": 239967,
+   "input_tokens": 10,
+   "output_tokens": 1333
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "fastapi__full-stack-fastapi-template/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 268240,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 33892,
+   "cache_read_input_tokens": 234338,
+   "input_tokens": 10,
+   "output_tokens": 1237
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "fastapi__full-stack-fastapi-template/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 217859,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 35717,
+   "cache_read_input_tokens": 182134,
+   "input_tokens": 8,
+   "output_tokens": 1357
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 212750,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 32025,
+   "cache_read_input_tokens": 180717,
+   "input_tokens": 8,
+   "output_tokens": 1614
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "fastapi__sqlmodel/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 222232,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 36388,
+   "cache_read_input_tokens": 185836,
+   "input_tokens": 8,
+   "output_tokens": 59
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q1:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 426216,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 43160,
+   "cache_read_input_tokens": 383042,
+   "input_tokens": 14,
+   "output_tokens": 1827
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 203900,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 28870,
+   "cache_read_input_tokens": 175022,
+   "input_tokens": 8,
+   "output_tokens": 1230
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "fastapi__sqlmodel/q2:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 215660,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 32558,
+   "cache_read_input_tokens": 183094,
+   "input_tokens": 8,
+   "output_tokens": 2013
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 269165,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 32642,
+   "cache_read_input_tokens": 236513,
+   "input_tokens": 10,
+   "output_tokens": 1369
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 207715,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 30365,
+   "cache_read_input_tokens": 177342,
+   "input_tokens": 8,
+   "output_tokens": 1527
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "fastapi__sqlmodel/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 276898,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 34471,
+   "cache_read_input_tokens": 242417,
+   "input_tokens": 10,
+   "output_tokens": 2141
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 232559,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 40217,
+   "cache_read_input_tokens": 192334,
+   "input_tokens": 8,
+   "output_tokens": 2175
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 328484,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 35851,
+   "cache_read_input_tokens": 292621,
+   "input_tokens": 12,
+   "output_tokens": 2931
+  },
+  "tool_calls": 10,
+  "verinoda_cli": 0
+ },
+ "fastapi__sqlmodel/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 225685,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 37447,
+   "cache_read_input_tokens": 188230,
+   "input_tokens": 8,
+   "output_tokens": 1712
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 355319,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 40210,
+   "cache_read_input_tokens": 315097,
+   "input_tokens": 12,
+   "output_tokens": 1810
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 314340,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 30553,
+   "cache_read_input_tokens": 283775,
+   "input_tokens": 12,
+   "output_tokens": 1158
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "fastapi__sqlmodel/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 351789,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 39585,
+   "cache_read_input_tokens": 312192,
+   "input_tokens": 12,
+   "output_tokens": 1046
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "fastapi__sqlmodel/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 271976,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 32925,
+   "cache_read_input_tokens": 239041,
+   "input_tokens": 10,
+   "output_tokens": 854
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 151655,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 27900,
+   "cache_read_input_tokens": 123749,
+   "input_tokens": 6,
+   "output_tokens": 1112
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 0
+ },
+ "gin-gonic__gin/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 219620,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 34539,
+   "cache_read_input_tokens": 185073,
+   "input_tokens": 8,
+   "output_tokens": 1274
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q1:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 102633,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 2,
+  "tokens": {
+   "cache_creation_input_tokens": 30860,
+   "cache_read_input_tokens": 71769,
+   "input_tokens": 4,
+   "output_tokens": 1135
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 264294,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 32781,
+   "cache_read_input_tokens": 231503,
+   "input_tokens": 10,
+   "output_tokens": 2064
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 0
+ },
+ "gin-gonic__gin/q2:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 210754,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 31321,
+   "cache_read_input_tokens": 179425,
+   "input_tokens": 8,
+   "output_tokens": 1141
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 159248,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 32704,
+   "cache_read_input_tokens": 126538,
+   "input_tokens": 6,
+   "output_tokens": 2340
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 282059,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 36596,
+   "cache_read_input_tokens": 245453,
+   "input_tokens": 10,
+   "output_tokens": 2971
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 0
+ },
+ "gin-gonic__gin/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 290861,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 37928,
+   "cache_read_input_tokens": 252923,
+   "input_tokens": 10,
+   "output_tokens": 2145
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 220377,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 35291,
+   "cache_read_input_tokens": 185078,
+   "input_tokens": 8,
+   "output_tokens": 1633
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 265996,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 31871,
+   "cache_read_input_tokens": 234115,
+   "input_tokens": 10,
+   "output_tokens": 1500
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "gin-gonic__gin/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 267965,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 32057,
+   "cache_read_input_tokens": 235898,
+   "input_tokens": 10,
+   "output_tokens": 1017
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 216725,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 33886,
+   "cache_read_input_tokens": 182831,
+   "input_tokens": 8,
+   "output_tokens": 1286
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 302124,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 43902,
+   "cache_read_input_tokens": 258212,
+   "input_tokens": 10,
+   "output_tokens": 2746
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 0
+ },
+ "gin-gonic__gin/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 334063,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 36580,
+   "cache_read_input_tokens": 297471,
+   "input_tokens": 12,
+   "output_tokens": 1823
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "gin-gonic__gin/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 276127,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 36543,
+   "cache_read_input_tokens": 239574,
+   "input_tokens": 10,
+   "output_tokens": 1536
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "google__gson/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 222204,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 36710,
+   "cache_read_input_tokens": 185486,
+   "input_tokens": 8,
+   "output_tokens": 900
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "google__gson/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 162156,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 35395,
+   "cache_read_input_tokens": 126755,
+   "input_tokens": 6,
+   "output_tokens": 1551
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 1
+ },
+ "google__gson/q1:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 301835,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 43124,
+   "cache_read_input_tokens": 258701,
+   "input_tokens": 10,
+   "output_tokens": 1748
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "google__gson/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 274008,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 34005,
+   "cache_read_input_tokens": 239993,
+   "input_tokens": 10,
+   "output_tokens": 2300
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 0
+ },
+ "google__gson/q2:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 223924,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 37306,
+   "cache_read_input_tokens": 186610,
+   "input_tokens": 8,
+   "output_tokens": 1432
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "google__gson/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 350646,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 40140,
+   "cache_read_input_tokens": 310494,
+   "input_tokens": 12,
+   "output_tokens": 1701
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "google__gson/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 150913,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 28419,
+   "cache_read_input_tokens": 122488,
+   "input_tokens": 6,
+   "output_tokens": 1440
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 0
+ },
+ "google__gson/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 328297,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 34568,
+   "cache_read_input_tokens": 293717,
+   "input_tokens": 12,
+   "output_tokens": 2116
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 1
+ },
+ "google__gson/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 268683,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 32566,
+   "cache_read_input_tokens": 236107,
+   "input_tokens": 10,
+   "output_tokens": 1103
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "google__gson/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 443345,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 48948,
+   "cache_read_input_tokens": 394383,
+   "input_tokens": 14,
+   "output_tokens": 4078
+  },
+  "tool_calls": 10,
+  "verinoda_cli": 0
+ },
+ "google__gson/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 436185,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 46769,
+   "cache_read_input_tokens": 389402,
+   "input_tokens": 14,
+   "output_tokens": 3471
+  },
+  "tool_calls": 10,
+  "verinoda_cli": 1
+ },
+ "google__gson/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 447459,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 49450,
+   "cache_read_input_tokens": 397995,
+   "input_tokens": 14,
+   "output_tokens": 2684
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 1
+ },
+ "google__gson/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 333787,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 36700,
+   "cache_read_input_tokens": 297075,
+   "input_tokens": 12,
+   "output_tokens": 1823
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "google__gson/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 215491,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 32531,
+   "cache_read_input_tokens": 182952,
+   "input_tokens": 8,
+   "output_tokens": 963
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "google__gson/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 335102,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 35363,
+   "cache_read_input_tokens": 299727,
+   "input_tokens": 12,
+   "output_tokens": 1015
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 155574,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 31191,
+   "cache_read_input_tokens": 124377,
+   "input_tokens": 6,
+   "output_tokens": 1542
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "guzzle__guzzle/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 164684,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 35089,
+   "cache_read_input_tokens": 129589,
+   "input_tokens": 6,
+   "output_tokens": 1618
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q1:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 161110,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 32957,
+   "cache_read_input_tokens": 128147,
+   "input_tokens": 6,
+   "output_tokens": 1192
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 399700,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 38993,
+   "cache_read_input_tokens": 360693,
+   "input_tokens": 14,
+   "output_tokens": 3111
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 0
+ },
+ "guzzle__guzzle/q2:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 297572,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 42662,
+   "cache_read_input_tokens": 254900,
+   "input_tokens": 10,
+   "output_tokens": 2876
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 2
+ },
+ "guzzle__guzzle/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 301533,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 43332,
+   "cache_read_input_tokens": 258191,
+   "input_tokens": 10,
+   "output_tokens": 2618
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 169562,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 38611,
+   "cache_read_input_tokens": 130945,
+   "input_tokens": 6,
+   "output_tokens": 1707
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "guzzle__guzzle/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 157946,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 32023,
+   "cache_read_input_tokens": 125917,
+   "input_tokens": 6,
+   "output_tokens": 1299
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 277288,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 34082,
+   "cache_read_input_tokens": 243196,
+   "input_tokens": 10,
+   "output_tokens": 1135
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 202789,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 28172,
+   "cache_read_input_tokens": 174609,
+   "input_tokens": 8,
+   "output_tokens": 1099
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 0
+ },
+ "guzzle__guzzle/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 218411,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 33428,
+   "cache_read_input_tokens": 184975,
+   "input_tokens": 8,
+   "output_tokens": 1656
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 273943,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 33443,
+   "cache_read_input_tokens": 240490,
+   "input_tokens": 10,
+   "output_tokens": 1421
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 206022,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 29635,
+   "cache_read_input_tokens": 176379,
+   "input_tokens": 8,
+   "output_tokens": 2039
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 0
+ },
+ "guzzle__guzzle/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 400318,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 38163,
+   "cache_read_input_tokens": 362141,
+   "input_tokens": 14,
+   "output_tokens": 3187
+  },
+  "tool_calls": 9,
+  "verinoda_cli": 1
+ },
+ "guzzle__guzzle/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 217340,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 34088,
+   "cache_read_input_tokens": 183244,
+   "input_tokens": 8,
+   "output_tokens": 1786
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 211028,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 31943,
+   "cache_read_input_tokens": 179077,
+   "input_tokens": 8,
+   "output_tokens": 1951
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 0
+ },
+ "junegunn__fzf/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 216839,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 34149,
+   "cache_read_input_tokens": 182682,
+   "input_tokens": 8,
+   "output_tokens": 1555
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q1:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 217289,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 34425,
+   "cache_read_input_tokens": 182856,
+   "input_tokens": 8,
+   "output_tokens": 2064
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 327034,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 36613,
+   "cache_read_input_tokens": 290409,
+   "input_tokens": 12,
+   "output_tokens": 2774
+  },
+  "tool_calls": 9,
+  "verinoda_cli": 0
+ },
+ "junegunn__fzf/q2:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 276369,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 35462,
+   "cache_read_input_tokens": 240897,
+   "input_tokens": 10,
+   "output_tokens": 1423
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 274207,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 34477,
+   "cache_read_input_tokens": 239720,
+   "input_tokens": 10,
+   "output_tokens": 1329
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 337668,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 37198,
+   "cache_read_input_tokens": 300458,
+   "input_tokens": 12,
+   "output_tokens": 2324
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 0
+ },
+ "junegunn__fzf/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 291097,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 39289,
+   "cache_read_input_tokens": 251798,
+   "input_tokens": 10,
+   "output_tokens": 1570
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 353522,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 39933,
+   "cache_read_input_tokens": 313577,
+   "input_tokens": 12,
+   "output_tokens": 1880
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 278001,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 34629,
+   "cache_read_input_tokens": 243362,
+   "input_tokens": 10,
+   "output_tokens": 2503
+  },
+  "tool_calls": 9,
+  "verinoda_cli": 0
+ },
+ "junegunn__fzf/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 412115,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 7,
+  "tokens": {
+   "cache_creation_input_tokens": 38915,
+   "cache_read_input_tokens": 373186,
+   "input_tokens": 14,
+   "output_tokens": 1687
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 337084,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 36013,
+   "cache_read_input_tokens": 301059,
+   "input_tokens": 12,
+   "output_tokens": 1544
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 346921,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 39481,
+   "cache_read_input_tokens": 307428,
+   "input_tokens": 12,
+   "output_tokens": 2986
+  },
+  "tool_calls": 13,
+  "verinoda_cli": 0
+ },
+ "junegunn__fzf/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 221684,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 37602,
+   "cache_read_input_tokens": 184074,
+   "input_tokens": 8,
+   "output_tokens": 1727
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "junegunn__fzf/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 273130,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 34259,
+   "cache_read_input_tokens": 238861,
+   "input_tokens": 10,
+   "output_tokens": 1636
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q1:none": {
+  "graphify_cli": 0,
+  "input_total": 289411,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 40521,
+   "cache_read_input_tokens": 248880,
+   "input_tokens": 10,
+   "output_tokens": 2426
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 0
+ },
+ "sharkdp__bat/q1:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 347048,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 39991,
+   "cache_read_input_tokens": 307045,
+   "input_tokens": 12,
+   "output_tokens": 1788
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q1:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 296876,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 5,
+  "tokens": {
+   "cache_creation_input_tokens": 42190,
+   "cache_read_input_tokens": 254676,
+   "input_tokens": 10,
+   "output_tokens": 1951
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q2:none": {
+  "graphify_cli": 0,
+  "input_total": 206549,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 30200,
+   "cache_read_input_tokens": 176341,
+   "input_tokens": 8,
+   "output_tokens": 2153
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 0
+ },
+ "sharkdp__bat/q2:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 216409,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 33274,
+   "cache_read_input_tokens": 183127,
+   "input_tokens": 8,
+   "output_tokens": 1783
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q2:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 350286,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 38895,
+   "cache_read_input_tokens": 311379,
+   "input_tokens": 12,
+   "output_tokens": 1609
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q3:none": {
+  "graphify_cli": 0,
+  "input_total": 229457,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 38615,
+   "cache_read_input_tokens": 190834,
+   "input_tokens": 8,
+   "output_tokens": 2279
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 0
+ },
+ "sharkdp__bat/q3:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 217910,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 35478,
+   "cache_read_input_tokens": 182424,
+   "input_tokens": 8,
+   "output_tokens": 1670
+  },
+  "tool_calls": 4,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q3:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 341597,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 38730,
+   "cache_read_input_tokens": 302855,
+   "input_tokens": 12,
+   "output_tokens": 1692
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q4:none": {
+  "graphify_cli": 0,
+  "input_total": 329575,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 36443,
+   "cache_read_input_tokens": 293120,
+   "input_tokens": 12,
+   "output_tokens": 2659
+  },
+  "tool_calls": 8,
+  "verinoda_cli": 0
+ },
+ "sharkdp__bat/q4:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 341469,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 37128,
+   "cache_read_input_tokens": 304329,
+   "input_tokens": 12,
+   "output_tokens": 2085
+  },
+  "tool_calls": 6,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q4:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 361047,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 6,
+  "tokens": {
+   "cache_creation_input_tokens": 43430,
+   "cache_read_input_tokens": 317605,
+   "input_tokens": 12,
+   "output_tokens": 1973
+  },
+  "tool_calls": 7,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q5:none": {
+  "graphify_cli": 0,
+  "input_total": 152833,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 31075,
+   "cache_read_input_tokens": 121752,
+   "input_tokens": 6,
+   "output_tokens": 1227
+  },
+  "tool_calls": 3,
+  "verinoda_cli": 0
+ },
+ "sharkdp__bat/q5:verinoda_fresh": {
+  "graphify_cli": 0,
+  "input_total": 218592,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 4,
+  "tokens": {
+   "cache_creation_input_tokens": 33798,
+   "cache_read_input_tokens": 184786,
+   "input_tokens": 8,
+   "output_tokens": 1786
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ },
+ "sharkdp__bat/q5:verinoda_stale": {
+  "graphify_cli": 0,
+  "input_total": 162049,
+  "leaks": [],
+  "mcp_verinoda": 0,
+  "model_calls": 3,
+  "tokens": {
+   "cache_creation_input_tokens": 33913,
+   "cache_read_input_tokens": 128130,
+   "input_tokens": 6,
+   "output_tokens": 1579
+  },
+  "tool_calls": 5,
+  "verinoda_cli": 1
+ }
+}

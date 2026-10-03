@@ -1,0 +1,40 @@
+Graph: graphify-out/graph.json (3267 nodes) | Traversal: BFS depth=2 | Start: ['Record ``item`` in the manifest without changing anything on disk.', 'Append a history entry without changing status (claim rules still apply).'] | 12 nodes found
+
+NODE Record ``item`` in the manifest without changing anything on disk. [src=verinoda/agents/installer.py loc=L327 community=Plan]
+NODE Append a history entry without changing status (claim rules still apply). [src=verinoda/feedback.py loc=L220 community=feedback.py]
+NODE _audit() [src=verinoda/feedback.py loc=L219 community=feedback.py]
+NODE .keep() [src=verinoda/agents/installer.py loc=L326 community=Plan]
+NODE feedback.py [src=verinoda/feedback.py loc=L1 community=feedback.py]
+NODE Claims [src=verinoda/claims.py loc=L321 community=Claims]
+NODE now() [src=verinoda/store.py loc=L382 community=Store]
+NODE process() [src=verinoda/feedback.py loc=L690 community=feedback.py]
+NODE resolve() [src=verinoda/feedback.py loc=L999 community=feedback.py]
+NODE Plan [src=verinoda/agents/installer.py loc=L310 community=Plan]
+NODE _qualify() [src=verinoda/feedback.py loc=L289 community=feedback.py]
+NODE _retract_bounds() [src=verinoda/feedback.py loc=L276 community=feedback.py]
+EDGE Record ``item`` in the manifest without changing anything on disk. --rationale_for [EXTRACTED]--> .keep() at=verinoda/agents/installer.py:L327
+EDGE Append a history entry without changing status (claim rules still apply). --rationale_for [EXTRACTED]--> _audit() at=verinoda/feedback.py:L220
+EDGE _audit() --calls [EXTRACTED context=call]--> now() at=verinoda/feedback.py:L223
+EDGE process() --calls [EXTRACTED context=call]--> _audit() at=verinoda/feedback.py:L963
+EDGE _qualify() --calls [EXTRACTED context=call]--> _audit() at=verinoda/feedback.py:L298
+EDGE resolve() --calls [EXTRACTED context=call]--> _audit() at=verinoda/feedback.py:L1074
+EDGE _retract_bounds() --calls [EXTRACTED context=call]--> _audit() at=verinoda/feedback.py:L284
+EDGE feedback.py --contains [EXTRACTED]--> _audit() at=verinoda/feedback.py:L219
+EDGE _audit() --uses [INFERRED context=parameter_type]--> Claims at=verinoda/feedback.py:L219
+EDGE Plan --method [EXTRACTED]--> .keep() at=verinoda/agents/installer.py:L326
+EDGE process() --calls [EXTRACTED context=call]--> Claims at=verinoda/feedback.py:L705
+EDGE _qualify() --calls [EXTRACTED context=call]--> Claims at=verinoda/feedback.py:L291
+EDGE resolve() --calls [EXTRACTED context=call]--> Claims at=verinoda/feedback.py:L1050
+EDGE feedback.py --imports [EXTRACTED context=import]--> Claims at=verinoda/feedback.py:L55
+EDGE _retract_bounds() --uses [INFERRED context=parameter_type]--> Claims at=verinoda/feedback.py:L276
+EDGE feedback.py --imports [EXTRACTED context=import]--> now() at=verinoda/feedback.py:L56
+EDGE feedback.py --contains [EXTRACTED]--> _retract_bounds() at=verinoda/feedback.py:L276
+EDGE feedback.py --contains [EXTRACTED]--> _qualify() at=verinoda/feedback.py:L289
+EDGE feedback.py --contains [EXTRACTED]--> process() at=verinoda/feedback.py:L690
+EDGE feedback.py --contains [EXTRACTED]--> resolve() at=verinoda/feedback.py:L999
+EDGE process() --calls [EXTRACTED context=call]--> now() at=verinoda/feedback.py:L706
+EDGE process() --calls [EXTRACTED context=call]--> _qualify() at=verinoda/feedback.py:L959
+EDGE process() --calls [EXTRACTED context=call]--> _retract_bounds() at=verinoda/feedback.py:L962
+EDGE resolve() --calls [EXTRACTED context=call]--> _qualify() at=verinoda/feedback.py:L1063
+EDGE resolve() --calls [EXTRACTED context=call]--> _retract_bounds() at=verinoda/feedback.py:L1067
+EDGE resolve() --calls [EXTRACTED context=call]--> now() at=verinoda/feedback.py:L1085

@@ -1,0 +1,88 @@
+Graph: graphify-out/graph.json (3267 nodes) | Traversal: BFS depth=2 | Start: ['update()'] | 26 nodes found
+
+[i] Complete answer over budget: all 26 nodes and 58 edges shown (~2538 tokens vs the requested ~2000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE update() [src=verinoda/copies.py loc=L161 community=copies.py]
+NODE copies.py [src=verinoda/copies.py loc=L1 community=copies.py]
+NODE detect() [src=verinoda/copies.py loc=L72 community=copies.py]
+NODE load() [src=verinoda/copies.py loc=L173 community=copies.py]
+NODE _config() [src=verinoda/copies.py loc=L63 community=copies.py]
+NODE _path() [src=verinoda/copies.py loc=L155 community=copies.py]
+NODE Detect the copies of ``g`` and write them beside the index (a scan / update… [src=verinoda/copies.py loc=L162 community=copies.py]
+NODE search_index.py [src=verinoda/search_index.py loc=L1 community=search_index.py]
+NODE workflow.py [src=verinoda/workflow.py loc=L1 community=workflow.py]
+NODE pathlib [src= loc= community=search_index.py]
+NODE graph_path() [src=verinoda/paths.py loc=L110 community=workflow.py]
+NODE json [src= loc= community=search_index.py]
+NODE data.py [src=verinoda/ui/data.py loc=L1 community=search_index.py]
+NODE load_config() [src=verinoda/paths.py loc=L172 community=paths.py]
+NODE setup.py [src=verinoda/setup.py loc=L1 community=setup.py]
+NODE setup_project() [src=verinoda/setup.py loc=L217 community=setup.py]
+NODE collections [src= loc= community=search_index.py]
+NODE _reference_roots() [src=verinoda/search_index.py loc=L2082 community=copies.py]
+NODE _ancestors() [src=verinoda/copies.py loc=L54 community=copies.py]
+NODE _names() [src=verinoda/copies.py loc=L45 community=copies.py]
+NODE _top() [src=verinoda/copies.py loc=L59 community=copies.py]
+NODE used() [src=verinoda/copies.py loc=L117 community=copies.py]
+NODE Path [src= loc= community=copies.py]
+NODE Folders that are a copy of the project's own code. A benchmark corpus holding… [src=verinoda/copies.py loc=L1 community=copies.py]
+NODE The detected copies to rank lower: none when detection is off or a path is… [src=verinoda/copies.py loc=L174 community=copies.py]
+NODE The copy folders of graph ``g``: ``[{"path": "a/b/", "files", "copies",… [src=verinoda/copies.py loc=L73 community=copies.py]
+EDGE update() --calls [EXTRACTED context=call]--> _config() at=verinoda/copies.py:L163
+EDGE update() --calls [EXTRACTED context=call]--> detect() at=verinoda/copies.py:L165
+EDGE update() --calls [EXTRACTED context=call]--> _path() at=verinoda/copies.py:L166
+EDGE update() --calls [EXTRACTED context=call]--> load() at=verinoda/copies.py:L170
+EDGE copies.py --contains [EXTRACTED]--> update() at=verinoda/copies.py:L161
+EDGE Detect the copies of ``g`` and write them beside the index (a scan / update… --rationale_for [EXTRACTED]--> update() at=verinoda/copies.py:L162
+EDGE _reference_roots() --calls [EXTRACTED context=call]--> load() at=verinoda/search_index.py:L2096
+EDGE setup_project() --calls [EXTRACTED context=call]--> load() at=verinoda/setup.py:L257
+EDGE The detected copies to rank lower: none when detection is off or a path is… --rationale_for [EXTRACTED]--> load() at=verinoda/copies.py:L174
+EDGE detect() --calls [EXTRACTED context=call]--> _ancestors() at=verinoda/copies.py:L102
+EDGE detect() --calls [EXTRACTED context=call]--> _top() at=verinoda/copies.py:L102
+EDGE detect() --calls [EXTRACTED context=call]--> _names() at=verinoda/copies.py:L79
+EDGE detect() --contains [EXTRACTED context=call]--> used() at=verinoda/copies.py:L117
+EDGE The copy folders of graph ``g``: ``[{"path": "a/b/", "files", "copies",… --rationale_for [EXTRACTED]--> detect() at=verinoda/copies.py:L73
+EDGE copies.py --imports [EXTRACTED context=import]--> graph_path() at=verinoda/copies.py:L156
+EDGE copies.py --imports [EXTRACTED context=import]--> json at=verinoda/copies.py:L28
+EDGE copies.py --imports [EXTRACTED context=import]--> load_config() at=verinoda/copies.py:L64
+EDGE copies.py --imports_from [EXTRACTED context=import]--> collections at=verinoda/copies.py:L29
+EDGE copies.py --imports_from [EXTRACTED context=import]--> pathlib at=verinoda/copies.py:L30
+EDGE search_index.py --imports_from [EXTRACTED context=submodule_import]--> copies.py at=verinoda/search_index.py:L2094
+EDGE setup.py --imports_from [EXTRACTED context=submodule_import]--> copies.py at=verinoda/setup.py:L253
+EDGE data.py --imports_from [EXTRACTED context=submodule_import]--> copies.py at=verinoda/ui/data.py:L354
+EDGE workflow.py --imports_from [EXTRACTED context=submodule_import]--> copies.py at=verinoda/workflow.py:L112
+EDGE copies.py --contains [EXTRACTED]--> _names() at=verinoda/copies.py:L45
+EDGE copies.py --contains [EXTRACTED]--> _ancestors() at=verinoda/copies.py:L54
+EDGE copies.py --contains [EXTRACTED]--> _top() at=verinoda/copies.py:L59
+EDGE Folders that are a copy of the project's own code. A benchmark corpus holding… --rationale_for [EXTRACTED]--> copies.py at=verinoda/copies.py:L1
+EDGE _config() --calls [EXTRACTED context=call]--> load_config() at=verinoda/copies.py:L67
+EDGE _config() --references [EXTRACTED context=parameter_type]--> Path at=verinoda/copies.py:L63
+EDGE _path() --calls [EXTRACTED context=call]--> graph_path() at=verinoda/copies.py:L158
+EDGE search_index.py --imports_from [EXTRACTED context=import]--> collections at=verinoda/search_index.py:L63
+EDGE data.py --imports_from [EXTRACTED context=import]--> collections at=verinoda/ui/data.py:L29
+EDGE search_index.py --imports [EXTRACTED context=import]--> json at=verinoda/search_index.py:L56
+EDGE data.py --imports [EXTRACTED context=import]--> json at=verinoda/ui/data.py:L25
+EDGE search_index.py --imports_from [EXTRACTED context=import]--> pathlib at=verinoda/search_index.py:L67
+EDGE setup.py --imports_from [EXTRACTED context=import]--> pathlib at=verinoda/setup.py:L25
+EDGE data.py --imports_from [EXTRACTED context=import]--> pathlib at=verinoda/ui/data.py:L31
+EDGE workflow.py --imports_from [EXTRACTED context=import]--> pathlib at=verinoda/workflow.py:L6
+EDGE copies.py --contains [EXTRACTED]--> _path() at=verinoda/copies.py:L155
+EDGE copies.py --contains [EXTRACTED]--> load() at=verinoda/copies.py:L173
+EDGE copies.py --contains [EXTRACTED]--> _config() at=verinoda/copies.py:L63
+EDGE copies.py --contains [EXTRACTED]--> detect() at=verinoda/copies.py:L72
+EDGE load() --calls [EXTRACTED context=call]--> _config() at=verinoda/copies.py:L175
+EDGE load() --calls [EXTRACTED context=call]--> _path() at=verinoda/copies.py:L180
+EDGE setup_project() --calls [EXTRACTED context=call]--> graph_path() at=verinoda/setup.py:L247
+EDGE setup.py --imports [EXTRACTED context=import]--> graph_path() at=verinoda/setup.py:L224
+EDGE data.py --imports [EXTRACTED context=import]--> graph_path() at=verinoda/ui/data.py:L139
+EDGE workflow.py --imports [EXTRACTED context=import]--> graph_path() at=verinoda/workflow.py:L11
+EDGE _reference_roots() --calls [EXTRACTED context=call]--> load_config() at=verinoda/search_index.py:L2090
+EDGE setup_project() --calls [EXTRACTED context=call]--> load_config() at=verinoda/setup.py:L265
+EDGE search_index.py --imports [EXTRACTED context=import]--> load_config() at=verinoda/search_index.py:L2088
+EDGE setup.py --imports [EXTRACTED context=import]--> load_config() at=verinoda/setup.py:L254
+EDGE data.py --imports [EXTRACTED context=import]--> load_config() at=verinoda/ui/data.py:L347
+EDGE data.py --imports_from [EXTRACTED context=submodule_import]--> search_index.py at=verinoda/ui/data.py:L214
+EDGE workflow.py --imports_from [EXTRACTED context=submodule_import]--> search_index.py at=verinoda/workflow.py:L104
+EDGE search_index.py --contains [EXTRACTED]--> _reference_roots() at=verinoda/search_index.py:L2082
+EDGE setup.py --imports_from [EXTRACTED context=submodule_import]--> workflow.py at=verinoda/setup.py:L221
+EDGE setup.py --contains [EXTRACTED]--> setup_project() at=verinoda/setup.py:L217

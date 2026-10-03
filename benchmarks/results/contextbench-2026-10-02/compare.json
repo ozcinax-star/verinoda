@@ -1,0 +1,204 @@
+{
+ "instances": [
+  "alibaba__fastjson2-2775",
+  "astropy__astropy-14539",
+  "cli__cli-10048",
+  "django__django-15252",
+  "facebook__zstd-1243",
+  "facebook__zstd-1532",
+  "fasterxml__jackson-core-964",
+  "fasterxml__jackson-databind-3701",
+  "fasterxml__jackson-databind-4015",
+  "fasterxml__jackson-databind-4050",
+  "fasterxml__jackson-databind-4469",
+  "fasterxml__jackson-databind-4641",
+  "huggingface__transformers-13989",
+  "iamkun__dayjs-938",
+  "jqlang__jq-2919",
+  "mui__material-ui-11987",
+  "mui__material-ui-39196",
+  "nlohmann__json-2225",
+  "nlohmann__json-2989",
+  "nlohmann__json-3601",
+  "nlohmann__json-4512",
+  "nushell__nushell-13357",
+  "ponylang__ponyc-2201",
+  "ponylang__ponyc-2247",
+  "ponylang__ponyc-2261",
+  "ponylang__ponyc-3973",
+  "prettier__prettier-11000",
+  "psf__requests-6028",
+  "pydata__xarray-4966",
+  "scikit-learn__scikit-learn-25931",
+  "simdjson__simdjson-1695",
+  "simdjson__simdjson-2016",
+  "sveltejs__svelte-12098",
+  "sveltejs__svelte-13097",
+  "sveltejs__svelte-14629",
+  "sympy__sympy-12489",
+  "sympy__sympy-22914",
+  "vuejs__core-8538",
+  "vuejs__core-9213",
+  "yt-dlp__yt-dlp-5933"
+ ],
+ "by_language": {
+  "java": 7,
+  "python": 9,
+  "go": 1,
+  "c": 7,
+  "javascript": 5,
+  "typescript": 4,
+  "cpp": 6,
+  "rust": 1
+ },
+ "arms": {
+  "vq": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.561,
+     "recall_micro": 0.42,
+     "precision_micro": 0.118,
+     "f1_micro": 0.185
+    },
+    "span": {
+     "recall_per_instance": 0.376,
+     "recall_micro": 0.206,
+     "precision_micro": 0.039,
+     "f1_micro": 0.066
+    },
+    "chars_mean": 5644
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.553,
+     "recall_micro": 0.414,
+     "precision_micro": 0.118,
+     "f1_micro": 0.184
+    },
+    "span": {
+     "recall_per_instance": 0.361,
+     "recall_micro": 0.206,
+     "precision_micro": 0.038,
+     "f1_micro": 0.064
+    },
+    "chars_mean": 5649
+   },
+   "paired_file_recall": [
+    0,
+    39,
+    1
+   ]
+  },
+  "va": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.405,
+     "recall_micro": 0.293,
+     "precision_micro": 0.102,
+     "f1_micro": 0.152
+    },
+    "span": {
+     "recall_per_instance": 0.193,
+     "recall_micro": 0.106,
+     "precision_micro": 0.099,
+     "f1_micro": 0.103
+    },
+    "chars_mean": 5640
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.465,
+     "recall_micro": 0.338,
+     "precision_micro": 0.1,
+     "f1_micro": 0.154
+    },
+    "span": {
+     "recall_per_instance": 0.232,
+     "recall_micro": 0.127,
+     "precision_micro": 0.099,
+     "f1_micro": 0.111
+    },
+    "chars_mean": 5937
+   },
+   "paired_file_recall": [
+    8,
+    31,
+    1
+   ]
+  },
+  "gq": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.355,
+     "recall_micro": 0.242,
+     "precision_micro": 0.037,
+     "f1_micro": 0.064
+    },
+    "span": {
+     "recall_per_instance": 0.004,
+     "recall_micro": 0.002,
+     "precision_micro": 0.017,
+     "f1_micro": 0.004
+    },
+    "chars_mean": 5957
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.356,
+     "recall_micro": 0.248,
+     "precision_micro": 0.039,
+     "f1_micro": 0.068
+    },
+    "span": {
+     "recall_per_instance": 0.004,
+     "recall_micro": 0.002,
+     "precision_micro": 0.017,
+     "f1_micro": 0.004
+    },
+    "chars_mean": 5957
+   },
+   "paired_file_recall": [
+    1,
+    39,
+    0
+   ]
+  },
+  "bm25": {
+   "old": {
+    "file": {
+     "recall_per_instance": 0.321,
+     "recall_micro": 0.217,
+     "precision_micro": 0.164,
+     "f1_micro": 0.187
+    },
+    "span": {
+     "recall_per_instance": 0.063,
+     "recall_micro": 0.023,
+     "precision_micro": 0.06,
+     "f1_micro": 0.033
+    },
+    "chars_mean": 5951
+   },
+   "new": {
+    "file": {
+     "recall_per_instance": 0.321,
+     "recall_micro": 0.217,
+     "precision_micro": 0.164,
+     "f1_micro": 0.187
+    },
+    "span": {
+     "recall_per_instance": 0.059,
+     "recall_micro": 0.022,
+     "precision_micro": 0.058,
+     "f1_micro": 0.032
+    },
+    "chars_mean": 5953
+   },
+   "paired_file_recall": [
+    0,
+    40,
+    0
+   ]
+  }
+ }
+}

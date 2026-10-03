@@ -1,0 +1,523 @@
+[
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q1",
+  "question": "When build merges the per-file extraction results, how does it turn the combined data into a networkx graph, and which function does that conversion?",
+  "fact_ids": [
+   "def-build-from-json",
+   "build-calls-build-from-json"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q2",
+  "question": "How does cluster split the graph into communities? Which algorithm does it try first, and what does it fall back to if that one isn't available?",
+  "fact_ids": [
+   "cluster-calls-partition",
+   "cluster-reaches-leiden",
+   "query-communities"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q3",
+  "question": "After the first pass of community detection, how does cluster decide that a community is too loosely connected and should be split again?",
+  "fact_ids": [
+   "cluster-calls-cohesion"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q4",
+  "question": "How does the tool find the 'god nodes', meaning the most connected nodes in the graph, and where is that analysis implemented?",
+  "fact_ids": [
+   "def-god-nodes",
+   "query-god-nodes"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q5",
+  "question": "How are Python source files parsed into nodes and edges, and how does the extractor get picked for a .py file?",
+  "fact_ids": [
+   "def-extract-python"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "Graphify-Labs__graphify",
+  "qid": "q6",
+  "question": "What happens when I run the graphify command from the terminal? What does the console entry point do before any subcommand is handled?",
+  "fact_ids": [
+   "main-calls-run-cli"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q1",
+  "question": "When I call axios.request(config) on an instance, what path does the call take internally, and how are my per-request options combined with the instance defaults?",
+  "fact_ids": [
+   "request-calls-private",
+   "private-request-merges-config",
+   "def-merge-config"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q2",
+  "question": "How do request and response interceptors get wired around the actual sending of a request, and once the request interceptors have run, what path does the request follow until the library decides which underlying transport will carry it?",
+  "fact_ids": [
+   "query-interceptors",
+   "request-reaches-adapter"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q3",
+  "question": "What happens in the step that actually sends a request out: where is it implemented, how is it reached from an instance's request method, what does it do to the request before handing it off, and how does it decide which transport to use?",
+  "fact_ids": [
+   "def-dispatch-request",
+   "dispatch-checks-cancel",
+   "request-reaches-adapter",
+   "def-get-adapter"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q4",
+  "question": "How is the default axios export (and instances made with axios.create) built so that the object itself can be called like a function?",
+  "fact_ids": [
+   "create-instance-binds"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "axios__axios",
+  "qid": "q5",
+  "question": "In Node.js, which part of the code actually sends the HTTP/HTTPS request, including following redirects and going through proxies, and how does axios decide to use it rather than one of its browser transports?",
+  "fact_ids": [
+   "query-http-adapter",
+   "def-get-adapter"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q1",
+  "question": "When a handler calls res.json, how does the object get turned into a JSON string, and how does the response actually go out after that?",
+  "fact_ids": [
+   "query-json-response",
+   "json-calls-stringify",
+   "def-stringify",
+   "json-calls-send"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q2",
+  "question": "What does res.sendFile hand the work off to, and how does res.render get from the response object to actually rendering the view template?",
+  "fact_ids": [
+   "sendfile-calls-helper",
+   "render-reaches-tryrender"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q3",
+  "question": "Where is the function that runs when you call express() to create a new app?",
+  "fact_ids": [
+   "def-create-application"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q4",
+  "question": "In the route-separation example, which routes are registered for listing posts and for submitting a user edit, which HTTP methods do they use, and which handlers serve them?",
+  "fact_ids": [
+   "route-posts",
+   "route-posts@v2",
+   "route-user-edit-put",
+   "route-user-edit-put@v2"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "expressjs__express",
+  "qid": "q5",
+  "question": "How does a request work out which content types the client says it can accept?",
+  "fact_ids": [
+   "query-accepts"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q1",
+  "question": "When a user logs in to the backend, which endpoint receives the credentials, what does its handler call to check the email and password, and where does the password comparison actually happen?",
+  "fact_ids": [
+   "route-login-access-token",
+   "login-calls-authenticate",
+   "def-authenticate",
+   "login-reaches-verify-password"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q2",
+  "question": "Once the credentials are accepted, where is the JWT access token generated, and how do protected endpoints turn an incoming token back into the current user (including how they handle a bad or malformed token)?",
+  "fact_ids": [
+   "query-jwt",
+   "def-get-current-user"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q3",
+  "question": "In the frontend, when the authentication hook's login function sends credentials to the backend, which function does it actually call to make that request, and where does that function come from?",
+  "fact_ids": [
+   "frontend-login-calls-sdk"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q4",
+  "question": "When a new user is created through the users API, where does the route hand off the actual database work, and how is the user table defined in the models and first created in the database schema?",
+  "fact_ids": [
+   "users-create-calls-crud",
+   "schema-user-table"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "fastapi__full-stack-fastapi-template",
+  "qid": "q5",
+  "question": "Which handler serves a request to fetch a single item by its id, and how is the full URL path for that endpoint put together from the router and API prefixes?",
+  "fact_ids": [
+   "route-read-item"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q1",
+  "question": "When I declare a SQLModel class with table=True, what happens at class-creation time to turn each of its fields into a database column, and how is the SQL column type chosen?",
+  "fact_ids": [
+   "metaclass-new-calls-column",
+   "def-get-column-from-field",
+   "column-calls-satype",
+   "query-field-to-column"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q2",
+  "question": "Where is the SQLModel base class defined, and what metaclass does it use? Where in the documentation's example code does the tutorial declare its first table model, Hero, what database table name does that model end up with, and how does SQLModel arrive at that name?",
+  "fact_ids": [
+   "class-sqlmodel",
+   "schema-hero-table"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q3",
+  "question": "What does SQLModel.model_validate actually do under the hood, and which helper does the real validation work?",
+  "fact_ids": [
+   "model-validate-calls-compat",
+   "model-validate-reaches-compat"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q4",
+  "question": "How is SQLModel's Field function declared, and where is the code that actually builds the field?",
+  "fact_ids": [
+   "def-field-impl"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "fastapi__sqlmodel",
+  "qid": "q5",
+  "question": "How does Session.exec work, and why does a select of a single model give back model instances instead of row tuples?",
+  "fact_ids": [
+   "query-session-exec"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q1",
+  "question": "What does Default set up when I create an engine with it, how does that differ from creating a bare engine, and where are Default and each piece of middleware it installs defined?",
+  "fact_ids": [
+   "def-default",
+   "default-calls-new",
+   "default-calls-recovery",
+   "default-calls-recovery@v2"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q2",
+  "question": "How does the framework recover from a panic in a handler and return a 500, where is that middleware implemented, and how does it end up installed on the engine you get by default?",
+  "fact_ids": [
+   "recovery-calls-writer",
+   "query-recovery",
+   "default-calls-recovery"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q3",
+  "question": "When an HTTP request arrives at the engine, what is the call path from ServeHTTP to the code that finds the matching route?",
+  "fact_ids": [
+   "servehttp-calls-handle",
+   "request-reaches-tree",
+   "request-reaches-tree@v2"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q4",
+  "question": "What happens internally when I register a route with router.GET, and where are routes stored and matched against request paths?",
+  "fact_ids": [
+   "get-registers-route",
+   "query-radix-tree"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "gin-gonic__gin",
+  "qid": "q5",
+  "question": "Where is the method that writes a JSON response from a handler defined, and what type does it belong to?",
+  "fact_ids": [
+   "context-json-method"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q1",
+  "question": "How does the streaming JsonReader tokenize input? When I call peek(), what actually works out which kind of token comes next?",
+  "fact_ids": [
+   "query-json-reader",
+   "peek-calls-dopeek",
+   "def-dopeek"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q2",
+  "question": "When I call Gson.toJson or Gson.fromJson with a specific type, how does Gson find the type adapter to use, and what does it do with that adapter once it has it?",
+  "fact_ids": [
+   "tojson-calls-getadapter",
+   "fromjson-calls-getadapter",
+   "getadapter-calls-factory-create"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q3",
+  "question": "What happens internally when I call JsonParser.parseString? How does a raw string become a JsonElement tree?",
+  "fact_ids": [
+   "parsestring-reaches-streams"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "google__gson",
+  "qid": "q4",
+  "question": "For an ordinary class with no custom adapter registered, how does Gson use reflection to find the object's fields and build an adapter that reads and writes each field?",
+  "fact_ids": [
+   "class-reflective-factory",
+   "query-reflective",
+   "boundfields-calls-create"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q1",
+  "question": "When I call send() on the Guzzle Client, what happens under the hood? Is the synchronous call built on top of the async one, and which private method does the actual work of dispatching the request?",
+  "fact_ids": [
+   "send-calls-sendasync",
+   "sendasync-calls-transfer",
+   "def-transfer"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q2",
+  "question": "Where do the request options I pass to the Client get merged and applied to the outgoing request, and how does a call to send() eventually get there?",
+  "fact_ids": [
+   "send-reaches-apply-options",
+   "def-transfer"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q3",
+  "question": "How does requestAsync() differ from sendAsync() in the Client? Do the two end up going through the same internal dispatch path?",
+  "fact_ids": [
+   "requestasync-calls-transfer",
+   "sendasync-calls-transfer"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q4",
+  "question": "What does HandlerStack::create set up by default? How does it decide which underlying HTTP transport (curl or PHP streams) to use, and which middleware does it add to the stack?",
+  "fact_ids": [
+   "stack-create-chooses-handler",
+   "def-choose-handler",
+   "stack-create-pushes-redirect"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q5",
+  "question": "How does Guzzle follow HTTP redirects? When a client is built with the default handler setup, how does redirect handling get switched on, and where does the redirect logic actually run when a 3xx response comes back?",
+  "fact_ids": [
+   "query-redirects",
+   "stack-create-pushes-redirect"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "guzzle__guzzle",
+  "qid": "q6",
+  "question": "How are cookies handled? Where are cookies from responses saved, and how do they get attached to later outgoing requests?",
+  "fact_ids": [
+   "query-cookies"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q1",
+  "question": "When the fzf binary starts, how does main hand control to the program's main loop, and where is that main loop function defined?",
+  "fact_ids": [
+   "def-run",
+   "main-calls-run",
+   "main-calls-run@v2"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q2",
+  "question": "Where are fzf's command-line options parsed, which internal function does ParseOptions hand the real parsing work to, and what does Run call on the parsed options before it starts using them (and where is that function defined)?",
+  "fact_ids": [
+   "query-options",
+   "parse-calls-parse",
+   "run-calls-postprocess"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q3",
+  "question": "How does Run set up the matching engine, and what does the matcher's Loop do on each iteration to process the input against the query?",
+  "fact_ids": [
+   "run-calls-newmatcher",
+   "run-calls-newmatcher@v2",
+   "matcher-loop-scan"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q4",
+  "question": "How does a Pattern decide whether a single item matches the query, and which matching paths can it take?",
+  "fact_ids": [
+   "pattern-matchitem",
+   "pattern-matchitem@v2"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "junegunn__fzf",
+  "qid": "q5",
+  "question": "Where is fzf's fuzzy matching and scoring algorithm implemented, which function carries out the fuzzy match that fzf uses by default, and where is that function defined?",
+  "fact_ids": [
+   "query-fuzzy-algo",
+   "def-fuzzymatchv2"
+  ],
+  "checked": "ok after rewrite"
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q1",
+  "question": "When I run the bat binary, what is the path from the program's entry point to the part that hands the work over to the Controller, and how does that function create the Controller?",
+  "fact_ids": [
+   "main-reaches-run-controller",
+   "def-run-controller",
+   "run-controller-new"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q2",
+  "question": "What is the Controller type, and what happens when Controller::run is called? Does it do the work directly or pass it on to something else?",
+  "fact_ids": [
+   "struct-controller",
+   "controller-run-delegates"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q3",
+  "question": "After the Controller starts running, how does each input reach the code that prints the selected line ranges of a file, and when is the file header printed?",
+  "fact_ids": [
+   "run-reaches-print-file-ranges",
+   "print-file-calls-header"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q4",
+  "question": "How are individual lines printed? Which printer types are there, and where is each line syntax-highlighted with the chosen theme before it is written out?",
+  "fact_ids": [
+   "def-interactive-print-line",
+   "query-highlight"
+  ],
+  "checked": "ok"
+ },
+ {
+  "repo": "sharkdp__bat",
+  "qid": "q5",
+  "question": "How does bat decide which pager to use, and how does it parse the pager command and its arguments?",
+  "fact_ids": [
+   "query-pager"
+  ],
+  "checked": "ok"
+ }
+]

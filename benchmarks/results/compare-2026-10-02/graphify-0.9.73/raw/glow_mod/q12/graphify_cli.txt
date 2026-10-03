@@ -1,0 +1,193 @@
+Graph: graphify-out/graph.json (194 nodes) | Traversal: BFS depth=2 | Start: ['ModItems', 'ModItems.java', 'ModEntities'] | 62 nodes found
+
+[i] Complete answer over budget: all 62 nodes and 127 edges shown (~7473 tokens vs the requested ~2000-token budget). Edges are never dropped once every node fits, so this is already the full answer — raising --budget further will not shrink it. Narrow with context_filter=['call'] or use get_node for a specific symbol to reduce size instead.
+
+NODE ModItems [src=src/main/java/com/example/glowmod/item/ModItems.java loc=L12 community=GlowMod.java]
+NODE ModItems.java [src=src/main/java/com/example/glowmod/item/ModItems.java loc=L1 community=GlowMod.java]
+NODE ModEntities [src=src/main/java/com/example/glowmod/entity/ModEntities.java loc=L11 community=Wisp]
+NODE GlowMod.java [src=src/main/java/com/example/glowmod/GlowMod.java loc=L1 community=GlowMod.java]
+NODE Wisp [src=src/main/java/com/example/glowmod/entity/Wisp.java loc=L14 community=Wisp]
+NODE ServerNetworking.java [src=src/main/java/com/example/glowmod/network/ServerNetworking.java loc=L1 community=GlowMod.java]
+NODE WispTests.java [src=src/gametest/java/com/example/glowmod/test/WispTests.java loc=L1 community=Wisp]
+NODE ModEntities.java [src=src/main/java/com/example/glowmod/entity/ModEntities.java loc=L1 community=GlowMod.java]
+NODE LanternEvents.java [src=src/main/java/com/example/glowmod/event/LanternEvents.java loc=L1 community=GlowMod.java]
+NODE GlowMod [src=src/main/java/com/example/glowmod/GlowMod.java loc=L15 community=GlowMod.java]
+NODE net.minecraft.util.Identifier [src= loc= community=Ritual.java]
+NODE net.minecraft.entity.EntityType [src= loc= community=Wisp]
+NODE net.minecraft.item.Item [src= loc= community=GlowMod.java]
+NODE registries [src= loc= community=GlowMod.java]
+NODE registry [src= loc= community=GlowMod.java]
+NODE .register() [src=src/main/java/com/example/glowmod/entity/ModEntities.java loc=L20 community=Wisp]
+NODE .initialize() [src=src/main/java/com/example/glowmod/item/ModItems.java loc=L25 community=GlowMod.java]
+NODE .register() [src=src/main/java/com/example/glowmod/item/ModItems.java loc=L20 community=GlowMod.java]
+NODE itemgroupevents [src= loc= community=GlowMod.java]
+NODE itemgroups [src= loc= community=GlowMod.java]
+NODE rarity [src= loc= community=GlowMod.java]
+NODE .ModEntities() [src=src/main/java/com/example/glowmod/entity/ModEntities.java loc=L17 community=Wisp]
+NODE .ModItems() [src=src/main/java/com/example/glowmod/item/ModItems.java loc=L17 community=GlowMod.java]
+NODE GlowConfig.java [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L1 community=GlowConfig.java]
+NODE Ritual.java [src=src/main/java/com/example/glowmod/ritual/Ritual.java loc=L1 community=Ritual.java]
+NODE GlowCommands.java [src=src/main/java/com/example/glowmod/command/GlowCommands.java loc=L1 community=GlowCommands.java]
+NODE RepairScheduler.java [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L1 community=Ritual.java]
+NODE net.minecraft.util.math.BlockPos [src= loc= community=Wisp]
+NODE GlowConfig [src=src/main/java/com/example/glowmod/config/GlowConfig.java loc=L15 community=GlowCommands.java]
+NODE entity/Wisp.java [src=src/main/java/com/example/glowmod/entity/Wisp.java loc=L1 community=Wisp]
+NODE WispSpawner.java [src=src/main/java/com/example/glowmod/world/WispSpawner.java loc=L1 community=WispSpawner.java]
+NODE .onInitialize() [src=src/main/java/com/example/glowmod/GlowMod.java loc=L19 community=GlowMod.java]
+NODE Datapack.java [src=src/main/java/com/example/glowmod/util/Datapack.java loc=L1 community=Ritual.java]
+NODE RepairScheduler [src=src/main/java/com/example/glowmod/repair/RepairScheduler.java loc=L14 community=Ritual.java]
+NODE SummonWispPayload.java [src=src/main/java/com/example/glowmod/network/SummonWispPayload.java loc=L1 community=GlowModClient.java]
+NODE GlowCommands [src=src/main/java/com/example/glowmod/command/GlowCommands.java loc=L14 community=GlowCommands.java]
+NODE .execute() [src=src/main/java/com/example/glowmod/util/Datapack.java loc=L25 community=Ritual.java]
+NODE WispTests [src=src/gametest/java/com/example/glowmod/test/WispTests.java loc=L11 community=Wisp]
+NODE ServerNetworking [src=src/main/java/com/example/glowmod/network/ServerNetworking.java loc=L11 community=GlowMod.java]
+NODE WispSpawner [src=src/main/java/com/example/glowmod/world/WispSpawner.java loc=L14 community=WispSpawner.java]
+NODE .onDeath() [src=src/main/java/com/example/glowmod/entity/Wisp.java loc=L38 community=Wisp]
+NODE LanternEvents [src=src/main/java/com/example/glowmod/event/LanternEvents.java loc=L11 community=GlowMod.java]
+NODE blockpos [src= loc= community=GlowMod.java]
+NODE net.minecraft.test.GameTest [src= loc= community=Wisp]
+NODE net.minecraft.test.TestContext [src= loc= community=Wisp]
+NODE .spawn() [src=src/main/java/com/example/glowmod/entity/Wisp.java loc=L28 community=Wisp]
+NODE .Wisp() [src=src/main/java/com/example/glowmod/entity/Wisp.java loc=L15 community=Wisp]
+NODE blocks [src= loc= community=GlowMod.java]
+NODE net.fabricmc.api.ModInitializer [src= loc= community=GlowMod.java]
+NODE net.fabricmc.fabric.api.gametest.v1.FabricGameTest [src= loc= community=Wisp]
+NODE net.minecraft.entity.mob.PathAwareEntity [src= loc= community=Wisp]
+NODE org.slf4j.Logger [src= loc= community=GlowMod.java]
+NODE .createWispAttributes() [src=src/main/java/com/example/glowmod/entity/Wisp.java loc=L20 community=Wisp]
+NODE actionresult [src= loc= community=GlowMod.java]
+NODE fabricdefaultattributeregistry [src= loc= community=GlowMod.java]
+NODE loggerfactory [src= loc= community=GlowMod.java]
+NODE payloadtyperegistry [src= loc= community=GlowMod.java]
+NODE serverplayerentity [src= loc= community=GlowMod.java]
+NODE serverplaynetworking [src= loc= community=GlowMod.java]
+NODE serverworld [src= loc= community=GlowMod.java]
+NODE spawngroup [src= loc= community=GlowMod.java]
+NODE useblockcallback [src= loc= community=GlowMod.java]
+EDGE WispTests.java --imports [EXTRACTED context=import]--> ModItems.java at=src/gametest/java/com/example/glowmod/test/WispTests.java:L5
+EDGE LanternEvents.java --imports [EXTRACTED context=import]--> ModItems.java at=src/main/java/com/example/glowmod/event/LanternEvents.java:L4
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> ModItems.java at=src/main/java/com/example/glowmod/GlowMod.java:L7
+EDGE ModItems.java --imports [EXTRACTED context=import]--> rarity at=src/main/java/com/example/glowmod/item/ModItems.java:L10
+EDGE ModItems.java --imports [EXTRACTED context=import]--> itemgroupevents at=src/main/java/com/example/glowmod/item/ModItems.java:L4
+EDGE ModItems.java --imports [EXTRACTED context=import]--> net.minecraft.item.Item at=src/main/java/com/example/glowmod/item/ModItems.java:L5
+EDGE ModItems.java --imports [EXTRACTED context=import]--> itemgroups at=src/main/java/com/example/glowmod/item/ModItems.java:L6
+EDGE ModItems.java --imports [EXTRACTED context=import]--> registries at=src/main/java/com/example/glowmod/item/ModItems.java:L7
+EDGE ModItems.java --imports [EXTRACTED context=import]--> registry at=src/main/java/com/example/glowmod/item/ModItems.java:L8
+EDGE ModItems.java --imports [EXTRACTED context=import]--> net.minecraft.util.Identifier at=src/main/java/com/example/glowmod/item/ModItems.java:L9
+EDGE ServerNetworking.java --imports [EXTRACTED context=import]--> ModItems.java at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L6
+EDGE ModItems.java --imports [EXTRACTED]--> GlowMod at=src/main/java/com/example/glowmod/item/ModItems.java:L3
+EDGE ModEntities --references [EXTRACTED context=field]--> net.minecraft.entity.EntityType at=src/main/java/com/example/glowmod/entity/ModEntities.java:L12
+EDGE ModEntities --references [EXTRACTED context=generic_arg]--> Wisp at=src/main/java/com/example/glowmod/entity/ModEntities.java:L12
+EDGE ModEntities.java --contains [EXTRACTED]--> ModEntities at=src/main/java/com/example/glowmod/entity/ModEntities.java:L11
+EDGE WispTests.java --imports [EXTRACTED]--> ModEntities at=src/gametest/java/com/example/glowmod/test/WispTests.java:L3
+EDGE GlowMod.java --imports [EXTRACTED]--> ModEntities at=src/main/java/com/example/glowmod/GlowMod.java:L5
+EDGE ModEntities --method [EXTRACTED]--> .ModEntities() at=src/main/java/com/example/glowmod/entity/ModEntities.java:L17
+EDGE ModEntities --method [EXTRACTED]--> .register() at=src/main/java/com/example/glowmod/entity/ModEntities.java:L20
+EDGE ModItems --references [EXTRACTED context=field]--> net.minecraft.item.Item at=src/main/java/com/example/glowmod/item/ModItems.java:L15
+EDGE WispTests.java --imports [EXTRACTED]--> ModItems at=src/gametest/java/com/example/glowmod/test/WispTests.java:L5
+EDGE LanternEvents.java --imports [EXTRACTED]--> ModItems at=src/main/java/com/example/glowmod/event/LanternEvents.java:L4
+EDGE GlowMod.java --imports [EXTRACTED]--> ModItems at=src/main/java/com/example/glowmod/GlowMod.java:L7
+EDGE ServerNetworking.java --imports [EXTRACTED]--> ModItems at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L6
+EDGE ModItems --method [EXTRACTED]--> .ModItems() at=src/main/java/com/example/glowmod/item/ModItems.java:L17
+EDGE ModItems --method [EXTRACTED]--> .register() at=src/main/java/com/example/glowmod/item/ModItems.java:L20
+EDGE ModItems --method [EXTRACTED]--> .initialize() at=src/main/java/com/example/glowmod/item/ModItems.java:L25
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> net.minecraft.util.Identifier at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L7
+EDGE Datapack.java --imports [EXTRACTED context=import]--> net.minecraft.util.Identifier at=src/main/java/com/example/glowmod/util/Datapack.java:L7
+EDGE .execute() --references [EXTRACTED context=parameter_type]--> net.minecraft.util.Identifier at=src/main/java/com/example/glowmod/util/Datapack.java:L25
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .initialize() at=src/main/java/com/example/glowmod/GlowMod.java:L22
+EDGE entity/Wisp.java --imports [EXTRACTED context=import]--> net.minecraft.entity.EntityType at=src/main/java/com/example/glowmod/entity/Wisp.java:L4
+EDGE .Wisp() --references [EXTRACTED context=parameter_type]--> net.minecraft.entity.EntityType at=src/main/java/com/example/glowmod/entity/Wisp.java:L15
+EDGE LanternEvents.java --imports [EXTRACTED context=import]--> useblockcallback at=src/main/java/com/example/glowmod/event/LanternEvents.java:L5
+EDGE LanternEvents.java --imports [EXTRACTED context=import]--> blocks at=src/main/java/com/example/glowmod/event/LanternEvents.java:L6
+EDGE LanternEvents.java --imports [EXTRACTED context=import]--> serverworld at=src/main/java/com/example/glowmod/event/LanternEvents.java:L7
+EDGE LanternEvents.java --imports [EXTRACTED context=import]--> actionresult at=src/main/java/com/example/glowmod/event/LanternEvents.java:L8
+EDGE LanternEvents.java --imports [EXTRACTED context=import]--> blockpos at=src/main/java/com/example/glowmod/event/LanternEvents.java:L9
+EDGE LanternEvents.java --contains [EXTRACTED]--> LanternEvents at=src/main/java/com/example/glowmod/event/LanternEvents.java:L11
+EDGE ModEntities.java --imports [EXTRACTED context=import]--> fabricdefaultattributeregistry at=src/main/java/com/example/glowmod/entity/ModEntities.java:L4
+EDGE ModEntities.java --imports [EXTRACTED context=import]--> spawngroup at=src/main/java/com/example/glowmod/entity/ModEntities.java:L6
+EDGE GlowCommands.java --imports [EXTRACTED context=import]--> Wisp at=src/main/java/com/example/glowmod/command/GlowCommands.java:L4
+EDGE Ritual.java --imports [EXTRACTED context=import]--> Wisp at=src/main/java/com/example/glowmod/ritual/Ritual.java:L4
+EDGE WispSpawner.java --imports [EXTRACTED context=import]--> Wisp at=src/main/java/com/example/glowmod/world/WispSpawner.java:L4
+EDGE entity/Wisp.java --contains [EXTRACTED]--> Wisp at=src/main/java/com/example/glowmod/entity/Wisp.java:L14
+EDGE Wisp --inherits [EXTRACTED]--> net.minecraft.entity.mob.PathAwareEntity at=src/main/java/com/example/glowmod/entity/Wisp.java:L14
+EDGE Wisp --method [EXTRACTED]--> .Wisp() at=src/main/java/com/example/glowmod/entity/Wisp.java:L15
+EDGE Wisp --method [EXTRACTED]--> .createWispAttributes() at=src/main/java/com/example/glowmod/entity/Wisp.java:L20
+EDGE Wisp --method [EXTRACTED]--> .spawn() at=src/main/java/com/example/glowmod/entity/Wisp.java:L28
+EDGE Wisp --method [EXTRACTED]--> .onDeath() at=src/main/java/com/example/glowmod/entity/Wisp.java:L38
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.fabricmc.fabric.api.gametest.v1.FabricGameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L6
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.minecraft.test.GameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L7
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.minecraft.test.TestContext at=src/gametest/java/com/example/glowmod/test/WispTests.java:L8
+EDGE WispTests.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/gametest/java/com/example/glowmod/test/WispTests.java:L9
+EDGE WispTests.java --contains [EXTRACTED]--> WispTests at=src/gametest/java/com/example/glowmod/test/WispTests.java:L11
+EDGE GlowConfig.java --imports [EXTRACTED context=import]--> GlowMod.java at=src/main/java/com/example/glowmod/config/GlowConfig.java:L3
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> WispSpawner.java at=src/main/java/com/example/glowmod/GlowMod.java:L10
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> net.fabricmc.api.ModInitializer at=src/main/java/com/example/glowmod/GlowMod.java:L11
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> org.slf4j.Logger at=src/main/java/com/example/glowmod/GlowMod.java:L12
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> loggerfactory at=src/main/java/com/example/glowmod/GlowMod.java:L13
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> GlowCommands.java at=src/main/java/com/example/glowmod/GlowMod.java:L3
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> RepairScheduler.java at=src/main/java/com/example/glowmod/GlowMod.java:L9
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> GlowMod.java at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L3
+EDGE Datapack.java --imports [EXTRACTED context=import]--> GlowMod.java at=src/main/java/com/example/glowmod/util/Datapack.java:L3
+EDGE GlowMod.java --imports [EXTRACTED]--> WispSpawner at=src/main/java/com/example/glowmod/GlowMod.java:L10
+EDGE GlowMod.java --imports [EXTRACTED]--> GlowCommands at=src/main/java/com/example/glowmod/GlowMod.java:L3
+EDGE GlowMod.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/GlowMod.java:L4
+EDGE GlowMod.java --imports [EXTRACTED]--> LanternEvents at=src/main/java/com/example/glowmod/GlowMod.java:L6
+EDGE GlowMod.java --imports [EXTRACTED]--> ServerNetworking at=src/main/java/com/example/glowmod/GlowMod.java:L8
+EDGE GlowMod.java --imports [EXTRACTED]--> RepairScheduler at=src/main/java/com/example/glowmod/GlowMod.java:L9
+EDGE ServerNetworking.java --imports [EXTRACTED context=import]--> GlowConfig.java at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L4
+EDGE ServerNetworking.java --imports [EXTRACTED context=import]--> payloadtyperegistry at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L7
+EDGE ServerNetworking.java --imports [EXTRACTED context=import]--> serverplaynetworking at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L8
+EDGE ServerNetworking.java --imports [EXTRACTED context=import]--> serverplayerentity at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L9
+EDGE ServerNetworking.java --contains [EXTRACTED]--> ServerNetworking at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L11
+EDGE ServerNetworking.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L4
+EDGE .onInitialize() --calls [EXTRACTED context=call]--> .register() at=src/main/java/com/example/glowmod/GlowMod.java:L23
+EDGE GlowMod --references [EXTRACTED context=field]--> org.slf4j.Logger at=src/main/java/com/example/glowmod/GlowMod.java:L17
+EDGE GlowMod --implements [EXTRACTED]--> net.fabricmc.api.ModInitializer at=src/main/java/com/example/glowmod/GlowMod.java:L15
+EDGE GlowConfig.java --imports [EXTRACTED]--> GlowMod at=src/main/java/com/example/glowmod/config/GlowConfig.java:L3
+EDGE SummonWispPayload.java --imports [EXTRACTED]--> GlowMod at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L3
+EDGE Datapack.java --imports [EXTRACTED]--> GlowMod at=src/main/java/com/example/glowmod/util/Datapack.java:L3
+EDGE GlowMod --method [EXTRACTED]--> .onInitialize() at=src/main/java/com/example/glowmod/GlowMod.java:L19
+EDGE GlowCommands.java --imports [EXTRACTED context=import]--> blockpos at=src/main/java/com/example/glowmod/command/GlowCommands.java:L11
+EDGE WispSpawner.java --imports [EXTRACTED context=import]--> blockpos at=src/main/java/com/example/glowmod/world/WispSpawner.java:L8
+EDGE Ritual.java --imports [EXTRACTED context=import]--> blocks at=src/main/java/com/example/glowmod/ritual/Ritual.java:L8
+EDGE WispTests --implements [EXTRACTED]--> net.fabricmc.fabric.api.gametest.v1.FabricGameTest at=src/gametest/java/com/example/glowmod/test/WispTests.java:L11
+EDGE ModEntities.java --imports [EXTRACTED context=import]--> net.minecraft.entity.EntityType at=src/main/java/com/example/glowmod/entity/ModEntities.java:L5
+EDGE entity/Wisp.java --imports [EXTRACTED context=import]--> net.minecraft.entity.mob.PathAwareEntity at=src/main/java/com/example/glowmod/entity/Wisp.java:L9
+EDGE .register() --references [EXTRACTED context=return_type]--> net.minecraft.item.Item at=src/main/java/com/example/glowmod/item/ModItems.java:L20
+EDGE ModEntities.java --imports [EXTRACTED context=import]--> net.minecraft.util.Identifier at=src/main/java/com/example/glowmod/entity/ModEntities.java:L9
+EDGE WispTests --references [EXTRACTED context=field]--> net.minecraft.util.math.BlockPos at=src/gametest/java/com/example/glowmod/test/WispTests.java:L12
+EDGE entity/Wisp.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/entity/Wisp.java:L11
+EDGE SummonWispPayload.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/network/SummonWispPayload.java:L8
+EDGE RepairScheduler.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L11
+EDGE Ritual.java --imports [EXTRACTED context=import]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/ritual/Ritual.java:L11
+EDGE .spawn() --references [EXTRACTED context=parameter_type]--> net.minecraft.util.math.BlockPos at=src/main/java/com/example/glowmod/entity/Wisp.java:L28
+EDGE ModEntities.java --imports [EXTRACTED context=import]--> registries at=src/main/java/com/example/glowmod/entity/ModEntities.java:L7
+EDGE ModEntities.java --imports [EXTRACTED context=import]--> registry at=src/main/java/com/example/glowmod/entity/ModEntities.java:L8
+EDGE WispTests.java --imports [EXTRACTED context=import]--> ModEntities.java at=src/gametest/java/com/example/glowmod/test/WispTests.java:L3
+EDGE WispTests.java --imports [EXTRACTED context=import]--> Wisp at=src/gametest/java/com/example/glowmod/test/WispTests.java:L4
+EDGE GlowCommands.java --imports [EXTRACTED context=import]--> GlowConfig.java at=src/main/java/com/example/glowmod/command/GlowCommands.java:L3
+EDGE GlowCommands.java --imports [EXTRACTED context=import]--> Ritual.java at=src/main/java/com/example/glowmod/command/GlowCommands.java:L5
+EDGE GlowCommands.java --contains [EXTRACTED]--> GlowCommands at=src/main/java/com/example/glowmod/command/GlowCommands.java:L14
+EDGE GlowCommands.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/command/GlowCommands.java:L3
+EDGE RepairScheduler.java --imports [EXTRACTED context=import]--> GlowConfig.java at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L3
+EDGE Ritual.java --imports [EXTRACTED context=import]--> GlowConfig.java at=src/main/java/com/example/glowmod/ritual/Ritual.java:L3
+EDGE WispSpawner.java --imports [EXTRACTED context=import]--> GlowConfig.java at=src/main/java/com/example/glowmod/world/WispSpawner.java:L3
+EDGE GlowConfig.java --contains [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/config/GlowConfig.java:L15
+EDGE RepairScheduler.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L3
+EDGE Ritual.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/ritual/Ritual.java:L3
+EDGE WispSpawner.java --imports [EXTRACTED]--> GlowConfig at=src/main/java/com/example/glowmod/world/WispSpawner.java:L3
+EDGE ModEntities.java --imports [EXTRACTED context=import]--> GlowMod.java at=src/main/java/com/example/glowmod/entity/ModEntities.java:L3
+EDGE ModEntities.java --imports [EXTRACTED]--> GlowMod at=src/main/java/com/example/glowmod/entity/ModEntities.java:L3
+EDGE entity/Wisp.java --imports [EXTRACTED context=import]--> Datapack.java at=src/main/java/com/example/glowmod/entity/Wisp.java:L3
+EDGE LanternEvents.java --imports [EXTRACTED context=import]--> Wisp at=src/main/java/com/example/glowmod/event/LanternEvents.java:L3
+EDGE ServerNetworking.java --imports [EXTRACTED context=import]--> Wisp at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L5
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> LanternEvents.java at=src/main/java/com/example/glowmod/GlowMod.java:L6
+EDGE GlowMod.java --imports [EXTRACTED context=import]--> ServerNetworking.java at=src/main/java/com/example/glowmod/GlowMod.java:L8
+EDGE GlowMod.java --contains [EXTRACTED]--> GlowMod at=src/main/java/com/example/glowmod/GlowMod.java:L15
+EDGE ServerNetworking.java --imports [EXTRACTED]--> GlowMod at=src/main/java/com/example/glowmod/network/ServerNetworking.java:L3
+EDGE ModItems.java --contains [EXTRACTED]--> ModItems at=src/main/java/com/example/glowmod/item/ModItems.java:L12
+EDGE Ritual.java --imports [EXTRACTED context=import]--> RepairScheduler.java at=src/main/java/com/example/glowmod/ritual/Ritual.java:L5
+EDGE RepairScheduler.java --contains [EXTRACTED]--> RepairScheduler at=src/main/java/com/example/glowmod/repair/RepairScheduler.java:L14
+EDGE Ritual.java --imports [EXTRACTED]--> RepairScheduler at=src/main/java/com/example/glowmod/ritual/Ritual.java:L5
+EDGE Ritual.java --imports [EXTRACTED context=import]--> Datapack.java at=src/main/java/com/example/glowmod/ritual/Ritual.java:L6
+EDGE WispSpawner.java --contains [EXTRACTED]--> WispSpawner at=src/main/java/com/example/glowmod/world/WispSpawner.java:L14

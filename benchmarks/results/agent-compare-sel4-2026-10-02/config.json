@@ -1,0 +1,39 @@
+{
+ "tasks": "<REPO>/benchmarks/results/agent-compare-sel4-2026-10-02/tasks.json",
+ "copy_pattern": "<SEL4>/work/{task}/{arm}",
+ "project": "the seL4 microkernel repository at {c} (a git checkout of it)",
+ "out": "<SEL4>/results_r{1,2,3}.jsonl",
+ "model": "claude-sonnet-5-5",
+ "plugin_dir": "<REPO>/claude-mods/verinoda-live",
+ "mod_options": {
+  "auto": "nudge"
+ },
+ "path_dirs": {
+  "graphify": [
+   "<BENCH>/envs/graphify/Scripts"
+  ],
+  "verinoda_mod": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_setup": [
+   "<REPO>/.venv/Scripts"
+  ]
+ },
+ "drop_path": [
+  "<USER>/.local/bin"
+ ],
+ "arms": [
+  "none",
+  "graphify",
+  "verinoda_mod",
+  "verinoda_setup"
+ ],
+ "arm_workers": {
+  "none": 4,
+  "graphify": 4,
+  "verinoda_mod": 4,
+  "verinoda_setup": 4
+ },
+ "timeout_s": 1800,
+ "max_turns": 80
+}

@@ -1,0 +1,70 @@
+$ grep -rniE 'kor|ocağı|nın|türkçe|ngilizce|adı|hangi|anahtarla|dosyalarda|tanımlı|blok|kodda|nerede|kaydediliyor' .   # 5 matching lines in 2 files
+src/main/resources/assets/emberforge/lang/tr_tr.json:2: "block.emberforge.ember_forge": "Kor Ocağı",
+src/main/resources/assets/emberforge/lang/tr_tr.json:7: "container.emberforge.ember_forge": "Kor Ocağı",
+src/main/resources/assets/emberforge/lang/tr_tr.json:12: "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+src/main/resources/assets/emberforge/lang/tr_tr.json:14: "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:3: import com.mojang.brigadier.CommandDispatcher
+
+==> src/main/resources/assets/emberforge/lang/tr_tr.json:1-17 <==
+     1	{
+     2	  "block.emberforge.ember_forge": "Kor Ocağı",
+     3	  "block.emberforge.cinder_ore": "Cüruf Cevheri",
+     4	  "item.emberforge.cinder_ingot": "Cüruf Külçesi",
+     5	  "item.emberforge.forge_hammer": "Demirci Çekici",
+     6	  "itemGroup.emberforge": "Emberforge",
+     7	  "container.emberforge.ember_forge": "Kor Ocağı",
+     8	  "gui.emberforge.stoke": "Körükle",
+     9	  "message.emberforge.stoked": "Ocak daha da kızarıyor (ısı %s)",
+    10	  "message.emberforge.first_cinder": "Sıcak taş! Bir ocak yakman için biraz kömür.",
+    11	  "message.emberforge.reset.heat_source": "Altında hâlâ bir ısı kaynağı var.",
+    12	  "message.emberforge.reset.done": "Yakındaki Kor Ocakları sıfırlandı.",
+    13	  "command.emberforge.heat": "Ocak ısısı: %s",
+    14	  "command.emberforge.heat.not_a_forge": "Bu blok bir Kor Ocağı değil.",
+    15	  "advancement.emberforge.first_cinder.title": "İçten İçe Yanan Taş",
+    16	  "advancement.emberforge.first_cinder.description": "Biraz Cüruf Cevheri bul"
+    17	}
+
+==> src/main/kotlin/net/ashvale/emberforge/command/ForgeCommands.kt:1-43 <==
+     1	package net.ashvale.emberforge.command
+     2	
+     3	import com.mojang.brigadier.CommandDispatcher
+     4	import net.ashvale.emberforge.block.EmberForgeBlockEntity
+     5	import net.ashvale.emberforge.config.EmberConfig
+     6	import net.ashvale.emberforge.util.ForgeFunctions
+     7	import net.minecraft.commands.CommandSourceStack
+     8	import net.minecraft.commands.Commands
+     9	import net.minecraft.commands.arguments.coordinates.BlockPosArgument
+    10	import net.minecraft.core.BlockPos
+    11	import net.minecraft.network.chat.Component
+    12	
+    13	/** /emberforge reset and /emberforge heat <pos>. */
+    14	object ForgeCommands {
+    15	    @JvmStatic
+    16	    fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+    17	        dispatcher.register(
+    18	            Commands.literal("emberforge")
+    19	                .then(
+    20	                    Commands.literal("reset")
+    21	                        .requires { it.hasPermission(2) && EmberConfig.ALLOW_RESET_COMMAND.get() }
+    22	                        .executes { ctx -> if (ForgeFunctions.resetForges(ctx.source)) 1 else 0 }
+    23	                )
+    24	                .then(
+    25	                    Commands.literal("heat")
+    26	                        .then(
+    27	                            Commands.argument("pos", BlockPosArgument.blockPos())
+    28	                                .executes { ctx -> reportHeat(ctx.source, BlockPosArgument.getLoadedBlockPos(ctx, "pos")) }
+    29	                        )
+    30	                )
+    31	        )
+    32	    }
+    33	
+    34	    private fun reportHeat(source: CommandSourceStack, pos: BlockPos): Int {
+    35	        val forge = source.level.getBlockEntity(pos) as? EmberForgeBlockEntity
+    36	        if (forge == null) {
+    37	            source.sendFailure(Component.translatable("command.emberforge.heat.not_a_forge"))
+    38	            return 0
+    39	        }
+    40	        source.sendSuccess({ Component.translatable("command.emberforge.heat", forge.heat) }, false)
+    41	        return forge.heat
+    42	    }
+    43	}

@@ -1,0 +1,84 @@
+expanded: emberforgeblockentity->emberforge, stoke->inventori
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:140-144 EmberForgeBlockEntity.stoke
+  calls: addHeat@141
+  called by: useItemOn (src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:83)?; handleStoke (src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:39)?
+140 public void stoke(Player player) {
+141     heat = HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get());
+142     setChanged();
+143     player.displayClientMessage(Component.translatable("message.emberforge.stoked", heat), true);
+144 }
+## src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:28-41 EmberNetwork.handleStoke
+  calls: getPos@32?, stoke@39?
+  runs: when the client sends that packet (registered at src/main/java/net/ashvale/emberforge/network/EmberNetwork.java:24)
+28 static void handleStoke(StokeForgePayload payload, IPayloadContext context) {
+29     if (!(context.player() instanceof ServerPlayer player)) {
+30         return;
+31     }
+32     if (!(player.containerMenu instanceof EmberForgeMenu menu) || !menu.getPos().equals(payload.pos())) {
+33         return;
+34     }
+35     if (player.distanceToSqr(payload.pos().getCenter()) > MAX_DISTANCE_SQR) {
+36         return;
+37     }
+38     if (player.level().getBlockEntity(payload.pos()) instanceof EmberForgeBlockEntity forge) {
+39         forge.stoke(player);
+40     }
+41 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33-179 public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider
+  names: `emberforge:ember_forge` (line 172, lang, kind not stated: inferred) -> src/main/resources/assets/emberforge/blockstates/ember_forge.json
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:30-32
+30 /**
+31  * Inventory (input, fuel, output), heat and forging progress of one Ember Forge.
+32  */
+  src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:47-59
+48 private final ContainerData data = new ContainerData() {
+49     @Override
+50     public int get(int index) {
+51         return switch (index) {
+52             case 0 -> heat;
+53             case 1 -> EmberConfig.MAX_HEAT.get();
+54             case 2 -> progress;
+55             case 3 -> forgeTime;
+56             default -> 0;
+57         };
+58     }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:175-178 EmberForgeBlockEntity.createMenu
+175 @Override
+176 public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
+177     return new EmberForgeMenu(containerId, inventory, this, data);
+178 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:76-87 EmberForgeBlock.useItemOn
+76 @Override
+77 protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+78                                           Player player, InteractionHand hand, BlockHitResult hit) {
+79     if (!stack.is(ModItems.FORGE_HAMMER.get())) {
+80         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+81     }
+82     if (!level.isClientSide && level.getBlockEntity(pos) instanceof EmberForgeBlockEntity forge) {
+83         forge.stoke(player);
+84         stack.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
+85     }
+86     return ItemInteractionResult.sidedSuccess(level.isClientSide);
+87 }
+## src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:71-73 EmberForgeBlockEntity.EmberForgeBlockEntity
+71 public EmberForgeBlockEntity(BlockPos pos, BlockState state) {
+72     super(ModBlocks.EMBER_FORGE_ENTITY.get(), pos, state);
+73 }
+## src/main/java/net/ashvale/emberforge/menu/EmberForgeMenu.java:32-34 EmberForgeMenu.EmberForgeMenu
+32 public EmberForgeMenu(int containerId, Inventory inventory, EmberForgeBlockEntity forge, ContainerData data) {
+33     this(containerId, inventory, forge.getBlockPos(), forge.getItems(), data);
+34 }
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:133-138 private void finish(ForgingRecipe recipe)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75-120 public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:162-164 public ItemStackHandler getItems()
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:123-125 public static int cooled(int heat, long gameTime, int decayInterval)
+src/main/java/net/ashvale/emberforge/network/StokeForgePayload.java:10-19 public record StokeForgePayload(BlockPos pos) implements CustomPacketPayload
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:127-131 private boolean canOutput(ItemStack result)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:170-173 @Override public Component getDisplayName()
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:146-152 @Override protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:154-160 @Override protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries)
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:166-168 public int getHeat()
+src/main/java/net/ashvale/emberforge/registry/ModBlocks.java:18-40 public final class ModBlocks
+src/main/kotlin/net/ashvale/emberforge/client/EmberForgeScreen.kt:25-27 private fun requestStoke()
+… 109 more candidates not shown: src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:64-67 @Override public BlockEntity newBlockEntity(BlockP; src/main/java/net/ashvale/emberforge/block/EmberForgeBlock.java:34-115 public class EmberForgeBlock extends BaseEntityBl; src/test/java/net/ashvale/emberforge/ForgeTickTest.java:10-14 @Test void forgeCoolsOnlyOnDecayTicks(); src/main/java/net/a…
+next: verinoda query "…" --max-chars 12000

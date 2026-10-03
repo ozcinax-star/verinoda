@@ -1,0 +1,439 @@
+$ grep -rniE 'environment|variables|passed|experiment|commands|decided' .   # 457 matching lines in 56 files
+repoatlas/experiments.py:1: """Targeted experiments with real, stated isolation.
+repoatlas/experiments.py:11: * environment rebuilt from an allowlist - API keys, tokens and other
+repoatlas/experiments.py:12: secrets from the caller's environment are not passed;
+repoatlas/experiments.py:22: the container is named ``repoatlas-<experiment id>`` and killed by name on
+repoatlas/experiments.py:25: Policy (:func:`policy`): only commands matching the configured test-runner
+repoatlas/experiments.py:36: ``container`` isolation; without it the experiment is *refused*, not run, and
+repoatlas/experiments.py:37: the refusal names the offending argument. Commands are never passed through a
+repoatlas/experiments.py:44: environment variables (``env_extra``), and collect files the child writes to
+repoatlas/experiments.py:83: r"(=+ .*(passed|failed|error).* =+"
+repoatlas/experiments.py:84: # pytest -q prints the bare summary: "3 passed in 0.17s", "1 failed, 2 passed in ..."
+repoatlas/experiments.py:85: r"|^\d+ (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b.*\bin [\d.]+s.*$"
+repoatlas/experiments.py:93: ARGS_CONFINED = "allowlisted commands may only name paths inside the repository copy"
+repoatlas/experiments.py:110: class ExperimentRefused(RuntimeError):
+repoatlas/experiments.py:257: "NO_COLOR": "1", "REPOATLAS_EXPERIMENT": "1"})
+repoatlas/experiments.py:371: """Run one experiment and record it (and its evidence) in the store.
+repoatlas/experiments.py:375: them with ``-p <module>``). ``env_extra`` adds ``REPOATLAS_*`` variables
+repoatlas/experiments.py:380: cfg = load_config(repo)["experiments"]
+repoatlas/experiments.py:390: raise ValueError(f"env_extra may only set REPOATLAS_* variables, not {key!r}")
+repoatlas/experiments.py:412: "RepoAtlas does not run non-allowlisted commands with process isolation only")
+repoatlas/experiments.py:415: store.insert("experiments", {**base, "cwd": str(repo), "isolation": "none",
+repoatlas/experiments.py:417: "environment": {"policy": {"kind": kind, "reason": why_risky}}})
+repoatlas/experiments.py:418: raise ExperimentRefused(reason)
+repoatlas/experiments.py:479: store.insert("experiments", {**base, "cwd": str(copy), "isolation": level, "status": "error",
+repoatlas/experiments.py:480: "summary": f"could not start: {exc}", "environment": guarantees})
+repoatlas/experiments.py:510: "source_type": "test_result" if is_test else "experiment",
+repoatlas/experiments.py:515: "meta": {"experiment_id": eid,
+repoatlas/experiments.py:522: store.insert("experiments", {
+repoatlas/experiments.py:524: "environment": {"guarantees": guarantees, "limits": limits, "python": sys.version.split()[0],
+repoatlas/experiments.py:537: note=f"experiment {eid}: expected {expect}, got {outcome}"
+repoatlas/experiments.py:548: res["next_step"] = ("install pytest in the project's environment (or create .venv) and re-run"
+tests/test_experiments.py:1: """Experiments: real isolated runs on a git-committed copy of examples/orders_app.
+tests/test_experiments.py:3: Every test runs a real child process (no mocks of experiments.run): allowlisted
+tests/test_experiments.py:4: pytest in a throw-away copy with a scrubbed environment, timeouts that kill the
+tests/test_experiments.py:5: whole process tree, refusal of non-allowlisted commands, logs on disk with only
+tests/test_experiments.py:26: from repoatlas import experiments  # noqa: E402
+tests/test_experiments.py:36: pytestmark = [pytest.mark.experiment,
+tests/test_experiments.py:117: assert experiments.classify(argv, DEFAULT_CONFIG["experiments"]["process_isolation_allowlist"]) == expected
+tests/test_experiments.py:124: env = experiments._scrubbed_env(tmp_path)
+tests/test_experiments.py:129: assert env["REPOATLAS_EXPERIMENT"] == "1"
+tests/test_experiments.py:140: "    Path('WRITTEN_BY_EXPERIMENT.txt').write_text('x')\n"
+... (417 more matching lines not shown)
+
+==> repoatlas/experiments.py:1-395 <==  (truncated at char cap; file has 550 lines)
+     1	"""Targeted experiments with real, stated isolation.
+     2	
+     3	Two isolation levels exist, and the one used is recorded on every run:
+     4	
+     5	``process`` (always available)
+     6	    * separate process in its own process group/session;
+     7	    * wall-clock timeout that kills the whole process tree;
+     8	    * working directory is a throw-away *copy* of the repository
+     9	      (tracked + untracked-not-ignored files), so the user's tree is never
+    10	      written to;
+    11	    * environment rebuilt from an allowlist - API keys, tokens and other
+    12	      secrets from the caller's environment are not passed;
+    13	    * POSIX only: CPU-time, address-space and file-size rlimits.
+    14	    It does NOT isolate the network, and it does NOT confine the child's file
+    15	    system access: the command's own path arguments are checked (see Policy),
+    16	    but the code it runs - the project's tests - can still read and write
+    17	    anywhere the user can. ``guarantees`` in every result says exactly this
+    18	    (``fs_reads_confined`` / ``fs_writes_confined`` are false).
+    19	
+    20	``container`` (docker or podman on PATH)
+    21	    ``--network none``, memory/CPU/pid limits, read-write mount of the copy only;
+    22	    the container is named ``repoatlas-<experiment id>`` and killed by name on
+    23	    timeout (killing the CLI client alone would leave it running).
+    24	
+    25	Policy (:func:`policy`): only commands matching the configured test-runner
+    26	allowlist and free of shell metacharacters may run under ``process``
+    27	isolation. An absolute path to a Python interpreter (e.g. the project's
+    28	``.venv``, see :func:`python_for`) counts as ``python``. Every *argument* of an
+    29	allowlisted command must stay inside the repository copy: absolute paths,
+    30	home-relative paths, URLs and ``..`` escapes are rejected wherever they appear
+    31	(positional test paths, ``--opt=value``, ``-o key=value``, ``type:path``
+    32	values such as ``--cov-report=xml:/x``, attached short options such as
+    33	``-c/x``), and runner options that execute arbitrary code or turn arguments
+    34	into outside imports (``pytest --pyargs``, ``node -e``, ``go test -exec``,
+    35	``cargo --config``, ``npm --script-shell``) are rejected. Anything else needs
+    36	``container`` isolation; without it the experiment is *refused*, not run, and
+    37	the refusal names the offending argument. Commands are never passed through a
+    38	shell, and no child inherits RepoAtlas's stdin (an MCP server's stdin is its
+    39	protocol pipe; a child waiting on it hangs).
+    40	
+    41	Plugins and artifacts: internal callers (the runtime tracer,
+    42	:mod:`repoatlas.runtime.trace`) may add Python modules that are written
+    43	*next to* the copy and put on ``PYTHONPATH`` (``plugins``), ``REPOATLAS_*``
+    44	environment variables (``env_extra``), and collect files the child writes to
+    45	``$REPOATLAS_ARTIFACTS``; those files are moved to ``runs/<id>/artifacts/``
+    46	before the throw-away copy is deleted.
+    47	
+    48	Outcomes: ``pass`` (exit 0), ``fail`` (exit 1, or any non-zero exit of a
+    49	non-pytest runner), ``timeout``, and ``inconclusive`` - pytest could not tell
+    50	(exit 2 interrupted/collection error, 3 internal error, 4 usage error, 5 no
+    51	tests collected, or pytest is not installed for that interpreter). An
+    52	inconclusive run is recorded, but its evidence only *qualifies* a claim: it
+    53	never supports or refutes it.
+    54	"""
+    55	
+    56	from __future__ import annotations
+    57	
+    58	import hashlib
+    59	import os
+    60	import re
+    61	import shlex
+    62	import shutil
+    63	import signal
+    64	import subprocess
+    65	import sys
+    66	import tempfile
+    67	import time
+    68	from pathlib import Path, PurePosixPath
+    69	
+    70	from repoatlas import evidence as evmod
+    71	from repoatlas.paths import load_config, runs_dir
+    72	from repoatlas.snapshot import list_files
+    73	from repoatlas.store import Store, new_id, now
+    74	
+    75	SHELL_META = re.compile(r"[;&|<>`$\n]|\$\(")
+    76	PYTHON_EXE_RE = re.compile(r"^python(\d+(\.\d+)*)?$")
+    77	NO_PYTEST_RE = re.compile(r"No module named '?pytest'?(?![\w.])")
+    78	PYTEST_INCONCLUSIVE = {2: "pytest was interrupted (e.g. an error during collection)", 3: "pytest internal error",
+    79	                       4: "pytest usage error (bad arguments or paths)", 5: "pytest collected no tests"}
+    80	ENV_ALLOW = {"PATH", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL",
+    81	             "TZ", "TERM", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS"}
+    82	SUMMARY_RE = re.compile(
+    83	    r"(=+ .*(passed|failed|error).* =+"
+    84	    # pytest -q prints the bare summary: "3 passed in 0.17s", "1 failed, 2 passed in ..."
+    85	    r"|^\d+ (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b.*\bin [\d.]+s.*$"
+    86	    r"|^(ok|FAIL|PASS)\b.*|test result:.*|Tests?:\s+\d+.*)", re.I | re.M)
+    87	KILL_DRAIN_TIMEOUT = 15  # seconds to collect output after killing a timed-out tree
+    88	RELEVANT_RE = re.compile(r"(FAILED|ERROR|Error|Traceback|assert|panic|exception)", re.I)
+    89	MAX_LOG_BYTES = 5 * 1024 * 1024
+    90	MAX_ARTIFACT_BYTES = 64 * 1024 * 1024  # per collected artifact file
+    91	PLUGIN_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.py$")
+    92	ENV_EXTRA_RE = re.compile(r"^REPOATLAS_[A-Z0-9_]+$")
+    93	ARGS_CONFINED = "allowlisted commands may only name paths inside the repository copy"
+    94	# Runner options that run arbitrary code or import from outside the copy, whatever their value.
+    95	FORBIDDEN_OPTIONS: dict[str, dict[str, str]] = {
+    96	    "pytest": {"--pyargs": "--pyargs turns arguments into importable package names that can live outside "
+    97	                           "the repository copy"},
+    98	    "node": {opt: f"node {opt} evaluates inline code" for opt in ("-e", "--eval", "-p", "--print", "-i",
+    99	                                                                 "--interactive")},
+   100	    "go": {"-exec": "go test -exec runs an arbitrary program", "-toolexec": "go -toolexec runs an arbitrary program"},
+   101	    "cargo": {"--config": "cargo --config can set an arbitrary runner program", "-Z": "cargo -Z enables unstable "
+   102	                                                                                     "behaviour"},
+   103	    "npm": {"--script-shell": "npm --script-shell runs an arbitrary shell"},
+   104	}
+   105	_DRIVE_RE = re.compile(r"^[A-Za-z]:")
+   106	_URL_RE = re.compile(r"^[A-Za-z][\w+.-]*://")
+   107	_TYPED_VALUE_RE = re.compile(r"^[\w.-]{2,}:(.*)$", re.S)  # xml:path, no:plugin (2+ chars: not a drive)
+   108	
+   109	
+   110	class ExperimentRefused(RuntimeError):
+   111	    pass
+   112	
+   113	
+   114	def python_for(repo: Path) -> str:
+   115	    """The interpreter to run a project's tests with.
+   116	
+   117	    The project's own virtualenv when it has one (``.venv`` then ``venv``;
+   118	    Windows ``Scripts/python.exe`` or POSIX ``bin/python``), else the
+   119	    interpreter running RepoAtlas. Returned as an absolute path, which the
+   120	    process-isolation allowlist accepts as ``python``.
+   121	    """
+   122	    repo = Path(repo).resolve()
+   123	    for env in (".venv", "venv"):
+   124	        for rel in (("Scripts", "python.exe"), ("bin", "python")):
+   125	            p = repo.joinpath(env, *rel)
+   126	            if p.is_file():
+   127	                return str(p)
+   128	    return sys.executable
+   129	
+   130	
+   131	def _strip_quotes(tok: str) -> str:
+   132	    return tok[1:-1] if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in "\"'" else tok
+   133	
+   134	
+   135	def _arg0_path(arg0: str) -> PurePosixPath:
+   136	    """argv[0] as a path, the same on every OS (quotes stripped, backslashes as separators)."""
+   137	    return PurePosixPath(_strip_quotes(arg0).replace("\\", "/"))
+   138	
+   139	
+   140	def _exe_name(arg0: str) -> str:
+   141	    """Normalised runner name: basename, lower-case, no .exe; interpreters -> 'python'."""
+   142	    name = _arg0_path(arg0).name.lower().removesuffix(".exe")
+   143	    return "python" if PYTHON_EXE_RE.match(name) else name
+   144	
+   145	
+   146	def _is_pytest(argv: list[str]) -> bool:
+   147	    if not argv:
+   148	        return False
+   149	    exe = _exe_name(argv[0])
+   150	    return exe == "pytest" or (exe in ("python", "py") and argv[1:3] == ["-m", "pytest"])
+   151	
+   152	
+   153	def container_runtime() -> str | None:
+   154	    for rt in ("docker", "podman"):
+   155	        if shutil.which(rt):
+   156	            try:
+   157	                r = subprocess.run([rt, "info"], capture_output=True, timeout=15, stdin=subprocess.DEVNULL)
+   158	                if r.returncode == 0:
+   159	                    return rt
+   160	            except (OSError, subprocess.TimeoutExpired):
+   161	                continue
+   162	    return None
+   163	
+   164	
+   165	def path_escape(value: str) -> str | None:
+   166	    """Why ``value`` names a location outside the repository copy, else None.
+   167	
+   168	    Purely lexical, so it is the same on every OS and needs no file system:
+   169	    the copy never contains symlinks (files are copied by content), so a
+   170	    path that stays inside lexically stays inside for real.
+   171	    """
+   172	    v = _strip_quotes(value).strip()
+   173	    if not v:
+   174	        return None
+   175	    s = v.replace("\\", "/")
+   176	    if s.startswith("~"):
+   177	        return f"{value!r} is relative to the home directory"
+   178	    if _DRIVE_RE.match(s) or s.startswith("/"):
+   179	        return f"{value!r} is an absolute path"
+   180	    if _URL_RE.match(s):
+   181	        return f"{value!r} is a URL"
+   182	    depth = 0
+   183	    for part in s.split("/"):
+   184	        if part == "..":
+   185	            depth -= 1
+   186	            if depth < 0:
+   187	                return f"{value!r} leaves the repository copy through '..'"
+   188	        elif part not in ("", "."):
+   189	            depth += 1
+   190	    return None
+   191	
+   192	
+   193	def _path_candidates(tok: str) -> list[str]:
+   194	    """Every sub-string of an argument that a runner may treat as a path."""
+   195	    out = [tok]
+   196	    if tok.startswith("-") and "=" in tok:            # --opt=value
+   197	        out.append(tok.split("=", 1)[1])
+   198	    if re.match(r"^-[A-Za-z].", tok) and not tok.startswith("--"):
+   199	        out.append(tok[2:])                          # attached short option value: -c/x, -oa=b
+   200	    for c in list(out):
+   201	        if "=" in c and not c.startswith("-"):      # ini override key=value (-o cache_dir=/x)
+   202	            out.append(c.split("=", 1)[1])
+   203	    for c in list(out):
+   204	        m = _TYPED_VALUE_RE.match(c)                 # type:path (--cov-report=xml:/x)
+   205	        if m and not _URL_RE.match(c):
+   206	            out.append(m.group(1))
+   207	    return out
+   208	
+   209	
+   210	def _runner(argv: list[str]) -> str:
+   211	    exe = _exe_name(argv[0])
+   212	    return "pytest" if _is_pytest(argv) else exe
+   213	
+   214	
+   215	def policy(argv: list[str], allowlist: list[str]) -> tuple[str, str | None]:
+   216	    """``('allowlisted', None)`` or ``('risky', why)``.
+   217	
+   218	    Allowlisted means: argv starts with an allowlisted test runner, has no
+   219	    shell metacharacters, no forbidden runner option, and no argument that
+   220	    names a path outside the repository copy (see the module docstring).
+   221	    """
+   222	    if not argv:
+   223	        return "risky", "empty command"
+   224	    joined = " ".join(argv)
+   225	    if SHELL_META.search(joined):
+   226	        return "risky", "the command contains shell metacharacters"
+   227	    raw = _arg0_path(argv[0]).name.lower().removesuffix(".exe")
+   228	    matched = False
+   229	    for exe in dict.fromkeys((raw, _exe_name(argv[0]))):
+   230	        norm = " ".join([exe, *argv[1:]])
+   231	        if any(norm == p or norm.startswith(p + " ") for p in allowlist):
+   232	            matched = True
+   233	            break
+   234	    if not matched:
+   235	        return "risky", f"{' '.join(argv[:3])!r} does not start with an allowlisted test runner"
+   236	    forbidden = FORBIDDEN_OPTIONS.get(_runner(argv), {})
+   237	    for tok in argv[1:]:
+   238	        opt = _strip_quotes(tok).split("=", 1)[0]
+   239	        if opt in forbidden:
+   240	            return "risky", forbidden[opt]
+   241	        for cand in _path_candidates(_strip_quotes(tok)):
+   242	            why = path_escape(cand)
+   243	            if why:
+   244	                return "risky", f"argument {tok!r}: {why}; {ARGS_CONFINED}"
+   245	    return "allowlisted", None
+   246	
+   247	
+   248	def classify(argv: list[str], allowlist: list[str]) -> str:
+   249	    """'allowlisted' or 'risky' - see :func:`policy` for the reason."""
+   250	    return policy(argv, allowlist)[0]
+   251	
+   252	
+   253	def _scrubbed_env(home: Path) -> dict[str, str]:
+   254	    env = {k: v for k, v in os.environ.items() if k.upper() in ENV_ALLOW}
+   255	    env.update({"HOME": str(home), "USERPROFILE": str(home), "TMP": str(home), "TEMP": str(home),
+   256	                "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0", "CI": "1",
+   257	                "NO_COLOR": "1", "REPOATLAS_EXPERIMENT": "1"})
+   258	    # Keep the interpreter that runs RepoAtlas reachable (tests need pytest etc.).
+   259	    env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
+   260	    return env
+   261	
+   262	
+   263	def _copy_repo(repo: Path, dst: Path) -> int:
+   264	    n = 0
+   265	    for rel in list_files(repo):
+   266	        src = repo / rel
+   267	        out = dst / rel
+   268	        out.parent.mkdir(parents=True, exist_ok=True)
+   269	        try:
+   270	            shutil.copy2(src, out)
+   271	            n += 1
+   272	        except OSError:
+   273	            continue
+   274	    return n
+   275	
+   276	
+   277	def _posix_limits(cpu_s: int, mem_mb: int):  # pragma: no cover - POSIX only
+   278	    def apply():
+   279	        import resource
+   280	
+   281	        os.setsid()
+   282	        resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s))
+   283	        resource.setrlimit(resource.RLIMIT_AS, (mem_mb << 20, mem_mb << 20))
+   284	        resource.setrlimit(resource.RLIMIT_FSIZE, (256 << 20, 256 << 20))
+   285	    return apply
+   286	
+   287	
+   288	def _kill_container(runtime: str, name: str) -> None:
+   289	    """Stop a timed-out container by name; killing the docker/podman client does not."""
+   290	    try:
+   291	        subprocess.run([runtime, "kill", name], capture_output=True, timeout=30, stdin=subprocess.DEVNULL)
+   292	    except (OSError, subprocess.TimeoutExpired):
+   293	        pass
+   294	
+   295	
+   296	def _container_argv(argv: list[str]) -> list[str]:
+   297	    """A host interpreter path means nothing inside the image: use its ``python``."""
+   298	    if argv and _exe_name(argv[0]) == "python" and len(_arg0_path(argv[0]).parts) > 1:
+   299	        return ["python", *argv[1:]]
+   300	    return argv
+   301	
+   302	
+   303	def _classify_outcome(argv: list[str], code: int | None, timed_out: bool, stdout: str,
+   304	                      stderr: str) -> tuple[str, str | None]:
+   305	    """(outcome, why) - see the module docstring for the outcome rules."""
+   306	    if timed_out:
+   307	        return "timeout", None
+   308	    if code == 0:
+   309	        return "pass", None
+   310	    if _is_pytest(argv):
+   311	        if NO_PYTEST_RE.search(stderr) or NO_PYTEST_RE.search(stdout[-2000:]):
+   312	            return "inconclusive", "pytest is not installed for this interpreter (No module named pytest)"
+   313	        if code in PYTEST_INCONCLUSIVE:
+   314	            return "inconclusive", f"pytest exit code {code}: {PYTEST_INCONCLUSIVE[code]}"
+   315	    return "fail", None
+   316	
+   317	
+   318	def _kill_tree(proc: subprocess.Popen) -> None:
+   319	    if proc.poll() is not None:
+   320	        return
+   321	    if os.name == "nt":
+   322	        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True,
+   323	                       stdin=subprocess.DEVNULL)
+   324	    else:  # pragma: no cover
+   325	        try:
+   326	            os.killpg(proc.pid, signal.SIGKILL)
+   327	        except ProcessLookupError:
+   328	            pass
+   329	    try:
+   330	        proc.wait(timeout=10)
+   331	    except subprocess.TimeoutExpired:
+   332	        proc.kill()
+   333	
+   334	
+   335	def _collect_artifacts(src: Path, dst: Path) -> dict[str, str]:
+   336	    """Move the regular files the child left in ``src`` to ``dst`` (flat, size-capped)."""
+   337	    out: dict[str, str] = {}
+   338	    try:
+   339	        entries = sorted(src.iterdir())
+   340	    except OSError:
+   341	        return out
+   342	    for p in entries:
+   343	        try:
+   344	            if not p.is_file() or p.is_symlink() or p.stat().st_size > MAX_ARTIFACT_BYTES:
+   345	                continue
+   346	            dst.mkdir(parents=True, exist_ok=True)
+   347	            target = dst / p.name
+   348	            shutil.copyfile(p, target)
+   349	            out[p.name] = str(target)
+   350	        except OSError:
+   351	            continue
+   352	    return out
+   353	
+   354	
+   355	def _summarize(stdout: str, stderr: str, exit_code: int | None, timed_out: bool) -> dict:
+   356	    text = stdout + "\n" + stderr
+   357	    lines = text.splitlines()
+   358	    summary = [m.group(0).strip() for m in SUMMARY_RE.finditer(text)][-3:]
+   359	    relevant = [l for l in lines if RELEVANT_RE.search(l)][:15]
+   360	    return {"exit_code": exit_code, "timed_out": timed_out, "summary_lines": summary,
+   361	            "relevant_lines": [l[:200] for l in relevant], "tail": [l[:200] for l in lines[-8:]],
+   362	            "total_lines": len(lines)}
+   363	
+   364	
+   365	def run(
+   366	    store: Store, repo: Path, argv: list[str] | str, *, hypothesis: str, expect: str = "pass",
+   367	    timeout: float | None = None, claim_id: str | None = None, isolation: str = "auto",
+   368	    commit: str | None = None, plugins: dict[str, bytes] | None = None,
+   369	    env_extra: dict[str, str] | None = None,
+   370	) -> dict:
+   371	    """Run one experiment and record it (and its evidence) in the store.
+   372	
+   373	    ``plugins`` ({module file name: source bytes}) are written next to the
+   374	    copy, never into it, and that directory is put on ``PYTHONPATH`` (load
+   375	    them with ``-p <module>``). ``env_extra`` adds ``REPOATLAS_*`` variables
+   376	    only. Files the child writes to ``$REPOATLAS_ARTIFACTS`` are returned in
+   377	    ``result["artifacts"]`` ({name: path under runs/<id>/artifacts}).
+   378	    """
+   379	    repo = Path(repo).resolve()
+   380	    cfg = load_config(repo)["experiments"]
+   381	    if isinstance(argv, str):
+   382	        argv = shlex.split(argv, posix=(os.name != "nt"))
+   383	        if os.name == "nt":
+   384	            argv = [_strip_quotes(a) for a in argv]
+   385	    for name in plugins or {}:
+   386	        if not PLUGIN_NAME_RE.match(name):
+   387	            raise ValueError(f"plugin file name must be a plain module file name, not {name!r}")
+   388	    for key in env_extra or {}:
+   389	        if not ENV_EXTRA_RE.match(key):
+   390	            raise ValueError(f"env_extra may only set REPOATLAS_* variables, not {key!r}")
+   391	    timeout = float(timeout or cfg["default_timeout"])
+   392	    kind, why_risky = policy(argv, cfg["process_isolation_allowlist"])
+   393	    runtime = container_runtime() if isolation in ("auto", "container") else None
+   394	    if isolation == "container" and not runtime:
+   395	        level = None

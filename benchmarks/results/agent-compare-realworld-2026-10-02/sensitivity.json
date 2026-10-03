@@ -1,0 +1,95 @@
+{
+ "declared_aliases": 1,
+ "registered": {
+  "found": {
+   "none": 107,
+   "graphify_first": 111,
+   "verinoda_first": 109
+  },
+  "diff": {
+   "graphify_first": {
+    "found_diff": 4,
+    "found_diff_ci95": [
+     -1,
+     12
+    ]
+   },
+   "verinoda_first": {
+    "found_diff": 2,
+    "found_diff_ci95": [
+     -4,
+     10
+    ]
+   }
+  }
+ },
+ "aliases_resolved": {
+  "found": {
+   "none": 110,
+   "graphify_first": 111,
+   "verinoda_first": 109
+  },
+  "diff": {
+   "graphify_first": {
+    "found_diff": 1,
+    "found_diff_ci95": [
+     -2,
+     4
+    ]
+   },
+   "verinoda_first": {
+    "found_diff": -1,
+    "found_diff_ci95": [
+     -4,
+     2
+    ]
+   }
+  }
+ },
+ "window_10": {
+  "found": {
+   "none": 107,
+   "graphify_first": 112,
+   "verinoda_first": 111
+  },
+  "diff": {
+   "graphify_first": {
+    "found_diff": 5,
+    "found_diff_ci95": [
+     0,
+     12
+    ]
+   },
+   "verinoda_first": {
+    "found_diff": 4,
+    "found_diff_ci95": [
+     0,
+     11
+    ]
+   }
+  }
+ },
+ "window_20": {
+  "found": {
+   "none": 108,
+   "graphify_first": 113,
+   "verinoda_first": 111
+  },
+  "diff": {
+   "graphify_first": {
+    "found_diff": 5,
+    "found_diff_ci95": [
+     0,
+     13
+    ]
+   },
+   "verinoda_first": {
+    "found_diff": 3,
+    "found_diff_ci95": [
+     0,
+     9
+    ]
+   }
+  }
+ }
+}

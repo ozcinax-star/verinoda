@@ -1,0 +1,88 @@
+analysis ana_d4afeb6a8a8a, snapshot snp_22edce792516 (commit b0b7687fa6)
+understood as: Understood (rules): q1 [tests] Which tests cover stale claim invalidation?
+plan links: cover -> tests/test_packaging.py:91-107; stale -> repoatlas/claims.py:1022-1092; claim -> repoatlas/analysis.py:213-247; invalidation -> tests/test_agents.py:524-532
+q1 [unmet] tests: Which tests cover stale claim invalidation?
+claims:
+  [statically_verified] `test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run()` is defined at tests/test_analysis.py:163-193  (clm_fef2f17651e9)
+  +1 verified claim(s) about lines the passages below print (--json lists them)
+passages (what `verinoda query` gives for the question; search results, not claims):
+## tests/test_analysis.py:163-193 def test_test_run_claim_goes_stale_and_is_only_restored_by_a_fresh_run(tmp_path)
+  calls: _copy_example@164, init@165, open_store@166, scan@168, analyze@169, update@175, verify@177, Claims@183
+  tests/test_analysis.py:168-176
+168 workflow.scan(st, repo)
+169 res = analysis.analyze(st, repo, "Which tests cover compute_total?", run_tests=True, challenge=False)
+170 c = next(c for c in res["claims"] if c["text"].startswith("Tests that reach `compute_total()`"))
+171 assert c["status"] == "experiment_verified"
+172 p = repo / "orders" / "pricing.py"
+173 original = p.read_text(encoding="utf-8")
+174 p.write_text(original + "\n# harmless trailing comment\n", encoding="utf-8")
+175 assert c["id"] in {s["id"] for s in workflow.update(st, repo)["stale"]}
+  tests/test_analysis.py:180-184
+181 v = workflow.verify(st, repo, c["id"], run=True)
+182 assert v["experiment"]["outcome"] == "pass" and v["after"]["status"] == "experiment_verified"
+183 assert Claims(st, repo).get(c["id"])["snapshot_id"] == st.latest_snapshot()["id"]
+## tests/test_snapshot_stale.py:244-260 test_memory_from_a_stale_claim_is_invalidated_not_deleted
+  calls: Memory@246, learn@247?, _edit@250, update@251, recall@252?, history@254?
+244 def test_memory_from_a_stale_claim_is_invalidated_not_deleted(proj):
+245     repo, st, cl, claims = proj
+246     mem = Memory(st)
+247     mem.learn("pricing.entry", "orders/pricing.py::compute_total", source_claim_id=claims["pricing"]["id"])
+248     mem.learn("persistence.owner", "orders/repository.py", source_claim_id=claims["repository"]["id"])
+249     rows_before = st.one("SELECT COUNT(*) AS n FROM memory")["n"]
+250     _edit(repo, "orders/pricing.py", "return apply_discount(subtotal)", "return subtotal")
+251     workflow.update(st, repo)
+252     assert mem.recall("pricing.entry") == []
+253     assert [m["value"] for m in mem.recall("persistence.owner")] == ["orders/repository.py"]
+254     hist = mem.history("pricing.entry")
+255     assert len(hist) == 1 and hist[0]["valid"] == 0 and hist[0]["invalidated_at"]
+256     assert hist[0]["invalidation_reason"] == "source claim became stale"
+257     assert st.one("SELECT COUNT(*) AS n FROM memory")["n"] == rows_before
+258     # Learning from a stale claim is refused (recall must only return standing facts).
+259     with pytest.raises(ValueError, match="stale"):
+260         mem.learn("pricing.entry", "again", source_claim_id=claims["pricing"]["id"])
+## tests/test_snapshot_stale.py:140-161 test_modifying_a_cited_file_marks_exactly_its_claims_stale
+  calls: _hist_len@142, _edit@143, update@144, _status@150
+140 def test_modifying_a_cited_file_marks_exactly_its_claims_stale(proj):
+141     repo, st, cl, claims = proj
+142     hist = _hist_len(cl, claims)
+143     _edit(repo, "orders/pricing.py", 'i["price"] * i["qty"]', 'i["price"] * i["qty"] * 2')
+144     res = workflow.update(st, repo)
+145     assert res["mode"] == "incremental" and res["changed"]["modified"] == ["orders/pricing.py"]
+146     stale_ids = {s["id"] for s in res["stale"]}
+147     assert stale_ids == {claims["pricing"]["id"], claims["pricing_inference"]["id"]}
+148     for s in res["stale"]:
+149         assert s["changed"] == [{"file": "orders/pricing.py", "change": "modified"}]
+150     st_now = _status(cl, claims)
+151     assert st_now["pricing"] == st_now["pricing_inference"] == "stale"
+152     assert st_now["service"] == st_now["repository"] == st_now["config"] == "statically_verified"
+153     after = _hist_len(cl, claims)
+154     for k in ("service", "repository", "config"):
+155         assert after[k] == hist[k], f"{k} history must be untouched"
+156     h = cl.show(claims["pricing"]["id"])["history"][-1]
+157     assert h["to_status"] == "stale" and "changed since snapshot" in h["reason"]
+158     assert cl.get(claims["pricing"]["id"])["confidence"] == CONFIDENCE_CAP["stale"]
+159     # A second update is a no-op and does not touch history again.
+160     assert workflow.update(st, repo)["mode"] == "noop"
+161     assert _hist_len(cl, claims) == after
+## tests/test_claims.py:492-497 test_stale_cannot_be_requested_at_creation
+492 def test_stale_cannot_be_requested_at_creation(env):
+493     repo, st, cl = env
+494     n = st.one("SELECT COUNT(*) AS n FROM claims")["n"]
+495     with pytest.raises(ClaimRuleError, match="stale is set only by invalidation"):
+496         make(cl, "stale", [(src(repo), "supports")])
+497     assert st.one("SELECT COUNT(*) AS n FROM claims")["n"] == n  # nothing half-created
+## tests/test_snapshot_stale.py:181-191 test_deleting_a_cited_file_marks_its_claims_stale
+181 def test_deleting_a_cited_file_marks_its_claims_stale(proj):
+182     repo, st, cl, claims = proj
+183     (repo / "orders" / "repository.py").unlink()
+184     res = workflow.update(st, repo)
+185     assert res["changed"]["removed"] == ["orders/repository.py"]
+186     assert {s["id"] for s in res["stale"]} == {claims["repository"]["id"]}
+187     assert res["stale"][0]["changed"] == [{"file": "orders/repository.py", "change": "removed"}]
+188     assert _status(cl, claims)["repository"] == "stale"
+189     v = workflow.verify(st, repo, claims["repository"]["id"])
+190     assert v["after"]["status"] == "stale"
+191     assert v["source_checks"][0]["reason"] == "file no longer exists: orders/repository.py"
+## tests/test_mcp.py:417-447 def test_edit_makes_evidence_changed_and_claim_stale(fresh_repo)
+… 1421 more candidates not shown: tests/test_analysis.py:731-750 def test_audit_marks_a_subquestion_stale_when_its_claim_goes_stale(tmp_path); tests/test_snapshot_stale.py:3-7 Covers: modify / commit / delete a cited file -> exactly the dependent claims go; tests/test_snapshot_stale.py:164-178 def test_a_new_commit_that_changes_a_file_marks_its_claims_stale(proj); tests/test_claims.py:293-302 def…
+next: verinoda query "…" --max-chars 12000

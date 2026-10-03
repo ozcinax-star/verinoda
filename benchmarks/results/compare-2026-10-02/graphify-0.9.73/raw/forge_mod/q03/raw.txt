@@ -1,0 +1,401 @@
+$ grep -rniE 'emberforge|forging|tarif|tipi|kodda|nerede|tanımlanıyor|tarifleri|hangi|kod|okuyup|kullanıyor' .   # 270 matching lines in 51 files
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1: package net.ashvale.emberforge.block;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:5: import net.ashvale.emberforge.EmberForge;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:6: import net.ashvale.emberforge.config.EmberConfig;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:7: import net.ashvale.emberforge.heat.HeatMath;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:8: import net.ashvale.emberforge.menu.EmberForgeMenu;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:9: import net.ashvale.emberforge.recipe.ForgingRecipe;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:10: import net.ashvale.emberforge.registry.ModBlocks;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:11: import net.ashvale.emberforge.registry.ModRecipes;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:12: import net.ashvale.emberforge.registry.ModTags;
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:31: * Inventory (input, fuel, output), heat and forging progress of one Ember Forge.
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:33: public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:71: public EmberForgeBlockEntity(BlockPos pos, BlockState state) {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:75: public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge) {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:92: Optional<RecipeHolder<ForgingRecipe>> match = level.getRecipeManager()
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:93: .getRecipeFor(ModRecipes.FORGING_TYPE.get(), new SingleRecipeInput(input), level);
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:95: ForgingRecipe recipe = match.get().value();
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:114: if (state.getValue(EmberForgeBlock.LIT) != lit) {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:115: level.setBlock(pos, state.setValue(EmberForgeBlock.LIT, lit), 3);
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:133: private void finish(ForgingRecipe recipe) {
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:137: EmberForge.LOGGER.debug("Ember Forge at {} forged {}", worldPosition, recipe.result());
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:143: player.displayClientMessage(Component.translatable("message.emberforge.stoked", heat), true);
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:172: return Component.translatable("container.emberforge.ember_forge");
+src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:177: return new EmberForgeMenu(containerId, inventory, this, data);
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:1: package net.ashvale.emberforge.recipe;
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:6: import net.ashvale.emberforge.registry.ModRecipes;
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:24: public record ForgingRecipe(Ingredient ingredient, ItemStack result, int forgeTime, int minHeat)
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:54: return ModRecipes.FORGING_SERIALIZER.get();
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:59: return ModRecipes.FORGING_TYPE.get();
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:62: public static final class Serializer implements RecipeSerializer<ForgingRecipe> {
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:63: private static final MapCodec<ForgingRecipe> CODEC = RecordCodecBuilder.mapCodec(i -> i.group(
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:64: Ingredient.CODEC_NONEMPTY.fieldOf("ingredient").forGetter(ForgingRecipe::ingredient),
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:65: ItemStack.STRICT_CODEC.fieldOf("result").forGetter(ForgingRecipe::result),
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:66: Codec.INT.optionalFieldOf("forge_time", 200).forGetter(ForgingRecipe::forgeTime),
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:67: Codec.INT.optionalFieldOf("min_heat", 0).forGetter(ForgingRecipe::minHeat)
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:68: ).apply(i, ForgingRecipe::new));
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:70: private static final StreamCodec<RegistryFriendlyByteBuf, ForgingRecipe> STREAM_CODEC = StreamCodec.composite(
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:71: Ingredient.CONTENTS_STREAM_CODEC, ForgingRecipe::ingredient,
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:72: ItemStack.STREAM_CODEC, ForgingRecipe::result,
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:73: ByteBufCodecs.VAR_INT, ForgingRecipe::forgeTime,
+src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:74: ByteBufCodecs.VAR_INT, ForgingRecipe::minHeat,
+... (230 more matching lines not shown)
+
+==> src/main/java/net/ashvale/emberforge/block/EmberForgeBlockEntity.java:1-179 <==
+     1	package net.ashvale.emberforge.block;
+     2	
+     3	import java.util.Optional;
+     4	
+     5	import net.ashvale.emberforge.EmberForge;
+     6	import net.ashvale.emberforge.config.EmberConfig;
+     7	import net.ashvale.emberforge.heat.HeatMath;
+     8	import net.ashvale.emberforge.menu.EmberForgeMenu;
+     9	import net.ashvale.emberforge.recipe.ForgingRecipe;
+    10	import net.ashvale.emberforge.registry.ModBlocks;
+    11	import net.ashvale.emberforge.registry.ModRecipes;
+    12	import net.ashvale.emberforge.registry.ModTags;
+    13	import net.minecraft.core.BlockPos;
+    14	import net.minecraft.core.HolderLookup;
+    15	import net.minecraft.nbt.CompoundTag;
+    16	import net.minecraft.network.chat.Component;
+    17	import net.minecraft.world.MenuProvider;
+    18	import net.minecraft.world.entity.player.Inventory;
+    19	import net.minecraft.world.entity.player.Player;
+    20	import net.minecraft.world.inventory.AbstractContainerMenu;
+    21	import net.minecraft.world.inventory.ContainerData;
+    22	import net.minecraft.world.item.ItemStack;
+    23	import net.minecraft.world.item.crafting.RecipeHolder;
+    24	import net.minecraft.world.item.crafting.SingleRecipeInput;
+    25	import net.minecraft.world.level.Level;
+    26	import net.minecraft.world.level.block.entity.BlockEntity;
+    27	import net.minecraft.world.level.block.state.BlockState;
+    28	import net.neoforged.neoforge.items.ItemStackHandler;
+    29	
+    30	/**
+    31	 * Inventory (input, fuel, output), heat and forging progress of one Ember Forge.
+    32	 */
+    33	public class EmberForgeBlockEntity extends BlockEntity implements MenuProvider {
+    34	    public static final int SLOT_INPUT = 0;
+    35	    public static final int SLOT_FUEL = 1;
+    36	    public static final int SLOT_OUTPUT = 2;
+    37	
+    38	    private final ItemStackHandler items = new ItemStackHandler(3) {
+    39	        @Override
+    40	        protected void onContentsChanged(int slot) {
+    41	            setChanged();
+    42	        }
+    43	    };
+    44	    private int heat;
+    45	    private int progress;
+    46	    private int forgeTime;
+    47	
+    48	    private final ContainerData data = new ContainerData() {
+    49	        @Override
+    50	        public int get(int index) {
+    51	            return switch (index) {
+    52	                case 0 -> heat;
+    53	                case 1 -> EmberConfig.MAX_HEAT.get();
+    54	                case 2 -> progress;
+    55	                case 3 -> forgeTime;
+    56	                default -> 0;
+    57	            };
+    58	        }
+    59	
+    60	        @Override
+    61	        public void set(int index, int value) {
+    62	            // the server owns these values; the client menu keeps its own copy
+    63	        }
+    64	
+    65	        @Override
+    66	        public int getCount() {
+    67	            return 4;
+    68	        }
+    69	    };
+    70	
+    71	    public EmberForgeBlockEntity(BlockPos pos, BlockState state) {
+    72	        super(ModBlocks.EMBER_FORGE_ENTITY.get(), pos, state);
+    73	    }
+    74	
+    75	    public static void serverTick(Level level, BlockPos pos, BlockState state, EmberForgeBlockEntity forge) {
+    76	        boolean changed = false;
+    77	
+    78	        ItemStack fuel = forge.items.getStackInSlot(SLOT_FUEL);
+    79	        int fuelHeat = HeatMath.heatForFuel(fuel);
+    80	        if (fuelHeat > 0 && forge.heat + fuelHeat <= EmberConfig.MAX_HEAT.get()) {
+    81	            forge.items.extractItem(SLOT_FUEL, 1, false);
+    82	            forge.heat = HeatMath.addHeat(forge.heat, fuelHeat);
+    83	            changed = true;
+    84	        }
+    85	
+    86	        if (level.getGameTime() % 40 == 0 && level.getBlockState(pos.below()).is(ModTags.FORGE_HEAT_SOURCES)) {
+    87	            forge.heat = HeatMath.addHeat(forge.heat, 2);
+    88	            changed = true;
+    89	        }
+    90	
+    91	        ItemStack input = forge.items.getStackInSlot(SLOT_INPUT);
+    92	        Optional<RecipeHolder<ForgingRecipe>> match = level.getRecipeManager()
+    93	                .getRecipeFor(ModRecipes.FORGING_TYPE.get(), new SingleRecipeInput(input), level);
+    94	        if (match.isPresent() && forge.canOutput(match.get().value().result())) {
+    95	            ForgingRecipe recipe = match.get().value();
+    96	            forge.forgeTime = recipe.forgeTime();
+    97	            forge.progress += HeatMath.progressPerTick(forge.heat, recipe.minHeat());
+    98	            if (forge.progress >= recipe.forgeTime()) {
+    99	                forge.finish(recipe);
+   100	            }
+   101	            changed = true;
+   102	        } else if (forge.progress != 0) {
+   103	            forge.progress = 0;
+   104	            changed = true;
+   105	        }
+   106	
+   107	        int cooled = cooled(forge.heat, level.getGameTime(), EmberConfig.DECAY_INTERVAL.get());
+   108	        if (cooled != forge.heat) {
+   109	            forge.heat = cooled;
+   110	            changed = true;
+   111	        }
+   112	
+   113	        boolean lit = forge.heat > 0;
+   114	        if (state.getValue(EmberForgeBlock.LIT) != lit) {
+   115	            level.setBlock(pos, state.setValue(EmberForgeBlock.LIT, lit), 3);
+   116	        }
+   117	        if (changed) {
+   118	            setChanged(level, pos, state);
+   119	        }
+   120	    }
+   121	
+   122	    /** Heat after cooling: one less on every decayInterval-th game tick, never below 0. */
+   123	    public static int cooled(int heat, long gameTime, int decayInterval) {
+   124	        return heat > 0 && gameTime % decayInterval == 0 ? heat - 1 : heat;
+   125	    }
+   126	
+   127	    private boolean canOutput(ItemStack result) {
+   128	        ItemStack out = items.getStackInSlot(SLOT_OUTPUT);
+   129	        return out.isEmpty() || (ItemStack.isSameItemSameComponents(out, result)
+   130	                && out.getCount() + result.getCount() <= out.getMaxStackSize());
+   131	    }
+   132	
+   133	    private void finish(ForgingRecipe recipe) {
+   134	        items.extractItem(SLOT_INPUT, 1, false);
+   135	        items.insertItem(SLOT_OUTPUT, recipe.result().copy(), false);
+   136	        progress = 0;
+   137	        EmberForge.LOGGER.debug("Ember Forge at {} forged {}", worldPosition, recipe.result());
+   138	    }
+   139	
+   140	    public void stoke(Player player) {
+   141	        heat = HeatMath.addHeat(heat, EmberConfig.STOKE_HEAT.get());
+   142	        setChanged();
+   143	        player.displayClientMessage(Component.translatable("message.emberforge.stoked", heat), true);
+   144	    }
+   145	
+   146	    @Override
+   147	    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+   148	        super.loadAdditional(tag, registries);
+   149	        items.deserializeNBT(registries, tag.getCompound("Items"));
+   150	        heat = tag.getInt("Heat");
+   151	        progress = tag.getInt("Progress");
+   152	    }
+   153	
+   154	    @Override
+   155	    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+   156	        super.saveAdditional(tag, registries);
+   157	        tag.put("Items", items.serializeNBT(registries));
+   158	        tag.putInt("Heat", heat);
+   159	        tag.putInt("Progress", progress);
+   160	    }
+   161	
+   162	    public ItemStackHandler getItems() {
+   163	        return items;
+   164	    }
+   165	
+   166	    public int getHeat() {
+   167	        return heat;
+   168	    }
+   169	
+   170	    @Override
+   171	    public Component getDisplayName() {
+   172	        return Component.translatable("container.emberforge.ember_forge");
+   173	    }
+   174	
+   175	    @Override
+   176	    public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
+   177	        return new EmberForgeMenu(containerId, inventory, this, data);
+   178	    }
+   179	}
+
+==> src/main/java/net/ashvale/emberforge/recipe/ForgingRecipe.java:1-87 <==
+     1	package net.ashvale.emberforge.recipe;
+     2	
+     3	import com.mojang.serialization.Codec;
+     4	import com.mojang.serialization.MapCodec;
+     5	import com.mojang.serialization.codecs.RecordCodecBuilder;
+     6	import net.ashvale.emberforge.registry.ModRecipes;
+     7	import net.minecraft.core.HolderLookup;
+     8	import net.minecraft.core.NonNullList;
+     9	import net.minecraft.network.RegistryFriendlyByteBuf;
+    10	import net.minecraft.network.codec.ByteBufCodecs;
+    11	import net.minecraft.network.codec.StreamCodec;
+    12	import net.minecraft.world.item.ItemStack;
+    13	import net.minecraft.world.item.crafting.Ingredient;
+    14	import net.minecraft.world.item.crafting.Recipe;
+    15	import net.minecraft.world.item.crafting.RecipeSerializer;
+    16	import net.minecraft.world.item.crafting.RecipeType;
+    17	import net.minecraft.world.item.crafting.SingleRecipeInput;
+    18	import net.minecraft.world.level.Level;
+    19	
+    20	/**
+    21	 * One ingredient becomes the result after forge_time progress points. Progress only
+    22	 * grows while the forge has at least min_heat heat.
+    23	 */
+    24	public record ForgingRecipe(Ingredient ingredient, ItemStack result, int forgeTime, int minHeat)
+    25	        implements Recipe<SingleRecipeInput> {
+    26	
+    27	    @Override
+    28	    public boolean matches(SingleRecipeInput input, Level level) {
+    29	        return ingredient.test(input.item());
+    30	    }
+    31	
+    32	    @Override
+    33	    public ItemStack assemble(SingleRecipeInput input, HolderLookup.Provider registries) {
+    34	        return result.copy();
+    35	    }
+    36	
+    37	    @Override
+    38	    public boolean canCraftInDimensions(int width, int height) {
+    39	        return true;
+    40	    }
+    41	
+    42	    @Override
+    43	    public ItemStack getResultItem(HolderLookup.Provider registries) {
+    44	        return result;
+    45	    }
+    46	
+    47	    @Override
+    48	    public NonNullList<Ingredient> getIngredients() {
+    49	        return NonNullList.of(Ingredient.EMPTY, ingredient);
+    50	    }
+    51	
+    52	    @Override
+    53	    public RecipeSerializer<?> getSerializer() {
+    54	        return ModRecipes.FORGING_SERIALIZER.get();
+    55	    }
+    56	
+    57	    @Override
+    58	    public RecipeType<?> getType() {
+    59	        return ModRecipes.FORGING_TYPE.get();
+    60	    }
+    61	
+    62	    public static final class Serializer implements RecipeSerializer<ForgingRecipe> {
+    63	        private static final MapCodec<ForgingRecipe> CODEC = RecordCodecBuilder.mapCodec(i -> i.group(
+    64	                Ingredient.CODEC_NONEMPTY.fieldOf("ingredient").forGetter(ForgingRecipe::ingredient),
+    65	                ItemStack.STRICT_CODEC.fieldOf("result").forGetter(ForgingRecipe::result),
+    66	                Codec.INT.optionalFieldOf("forge_time", 200).forGetter(ForgingRecipe::forgeTime),
+    67	                Codec.INT.optionalFieldOf("min_heat", 0).forGetter(ForgingRecipe::minHeat)
+    68	        ).apply(i, ForgingRecipe::new));
+    69	
+    70	        private static final StreamCodec<RegistryFriendlyByteBuf, ForgingRecipe> STREAM_CODEC = StreamCodec.composite(
+    71	                Ingredient.CONTENTS_STREAM_CODEC, ForgingRecipe::ingredient,
+    72	                ItemStack.STREAM_CODEC, ForgingRecipe::result,
+    73	                ByteBufCodecs.VAR_INT, ForgingRecipe::forgeTime,
+    74	                ByteBufCodecs.VAR_INT, ForgingRecipe::minHeat,
+    75	                ForgingRecipe::new);
+    76	
+    77	        @Override
+    78	        public MapCodec<ForgingRecipe> codec() {
+    79	            return CODEC;
+    80	        }
+    81	
+    82	        @Override
+    83	        public StreamCodec<RegistryFriendlyByteBuf, ForgingRecipe> streamCodec() {
+    84	            return STREAM_CODEC;
+    85	        }
+    86	    }
+    87	}
+
+==> src/main/java/net/ashvale/emberforge/registry/ModRecipes.java:1-25 <==
+     1	package net.ashvale.emberforge.registry;
+     2	
+     3	import java.util.function.Supplier;
+     4	
+     5	import net.ashvale.emberforge.EmberForge;
+     6	import net.ashvale.emberforge.recipe.ForgingRecipe;
+     7	import net.minecraft.core.registries.Registries;
+     8	import net.minecraft.world.item.crafting.RecipeSerializer;
+     9	import net.minecraft.world.item.crafting.RecipeType;
+    10	import net.neoforged.neoforge.registries.DeferredRegister;
+    11	
+    12	public final class ModRecipes {
+    13	    public static final DeferredRegister<RecipeType<?>> RECIPE_TYPES =
+    14	            DeferredRegister.create(Registries.RECIPE_TYPE, EmberForge.MOD_ID);
+    15	    public static final DeferredRegister<RecipeSerializer<?>> RECIPE_SERIALIZERS =
+    16	            DeferredRegister.create(Registries.RECIPE_SERIALIZER, EmberForge.MOD_ID);
+    17	
+    18	    public static final Supplier<RecipeType<ForgingRecipe>> FORGING_TYPE =
+    19	            RECIPE_TYPES.register("forging", () -> RecipeType.simple(EmberForge.id("forging")));
+    20	    public static final Supplier<RecipeSerializer<ForgingRecipe>> FORGING_SERIALIZER =
+    21	            RECIPE_SERIALIZERS.register("forging", ForgingRecipe.Serializer::new);
+    22	
+    23	    private ModRecipes() {
+    24	    }
+    25	}
+
+==> README.md:1-22 <==
+     1	# Emberforge (example mod)
+     2	
+     3	A small, fictional NeoForge 1.21.1 mod used as a test corpus for Verinoda. It builds on
+     4	paper only: textures (`.png`) are left out so the example stays plain text, and nothing
+     5	here has been run in a game.
+     6	
+     7	Adds:
+     8	
+     9	- **Ember Forge** - a block that burns fuel into heat and slowly forges its input with
+    10	  `emberforge:forging` recipes. Right-click opens it; a Forge Hammer stokes it.
+    11	- **Cinder Ore** - generated in a few overworld biomes; forged into two Cinder Ingots
+    12	  (a furnace gives one).
+    13	- `/emberforge reset` and `/emberforge heat <pos>` for operators.
+    14	
+    15	Layout:
+    16	
+    17	- `src/main/java` - Java code (registries, block, block entity, menu, recipe, network, events)
+    18	- `src/main/kotlin` - Kotlin code (heat rules, forge screen, commands); needs Kotlin for Forge
+    19	- `src/main/resources/data/emberforge` - recipes, tags, loot tables, worldgen, advancement, functions
+    20	- `src/main/resources/assets/emberforge` - blockstates, models, `en_us` / `tr_tr` translations
+    21	- `config/emberforge-common.toml` - the default common config, for reference
+    22	- `src/test/java` - JUnit tests
+
+==> src/main/kotlin/net/ashvale/emberforge/heat/HeatMath.kt:1-36 <==
+     1	package net.ashvale.emberforge.heat
+     2	
+     3	import net.ashvale.emberforge.config.EmberConfig
+     4	import net.ashvale.emberforge.registry.ModTags
+     5	import net.minecraft.world.item.ItemStack
+     6	import net.minecraft.world.item.Items
+     7	
+     8	/** Heat rules of the Ember Forge. */
+     9	object HeatMath {
+    10	    private const val HEAT_PER_EXTRA_STEP = 50
+    11	    private const val MAX_STEPS = 4
+    12	
+    13	    /** Heat one fuel item adds; blaze rods count double. 0 for items that are not forge fuel. */
+    14	    @JvmStatic
+    15	    fun heatForFuel(stack: ItemStack): Int {
+    16	        if (stack.isEmpty || !stack.`is`(ModTags.FORGE_FUELS)) return 0
+    17	        val base = EmberConfig.HEAT_PER_FUEL.get()
+    18	        return if (stack.`is`(Items.BLAZE_ROD)) base * 2 else base
+    19	    }
+    20	
+    21	    @JvmStatic
+    22	    fun addHeat(current: Int, amount: Int): Int = addHeat(current, amount, EmberConfig.MAX_HEAT.get())
+    23	
+    24	    @JvmStatic
+    25	    fun addHeat(current: Int, amount: Int, maxHeat: Int): Int = (current + amount).coerceIn(0, maxHeat)
+    26	
+    27	    /**
+    28	     * Forging progress per tick: nothing below the recipe's minimum heat, then 1,
+    29	     * plus 1 for every full 50 heat above the minimum, at most 4.
+    30	     */
+    31	    @JvmStatic
+    32	    fun progressPerTick(heat: Int, minHeat: Int): Int {
+    33	        if (heat < minHeat) return 0
+    34	        return (1 + (heat - minHeat) / HEAT_PER_EXTRA_STEP).coerceAtMost(MAX_STEPS)
+    35	    }
+    36	}
