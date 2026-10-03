@@ -11,6 +11,8 @@ tens of milliseconds to about a second, which is what a prompt hook or the first
   "max_files", "history"}`` answer what the command's ``--json`` prints, plus ``text``: the compact text a model reads.
   ``GET /status``; ``POST /shutdown`` (what ``stop`` uses, so a stop never signals a process id that may have been
   reused). Requests are answered one after another (git and the graph are shared).
+* A state file is only believed after the server it names answers as this repository's daemon (its `repo` and `pid`), and
+  only 127.0.0.1 is ever connected to, whatever the file says: a repository cloned from anywhere may ship one.
 * It listens at once and loads the graph in the background: ``start`` returns when it listens, ``/coupled`` is answered
   meanwhile and ``/locate`` waits for the graph (``/status`` says ``loading``).
 * It ends by itself after ``IDLE_TIMEOUT`` seconds without a request, and ``start`` finds one that is running by the
@@ -60,7 +62,8 @@ def _read_state(repo: Path | str) -> dict | None:
         data = json.loads(state_path(repo).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    ok = isinstance(data, dict) and isinstance(data.get("port"), int) and isinstance(data.get("token"), str)
+    ok = (isinstance(data, dict) and isinstance(data.get("port"), int) and 0 < data["port"] < 65536
+          and isinstance(data.get("token"), str))
     return data if ok else None
 
 
@@ -74,7 +77,9 @@ def _remove_state(repo: Path | str, pid: int | None = None) -> None:
         pass
 
 
-def _write_state(repo: Path | str, state: dict) -> None:
+def _write_state(repo: Path | str, state: dict) -> bool:
+    """Write the state file unless another daemon's is there (a link to a finished temporary file fails when the target exists,
+    so of two daemons started at once exactly one writes it); False when it was not written."""
     from verinoda.mcp.transport import _user_only
 
     p = state_path(repo)
@@ -84,9 +89,19 @@ def _write_state(repo: Path | str, state: dict) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(json.dumps(state, indent=2))
     note = _user_only(tmp)
-    os.replace(tmp, p)
+    try:
+        os.link(tmp, p)
+        written = True
+    except FileExistsError:
+        written = False
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
     if note:
         print(f"verinoda locate daemon: warning: {note}", file=sys.stderr, flush=True)
+    return written
 
 
 # -- the server ---------------------------------------------------------------------------------------------------
@@ -105,10 +120,20 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _body(self) -> dict | None:
+    def _body(self) -> dict | None | str:
+        """The JSON object of the body; None when it is not one; "big" when it is over the limit (read and dropped, so the
+        client that is still sending gets its answer)."""
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            raw = self.rfile.read(n) if 0 < n <= MAX_BODY else b"{}"
+            if n > MAX_BODY:
+                left = min(n, 16 * MAX_BODY)
+                while left > 0:
+                    chunk = self.rfile.read(min(65536, left))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+                return "big"
+            raw = self.rfile.read(n) if n > 0 else b"{}"
             data = json.loads(raw.decode("utf-8") or "{}")
         except (ValueError, OSError):
             return None
@@ -119,7 +144,13 @@ class _Handler(BaseHTTPRequestHandler):
         given = (self.headers.get(TOKEN_HEADER) or "").encode("utf-8")
         if not hmac.compare_digest(given, d.token.encode("utf-8")):
             return self._send(401, {"error": "unauthorized", "message": f"send the daemon's token in {TOKEN_HEADER}"})
-        d.touch()
+        d.begin()
+        try:
+            return self._answer(d, method)
+        finally:
+            d.end()
+
+    def _answer(self, d: Daemon, method: str) -> None:
         path = self.path.split("?", 1)[0]
         allowed = {"/status": "GET", "/locate": "POST", "/coupled": "POST", "/shutdown": "POST"}
         if path not in allowed:
@@ -133,7 +164,9 @@ class _Handler(BaseHTTPRequestHandler):
             threading.Thread(target=d.shutdown, daemon=True).start()
             return None
         body = self._body()
-        if body is None:
+        if body == "big":
+            return self._send(413, {"error": f"the body is over {MAX_BODY:,} bytes"})
+        if not isinstance(body, dict):
             return self._send(400, {"error": "the body is a JSON object"})
         kind = path.lstrip("/")
         code, out = d.answer(kind, body)
@@ -165,10 +198,12 @@ class Daemon:
         self.loaded = threading.Event()
         self.stopped = threading.Event()
         self._lock = threading.Lock()
+        self._lock_active = threading.Lock()
         self._serving = threading.Event()
         self._stop_asked = False
         self._last = time.monotonic()
         self._started = time.monotonic()
+        self._active = 0  # requests being answered: the idle clock does not run while there is one
         self._write = state_file
 
         class _Server(ThreadingHTTPServer):
@@ -182,6 +217,16 @@ class Daemon:
 
     def touch(self) -> None:
         self._last = time.monotonic()
+
+    def begin(self) -> None:
+        with self._lock_active:
+            self._active += 1
+        self.touch()
+
+    def end(self) -> None:
+        with self._lock_active:
+            self._active -= 1
+        self.touch()
 
     def status(self) -> dict:
         return {"ok": True, "pid": os.getpid(), "repo": str(self.repo), "graph_loaded": self.warm,
@@ -205,10 +250,23 @@ class Daemon:
         res["text"] = locate.render(res, max_chars, kind=kind)
         return 200, res
 
+    def _claim_state(self) -> bool:
+        """Write this daemon's state file; False when a live daemon of this repository has written its own (a stale file is
+        replaced)."""
+        state = {"pid": os.getpid(), "url": self.url, "host": HOST, "port": self.port, "token": self.token,
+                 "repo": str(self.repo), "idle_timeout": self.idle_timeout,
+                 "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        for _ in range(2):
+            if _write_state(self.repo, state):
+                return True
+            if status(self.repo)["running"]:
+                return False  # status removes a file nobody answers for, so the second try can write
+        return False
+
     def _watch(self) -> None:
         step = max(0.05, min(1.0, self.idle_timeout / 4))
         while not self.stopped.wait(step):
-            if time.monotonic() - self._last > self.idle_timeout:
+            if self._active == 0 and time.monotonic() - self._last > self.idle_timeout:
                 self.shutdown()
                 return
 
@@ -230,10 +288,9 @@ class Daemon:
 
     def serve_forever(self) -> None:
         try:
-            if self._write:
-                _write_state(self.repo, {"pid": os.getpid(), "url": self.url, "host": HOST, "port": self.port,
-                                         "token": self.token, "repo": str(self.repo), "idle_timeout": self.idle_timeout,
-                                         "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+            if self._write and not self._claim_state():
+                print("verinoda locate daemon: another daemon serves this repository; ending", file=sys.stderr, flush=True)
+                return
             self.touch()
             threading.Thread(target=self._watch, daemon=True).start()
             threading.Thread(target=self._load, daemon=True).start()
@@ -259,8 +316,8 @@ def run(repo: Path | str, *, idle_timeout: float = IDLE_TIMEOUT) -> int:
 
 # -- the commands -------------------------------------------------------------------------------------------------
 
-def _request(state: dict, method: str, path: str, timeout: float = 5.0) -> tuple[int, dict]:
-    conn = http.client.HTTPConnection(state.get("host") or HOST, state["port"], timeout=timeout)
+def _request(state: dict, method: str, path: str, timeout: float = 15.0) -> tuple[int, dict]:
+    conn = http.client.HTTPConnection(HOST, state["port"], timeout=timeout)  # never the file's host
     try:
         conn.request(method, path, body=b"{}" if method == "POST" else None, headers={TOKEN_HEADER: state["token"]})
         r = conn.getresponse()
@@ -274,21 +331,34 @@ def _request(state: dict, method: str, path: str, timeout: float = 5.0) -> tuple
         conn.close()
 
 
+def _ours(data: dict, repo: Path, state: dict) -> bool:
+    """Does the server that answered say it is this repository's daemon, the process the state file names?"""
+    served = str(data.get("repo") or "")
+    return bool(served) and os.path.normcase(str(Path(served).resolve())) == os.path.normcase(str(repo)) \
+        and data.get("pid") == state.get("pid")
+
+
 def status(repo: Path | str) -> dict:
-    """``{"running": True, url, token, pid, ...}`` when a daemon of this repository answers, else ``{"running": False}``
-    (a state file nobody answers for is removed)."""
+    """``{"running": True, url, token, pid, ...}`` when this repository's daemon answers, else ``{"running": False}`` (a state
+    file nobody answers for, or a server that is not this repository's daemon, is removed). A daemon that does not answer in
+    time is running and busy (``unresponsive``): its file stays."""
+    repo = Path(repo).resolve()
     state = _read_state(repo)
     if state is None:
         _remove_state(repo)  # no file, or one that is no state
         return {"running": False}
+    url = f"http://{HOST}:{state['port']}"
     try:
         code, data = _request(state, "GET", "/status")
-    except OSError:
-        code, data = 0, {}
-    if code != 200:
+    except (ConnectionRefusedError, FileNotFoundError):
         _remove_state(repo, state.get("pid"))
         return {"running": False}
-    return {"running": True, "url": state.get("url"), "token": state["token"], "pid": data.get("pid", state.get("pid")),
+    except OSError:
+        return {"running": True, "unresponsive": True, "url": url, "token": state["token"], "pid": state.get("pid")}
+    if code != 200 or not _ours(data, repo, state):
+        _remove_state(repo, state.get("pid"))
+        return {"running": False}
+    return {"running": True, "url": url, "token": state["token"], "pid": data.get("pid", state.get("pid")),
             "graph_loaded": data.get("graph_loaded"), "loading": data.get("loading"), "requests": data.get("requests"),
             "idle_timeout": data.get("idle_timeout"), "uptime_s": data.get("uptime_s")}
 
@@ -334,19 +404,27 @@ def start(repo: Path | str, *, idle_timeout: float = IDLE_TIMEOUT, wait: float =
 
 
 def stop(repo: Path | str) -> dict:
-    """Ask the daemon to end and wait until its port closes; ``{"running": False}`` (also when none ran)."""
+    """Ask the daemon to end and wait until its port closes: ``{"running": False}`` (also when none ran); ``{"running": True,
+    "error": ...}`` when it refused or did not answer (its state file stays)."""
+    repo = Path(repo).resolve()
     state = _read_state(repo)
     if state is None:
         return {"running": False}
     try:
-        _request(state, "POST", "/shutdown")
-    except OSError:
+        code, _ = _request(state, "POST", "/shutdown")
+    except (ConnectionRefusedError, FileNotFoundError):
         _remove_state(repo, state.get("pid"))
         return {"running": False}
+    except OSError as exc:
+        return {"running": True, "error": f"no answer to the stop request ({type(exc).__name__})"}
+    if code == 401:
+        return {"running": True, "error": "the daemon refuses the token in the state file"}
+    if code != 200:
+        return {"running": True, "error": f"the daemon answered the stop request with HTTP {code}"}
     deadline = time.monotonic() + STOP_WAIT
     while time.monotonic() < deadline:
         try:
-            with socket.create_connection((state.get("host") or HOST, state["port"]), timeout=0.5):
+            with socket.create_connection((HOST, state["port"]), timeout=0.5):
                 pass
         except OSError:
             break
@@ -360,6 +438,10 @@ def render(res: dict) -> str:
     if not res.get("running"):
         tail = f"\n{res['log_tail']}" if res.get("log_tail") else ""
         return "locate daemon: not running" + tail
+    if res.get("error"):
+        return f"locate daemon: still running ({res['error']})"
+    if res.get("unresponsive"):
+        return f"locate daemon: running at {res.get('url')} (pid {res.get('pid')}), busy: it did not answer in time"
     loaded = "graph loaded" if res.get("graph_loaded") else "graph loading" if res.get("loading") else "graph not loaded"
     return (f"locate daemon: running at {res.get('url')} (pid {res.get('pid')}, {loaded}, {res.get('requests') or 0} "
             f"requests, ends after {res.get('idle_timeout')} s idle)")

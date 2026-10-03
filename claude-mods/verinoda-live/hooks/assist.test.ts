@@ -23,6 +23,7 @@ const COUPLED_JSON = {
 }
 
 type Opts = {
+  cwd?: string
   daemon?: { url: string; token: string } | 'unsupported'
   locate?: { exitCode: number; stdout: string }
   fetchOk?: boolean
@@ -34,8 +35,8 @@ function world(on: On, opts: Opts = {}) {
   const runs: string[][] = []
   const registered: string[] = []
   const fetched: { url: string; init: { headers?: Record<string, string>; body?: string } }[] = []
-  on('session.start', () => ({ cwd: ROOT }))
-  on('session.cwd', () => ({ value: ROOT }))
+  on('session.start', () => ({ cwd: opts.cwd ?? ROOT }))
+  on('session.cwd', () => ({ value: opts.cwd ?? ROOT }))
   on('fs.stat', () => ({ value: { isFile: false, isDirectory: true, size: 0, mtimeMs: 0 } }) as never)
   on('command.register', ($, e) => ({ value: { command: e.name } }) as never)
   on('ui.status', () => ({ value: undefined }))
@@ -125,6 +126,7 @@ describe('assist: pure parts', () => {
       expect(isBlockedSearch({ tool: 'Bash', command: c })).toBe(true)
     }
     expect(isBlockedSearch({ tool: 'PowerShell', command: 'Select-String -Path src -Pattern x' })).toBe(true)
+    for (const c of ['sudo grep -rn x .', 'time rg foo', 'env LC_ALL=C grep x a.c', 'ls | xargs grep foo']) expect(isBlockedSearch({ tool: 'Bash', command: c })).toBe(true)
     for (const c of ['ls src', 'cat a.c', 'git status', 'python -m pytest', 'git log --grep=x', 'echo grep']) {
       expect(isBlockedSearch({ tool: 'Bash', command: c })).toBe(false)
     }
@@ -133,7 +135,8 @@ describe('assist: pure parts', () => {
 
   test('source files are code that is not a test or a document', () => {
     for (const f of ['src/a.c', 'include/a.h', 'pkg/m.py', 'lib/x.ts', 'CMakeLists.txt', 'src/a.rs', 'src/arch/x86/Makefile']) expect(isSourceFile(f)).toBe(true)
-    for (const f of ['README.md', 'docs/a.c', 'tests/test_a.py', 'src/a.test.ts', 'pkg/test_m.py', 'a.png', 'LICENSE', 'pkg/data.json']) expect(isSourceFile(f)).toBe(false)
+    for (const f of ['README.md', 'docs/a.c', 'tests/test_a.py', 'src/a.test.ts', 'pkg/test_m.py', 'a.png', 'LICENSE', 'pkg/data.json',
+      'vendor/lib/a.c', 'node_modules/p/index.js', 'third_party/x/y.c', 'pkg/site-packages/m.py']) expect(isSourceFile(f)).toBe(false)
   })
 
   test('the system prompt line is written for what is on', () => {
@@ -477,5 +480,57 @@ describe('a scripted session takes its settings as given', () => {
     await $.session.start(START)
     expect(contextOf(await $.prompt.submit(ask(REPORT)))).toEqual([])
     expect(w.cli('locate').length).toBe(0)
+  })
+})
+
+
+describe('what an independent review found', () => {
+  test('a session started outside the project gets no tools, no prompt line, no gate, no notes', { options: { assist: 'strict', root: ROOT } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    const w = world(on, { cwd: 'C:/elsewhere' })
+    await $.session.start({ cwd: 'C:/elsewhere', surface: 'terminal', isInteractive: true } as never)
+    expect(w.registered).toEqual([])
+    const out = await $.prompt.compose(COMPOSE)
+    expect(out.sections.some(s => s.id === 'verinoda-live:assist')).toBe(false)
+    await $.prompt.submit(ask(REPORT))
+    expect(((await $.tool.call({ tool: 'Grep', pattern: 'x' } as never)) as { deny?: string }).deny).toBeUndefined()
+    expect(contextOf(await $.tool.call(READ('src/kernel/thread.c')))).toEqual([])
+    expect(w.runs.some(r => r.includes('--daemon'))).toBe(false) // and no daemon for a session that will not ask
+    expect(w.cli('locate').length + w.cli('coupled').length).toBe(0)
+  })
+
+  test('the files read for one task are not the anchors of the next', { options: { assist: 'tool' } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    const w = world(on)
+    await $.session.start(START)
+    await $.prompt.submit(ask(REPORT))
+    await $.tool.call(READ('src/kernel/thread.c'))
+    await $.prompt.submit(ask(`${REPORT} A different one.`))
+    await $.tool.call({ tool: LOCATE, text: REPORT } as never)
+    expect(w.cli('locate')[0]).not.toContain('--anchor')
+  })
+
+  test('a daemon that names a host other than 127.0.0.1 is never used, and the prompt goes nowhere else', { options: { assist: 'tool' } }, async ($, on) => {
+    const clock = mock.clock(on)
+    mock.store(on)
+    const w = world(on, { daemon: { url: 'http://evil.example:8080', token: 'tok' } })
+    await $.session.start(START)
+    await clock.settle()
+    await $.tool.call({ tool: LOCATE, text: REPORT } as never)
+    expect(w.fetched.length).toBe(0)
+    expect(w.cli('locate').length).toBe(1)
+  })
+
+  test('the note budget is not spent on vendored files or on a file twice under two spellings', { options: { assist: 'coupled' } }, async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    const w = world(on)
+    await $.session.start(START)
+    for (const f of ['vendor/lib/a.c', 'node_modules/pkg/index.js', 'third_party/x/y.c']) await $.tool.call(READ(f))
+    await $.tool.call(READ('src/Kernel/Thread.c'))
+    await $.tool.call(READ('src/kernel/thread.c'))
+    expect(w.cli('coupled').length).toBe(1)
   })
 })

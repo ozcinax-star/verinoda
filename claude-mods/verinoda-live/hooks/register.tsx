@@ -592,7 +592,10 @@ async function startDaemon($: EngineInterface, root: string): Promise<void> {
     )
     if (exitCode !== 0) return
     const d = JSON.parse(stdout) as { running?: boolean; url?: string; token?: string }
-    if (d.running === true && typeof d.url === 'string' && typeof d.token === 'string') live.daemon = { url: d.url, token: d.token }
+    // only the machine's own loopback: the state file is in the repository, and the prompt is sent to this address
+    if (d.running === true && typeof d.url === 'string' && typeof d.token === 'string' && /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(d.url)) {
+      live.daemon = { url: d.url, token: d.token }
+    }
   } catch {
     // no daemon, nothing lost
   }
@@ -603,7 +606,7 @@ function wantsDaemon(f: Features): boolean {
 }
 
 function ensureDaemon($: EngineInterface, f: Features): void {
-  if (live.root === undefined || live.daemonStart !== undefined || !wantsDaemon(f)) return
+  if (live.root === undefined || !inProject() || live.daemonStart !== undefined || !wantsDaemon(f)) return
   live.daemonStart = startDaemon($, live.root)
   background(live.daemonStart)
 }
@@ -658,6 +661,12 @@ function toRel(root: string, file: string): string {
   return isInside(p, root) ? relPath(root, p) : p.replace(/^\.\//, '')
 }
 
+// The assist features serve a session that started inside the project, as the prompt hook always did: a session
+// started somewhere else with the project named in the settings gets no tools, no prompt line, no gate and no notes.
+function inProject(): boolean {
+  return live.root !== undefined && isInside(live.cwd, live.root)
+}
+
 function noteRead(rel: string): void {
   if (!live.reads.includes(rel) && live.reads.length < 50) live.reads.push(rel)
 }
@@ -667,6 +676,7 @@ function startTask(text: string): void {
   const t = text.trim()
   if (t.length < TASK_MIN_CHARS || /^[/!#]/.test(t)) return
   live.task = t
+  live.reads = [] // what was read for the last task is not what this one starts from
   live.gated = false
   live.usedLocate = false
 }
@@ -876,7 +886,7 @@ export const register: Register = (on, options) => {
     background(checkGraph($))
     if (live.root !== undefined && (await read($, check))) background(warmCheck($, live.root))
     const f = await features($)
-    if (live.root !== undefined && f.tool) await registerAssistTools($) // awaited: listed by the first turn
+    if (inProject() && f.tool) await registerAssistTools($) // awaited: listed by the first turn
     ensureDaemon($, f)
     return next(e)
   })
@@ -891,7 +901,7 @@ export const register: Register = (on, options) => {
   on('prompt.compose', async ($, e, next) => {
     const out = await next(e)
     const f = await features($)
-    if (!f.prompt || live.root === undefined) return out
+    if (!f.prompt || !inProject()) return out
     return { sections: [...out.sections, { id: 'verinoda-live:assist', text: assistPrompt(f), scope: 'session' as const }] }
   })
 
@@ -899,7 +909,7 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: LOCATE_TOOL }, async ($, e) => {
     live.usedLocate = true
     const root = live.root
-    if (root === undefined) return { result: 'verinoda locate: this project has no Verinoda index' }
+    if (root === undefined || !inProject()) return { result: 'verinoda locate: this session did not start in a project with a Verinoda index' }
     const text = typeof e.text === 'string' ? e.text.trim() : ''
     if (text === '') return { result: 'verinoda locate needs the text of the bug report or task (the text argument)' }
     const named = Array.isArray(e.files) ? e.files.filter((f): f is string => typeof f === 'string' && f !== '') : []
@@ -911,7 +921,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: COUPLED_TOOL }, async ($, e) => {
     const root = live.root
-    if (root === undefined) return { result: 'verinoda coupled: this project has no Verinoda index' }
+    if (root === undefined || !inProject()) return { result: 'verinoda coupled: this session did not start in a project with a Verinoda index' }
     const files = Array.isArray(e.files) ? e.files.filter((f): f is string => typeof f === 'string' && f !== '').map(f => toRel(root, f)).slice(0, ANCHORS_MAX) : []
     if (files.length === 0) return { result: 'verinoda coupled needs the files to look up (the files argument)' }
     const located = await lookup($, root, { op: 'coupled', files })
@@ -923,13 +933,15 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     const ran = await next(e)
     const root = live.root
-    if (root === undefined || ran.deny !== undefined || ran.isError === true || typeof e.file_path !== 'string') return ran
+    if (root === undefined || !inProject() || ran.deny !== undefined || ran.isError === true || typeof e.file_path !== 'string') return ran
     if (!isInside(e.file_path, root)) return ran
     const rel = toRel(root, e.file_path)
     if (rel.startsWith('.verinoda/')) return ran
     noteRead(rel)
-    if (!(await features($)).coupled || !isSourceFile(rel) || live.coupledAsked.has(rel) || live.coupledAsked.size >= COUPLED_BUDGET) return ran
-    live.coupledAsked.add(rel)
+    // one note per file whatever its spelling (a path is as the model typed it: another case, a drive letter in lower case)
+    const key = rel.toLowerCase()
+    if (!(await features($)).coupled || !isSourceFile(rel) || live.coupledAsked.has(key) || live.coupledAsked.size >= COUPLED_BUDGET) return ran
+    live.coupledAsked.add(key)
     const note = coupledNote(rel, await lookup($, root, { op: 'coupled', files: [rel] }))
     return note === undefined ? ran : { ...ran, context: [...(ran.context ?? []), note] }
   })
@@ -938,7 +950,7 @@ export const register: Register = (on, options) => {
   // reaches an agent that did not ask. Once per task, and never once the model has called the tool itself.
   on('tool.call', { tool: ['Grep', 'Glob', ...SHELL_TOOLS] }, async ($, e, next) => {
     const root = live.root
-    if (root === undefined || live.gated || live.usedLocate || live.task === '' || !isBlockedSearch(e)) return next(e)
+    if (root === undefined || !inProject() || live.gated || live.usedLocate || live.task === '' || !isBlockedSearch(e)) return next(e)
     if (!(await features($)).gate) return next(e)
     live.gated = true
     const located = await lookup($, root, { op: 'locate', text: live.task.slice(0, LOCATE_TEXT_MAX), anchors: live.reads.slice(0, ANCHORS_MAX) })
@@ -1023,7 +1035,7 @@ export const register: Register = (on, options) => {
     if (value === undefined) return { text: ASSIST_USAGE }
     await setAssist($, value)
     const f = assistFeatures(value)
-    if (live.root !== undefined && f.tool) await registerAssistTools($)
+    if (inProject() && f.tool) await registerAssistTools($)
     ensureDaemon($, f)
     const where = value !== 'off' && live.root !== undefined && !isInside(live.cwd, live.root) ? ` (only for sessions started in ${live.root})` : ''
     return { text: `assist: ${value}${where}` }

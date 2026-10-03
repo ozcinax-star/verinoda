@@ -400,3 +400,29 @@ def test_one_walk_for_several_anchors_counts_what_a_walk_for_one_counts(proj):
     alone = locate._history_pass(proj, ["include/kernel/machine.h"], False, None, time.monotonic() + 30)
     assert both["include/kernel/machine.h"]["commits"] == alone["include/kernel/machine.h"]["commits"] == 6
     assert both["include/kernel/machine.h"]["shared"] == alone["include/kernel/machine.h"]["shared"]
+
+
+# -- what an independent review found ----------------------------------------------------------------------------
+
+def test_a_git_call_over_its_deadline_ends_with_everything_it_started(tmp_path):
+    """On Windows `git` is often a shim (Git for Windows' cmd/git.exe) that starts the real git: ending the shim alone left the real one
+    running to its end, and the deadline did nothing. The alias below sleeps for 6 s."""
+    _git(tmp_path, "init", "-q")
+    t0 = __import__("time").monotonic()
+    out, why = locate._run(tmp_path, ["-c", "alias.slow=!sleep 6", "slow"], t0 + 0.6)
+    took = __import__("time").monotonic() - t0
+    assert out is None and why == "timeout" and took < 4.0, took
+
+
+def test_anchors_beyond_the_twelve_read_are_told_as_unused_and_not_as_missing(tmp_path):
+    repo = tmp_path / "many"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    names = [f"m{i}.c" for i in range(14)]
+    _commit(repo, "init", {n: f"int {n[:-2]};\n" for n in names})
+    res = locate.coupled(repo, names)
+    assert res["missing_anchors"] == [] and res["unused_anchors"] == ["m12.c", "m13.c"]
+    assert "2 anchors beyond the 12 read were not used: m12.c, m13.c" in locate.render(res, 1800, kind="coupled")
+    assert "unused_anchors" not in locate.coupled(repo, names[:3])  # only said when there is something to say
+    res = locate.coupled(repo, [*names[:2], "../elsewhere.c"])
+    assert res["missing_anchors"] == ["../elsewhere.c"] and "unused_anchors" not in res

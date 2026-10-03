@@ -114,22 +114,37 @@ def _env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_ENV}
 
 
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """End a process and what it started: on Windows `git` is often a shim (Git\\cmd\\git.exe) that starts the real git, and
+    ending the shim alone leaves the real one running to its end."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=30, check=False)
+    else:
+        proc.kill()
+
+
 def _run(repo: Path, args: list[str], deadline: float, stdin: str | None = None) -> tuple[str | None, str]:
     """``(stdout, "")`` or ``(None, why)``: a git call that must end before ``deadline`` (a ``time.monotonic()``)."""
     left = deadline - time.monotonic()
     if left <= 0.05:
         return None, "timeout"
     try:
-        p = subprocess.run([*_GIT, "-C", str(repo), *args], capture_output=True, timeout=left, env=_env(),
-                           input=None if stdin is None else stdin.encode("utf-8"),
-                           stdin=subprocess.DEVNULL if stdin is None else None, check=False)
-    except subprocess.TimeoutExpired:
-        return None, "timeout"
+        proc = subprocess.Popen([*_GIT, "-C", str(repo), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=_env(),
+                                stdin=subprocess.DEVNULL if stdin is None else subprocess.PIPE)
     except OSError:
         return None, "git not found"
-    if p.returncode != 0:
+    try:
+        out, _err = proc.communicate(input=None if stdin is None else stdin.encode("utf-8"), timeout=left)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        return None, "timeout"
+    if proc.returncode != 0:
         return None, "error"
-    return p.stdout.decode("utf-8", errors="replace"), ""
+    return out.decode("utf-8", errors="replace"), ""
 
 
 class _Inventory:
@@ -534,7 +549,7 @@ def coupled(repo: Path | str, anchors, *, max_files: int = 8, history: bool = Tr
     named = _normalise(repo, anchors)
     outside = [a for a in named if not _inside(a)]  # never read: it is not a file of this repository
     named = [a for a in named if _inside(a)]
-    ignored = named[MAX_ANCHORS:] + outside
+    unused = named[MAX_ANCHORS:]  # more than are read: told, never called missing
     given = named[:MAX_ANCHORS]
     hist: dict[str, Any] = {"read": False, "commits": 0, "anchors_read": 0}
     gitdir = _gitdir(repo)
@@ -544,7 +559,7 @@ def coupled(repo: Path | str, anchors, *, max_files: int = 8, history: bool = Tr
         present = [a for a in given if a in inv.set or (repo / a).is_file()]
         rows = _code_signals(repo, present, inv, deadline)  # while the walk runs
         results = f_hist.result() if f_hist is not None else None
-    missing = [a for a in given if a not in present] + ignored
+    missing = [a for a in given if a not in present] + outside
     if reason:
         hist["reason"] = reason
     if results is not None:
@@ -570,7 +585,8 @@ def coupled(repo: Path | str, anchors, *, max_files: int = 8, history: bool = Tr
     files = [{"path": f, "tier": "coupled", "why": _why(row["relations"]),
               "score": round(degree, 3) if degree else None, "relations": row["relations"]}
              for f, row, degree, _k in ranked[:cap]]
-    return {"anchors": present, "files": files, "history": hist, "missing_anchors": missing,
+    extra = {"unused_anchors": unused} if unused else {}
+    return {**extra, "anchors": present, "files": files, "history": hist, "missing_anchors": missing,
             "truncated": len(ranked) > cap, "seconds": round(time.monotonic() - t0, 3)}
 
 
@@ -699,6 +715,8 @@ def locate(g_or_loader, repo: Path | str, text: str, *, anchors=(), max_files: i
                            "truncated": cp["truncated"] or len(rest) > len(files) - len(likely)}
     if cp["missing_anchors"]:
         res["missing_anchors"] = cp["missing_anchors"]
+    if cp.get("unused_anchors"):
+        res["unused_anchors"] = cp["unused_anchors"]
     fit(res, max_chars, kind="locate")
     res["seconds"] = round(time.monotonic() - t0, 3)
     return res
@@ -729,6 +747,10 @@ def render(res: dict, max_chars: int = 1800, *, kind: str = "locate") -> str:
         notes.append(f"{fr['stale_count']} file(s) changed since the index (run `verinoda update`)")
     if res.get("missing_anchors"):
         notes.append("not in the repository: " + ", ".join(res["missing_anchors"][:4]))
+    if res.get("unused_anchors"):
+        n = len(res["unused_anchors"])
+        notes.append(f"{n} anchor{'s' if n != 1 else ''} beyond the {MAX_ANCHORS} read {'were' if n != 1 else 'was'} not used: "
+                     + ", ".join(res["unused_anchors"][:4]))
     lines = [head, *("note: " + n for n in notes)]
     likely = [f for f in files if f["tier"] == "likely"]
     other = [f for f in files if f["tier"] != "likely"]

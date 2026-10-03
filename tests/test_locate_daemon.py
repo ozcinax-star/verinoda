@@ -6,6 +6,7 @@ The server is exercised in-process (a thread on a port the system picks) for its
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import threading
 import time
@@ -231,3 +232,140 @@ def test_the_daemon_listens_before_the_graph_is_loaded_and_coupled_answers_meanw
         gate.set()
         d.shutdown()
         t.join(10)
+
+
+# -- what an independent review found ----------------------------------------------------------------------------
+
+def _state(orders, **kw) -> Path:
+    state = orders / ".verinoda" / "locate-daemon.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(json.dumps({"pid": 1, "host": "127.0.0.1", "token": "x" * 40, "repo": str(orders), **kw}), encoding="utf-8")
+    return state
+
+
+def test_status_is_this_repositorys_daemon_not_any_server_on_the_port(orders):
+    import http.server
+
+    class Other(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # a program that answers 200 to anything
+            body = b'{"ok": true}'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            return
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Other)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        state = _state(orders, port=srv.server_address[1], url=f"http://127.0.0.1:{srv.server_address[1]}")
+        assert locate_daemon.status(orders) == {"running": False}
+        assert not state.exists()
+    finally:
+        srv.shutdown()
+
+
+def test_a_daemon_of_another_repository_on_the_port_is_not_this_ones(orders, tmp_path):
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    d = locate_daemon.Daemon(orders, token="t" * 40, idle_timeout=600)
+    t = threading.Thread(target=d.serve_forever, daemon=True)
+    t.start()
+    assert d.ready.wait(60)
+    try:
+        state = _state(other, port=d.port, token=d.token, pid=os.getpid(), repo=str(other))  # the other repository's file names our port
+        assert locate_daemon.status(other) == {"running": False}
+        assert not state.exists()
+    finally:
+        d.shutdown()
+        t.join(10)
+
+
+def test_a_host_in_the_state_file_is_never_connected_to(orders, monkeypatch):
+    """A repository (cloned from anywhere) must not be able to make the commands, or the mod that asks them, talk to another host."""
+    seen = []
+
+    class Recorder:
+        def __init__(self, host, port, timeout=None):
+            seen.append(host)
+
+        def request(self, *a, **k):
+            raise ConnectionRefusedError
+
+        def close(self):
+            return None
+    monkeypatch.setattr(locate_daemon.http.client, "HTTPConnection", Recorder)
+    _state(orders, host="example.invalid", port=80, url="http://example.invalid:80")
+    assert locate_daemon.status(orders) == {"running": False}
+    assert seen == ["127.0.0.1"]
+    state = _state(orders, host="example.invalid", port=70000, url="http://example.invalid:80")  # not a port either
+    assert locate_daemon.status(orders) == {"running": False} and not state.exists()
+
+
+def test_a_busy_daemon_that_misses_one_status_request_keeps_its_state_file(orders, monkeypatch):
+    state = _state(orders, port=9, url="http://127.0.0.1:9", pid=4242)
+
+    def slow(*a, **k):
+        raise TimeoutError("timed out")
+    monkeypatch.setattr(locate_daemon, "_request", slow)
+    res = locate_daemon.status(orders)
+    assert res["running"] is True and res["unresponsive"] is True and res["pid"] == 4242 and res["url"] == "http://127.0.0.1:9"
+    assert state.exists()  # a daemon that is busy is not a daemon that is gone: a second one is not started over it
+
+
+def test_stop_with_a_token_the_daemon_refuses_says_it_still_runs_and_keeps_the_state(orders):
+    d = locate_daemon.Daemon(orders, token="t" * 40, idle_timeout=600)
+    t = threading.Thread(target=d.serve_forever, daemon=True)
+    t.start()
+    assert d.ready.wait(60)
+    try:
+        state = _state(orders, port=d.port, token="wrong" * 8, pid=os.getpid(), repo=str(d.repo))
+        res = locate_daemon.stop(orders)
+        assert res["running"] is True and "refuses" in res["error"]
+        assert state.exists() and call(d.url, "/status", d.token)[0] == 200  # still there, still answering to its own token
+    finally:
+        d.shutdown()
+        t.join(10)
+
+
+def test_two_starts_at_once_leave_one_daemon(orders):
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(locate_daemon.start(orders, idle_timeout=120))) for _ in range(2)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(180)
+        assert len(results) == 2 and results[0]["running"] and results[1]["running"]
+        assert results[0]["pid"] == results[1]["pid"] and results[0]["token"] == results[1]["token"]
+        time.sleep(3)  # the one that lost its race has ended
+        log = (orders / ".verinoda" / "locate-daemon.log").read_text(encoding="utf-8", errors="replace")
+        assert log.count("another daemon serves this repository") <= 1
+        assert locate_daemon.status(orders)["pid"] == results[0]["pid"]
+    finally:
+        locate_daemon.stop(orders)
+
+
+def test_a_request_in_flight_is_not_cut_by_the_idle_timeout(orders, monkeypatch):
+    real = locate_daemon.locate.handle
+
+    def slow(request, repo, keeper, cache=None):
+        time.sleep(1.5)
+        return real(request, repo, keeper, cache)
+    monkeypatch.setattr(locate_daemon.locate, "handle", slow)
+    d = locate_daemon.Daemon(orders, token="t" * 40, idle_timeout=0.5)
+    t = threading.Thread(target=d.serve_forever, daemon=True)
+    t.start()
+    assert d.ready.wait(60)
+    code, res = call(d.url, "/coupled", d.token, {"files": ["orders/pricing.py"]})
+    assert code == 200 and res["files"]
+    t.join(10)
+    assert not t.is_alive()  # then it ended, an idle timeout after the request ended
+
+
+def test_a_body_over_the_limit_is_a_413(running):
+    url, token, _ = running
+    big = b'{"text": "' + b"x" * (locate_daemon.MAX_BODY + 10) + b'"}'
+    assert call(url, "/locate", token, raw=big)[0] == 413
+    assert call(url, "/locate", token, {"text": TEXT})[0] == 200  # and the next request is served

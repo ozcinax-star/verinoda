@@ -87,8 +87,22 @@ export function coupledNote(file: string, located: Located | undefined): string 
 // `cd x && grep` is read segment by segment; the first word of a segment is the command (after any NAME=value).
 const SEARCH_COMMANDS = new Set(['grep', 'egrep', 'fgrep', 'zgrep', 'rg', 'ag', 'ack', 'find', 'fd', 'fdfind', 'findstr', 'select-string', 'sls'])
 
+// words that run another command: `sudo grep`, `time rg`, `env LC_ALL=C grep`, `xargs grep`
+const PREFIX_COMMANDS = new Set(['sudo', 'time', 'env', 'nice', 'command', 'exec', 'nohup', 'xargs'])
+
 function startsSearch(segment: string): boolean {
-  const words = segment.trim().split(/\s+/).filter(w => !/^[A-Za-z_][\w]*=/.test(w))
+  const words: string[] = []
+  let isPrefixed = false
+  for (const w of segment.trim().split(/\s+/)) {
+    if (/^[A-Za-z_][\w]*=/.test(w)) continue // NAME=value
+    if (isPrefixed && w.startsWith('-')) continue // an option of the prefix: xargs -n1 grep
+    const base = w.toLowerCase().replace(/^.*[\\/]/, '').replace(/\.exe$/, '')
+    if (words.length === 0 && PREFIX_COMMANDS.has(base)) {
+      isPrefixed = true
+      continue
+    }
+    words.push(w)
+  }
   const first = (words[0] ?? '').toLowerCase().replace(/^.*[\\/]/, '').replace(/\.exe$/, '')
   if (first === 'git') return (words[1] ?? '').toLowerCase() === 'grep'
   return SEARCH_COMMANDS.has(first)
@@ -104,7 +118,10 @@ export function isBlockedSearch(e: { tool: string; command?: unknown }): boolean
 const CODE_FILE = /\.(c|h|cc|cpp|cxx|hpp|hh|hxx|inl|m|mm|s|asm|py|pyi|pyx|js|jsx|mjs|cjs|ts|tsx|java|kt|kts|scala|go|rs|rb|php|cs|swift|lua|sh|bash|cmake|bf|pml)$/i
 const BUILD_FILE = /^(cmakelists\.txt|makefile|kconfig|kbuild|meson\.build|build\.bazel|build|.*\.mk)$/i
 const TEST_FILE = /(^test_|_test\.|\.test\.|\.spec\.|^conftest\.py$)/i
-const NOT_SOURCE_DIR = new Set(['docs', 'doc', 'documentation', 'test', 'tests', '__tests__', 'spec', 'specs'])
+const NOT_SOURCE_DIR = new Set([
+  'docs', 'doc', 'documentation', 'test', 'tests', '__tests__', 'spec', 'specs', // not what a fix changes
+  'vendor', 'node_modules', 'third_party', 'thirdparty', 'site-packages', // not the project's own
+])
 
 export function isSourceFile(path: string): boolean {
   const parts = path.replace(/\\/g, '/').split('/')
