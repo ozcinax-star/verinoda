@@ -259,9 +259,21 @@ def _optional_lines(tree: ast.AST) -> set[int]:
     return out
 
 
+# A single line this long is generated data, not code. Building the tree of an expression that deep takes more C
+# stack than Python 3.10 on Windows has (the process dies with "stack overflow", no exception to catch), and newer
+# Pythons refuse it with a RecursionError: one rule, so that every version reports the file as not parsed.
+MAX_LINE_CHARS = 100_000
+
+
+def _too_long(text: str) -> bool:
+    return len(text) > MAX_LINE_CHARS and any(len(ln) > MAX_LINE_CHARS for ln in text.split("\n"))
+
+
 def python_imports(text: str, rel: str, strings: set[str] | None = None) -> list[Use] | None:
     """The absolute imports of a Python file (None: it does not parse). ``strings`` collects the string
     literals that look like a module name (``importlib.import_module("tree_sitter_lua")``)."""
+    if _too_long(text):
+        return None
     try:
         tree = ast.parse(text)
     except (SyntaxError, ValueError, RecursionError, MemoryError):   # nested too deep for the parser too

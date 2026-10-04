@@ -106,11 +106,14 @@ def _declared_scripts(root: Path, problems: list[str]) -> list[tuple[str, str]]:
     """``(module:function, where)`` of the scripts and entry points ``pyproject.toml`` declares."""
     try:
         import tomllib
-    except ImportError:  # Python 3.10: no reader, no declared scripts
-        if (Path(root) / "pyproject.toml").is_file():
-            problems.append("pyproject.toml was not read (no TOML reader before Python 3.11): the scripts it "
-                            "declares are not roots")
-        return []
+    except ImportError:  # Python 3.10: tomli, which Verinoda depends on there
+        try:
+            import tomli as tomllib  # type: ignore[no-redef]
+        except ImportError:  # a Verinoda installed without its dependencies: no reader, no declared scripts
+            if (Path(root) / "pyproject.toml").is_file():
+                problems.append("pyproject.toml was not read (no TOML reader: tomli is not installed): the scripts "
+                                "it declares are not roots")
+            return []
     data = _manifest(root, "pyproject.toml", tomllib.loads, problems)
     if not isinstance(data, dict):
         return []

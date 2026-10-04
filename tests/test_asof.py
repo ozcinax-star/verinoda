@@ -10,6 +10,7 @@ os.environ.setdefault("GRAPHIFY_OUT", ".verinoda/index")
 import json  # noqa: E402
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
+import time  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
@@ -17,7 +18,7 @@ import pytest  # noqa: E402
 from verinoda import asof, cli, workflow  # noqa: E402
 from verinoda import evidence as evmod  # noqa: E402
 from verinoda.claims import Claims  # noqa: E402
-from verinoda.store import open_store  # noqa: E402
+from verinoda.store import now, open_store  # noqa: E402
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
 
@@ -55,6 +56,11 @@ def story(tmp_path):
     c2 = _commit(repo, {"b.py": "def b():\n    return 2\n"}, "two")
     workflow.update(st, repo)
     c3 = _commit(repo, {"a.py": "def a():\n    return 3\n"}, "three")
+    # recorded times have a resolution of one second: the transition to stale must be recorded in a later second than
+    # the one before it, or "the moment before it went stale" cannot be told apart from it (a fast machine did)
+    last = st.history(c["id"])[-1]["created_at"]
+    while now() == last:
+        time.sleep(0.05)
     workflow.update(st, repo)
     yield repo, st, c["id"], (c0, c1, c2, c3)
     st.close()
