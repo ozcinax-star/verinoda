@@ -10,5 +10,7 @@ graphify-out/
 .hypothesis/
 # git worktrees made by coding agents
 .claude/worktrees/
+# a local copy of Claude Code's plugin authoring guide, for agents that cannot load the skill (claude-mods/verinoda-live/AGENTS.md)
+claude-mods/.local-reference/
 # written by the release workflow before the build (verinoda/buildinfo.py)
 verinoda/data/build_stamp.json
