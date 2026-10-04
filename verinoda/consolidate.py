@@ -134,11 +134,26 @@ def _stale_queue(store) -> list[dict]:
     return rows
 
 
-def _mark_tried(store, cid: str) -> None:
-    from verinoda.store import now
+_last_tried = ""
 
+
+def _tried_stamp() -> str:
+    """The time of an attempt, to the microsecond and never equal to the one before it in this process: the queue
+    orders claims by these stamps, and several runs within one clock tick (a second for ``store.now``, 15 ms on a
+    Windows clock) must still rotate through every claim instead of tying and coming back to the first."""
+    global _last_tried
+    from datetime import datetime, timedelta, timezone
+
+    stamp = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    if stamp <= _last_tried:
+        stamp = (datetime.fromisoformat(_last_tried) + timedelta(microseconds=1)).isoformat(timespec="microseconds")
+    _last_tried = stamp
+    return stamp
+
+
+def _mark_tried(store, cid: str) -> None:
     c = store.claim(cid)
-    store.update_claim(cid, {"spec": {**(c.get("spec") or {}), "consolidate_tried": now()}})
+    store.update_claim(cid, {"spec": {**(c.get("spec") or {}), "consolidate_tried": _tried_stamp()}})
 
 
 def _status_before_stale(store, cid: str) -> str | None:
