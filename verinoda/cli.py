@@ -502,8 +502,22 @@ def cmd_setup(args) -> int:
             rep["git_hooks"] = githooks.install(Path(rep.get("repo") or args.path or ".").resolve())
         except githooks.HookError as exc:
             rep["git_hooks"] = {"error": str(exc)}
-    _emit(args, rep, lambda r: (setup_mod.render(r), _r_setup_hooks(r.get("git_hooks"))))
+    if args.live and rep.get("ok"):
+        from verinoda import live_install
+
+        chosen = [a["agent"] for a in rep.get("agents", [])]
+        rep["live"] = (live_install.run("install", chosen, args.scope, Path(rep["repo"])) if chosen else
+                       {"ok": False, "error": "no agent was set up, so there is nothing to put the live hooks in"})
+    _emit(args, rep, lambda r: (setup_mod.render(r), _r_setup_hooks(r.get("git_hooks")),
+                                _r_setup_live(r.get("live"))))
     return 0 if rep["ok"] else 1
+
+
+def _r_setup_live(res: dict | None) -> None:
+    from verinoda import live_install
+
+    if res:
+        print("live hooks and skills:\n" + live_install.render(res), end="")
 
 
 def _r_setup_hooks(res: dict | None) -> None:
@@ -535,6 +549,220 @@ def cmd_hooks(args) -> int:
         return 2
     _emit(args, res, lambda r: print(githooks.render(r)))
     return 2 if res.get("refused") else 0
+
+
+# -- verinoda live: the commands behind the Claude Code mod verinoda-live (D137) ---------------------------------
+
+def _read_json_arg(path: str | None, what: str):
+    """JSON from ``--file`` (``-`` or no file: stdin)."""
+    try:
+        text = sys.stdin.buffer.read().decode("utf-8-sig", "replace") if not path or path == "-" else \
+            Path(path).read_text(encoding="utf-8-sig")
+        return json.loads(text)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"error: {what} is not readable JSON ({exc})") from None
+
+
+def cmd_live(args) -> int:
+    from verinoda import live
+
+    c = args.live_cmd
+    if c == "hook":
+        # a hook never fails the agent's step: every error is swallowed, the exit status is 0
+        try:
+            raw = sys.stdin.buffer.read().decode("utf-8-sig", "replace")
+            payload = json.loads(raw) if raw.strip() else {}
+            out = live.hook(payload if isinstance(payload, dict) else {})
+            if out:
+                _write(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
+        except Exception:  # noqa: BLE001
+            pass
+        return 0
+    if c in ("install", "uninstall", "hooks"):
+        from verinoda import live_install
+
+        agents = live_install.parse_agents(args.agents)
+        res = live_install.run({"hooks": "status"}.get(c, c), agents, args.scope, Path(args.project_dir or ".").resolve(),
+                               dry_run=getattr(args, "dry_run", False), with_skills=not getattr(args, "no_skills", False))
+        _emit(args, res, lambda r: _write(live_install.render(r)))
+        return 0 if res.get("ok") else 1
+    repo = _repo(args)
+    if c == "status":
+        st = live.status(repo)
+        _emit(args, st, lambda r: _write(live.render_status(r)))
+        return 0
+    if c == "refresh":
+        res = live.refresh(repo, wait=args.wait)
+        _emit(args, res, lambda r: _write(r["why"] if not r.get("ran") or r.get("background") is False
+                                          else f"{r['why']} ({r['changed']} changed file(s))"))
+        return 0 if res.get("ran") or res.get("state") in ("fresh", "building") else 1
+    if c == "check":
+        if args.files:
+            results = [live.check_edit(repo, f) for f in args.files]
+            res = {"results": results, "bad": sum(r["bad"] for r in results)}
+        else:
+            res = live.check_all(repo)
+        def _line(x):
+            if x["note"]:
+                return x["note"]
+            if not x["checked"]:
+                return f"{x['file']}: not checked ({x.get('why')})"
+            more = (f" ({x['unknown']} site(s) of the change could not be checked: `verinoda check --diff` says why)"
+                    if x.get("unknown") else "")
+            return f"{x['file']}: no name that does not exist{more}"
+        _emit(args, res, lambda r: _write("\n".join(_line(x) for x in r["results"]) or "no changed file to check"))
+        return 3 if res["bad"] else 0
+    if c == "context":
+        block = live.context_for(repo, " ".join(args.prompt), args.mode)
+        _emit(args, {"mode": args.mode or live.settings(repo)["auto"], "context": block},
+              lambda r: _write(r["context"] or f"nothing attached (mode {r['mode']}; the text is not a code question "
+                                               "or the mode is off)"))
+        return 0
+    if c == "review":
+        if args.show:
+            info = live._state(repo, "last-review.json")
+            _emit(args, info, lambda r: _write(live.review_line(r) if r else "no review yet"))
+            return 0
+        info = live.review_commit(repo, args.base)
+        _emit(args, info, lambda r: _write(live.review_line(r)))
+        return 0 if info.get("ok") else 1
+    if c in ("auto", "guard", "config"):
+        try:
+            if c == "config" and not args.key:
+                cfg = live.settings(repo)
+            elif c == "config" and args.value is None:
+                cfg = {args.key: live.settings(repo)[args.key]} if args.key in live.DEFAULTS else None
+                if cfg is None:
+                    raise ValueError(f"unknown setting {args.key!r} (one of {', '.join(live.DEFAULTS)})")
+            else:
+                key, value = (args.key, args.value) if c == "config" else (c, args.value)
+                if value is None:
+                    cur = live.settings(repo)[key]
+                    value = ("off" if cur != "off" and cur is not False else "nudge" if key == "auto" else "on")
+                cfg = live.set_setting(repo, key, value)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        _emit(args, cfg, lambda r: _write("\n".join(f"{k}: {'on' if v is True else 'off' if v is False else v}"
+                                                    for k, v in r.items())))
+        return 0
+    return 2
+
+
+# -- verinoda improve: a vague "make it better" turned into choices (D137) ------------------------------------------
+
+def _r_questions(q: dict) -> None:
+    if not q["questions"]:
+        _write("No undecided item to ask about." + ("" if not q["folded"] else
+               f" Folded: {sum(q['folded'].values())} (`verinoda improve questions --all`)."))
+        return
+    out = [f"Improvement list: {q['subject']} - {q['questions']} question(s) in {len(q['batches'])} batch(es).",
+           "Ask each batch with your question tool in one call (Claude Code: AskUserQuestion; Codex: request_user_input), "
+           "in the person's language, one question per item, the option labels as given. Then record the answers "
+           "with `verinoda improve decide ID=DECISION ...`. An answer you did not get, or an \"other\" answer, leaves "
+           "the item undecided: that is not keep and not reject. Change nothing yet.", ""]
+    for n, batch in enumerate(q["batches"], 1):
+        out.append(f"Batch {n}")
+        for x in batch:
+            out.append(f"  [{x['id']}] ({x['group']}) {x['question']}")
+            out.append(f"      {x['detail']}")
+            for o in x["options"]:
+                out.append(f"      - {o['label']} -> decision={o['decision']}: {o['description']}")
+        out.append("")
+    if q["folded"]:
+        out.append("Folded (not asked): " + ", ".join(f"{n} {g}" for g, n in q["folded"].items())
+                   + " (`verinoda improve questions --all` asks them too)")
+    out.append(q["ask_own"])
+    _write("\n".join(out))
+
+
+def cmd_improve(args) -> int:
+    from verinoda import improve as im
+
+    c = args.improve_cmd
+    if c == "schema":
+        _write(_dump(im.SCHEMA["report" if args.report else "propose"], pretty=True))
+        return 0
+    repo = _repo(args)
+    state = im.load(repo)
+    try:
+        if c == "start":
+            what = " ".join(args.what)
+            if im.resumes(state, what):
+                _write(im.render(state) + "\n\n(This list is still open; `verinoda improve start <what to look at>` "
+                                         "starts a new one.)")
+                return 0
+            state, replaced = im.start(state, what)
+            im.save(repo, state)
+            _write(im.review_prompt(what) + (f"\n(The earlier list of {replaced} items was replaced.)" if replaced else ""))
+            return 0
+        if c == "propose":
+            state, msg = im.propose(state, _read_json_arg(args.file, "the list"))
+            im.save(repo, state)
+            _write(msg)
+            return 0
+        if c in ("show", "status"):
+            _emit(args, state, lambda s: _write(im.render(s, everything=args.all, detail=args.detail)))
+            return 0
+        if c == "questions":
+            q = im.questions(state, per_call=args.per_call, everything=args.all, group=args.group)
+            _emit(args, q, _r_questions)
+            return 0
+        if c == "decide":
+            done = []
+            for pair in args.pairs:
+                iid, _, dec = pair.partition("=")
+                if not dec:
+                    raise im.ImproveError(f"{pair!r} is not ID=DECISION (decision: {', '.join(im.DECISIONS)})")
+                im.decide(state, iid, dec)
+                done.append(f"{iid}={dec}")
+            im.save(repo, state)
+            c_ = im.counts(state)
+            _write(f"Recorded {', '.join(done)}. {c_['apply']} to apply, {c_['check']} to check first, {c_['keep']} to keep.")
+            return 0
+        if c == "add":
+            it = im.add_own(state, " ".join(args.text))
+            im.save(repo, state)
+            _write(f"Added {it['id']}: {it['title']} (to be applied).")
+            return 0
+        if c == "remove":
+            im.remove_own(state, args.id)
+            im.save(repo, state)
+            _write(f"Removed {args.id}.")
+            return 0
+        if c == "more":
+            im.unfold(state, args.group)
+            im.save(repo, state)
+            _write(im.render(state))
+            return 0
+        if c == "send":
+            prompt = im.send(state)
+            im.save(repo, state)
+            _write(prompt)
+            return 0
+        if c == "report":
+            msg, _left = im.report(state, _read_json_arg(args.file, "the report"))
+            im.save(repo, state)
+            _write(msg)
+            return 0
+        if c == "stop-waiting":
+            n = im.stop_waiting(state)
+            im.save(repo, state)
+            _write(f"{n} item(s) marked as having no reported outcome.")
+            return 0
+        if c == "ask-report":
+            prompt = im.ask_report(state)
+            im.save(repo, state)
+            _write(prompt)
+            return 0
+        if c == "reset":
+            im.save(repo, im.empty())
+            _write("The improvement list was cleared.")
+            return 0
+    except im.ImproveError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 2
 
 
 def _scan_precise(st, repo: Path, before: dict[str, str], now_files: dict[str, str]) -> dict:
@@ -3778,6 +4006,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="also install git hooks (post-commit, post-checkout, post-merge, post-rewrite) that run "
                          "`verinoda update` "
                          "in the background; `verinoda hooks uninstall` removes them")
+    sp.add_argument("--live", action="store_true",
+                    help="also `verinoda live install` for those agents: hooks (fresh index, name check on edits, "
+                         "commit review, auto-context) and the verinoda-live and verinoda-improve skills")
     sp.add_argument("--reference", action="append", metavar="PATH[=ALIAS,...]",
                     help="a folder of reference code (an original being ported, a vendored copy) that should rank "
                          "below the project's own code unless a question names it or an alias; repeatable")
@@ -3796,6 +4027,89 @@ def build_parser() -> argparse.ArgumentParser:
                    help="instead remove every block whose project folder no longer exists (a moved project, a "
                         "removed worktree)")
     add("status", cmd_hooks, "which hooks have this project's block", parent=hsub_hooks)
+    sp = sub.add_parser("live", help="Verinoda beside the agent while it works: fresh index, name check on edits, "
+                                     "commit review, auto-context; hooks for Claude Code and Codex (the commands of "
+                                     "the verinoda-live mod)")
+    lsub = sp.add_subparsers(dest="live_cmd", required=True)
+    add("status", cmd_live, "the index (fresh, stale, graph building), the settings, the last check, context and review",
+        parent=lsub)
+    c = add("refresh", cmd_live, "take the changed files into the index now (update --fast; the graph builds in the "
+                                 "background)", parent=lsub)
+    c.add_argument("--wait", action="store_true", help="run it here and wait, instead of in the background")
+    c = add("check", cmd_live, "the names the changed lines use that do not exist (exit 3 when there are any); "
+                               "default: the whole change against HEAD", parent=lsub)
+    c.add_argument("files", nargs="*", metavar="FILE")
+    c = add("context", cmd_live, "what the auto-context would attach to a prompt (nudge: start with analyze; "
+                                 "search: query results)", parent=lsub)
+    c.add_argument("prompt", nargs="+")
+    c.add_argument("--mode", choices=["nudge", "search"], help="instead of the project's setting")
+    c = add("review", cmd_live, "review the commit at HEAD (verinoda review --base HEAD~1) and keep the result",
+            parent=lsub)
+    c.add_argument("--base", default="HEAD~1")
+    c.add_argument("--show", action="store_true", help="print the last review instead of running one")
+    for name, helptext in (("auto", "code questions get: off, nudge (start with analyze) or search (query results "
+                                    "attached); no value toggles nudge/off"),
+                           ("guard", "review each commit the agent makes, in the background: on or off; no value "
+                                     "toggles")):
+        c = add(name, cmd_live, helptext, parent=lsub)
+        c.add_argument("value", nargs="?")
+    c = add("config", cmd_live, "show the settings, one of them, or set one (refresh, check, guard, auto)", parent=lsub,
+            repo=True)
+    c.add_argument("key", nargs="?")
+    c.add_argument("value", nargs="?")
+    add("hook", cmd_live, "the hook command itself: a hook event of Claude Code or Codex as JSON on stdin, additional "
+                          "context as JSON on stdout (never fails)", repo=False, js=False, parent=lsub)
+    for name, helptext in (("install", "hooks (and the verinoda-live and verinoda-improve skills) for Claude Code "
+                                       "and Codex"),
+                           ("uninstall", "remove exactly what install wrote"),
+                           ("hooks", "which hooks and skills are installed")):
+        c = add(name, cmd_live, helptext, repo=False, parent=lsub)
+        c.add_argument("--agents", default="auto", help="auto (found on PATH), all, or claude,codex")
+        c.add_argument("--scope", choices=["project", "user"], default="project")
+        c.add_argument("--project-dir", default=".")
+        if name != "hooks":
+            c.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
+        if name == "install":
+            c.add_argument("--no-skills", action="store_true", help="hooks only")
+    sp = sub.add_parser("improve", help="turn a vague \"make it better\" into choices: a ranked list, questions with "
+                                        "options, only what the person chose is done")
+    isub = sp.add_subparsers(dest="improve_cmd", required=True)
+    c = add("start", cmd_improve, "begin: prints what to do (look, change nothing, hand over a ranked list)",
+            parent=isub, js=False)
+    c.add_argument("what", nargs="*", help="what to look at (default: what the conversation has been about)")
+    c = add("propose", cmd_improve, "store the ranked list the agent made (JSON on stdin or --file; `schema` prints "
+                                    "the shape)", parent=isub, js=False)
+    c.add_argument("--file", help="a JSON file (default: stdin)")
+    for name in ("show", "status"):
+        c = add(name, cmd_improve, "the list: groups, marks, the seven best-ranked first, results", parent=isub)
+        c.add_argument("--all", action="store_true", help="also the folded items")
+        c.add_argument("--detail", action="store_true", help="each item's observation, why, change, cost, evidence")
+    c = add("questions", cmd_improve, "the undecided items as multiple-choice questions for AskUserQuestion / "
+                                      "request_user_input (3 to a batch)", parent=isub)
+    c.add_argument("--per-call", type=int, default=3, metavar="N", help="questions per batch (Codex takes 3, Claude "
+                                                                         "Code 4)")
+    c.add_argument("--all", action="store_true", help="also the folded items")
+    c.add_argument("--group", choices=["problem", "improvement", "taste"])
+    c = add("decide", cmd_improve, "record the person's answers: ID=apply|keep|check|none ...", parent=isub, js=False)
+    c.add_argument("pairs", nargs="+", metavar="ID=DECISION")
+    c = add("add", cmd_improve, "an item of the person's own (applied; at most 10)", parent=isub, js=False)
+    c.add_argument("text", nargs="+")
+    c = add("remove", cmd_improve, "remove an item of the person's own", parent=isub, js=False)
+    c.add_argument("id")
+    c = add("more", cmd_improve, "show a group's folded items from now on", parent=isub, js=False)
+    c.add_argument("group", choices=["problem", "improvement", "taste"])
+    add("send", cmd_improve, "send what was chosen: prints what the agent does now (apply, check first, keep); "
+                             "refused when nothing is chosen", parent=isub, js=False)
+    c = add("report", cmd_improve, "the agent's outcome for each item sent (JSON on stdin or --file)", parent=isub,
+            js=False)
+    c.add_argument("--file", help="a JSON file (default: stdin)")
+    add("stop-waiting", cmd_improve, "the agent never reported: mark the waiting items as having no outcome",
+        parent=isub, js=False)
+    add("ask-report", cmd_improve, "prints the request for the outcomes that never came", parent=isub, js=False)
+    add("reset", cmd_improve, "clear the list", parent=isub, js=False)
+    c = add("schema", cmd_improve, "the JSON shape of `propose` (or of `report` with --report)", parent=isub, repo=False,
+            js=False)
+    c.add_argument("--report", action="store_true")
     sp = add("init", cmd_init, "create .verinoda/ (database + config) in a project", repo=False)
     sp.add_argument("path", nargs="?", default=".")
     sp = add("trust", cmd_trust, "trust a project: its tests run with process isolation (your privileges) and its "

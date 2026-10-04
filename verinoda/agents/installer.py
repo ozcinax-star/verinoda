@@ -457,8 +457,9 @@ def cli_hint(launcher: dict | None = None) -> str:
     return (launcher or resolve_launcher())["cli"]
 
 
-def render_skill(agent: str, launcher: dict | None = None) -> bytes:
-    tpl = (TEMPLATES / f"{agent}_SKILL.md").read_text(encoding="utf-8")
+def render_skill(agent: str, launcher: dict | None = None, template: str | None = None) -> bytes:
+    """The skill text for ``agent``; ``template`` names another one (``claude_improve``: D137's extra skills)."""
+    tpl = (TEMPLATES / f"{template or agent}_SKILL.md").read_text(encoding="utf-8")
     launcher = launcher or resolve_launcher()
     cli = cli_hint(launcher)
     if cli == NAME:

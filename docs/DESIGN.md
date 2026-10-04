@@ -10881,6 +10881,95 @@ the unbacked ones visible, with an exit code a CI job can read.
 - `tests/test_docs.py` (README Commands row, ARCHITECTURE module row), `tests/test_cli.py`,
   `tests/test_line_endings.py`.
 
+## 110. The commands of the verinoda-live mod, for Claude Code and Codex (D137, 2026-10-04)
+
+### 110.1 Why
+
+The Symbiosis repository (`verinoda-symbiosis`) holds *verinoda-live*, a Claude Code mod (a TypeScript plugin of
+function hooks): it keeps the index fresh while the agent edits, checks each edit for names that do not exist, reviews
+commits, attaches Verinoda to a code question and, in its next step, turns a vague "make this better" into a list the
+person chooses from, in a pane. A mod is Claude Code's own plugin API, so Codex users had none of it, and the
+original Verinoda had none of it as a command. This decision makes each of those a command of the CLI that Claude Code
+and Codex both reach, so the behaviour no longer depends on one host's plugin system.
+
+### 110.2 Decisions
+
+- **One logic, in Python, agent-neutral.** `verinoda/live.py` and `verinoda/improve.py` hold it; the mod can become a
+  thin caller of these commands later instead of a second implementation that drifts. State is the project's, in
+  `.verinoda/live/` and `.verinoda/improve.json` (git-ignored with the rest of `.verinoda`).
+- **Hooks are one command.** Claude Code's and Codex's hook systems both send the event as JSON on stdin
+  (`hook_event_name`, `cwd`, `tool_name`, `tool_input`, `prompt`) and read `hookSpecificOutput.additionalContext`. So
+  `verinoda live hook` serves both; the matcher decides which tools reach it. Four events: `UserPromptSubmit`,
+  `PostToolUse` (edit tools and shell commands), `Stop`, `SessionStart`. It never fails the agent's step: errors are
+  swallowed, the exit status is 0, no project (no `.verinoda` index below the working folder, never the home folder)
+  means no answer.
+- **Defaults are the mod's, because they were measured there:** the index refresh and the name check on; the commit
+  review, the auto-context (`nudge`, `search`) and the improvement offer off. The Symbiosis studies found no gain from the
+  auto-context on real code (the agent used Verinoda in none of 286 sessions given a nudge) and a name check that never
+  fired because the agent read the code first; nothing here claims otherwise.
+- **The index is not tracked by edit.** The mod marks edited files; here `freshness.check` (one directory listing per
+  folder) already says what changed since the snapshot, so `Stop` asks it, and starts a detached `update --fast` only for
+  a stale index with no build running. A build in progress is `building`: the text index is current, the graph is behind.
+- **The name check reports what it found, not what it could not.** After an edit tool (Claude Code's `Edit`, `Write`,
+  `MultiEdit`, `NotebookEdit`; Codex's `apply_patch`, read from its `*** Update File:` lines) `check --diff` (the file
+  itself without git) runs for a Python, Java or Kotlin file inside the project; the sites of that file that are
+  `absent` or `mismatch` go to the model with the nearest real names. An `unknown` is counted and said ("N site(s) could
+  not be checked"), never reported as fine; without the `precise` extra most sites are unknown, so `live check` says so.
+- **The commit guard needs no host event for a commit:** after a shell command the project's HEAD is compared with the one
+  noted at the last call; a moved HEAD starts `live review` detached, and the finished result is handed to the model once
+  with the next prompt or tool result. Off by default, and no git call is made while it is off.
+- **Questions, answers, options (`verinoda improve`)** keep the rules of the mod's improvement pane (IMPROVE-PANE.md): the
+  agent looks and changes nothing; a ranked list in three groups (a `problem` shows its evidence or says it has none, a
+  `taste` item not judged from a rendered view says it is a guess); nothing is selected at the start and an undecided
+  item is never keep; the seven best-ranked items are the first sight; "check first" asks for an investigation, not a
+  change, and a confirmed problem goes back into the list for the person to decide on its fix; the work's boundary is
+  what was chosen and changes outside the list are reported. What the pane did with buttons, the CLI does with the agent's
+  own question tool: `improve questions` prints the undecided items as multiple-choice questions, one per item, three to
+  a batch (Codex's `request_user_input` takes three questions, Claude Code's `AskUserQuestion` four), options Apply,
+  Check first (a problem no check confirmed) and Keep as is; an unanswered or "other" answer leaves the item undecided.
+  Plain numbered text is the fallback for an agent with no question tool.
+- **Two small skills, not a longer one.** `verinoda-improve` and `verinoda-live` (Claude Code: `/verinoda-improve`,
+  `/verinoda-live`; Codex: `$verinoda-improve`, `$verinoda-live`) beside the existing one, whose template is already at the
+  line limit its test sets. They are Verinoda's own files like it (`selffiles.SKILL_NAMES`), written by `live install`
+  under the installer's rules and recorded with a hash in `.verinoda/live-install.json`.
+- **`live install` edits only its own entries** (a command that ends in `verinoda live hook`) in `.claude/settings.json`
+  or `.codex/hooks.json` (user scope: `~/.claude/settings.json`, `$CODEX_HOME/hooks.json`), keeps the file's other keys,
+  hooks and indent, and refuses a file that is not a JSON object. It does not edit Codex's `config.toml`: the flag
+  `[features] codex_hooks = true` (and, for a project's file, a trusted project) is said, not set. A project-scope Claude
+  file is usually committed: the command says so, and names this machine's interpreter (with a warning) only when the
+  `verinoda` on PATH is not this build.
+
+### 110.3 Measured
+
+Nothing about the value of the features: the studies behind the defaults are the Symbiosis repository's
+(`benchmarks/results/agent-compare-*`) and are not repeated or extended here. Run here: the unit tests below, and a manual
+pass in a scanned copy of `examples/orders_app` (a hook call for each event with a Claude Code and a Codex payload, a
+deliberately wrong import caught with its nearest name, the stale index refreshed, the settings toggled, hooks
+installed and listed). **No real Claude Code or Codex session was run:** that the hosts accept these hook entries, call
+them with exactly these payloads and hand the output to the model is built from the hosts' documented hook interface and
+from the Symbiosis repository's working `tool-hook` entries, not observed. Codex's `apply_patch` payload shape in
+particular was not seen.
+
+### 110.4 Not done
+
+- The mod's **assist features** (`locate`, `coupled`, the daemon, the gate) and the `tool-hook` of the Symbiosis
+  repository: they need modules this repository does not have (`locate.py` and what it reads, `locate_daemon.py`); a port
+  is its own decision.
+- **MCP tools** for `live` and `improve`: the core menu's size is a measured cost (D61); the commands work wherever the CLI
+  does. Where a Codex sandbox cannot run the CLI, these commands are not reachable.
+- The mod's **pane and mascot** stay Claude Code's; the CLI has no screen, and `live status` is its text.
+- Improve step 2 (single-choice groups for alternatives that exclude each other, items nested under an outcome, warnings
+  about conflicting items) and a remembered "keep".
+- Whether a model, asked by the skill, asks the questions rather than guessing: not measured. Nothing enforces it except
+  that `send` refuses while nothing is chosen.
+
+### 110.5 Tests
+
+- `tests/test_improve.py` (the state functions), `tests/test_improve_cli.py` (the whole conversation through the CLI),
+  `tests/test_live.py` (settings, the question heuristic, each hook event, the check, the guard, a real index going stale),
+  `tests/test_live_install.py` (hooks and skills, key-wise edits, refusals, uninstall, every command a skill names exists,
+  the two skills are Verinoda's own files), `tests/test_docs.py` (README, ARCHITECTURE).
+
 ## Sources
 
 - **Retrieval:**
