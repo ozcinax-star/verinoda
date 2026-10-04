@@ -1,9 +1,15 @@
 """Set aside the sessions of a results file that a harness fault touched, so that rerunning the study (it is resumable: a
 task and arm already in the file is skipped) runs them again (DESIGN_ASSIST.md: a session of a mod arm whose transcript
-shows the nudge is a fault, rerun once and reported).
+shows the nudge is a fault, rerun once and reported; so is a session the network took from the model, amendment 14).
 
-A session is faulty when the mod's nudge ("[Verinoda auto-context]") reached the model although no arm of the study asks for
-it (`assist.nudge` > 0). Rows are moved to `<file>.nudged`, which is kept for the record; with `--count` nothing is moved.
+Two faults:
+
+* the mod's nudge ("[Verinoda auto-context]") reached the model although no arm of the study asks for it (`assist.nudge` > 0):
+  rows are moved to `<file>.nudged`;
+* the API could not be reached (the machine's connection or DNS was down for minutes): the session ended on its first turn with an
+  error, no answer and no cost, whatever its arm: rows are moved to `<file>.api-error`.
+
+Both asides are kept for the record. With `--count` nothing is moved.
 
     python benchmarks/agent_compare/drop_faults.py [--count] RESULTS.jsonl [RESULTS2.jsonl ...]
 """
@@ -15,8 +21,20 @@ import sys
 from pathlib import Path
 
 
-def faulty(row: dict) -> bool:
+def nudged(row: dict) -> bool:
     return bool((row.get("assist") or {}).get("nudge"))
+
+
+def api_error(row: dict) -> bool:
+    """A session that never reached the model: an error result, no answer, no cost, at most one turn."""
+    return bool(row.get("is_error")) and not row.get("answered") and not row.get("cost_usd") and (row.get("num_turns") or 0) <= 1
+
+
+FAULTS = (("nudged", nudged), ("api-error", api_error))
+
+
+def faulty(row: dict) -> bool:
+    return any(test(row) for _, test in FAULTS)
 
 
 def split(rows: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -40,11 +58,16 @@ def main(argv: list[str]) -> int:
         rows = read(p)
         keep, bad = split(rows)
         total += len(bad)
+        moved = []
         if not count_only and bad:
-            aside = p.with_suffix(p.suffix + ".nudged")
-            aside.write_bytes(lines(read(aside) + bad))
+            for kind, test in FAULTS:
+                these = [r for r in bad if test(r)]
+                if these:
+                    aside = p.with_suffix(p.suffix + "." + kind)
+                    aside.write_bytes(lines(read(aside) + these))
+                    moved.append(f"{len(these)} to {aside.name}")
             p.write_bytes(lines(keep))
-        print(f"{name}: {len(bad)} faulty of {len(rows)}" + ("" if count_only or not bad else f"; moved to {p.name}.nudged"))
+        print(f"{name}: {len(bad)} faulty of {len(rows)}" + (f"; moved {', '.join(moved)}" if moved else ""))
     return 0 if total == 0 or not count_only else 1
 
 

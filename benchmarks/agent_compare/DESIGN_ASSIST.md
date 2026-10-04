@@ -198,6 +198,36 @@ seL4 development runs had finished and Home Assistant's were running when these 
     were run again with the fix below; `none` and `verinoda_setup` are unaffected and were kept. The arm choice reads the
     rerun only. The seL4 development runs are not affected.
 
+13. **One confirmatory task's Verinoda copies were not finished when run 1 started, and its sessions were run after them
+    (2026-10-04, during the confirmatory runs).** `fasterxml__jackson-databind-3666`, whose Verinoda setup takes over half an
+    hour, was still being built when run 1 started (the build had been ended once by a 28-minute limit I had put around the
+    command, and was started again at 04:30 without it). Run 1 reached the task, the fourth of every arm's queue, before the
+    build ended: its `none` and `graphify` sessions ran on their finished copies; its `inject` and `passive_gate` sessions ran
+    on the unfinished `verinoda_mod` copy and got no treatment (`assist.inject` 0), and its `verinoda_setup` session did not
+    run (no copy). The two sessions are kept apart (`conf_r1.jsonl.unfinished-copy`); runs 2, 3 and the Haiku runs were held
+    until the copies were done (the later run configs were put aside, and `run_confirm2.ps1` runs them), and run 1's three
+    missing sessions were run after the build with the same config. Every other task's build was finished (a `done.json`) before
+    run 1 started; no other session is affected.
+
+14. **Sessions the network took from the model were run again (2026-10-04, after run 3).** Four sessions of run 3 (two `inject`,
+    two `passive_gate`, in four different tasks, all within a few minutes of each other) ended on their first turn with "API
+    Error: Can't reach the API server - check your internet or DNS (ENOTFOUND)": no answer, no cost, no turn of the agent. The
+    machine's connection was down; the arms had nothing to do with it. Left in, each counts as recall 0 and pulls its arm's
+    mean down (about 0.2 of a task each, against effects of about one), so they are set aside (`conf_r3.jsonl.api-error`, kept)
+    and were run again, once, with the same config; `drop_faults.py` now does this for any arm (an error result with no answer,
+    no cost and at most one turn) as it did for the nudge, and the rule is applied to every results file of the study, the
+    Haiku runs included. The rule was written before the rerun's outcome was known; the decisions below are reported with
+    the rerun, and the numbers before it are in the results folder's README.
+
+    The Haiku runs had 18 of the same (6 in run 1, 12 in run 2, in both arms, in two clusters of a few minutes): set aside
+    (`haiku_r1.jsonl.api-error`, `haiku_r2.jsonl.api-error`) and run again by `run_confirm3.ps1`. Haiku also did what the prompt
+    forbids, writing a test file into the repository in three sessions (`test_issue.py`, `test_mod_bug.py`, `test_bug.py`; no
+    Sonnet session changed a file), and two of the files were still in a `none` copy when run 2's session of the same task ran
+    (pylint-4604, sympy-22080: the transcripts mention them), so those two sessions are set aside as well
+    (`haiku_r2.jsonl.saw-earlier-files`) and run again on copies with the files removed. What stays as a result is a session
+    that ended without an answer for another reason: three `none_haiku` sessions of run 2 ended after 15 to 35 turns with no
+    structured answer.
+
 Bug fixes made after the development runs began and before `selection.json` (none changes what an answer lists): the
 daemon's `status` checks that the server that answers is this repository's daemon (the `repo` and `pid` it reports) and
 never takes a host from the state file, `stop` checks the answer to its request, two `start`s at once leave one daemon, a

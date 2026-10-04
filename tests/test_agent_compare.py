@@ -860,6 +860,21 @@ def test_sessions_that_got_the_nudge_are_set_aside_for_a_rerun_and_kept_for_the_
     assert drop_faults.main([str(tmp_path / "missing.jsonl")]) == 0
 
 
+def test_sessions_the_network_took_from_the_model_are_set_aside_in_every_arm_but_a_failed_search_is_not_one(tmp_path):
+    ok = {"id": "t1", "arm": "none", "answered": True, "is_error": False, "cost_usd": 0.04, "num_turns": 5, "assist": {}}
+    down = {"id": "t2", "arm": "none", "answered": False, "is_error": True, "cost_usd": 0, "num_turns": 1}
+    down_mod = {"id": "t3", "arm": "inject", "answered": False, "is_error": True, "cost_usd": 0.0, "num_turns": 1, "assist": {"nudge": 0}}
+    ran_out = {"id": "t4", "arm": "inject", "answered": False, "is_error": True, "cost_usd": 0.31, "num_turns": 81, "assist": {}}  # a real result
+    f = tmp_path / "r.jsonl"
+    f.write_text("\n".join(json.dumps(x) for x in (ok, down, down_mod, ran_out)) + "\n", encoding="utf-8")
+    assert drop_faults.main(["--count", str(f)]) == 1
+    assert drop_faults.main([str(f)]) == 0
+    assert [json.loads(x)["id"] for x in f.read_text(encoding="utf-8").splitlines()] == ["t1", "t4"]
+    aside = tmp_path / "r.jsonl.api-error"
+    assert [json.loads(x)["id"] for x in aside.read_text(encoding="utf-8").splitlines()] == ["t2", "t3"]
+    assert not (tmp_path / "r.jsonl.nudged").exists()
+
+
 def test_the_assist_report_adds_the_languages_the_network_free_pairs_and_any_harness_fault():
     tasks = [{"id": "t0", "gold": ["a.py", "b.py"], "lang": "python"}, {"id": "t1", "gold": ["a.go", "b.go"], "lang": "go"}]
     zero = {"inject": 0, "coupled_notes": 0, "gate": 0, "nudge": 0, "locate_calls": 0, "coupled_calls": 0, "tool_search": 0}
@@ -884,3 +899,25 @@ latency_probe = _load("latency_probe")
 def test_the_latency_summary_is_the_median_and_the_extremes():
     assert latency_probe.summarize([3.0, 1.0, 2.0]) == {"n": 3, "median": 2.0, "max": 3.0, "min": 1.0}
     assert latency_probe.summarize([]) == {"n": 0}
+
+
+def test_the_query_form_diagnosis_counts_gold_files_source_files_and_the_projects_own_setup_files():
+    sys.path.insert(0, str(ROOT / "benchmarks" / "agent_compare"))
+    qf = _load("query_forms")
+    text = ("verinoda locate: 5 files (history: 375 commits read)\nlikely\n"
+            "  pom.xml:1-81 com.fasterxml.jackson:x  - matches: commit, jackson\n"
+            "  src/main/java/a/FromXmlParser.java:68-82 EMPTY_ELEMENT_AS_NULL  - matches: change, code\n"
+            "  .mcp.json:1-12  - matches: modify, repository, user, verinoda_mod\n"
+            "also check (change together with the above)\n"
+            "  release-notes/VERSION-2.x  - changed together in 15 of 74 commits with src/main/java/a/FromXmlParser.java\n"
+            "  src/main/java/a/XmlTokenStream.java  - changed together in 27 of 74 commits with src/main/java/a/FromXmlParser.java\n")
+    paths = qf.listed_paths(text)
+    assert paths == ["pom.xml", "src/main/java/a/FromXmlParser.java", ".mcp.json", "release-notes/VERSION-2.x",
+                     "src/main/java/a/XmlTokenStream.java"]
+    assert [qf.kind(p) for p in paths] == ["other", "code", "own", "other", "code"]
+    cell = qf.score_answer(text, ["src/main/java/a/FromXmlParser.java", "src/main/java/a/Other.java"])
+    assert (cell["listed"], cell["gold_listed"], cell["code"], cell["other"], cell["own"]) == (5, 1, 2, 2, 1)
+    assert qf.score_answer("verinoda locate: 0 files (history not read)", ["a.py"])["listed"] == 0
+    rows = [{"gold": ["a.py", "b.py"], "prompt": cell, "report": qf.score_answer("", ["a.py", "b.py"])}]
+    assert qf.total(rows, "prompt")["tasks_with_a_gold_file_listed"] == 1
+    assert qf.total(rows, "report")["tasks_listing_nothing"] == 1
