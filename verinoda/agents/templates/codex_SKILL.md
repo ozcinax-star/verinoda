@@ -139,15 +139,12 @@ user asks which option to take or what you recommend (the routing misses some ph
 ## Commands (examples; the output is plain text written for you - read it as it is)
 
 ```bash
-verinoda review --target src/pricing.py::apply_discount --change signature
 verinoda map . --view impact --target src/module.py
 verinoda query "where is the order total computed" --max-items 8
 verinoda resolve "compare with requests 2.31 sessions.py"
 verinoda plan draft "how does an order get persisted?"
 verinoda plan check .verinoda/plans/plan-001.json
 verinoda analyze --plan .verinoda/plans/plan-001.json
-verinoda analyze "why is pricing separate from the service?" --run-tests
-verinoda analyze "which tests reach apply_discount?" --observe
 verinoda trace create_order save_order --mode any
 verinoda observe --for apply_discount
 verinoda resolve-call src/service.py:22 save

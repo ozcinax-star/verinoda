@@ -1276,6 +1276,23 @@ Depo herkese açıktır (https://github.com/ozcinax-star/verinoda); paket PyPI'd
 
 ---
 
+### Claude Code ve Codex için canlı komutlar (D137)
+
+Symbiosis deposundaki **verinoda-live** modu Claude Code'a özeldi (bir Claude Code eklentisi); Codex kullanıcıları
+bundan mahrumdu. Aynı davranış artık Verinoda'nın kendi komutları, iki ajan da bunları kullanır:
+
+- `verinoda live install` (ya da `setup --live`): ajanın ayar dosyasına tek bir hook komutu (`verinoda live hook`)
+  ve iki küçük beceri yazar: `/verinoda-live` ile `/verinoda-improve` (Codex'te `$verinoda-live`, `$verinoda-improve`).
+  Codex'in hook çalıştırması için `config.toml` içinde `[features] codex_hooks = true` gerekir; komut bunu söyler, dosyaya dokunmaz.
+- Hook'lar: ajan dosya düzenledikçe indeks tazelenir (`Stop`: `update --fast`), her düzenlemeden sonra var olmayan isimler
+  denetlenir (`live check`), istenirse ajanın yaptığı commit'ler incelenir (`live guard on`), istenirse kod sorusuna Verinoda
+  eklenir (`live auto nudge|search`). Ayarlar `.verinoda/live.json`'da; `live status` durumu gösterir.
+- **Sorular, cevaplar, şıklar** (`verinoda improve`): "bunu daha iyi yap" gibi belirsiz bir istekte ajan önce bakar, hiçbir şey
+  değiştirmez, sıralı bir liste verir (olası sorun / iyileştirme / zevk meselesi); maddeler ajanın kendi soru aracıyla
+  (Claude Code'da `AskUserQuestion`, Codex'te `request_user_input`) şıklı soru olarak sorulur: Uygula, Önce kontrol et, Olduğu gibi kalsın.
+  Cevap verilmeyen madde kararsız kalır (kalsın demek değildir). Yalnızca seçilenler yapılır; sonuç madde madde raporlanır.
+- Ölçülen: etki Symbiosis deposunun ölçümlerindedir; burada gerçek bir Claude Code ya da Codex oturumu çalıştırılmadı.
+
 ## 11. Sözlük
 
 | Terim | Açıklama |

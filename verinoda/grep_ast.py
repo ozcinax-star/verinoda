@@ -226,7 +226,7 @@ class _Matcher:
 
     def tick(self) -> None:
         self.steps += 1
-        if self.steps % 512 == 1 and time.monotonic() > self.deadline:
+        if self.steps % 512 == 1 and time.monotonic() >= self.deadline:   # >=: a bound of 0 s holds on a coarse clock too
             raise _Timeout
 
     def bind(self, binds: dict, name: str, value: str) -> bool:

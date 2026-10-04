@@ -54,10 +54,13 @@ SKILL_DIRS: dict[str, tuple[str, ...]] = {
 }
 # the skill folders of a project-scope install, at the project's root
 SKILL_PREFIXES = tuple("/".join(parts) + "/" for parts in SKILL_DIRS.values())
-_SKILL_DIR_PARTS = frozenset(tuple(p.lower() for p in parts) for parts in SKILL_DIRS.values())
-_SKILL_NEEDLE = f"skills/{NAME}/"  # in every skill-folder path, lower-cased: a cheap test before the split
+# the two small skills `verinoda live install` writes beside it (D137) are Verinoda's own files too
+SKILL_NAMES = (NAME, f"{NAME}-live", f"{NAME}-improve")
+_ALL_SKILL_DIRS = tuple((*parts[:-1], n) for parts in SKILL_DIRS.values() for n in SKILL_NAMES)
+_SKILL_DIR_PARTS = frozenset(tuple(p.lower() for p in parts) for parts in _ALL_SKILL_DIRS)
+_SKILL_NEEDLE = f"skills/{NAME}"  # in every skill-folder path, lower-cased: a cheap test before the split
 # git pathspecs of the files under a skill folder at any depth, any case (paths relative to the -C folder)
-_SKILL_PATHSPECS = tuple(":(glob,icase)**/" + "/".join(parts) + "/**" for parts in SKILL_DIRS.values())
+_SKILL_PATHSPECS = tuple(":(glob,icase)**/" + "/".join(parts) + "/**" for parts in _ALL_SKILL_DIRS)
 # The files an MCP config extractor reads (verinoda.project_index.mcp_ingest.MCP_CONFIG_FILENAMES).
 MCP_CONFIG_NAMES = frozenset({".mcp.json", "claude_desktop_config.json", "mcp.json", "mcp_servers.json"})
 _MARKER_READ = 1 << 20  # a skill is a few KB; a larger file is read this far for the marker

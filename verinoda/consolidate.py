@@ -61,7 +61,7 @@ def duplicate_groups(store) -> list[dict]:
         live = [c for c in cs if c["status"] not in LIVE_EXCLUDED]
         if len(live) < 2:
             continue
-        live.sort(key=lambda c: (rank.get(c["status"], len(ORDER)), -_verified_stamp(store, c), c["id"]))
+        live.sort(key=lambda c: (rank.get(c["status"], len(ORDER)), *[-x for x in _verified_stamp(store, c)], c["id"]))
         out.append({"key": key, "project": project, "valid_env": env or None, "keep": live[0]["id"],
                     "fold": [c["id"] for c in live[1:]], "text": live[0]["text"][:160],
                     "statuses": [c["status"] for c in live]})
@@ -89,14 +89,16 @@ def _stamp(v) -> float:
         return 0.0
 
 
-def _verified_stamp(store, c: dict) -> float:
-    """When the claim was last verified: ``verified_at`` names the snapshot it was verified at (older rows may
-    hold a time); 0 for a claim never verified."""
+def _verified_stamp(store, c: dict) -> tuple[float, int]:
+    """When the claim was last verified, as ``(time, snapshot order)``: ``verified_at`` names the snapshot it was
+    verified at (older rows may hold a time). Snapshot times have a resolution of one second, so two snapshots
+    made within it are told apart by the order they were recorded in, as :meth:`Store.latest_snapshot` does;
+    ``(0, 0)`` for a claim never verified."""
     v = c.get("verified_at")
     if not v:
-        return 0.0
-    s = store.one("SELECT created_at FROM snapshots WHERE id = ?", (v,))
-    return _stamp(s["created_at"] if s else v)
+        return 0.0, 0
+    s = store.one("SELECT created_at, rowid AS seq FROM snapshots WHERE id = ?", (v,))
+    return (_stamp(s["created_at"]), int(s["seq"])) if s else (_stamp(v), 0)
 
 
 def _fold(store, repo: Path, keep: str, dup: str) -> dict:
@@ -132,11 +134,26 @@ def _stale_queue(store) -> list[dict]:
     return rows
 
 
-def _mark_tried(store, cid: str) -> None:
-    from verinoda.store import now
+_last_tried = ""
 
+
+def _tried_stamp() -> str:
+    """The time of an attempt, to the microsecond and never equal to the one before it in this process: the queue
+    orders claims by these stamps, and several runs within one clock tick (a second for ``store.now``, 15 ms on a
+    Windows clock) must still rotate through every claim instead of tying and coming back to the first."""
+    global _last_tried
+    from datetime import datetime, timedelta, timezone
+
+    stamp = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    if stamp <= _last_tried:
+        stamp = (datetime.fromisoformat(_last_tried) + timedelta(microseconds=1)).isoformat(timespec="microseconds")
+    _last_tried = stamp
+    return stamp
+
+
+def _mark_tried(store, cid: str) -> None:
     c = store.claim(cid)
-    store.update_claim(cid, {"spec": {**(c.get("spec") or {}), "consolidate_tried": now()}})
+    store.update_claim(cid, {"spec": {**(c.get("spec") or {}), "consolidate_tried": _tried_stamp()}})
 
 
 def _status_before_stale(store, cid: str) -> str | None:
