@@ -17,6 +17,7 @@ How this file is used:
   coupling, an embedding hit) is `strong_inference` at most; the core MCP profile stays at five tools (new tools go
   behind `run_tool` or the full profile); nothing leaves the machine unless the user turned it on.
 - The "Seen in" column names tools that have the feature, for reference; it is not a claim about their quality.
+  An item that did not come from the survey says so there ("none: our own idea") and is not one of the 106.
 
 ## 1 - Incremental index core
 
@@ -95,6 +96,7 @@ next steps. Stage B (incremental cross-file passes) is not started.
 
 | id | feature | what | seen in | done when |
 |---|---|---|---|---|
+| 13.9 | **Improvement checklist pane (verinoda-live)** | For a vague request ("make this better", "higher quality"), and only on the user's explicit command: the model finds what could change and fixes nothing yet. It lists the items in a pane on the right, ranked and in three groups (may be a bug, with `file:line` evidence; could be better; a matter of taste, a guess unless a screenshot was looked at), the first five to seven open and the rest folded by group. Each item is fix, keep or explain; the user may add items of their own; two ticked items that conflict are named before sending. Only the ticked items go to the agent, and the pane then shows each item's outcome and any change that was not on the list. First version: the command, the list, the three states, own items, send, outcomes. Later: a "keep" remembered per project with an expiry, so the same item is not proposed again; a screenshot loop for looks. Known risks: a long list is not read (rank and fold it); a guess in a checklist reads as a fact (status on every item); the list frames what "better" means (own items, "none of these") | none: our own idea (2026-10-04), not from the survey; Claude Code's review findings list is the nearest | a real session in which nothing outside the ticked items changes; the share of shown items the user ticks is reported (a low share means the list is noise); compared with plain chat on vague requests: turns spent correcting, changes nobody asked for |
 
 ## 14 - Outputs and views
 
