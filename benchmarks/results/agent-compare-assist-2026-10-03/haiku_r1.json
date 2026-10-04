@@ -1,0 +1,53 @@
+{
+ "tasks": "<REPO>/benchmarks/results/agent-compare-assist-2026-10-03/tasks.json",
+ "copy_pattern": "<BENCH>/assist/cb/work/{task}/{arm}",
+ "project": "the {repo} repository at {c} (a git checkout at the commit before the fix)",
+ "model": "claude-haiku-4-5-20251001",
+ "plugin_dir": "<REPO>/claude-mods/verinoda-live",
+ "mod_options": {
+  "auto": "off"
+ },
+ "path_dirs": {
+  "graphify": [
+   "<BENCH>/agentbench/envs/graphify/Scripts"
+  ],
+  "verinoda_mod": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_setup": [
+   "<REPO>/.venv/Scripts"
+  ]
+ },
+ "drop_path": [
+  "<USER>/.local/bin"
+ ],
+ "timeout_s": 1800,
+ "max_turns": 80,
+ "max_concurrent": 8,
+ "arm_defs": {
+  "none_haiku": {
+   "kind": "none",
+   "copy_arm": "none",
+   "model": "claude-haiku-4-5-20251001"
+  },
+  "inject_haiku": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject"
+   },
+   "model": "claude-haiku-4-5-20251001"
+  }
+ },
+ "arms": [
+  "none_haiku",
+  "inject_haiku"
+ ],
+ "arm_workers": {
+  "none_haiku": 3,
+  "inject_haiku": 3
+ },
+ "out": "<BENCH>/assist/cb/haiku_r1.jsonl"
+}

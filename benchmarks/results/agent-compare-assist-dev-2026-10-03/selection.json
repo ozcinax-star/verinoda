@@ -1,0 +1,60 @@
+{
+ "totals": {
+  "coupled": 0.1944,
+  "full": -0.0278,
+  "gate": 0.6389,
+  "inject": 1.1389,
+  "passive": 0.5278,
+  "passive_gate": 1.5278,
+  "strict": 0.5833,
+  "tool": 0.3056
+ },
+ "ranking": [
+  {
+   "arm": "passive_gate",
+   "gain": 1.5278,
+   "features": 3
+  },
+  {
+   "arm": "inject",
+   "gain": 1.1389,
+   "features": 1
+  },
+  {
+   "arm": "gate",
+   "gain": 0.6389,
+   "features": 1
+  },
+  {
+   "arm": "strict",
+   "gain": 0.5833,
+   "features": 3
+  },
+  {
+   "arm": "passive",
+   "gain": 0.5278,
+   "features": 2
+  },
+  {
+   "arm": "tool",
+   "gain": 0.3056,
+   "features": 1
+  },
+  {
+   "arm": "coupled",
+   "gain": 0.1944,
+   "features": 1
+  },
+  {
+   "arm": "full",
+   "gain": -0.0278,
+   "features": 2
+  }
+ ],
+ "mod_best": "inject",
+ "mod_second": "passive_gate",
+ "swapped": true,
+ "within": 1.0,
+ "n_tasks": 61,
+ "excluded_tasks": []
+}

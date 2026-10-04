@@ -1,0 +1,112 @@
+{
+ "none": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 0,
+  "named": 74,
+  "shown_and_named": 0,
+  "shown_not_named": 0,
+  "named_not_shown": 74,
+  "neither": 28
+ },
+ "verinoda_setup": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 0,
+  "named": 74,
+  "shown_and_named": 0,
+  "shown_not_named": 0,
+  "named_not_shown": 74,
+  "neither": 28
+ },
+ "inject": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 48,
+  "named": 82,
+  "shown_and_named": 42,
+  "shown_not_named": 6,
+  "named_not_shown": 40,
+  "neither": 14
+ },
+ "coupled": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 9,
+  "named": 76,
+  "shown_and_named": 4,
+  "shown_not_named": 5,
+  "named_not_shown": 72,
+  "neither": 21
+ },
+ "gate": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 48,
+  "named": 81,
+  "shown_and_named": 41,
+  "shown_not_named": 7,
+  "named_not_shown": 40,
+  "neither": 14
+ },
+ "tool": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 44,
+  "named": 79,
+  "shown_and_named": 38,
+  "shown_not_named": 6,
+  "named_not_shown": 41,
+  "neither": 17
+ },
+ "passive": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 50,
+  "named": 80,
+  "shown_and_named": 39,
+  "shown_not_named": 11,
+  "named_not_shown": 41,
+  "neither": 11
+ },
+ "passive_gate": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 50,
+  "named": 83,
+  "shown_and_named": 41,
+  "shown_not_named": 9,
+  "named_not_shown": 42,
+  "neither": 10
+ },
+ "full": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 47,
+  "named": 78,
+  "shown_and_named": 40,
+  "shown_not_named": 7,
+  "named_not_shown": 38,
+  "neither": 17
+ },
+ "strict": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 53,
+  "named": 75,
+  "shown_and_named": 42,
+  "shown_not_named": 11,
+  "named_not_shown": 33,
+  "neither": 16
+ },
+ "forced": {
+  "sessions": 63,
+  "gold": 102,
+  "shown": 55,
+  "named": 80,
+  "shown_and_named": 49,
+  "shown_not_named": 6,
+  "named_not_shown": 31,
+  "neither": 16
+ }
+}

@@ -1,0 +1,62 @@
+{
+ "tasks": "<REPO>/benchmarks/results/agent-compare-assist-2026-10-03/tasks.json",
+ "copy_pattern": "<BENCH>/assist/cb/work/{task}/{arm}",
+ "project": "the {repo} repository at {c} (a git checkout at the commit before the fix)",
+ "model": "claude-sonnet-5-5",
+ "plugin_dir": "<REPO>/claude-mods/verinoda-live",
+ "mod_options": {
+  "auto": "off"
+ },
+ "path_dirs": {
+  "graphify": [
+   "<BENCH>/agentbench/envs/graphify/Scripts"
+  ],
+  "verinoda_mod": [
+   "<REPO>/.venv/Scripts"
+  ],
+  "verinoda_setup": [
+   "<REPO>/.venv/Scripts"
+  ]
+ },
+ "drop_path": [
+  "<USER>/.local/bin"
+ ],
+ "timeout_s": 1800,
+ "max_turns": 80,
+ "max_concurrent": 8,
+ "arm_defs": {
+  "inject": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject"
+   }
+  },
+  "passive_gate": {
+   "kind": "verinoda",
+   "plugin": true,
+   "copy_arm": "verinoda_mod",
+   "mod_options": {
+    "auto": "off",
+    "assist": "inject,coupled,gate"
+   }
+  }
+ },
+ "arms": [
+  "none",
+  "graphify",
+  "verinoda_setup",
+  "inject",
+  "passive_gate"
+ ],
+ "arm_workers": {
+  "none": 2,
+  "graphify": 2,
+  "verinoda_setup": 2,
+  "inject": 2,
+  "passive_gate": 2
+ },
+ "out": "<BENCH>/assist/cb/conf_r1.jsonl"
+}

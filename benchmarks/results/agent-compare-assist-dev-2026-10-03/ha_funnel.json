@@ -1,0 +1,102 @@
+{
+ "none": {
+  "sessions": 80,
+  "gold": 104,
+  "shown": 0,
+  "named": 89,
+  "shown_and_named": 0,
+  "shown_not_named": 0,
+  "named_not_shown": 89,
+  "neither": 15
+ },
+ "verinoda_setup": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 0,
+  "named": 47,
+  "shown_and_named": 0,
+  "shown_not_named": 0,
+  "named_not_shown": 47,
+  "neither": 5
+ },
+ "coupled": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 11,
+  "named": 45,
+  "shown_and_named": 8,
+  "shown_not_named": 3,
+  "named_not_shown": 37,
+  "neither": 4
+ },
+ "gate": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 19,
+  "named": 45,
+  "shown_and_named": 18,
+  "shown_not_named": 1,
+  "named_not_shown": 27,
+  "neither": 6
+ },
+ "inject": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 19,
+  "named": 46,
+  "shown_and_named": 18,
+  "shown_not_named": 1,
+  "named_not_shown": 28,
+  "neither": 5
+ },
+ "tool": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 23,
+  "named": 46,
+  "shown_and_named": 20,
+  "shown_not_named": 3,
+  "named_not_shown": 26,
+  "neither": 3
+ },
+ "full": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 18,
+  "named": 45,
+  "shown_and_named": 14,
+  "shown_not_named": 4,
+  "named_not_shown": 31,
+  "neither": 3
+ },
+ "passive": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 30,
+  "named": 45,
+  "shown_and_named": 27,
+  "shown_not_named": 3,
+  "named_not_shown": 18,
+  "neither": 4
+ },
+ "strict": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 30,
+  "named": 46,
+  "shown_and_named": 26,
+  "shown_not_named": 4,
+  "named_not_shown": 20,
+  "neither": 2
+ },
+ "passive_gate": {
+  "sessions": 40,
+  "gold": 52,
+  "shown": 30,
+  "named": 46,
+  "shown_and_named": 27,
+  "shown_not_named": 3,
+  "named_not_shown": 19,
+  "neither": 3
+ }
+}

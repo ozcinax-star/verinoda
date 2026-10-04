@@ -876,3 +876,11 @@ def test_the_assist_report_adds_the_languages_the_network_free_pairs_and_any_har
     assert "1 session of the data shows the mod's nudge" in md  # a fault is said, not hidden
     clean = assist_report.report(tasks, [[row("t0", "none", ["a.py"]), row("t0", "inject", ["a.py"])]], title="clean")
     assert "nudge" not in clean
+
+
+latency_probe = _load("latency_probe")
+
+
+def test_the_latency_summary_is_the_median_and_the_extremes():
+    assert latency_probe.summarize([3.0, 1.0, 2.0]) == {"n": 3, "median": 2.0, "max": 3.0, "min": 1.0}
+    assert latency_probe.summarize([]) == {"n": 0}

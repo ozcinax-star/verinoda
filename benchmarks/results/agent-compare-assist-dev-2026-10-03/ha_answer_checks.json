@@ -1,0 +1,72 @@
+{
+ "none": {
+  "sessions": 80,
+  "named": 149,
+  "missing": 6,
+  "share_missing": 0.04,
+  "sessions_with_a_missing": 6
+ },
+ "verinoda_setup": {
+  "sessions": 40,
+  "named": 81,
+  "missing": 3,
+  "share_missing": 0.037,
+  "sessions_with_a_missing": 3
+ },
+ "coupled": {
+  "sessions": 40,
+  "named": 75,
+  "missing": 3,
+  "share_missing": 0.04,
+  "sessions_with_a_missing": 2
+ },
+ "gate": {
+  "sessions": 40,
+  "named": 82,
+  "missing": 4,
+  "share_missing": 0.049,
+  "sessions_with_a_missing": 3
+ },
+ "inject": {
+  "sessions": 40,
+  "named": 79,
+  "missing": 4,
+  "share_missing": 0.051,
+  "sessions_with_a_missing": 3
+ },
+ "tool": {
+  "sessions": 40,
+  "named": 82,
+  "missing": 3,
+  "share_missing": 0.037,
+  "sessions_with_a_missing": 3
+ },
+ "full": {
+  "sessions": 40,
+  "named": 79,
+  "missing": 3,
+  "share_missing": 0.038,
+  "sessions_with_a_missing": 3
+ },
+ "passive": {
+  "sessions": 40,
+  "named": 80,
+  "missing": 3,
+  "share_missing": 0.037,
+  "sessions_with_a_missing": 2
+ },
+ "strict": {
+  "sessions": 40,
+  "named": 87,
+  "missing": 4,
+  "share_missing": 0.046,
+  "sessions_with_a_missing": 3
+ },
+ "passive_gate": {
+  "sessions": 40,
+  "named": 76,
+  "missing": 4,
+  "share_missing": 0.053,
+  "sessions_with_a_missing": 3
+ }
+}
