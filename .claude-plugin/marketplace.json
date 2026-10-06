@@ -1,0 +1,12 @@
+{
+  "name": "verinoda",
+  "owner": { "name": "Verinoda" },
+  "metadata": { "description": "Claude Code mods that belong to the Verinoda repository." },
+  "plugins": [
+    {
+      "name": "verinoda-live",
+      "source": "./claude-mods/verinoda-live",
+      "description": "Verinoda in Claude Code: keeps the code index fresh while Claude edits, reviews commits, and shows it in a pane."
+    }
+  ]
+}

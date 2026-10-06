@@ -25,7 +25,7 @@ always migrated forward, never silently reset.
 | Exact names, one build at a time, fresh index (D37) | Nothing to migrate. `receiver_calls.json` v2 is recomputed on the first load (its per-file facts are reused); `.verinoda/index/fresh_ignored.json` changed format (v2), and an older one is ignored and rewritten. Output and exit-code changes are listed below. |
 | Upstream (Graphify) base | Maintainers only: `python tools/port_upstream.py <graphify-checkout-at-new-commit>`, review the diff, run `pytest tests` and `pytest tests_upstream`, update `docs/UPSTREAM.md` (commit, test table, inventory). Check that `index.install_path_identity_memo()` still finds `watch._StoredSourcePaths` (`tests/test_index.py` covers it). |
 
-## Upgrading from 0.4.0 (D137-D174)
+## Upgrading from 0.4.0 (D137-D175)
 
 ### D137: Trigram regex index
 
@@ -497,6 +497,22 @@ per-repository background process (`verinoda/locate_daemon.py`) that keeps the g
 127.0.0.1 only, asks for a random token kept in `.verinoda/locate-daemon.json` (with `.verinoda/locate-daemon.log`;
 both disposable), and ends by itself after 10 minutes without a request. `--json` carries the compact text a model
 reads as `text`.
+
+### D175: The improvement checklist pane
+
+The `verinoda-live` mod is now 0.6.0. `/verinoda-improve [what to look at]` opens a separate pane of improvement options;
+the model is asked to inspect without edits, and the person chooses apply, keep or check first before sending the work.
+Own items, folded groups, evidence/guess labels and per-item outcomes are included. A confirmed check requires a new
+selection; missing reports can be requested again. `Beklemeyi bırak` stops waiting for reports, not the running agent.
+
+The new `improveOffer` setting is off by default. On, in an interactive session, it offers the checklist for vague requests.
+The two new tools are registered on demand; scripted sessions get no tools or offer. No Verinoda index or store migration
+is required. State lasts for the session, survives module reload and is explicitly reset on `/clear`. The command schedules
+its review prompt through a zero-delay timer because the host refuses direct submission inside `command.run`.
+
+Automated checks: 126 tests pass (88 existing, 38 new), validation and TypeScript pass. Real-session behaviour and user
+benefit are not measured; see the mod's README for the terminal checks. Alternatives, conflict/dependency warnings,
+redirection, previews and preference memory remain later steps.
 
 ## Upgrading from 0.3.2 (D60-D136)
 

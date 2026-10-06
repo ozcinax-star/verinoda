@@ -1,0 +1,15 @@
+Generator: built-in image_gen
+Concept: verinoda-neural-nature-concept.png
+Final vector: verinoda-neural-nature.svg
+Final raster: verinoda-neural-nature.png, rendered from the SVG using sharp, 2048x2048 with alpha.
+Vector refinement uses one branch group rotated by 0, 120 and 240 degrees around (512,512), one central hub, three leaves, six terminal nodes on a radius of 320, and an outer circle of radius 416. Terminal coordinates use 512 +/- 160 and 512 - 160*sqrt(3). Fine leaf veins are removed for legibility. SVG rotational symmetry is exact; aesthetic perfection and tiny-icon legibility have not been quantitatively measured.
+
+Use case: logo-brand
+Asset type: final square, text-free Verinoda emblem.
+Input image: previous green nature logo, STYLE AND COLOR REFERENCE ONLY. Replace its swirling-leaf structure with the new concept below.
+Primary request: Create a beautiful, clear, extremely simple symbol that unifies a neural connection network radiating from ONE central hub, living nature and the Earth. It should feel like one intelligent living organism, not three icons combined.
+Design: ONE small solid circular seed-like node precisely at the center. Exactly THREE elegant gently curving primary connections emerge from that same center, spaced 120 degrees apart. Each primary connection gently divides once, yielding six small round terminal nodes toward the periphery. Integrate a small smooth almond-shaped leaf into each primary branch, using the same geometry and scale. Suggest the Earth through a restrained thin circular contour around the entire network, with generous breathing room. The ring, branches, leaves and nodes form one cohesive refined mark. Sparse connections, absolutely no tangled mesh. Branches must remain clear and separated except at the single common center.
+Geometry: disciplined circular composition, exact visual threefold rotational symmetry, identical repeated branches, coherent rounded stroke weight, calm and generous negative space, harmonious proportions. Circular hub and small rounded nodes; leaves and soft curved stems convey life.
+Style: premium minimalist flat vector-style logo, solid single-color emerald jade green #00865A, crisp edges. Elegant, understated, organic, highly legible as an app icon at small sizes.
+Composition: one single mark centered on square 1:1 canvas, 75% canvas width, balanced margins, genuinely transparent background.
+Constraints: NO words, letters, numbers, tagline, texture, gradients, shadows, glow, 3D, mockup, extra decorations or watermark. Do not draw a brain, realistic neuron, anatomical diagram, continents or globe latitude grid. No tiny details, no dense network, no straight spiky spokes, no recycling arrows. The SINGLE CENTRAL ORIGIN of all connections must be visually obvious.

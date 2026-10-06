@@ -1,0 +1,14 @@
+Generator: built-in image_gen
+Output: verinoda-nature-concept.png
+Vector refinement: verinoda-nature.svg, one cubic Bezier leaf reused with exact 120-degree rotations around (512, 512), solid #00865A, transparent 1024x1024 canvas.
+Final raster: verinoda-nature.png, rendered from the SVG with sharp at 2048x2048, preserving alpha.
+The vector is a geometric refinement of the concept, not an automatic trace. Rotational symmetry is enforced by SVG transforms. Aesthetic perfection is subjective; no golden-ratio claim is made.
+
+Use case: logo-brand
+Asset type: square, symbol-only nature-inspired logo for Verinoda.
+Primary request: Design an exceptionally elegant, timeless, completely text-free emblem inspired by life, nature and the Earth. Replace the previous technology-node idea entirely.
+Subject: A spherical organic emblem composed of exactly THREE identical curved leaf-like forms, arranged with exact visual threefold rotational symmetry, 120 degrees apart. The forms softly spiral around a calm open center. The overall silhouette evokes a small living planet, a germinating seed and a natural growth cycle. Use generous flowing negative space and a memorable unified silhouette. Each form is a broad smooth crescent leaf, not an arrow. The implied circle and repeated arcs should feel constructed with a compass and mathematically harmonious.
+Style: premium minimalist identity design, beautifully resolved geometry, smooth circular arcs, flat solid emerald-jade green, no gradients, consistent proportions, refined organic elegance. Make it look like a real considered brand mark rather than clip art.
+Composition: one single emblem centered on a square 1:1 canvas, occupies 75% of canvas width, identical padding on all sides. No writing whatsoever.
+Background: truly transparent alpha background.
+Constraints: one color only; all three leaves identical in shape and size; rotation is the only difference. No text, letters, numbers, wordmark, tagline, mockup, framing badge, outlines, textures, shading, shadows or watermark. No literal continents, no globe latitude lines, no tech nodes, no arrows, no recycling-sign appearance, no generic stock eco hand-and-leaf symbol. Favor exquisite simplicity and harmonious balance.

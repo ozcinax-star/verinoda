@@ -60,11 +60,75 @@ export type CheckInfo = {
   at: number // ms
 }
 
+export type ImproveGroup = 'problem' | 'improvement' | 'taste' | 'own'
+export type ImproveDecision = 'none' | 'apply' | 'keep' | 'check'
+export type ImproveStatus = 'waiting' | 'applied' | 'partial' | 'failed' | 'not_confirmed' | 'unreported'
+
+export type ImproveItem = {
+  id: string
+  group: ImproveGroup
+  title: string
+  observation: string
+  why: string
+  change: string
+  cost: string
+  evidence: string[]
+  seen: boolean
+  verified: boolean
+  checked: string
+  decision: ImproveDecision
+  sentAs: 'apply' | 'check' | null
+  outcome: { status: ImproveStatus; note: string; evidence: string[] } | null
+}
+
+export type ImproveState = {
+  phase: 'idle' | 'reviewing' | 'choosing' | 'sent'
+  subject: string
+  items: ImproveItem[]
+  open: string | null
+  unfolded: ImproveGroup[]
+  extra: string[]
+  draft: string
+  ownSeq: number
+  expect: '' | 'review' | 'selection' | 'report'
+  turn: string | null
+  note: '' | 'no-list' | 'not-sent'
+  requestSeq: number // a late submit failure must not roll back a newer request (D175)
+}
+
+export type ImproveProposal = {
+  subject: string
+  items: {
+    id: string
+    group: 'problem' | 'improvement' | 'taste'
+    title: string
+    observation: string
+    why: string
+    change: string
+    cost?: string
+    evidence?: string[]
+    seen?: boolean
+  }[]
+}
+
+export type ImproveReport = {
+  outcomes: {
+    id: string
+    status: 'applied' | 'partial' | 'failed' | 'confirmed' | 'not_confirmed'
+    note: string
+    change?: string
+    evidence?: string[]
+  }[]
+  extra_changes?: string[]
+}
+
 declare module 'claude-code' {
   // The tools the mod registers (feature `tool`), so a `tool.call` hook can name them and read their arguments.
   interface McpToolInputs {
     'mcp__verinoda-live__locate': { text: string; files?: string[] }
     'mcp__verinoda-live__coupled': { files: string[] }
+    'mcp__verinoda-live__improve_propose': ImproveProposal
+    'mcp__verinoda-live__improve_report': ImproveReport
   }
 
   interface PluginState {
@@ -81,6 +145,8 @@ declare module 'claude-code' {
       reviewing: string | null // the short sha of the commit under review
       expanded: boolean // the review summary shown whole
       assist: string // the assist setting: a preset (off, inject, tool, full, strict) or a list of features
+      improve: ImproveState
+      language: string // answer language: auto (follow the person), Turkish, English or a typed language name
     }
   }
 }

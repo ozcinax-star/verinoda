@@ -9,6 +9,9 @@ import {
 import type { Features, Located } from './assist'
 import { frameRows, MASCOT_HEIGHT, MASCOT_WIDTH } from './mascot'
 import type { MascotProps, Mood } from './mascot'
+import { registerImprove } from './improve-pane'
+import { IMPROVE_TOOLS, initialImprove, OFFER_PROMPT, turnEnded } from './improve'
+import { asLanguage, LANG_AUTO, LANG_ENGLISH, LANG_TURKISH, languageCommand, languageLabel, languageNote, nextLanguage } from './language'
 
 const PANE = 'verinoda'
 const GRAPH_POLL_MS = 1_000
@@ -93,14 +96,17 @@ const lastReview = atom({ plugin: 'verinoda-live', key: 'lastReview' } as const,
 const reviewing = atom({ plugin: 'verinoda-live', key: 'reviewing' } as const, null as string | null)
 const expanded = atom({ plugin: 'verinoda-live', key: 'expanded' } as const, false)
 const assist = atom({ plugin: 'verinoda-live', key: 'assist' } as const, 'off')
+const improve = atom({ plugin: 'verinoda-live', key: 'improve' } as const, initialImprove())
+const language = atom({ plugin: 'verinoda-live', key: 'language' } as const, LANG_AUTO)
 
 // Where Verinoda is, settled at session start from the plugin's settings (`userConfig`), else found: the project is
 // the nearest folder at or above the session's with a .verinoda index; the CLI is the project's own .venv one if it
 // has one, else `verinoda` on PATH; the Python beside that CLI reads the graph's state.
-const cfg = { cli: 'verinoda', python: 'python', motion: true, auto: 'off' as AutoMode, assist: 'off' }
+const cfg = { cli: 'verinoda', python: 'python', motion: true, auto: 'off' as AutoMode, assist: 'off', language: LANG_AUTO }
 
 // Module state: a reload starts it over, which only forgets edits not yet indexed.
 const live = {
+  interactive: false,
   root: undefined as string | undefined,
   cwd: '',
   pending: new Set<string>(),
@@ -122,6 +128,7 @@ const live = {
   coupledAsked: new Set<string>(),
   usedLocate: false, // the model called the locate tool for this task
   gated: false, // the gate has answered the first search of this task
+  langSent: undefined as string | undefined, // the language the model was last told to answer in, this session
   daemonStart: undefined as Promise<void> | undefined,
 }
 
@@ -295,6 +302,11 @@ async function setAssist($: EngineInterface, value: string): Promise<void> {
   await $.store.set('assist', value)
 }
 
+async function setLanguage($: EngineInterface, value: string): Promise<void> {
+  await update($, language, () => value)
+  await $.store.set('language', value)
+}
+
 async function features($: EngineInterface): Promise<Features> {
   return assistFeatures(await read($, assist))
 }
@@ -312,10 +324,12 @@ async function loadSettings($: EngineInterface, isInteractive: boolean): Promise
   const isGuard = (await storedChoice('guard')) === true
   const isCheck = (await storedChoice('check')) !== false
   const storedAssist = await storedChoice('assist')
+  const storedLanguage = await storedChoice('language')
   await update($, auto, () => mode)
   await update($, guard, () => isGuard)
   await update($, check, () => isCheck)
   await update($, assist, () => (typeof storedAssist === 'string' ? storedAssist : cfg.assist))
+  await update($, language, () => (storedLanguage === undefined ? cfg.language : asLanguage(storedLanguage)))
 }
 
 // `check --diff` reads the lines changed against HEAD (and new files whole); a project without git, or a diff the
@@ -811,6 +825,10 @@ export const MODE_HINT: Record<AutoMode, string> = {
 }
 export const OUTSIDE_HINT = '▲ Oturum proje dışında başladı; bağlam eklenmez'
 export const GUARD_HINT = 'Commit sonrası risk ve bulgular bildirilir'
+export const LANG_HINT = {
+  auto: "Claude yazdığın dilde cevap verir · ilk soruda dilini de yazabilirsin",
+  set: (name: string) => `Claude ${name} dilinde cevap verir ve seçenekleri bu dilde sunar`,
+}
 export const CHECK_HINT = "Python/Java/Kotlin düzenlemesindeki var olmayan isimler Claude'a söylenir"
 
 export function checkLine(c: CheckInfo | null): { text: string; tone: Tone } | null {
@@ -848,16 +866,26 @@ export function rowsOf(text: string, columns: number): number {
 }
 
 export const register: Register = (on, options) => {
+  registerImprove(on, live, background)
   on('session.start', async ($, e, next) => {
+    live.interactive = e.isInteractive !== false
+    await $.command.register({ name: 'verinoda-improve', argumentHint: '[what to look at]',
+      description: 'List what could be changed here and choose what to apply; nothing changes until you choose.' })
+    if (live.interactive && (options.improveOffer === true || (await read($, improve)).phase !== 'idle')) {
+      for (const spec of IMPROVE_TOOLS) await $.tool.register(spec)
+    }
     live.cwd = await $.session.cwd()
     cfg.auto = asMode(options.auto)
     cfg.assist = typeof options.assist === 'string' ? options.assist : 'off'
+    cfg.language = asLanguage(options.language)
+    live.langSent = undefined // a reload starts the session's language note over; say it again at the next prompt
     live.root = await findRoot($, typeof options.root === 'string' ? options.root.trim() : '', live.cwd)
     if (live.root !== undefined) await resolveTools($, live.root, options)
     await loadSettings($, e.isInteractive !== false)
     await $.command.register({ name: 'verinoda-update', description: 'Re-index the files edited this session now.' })
     await $.command.register({ name: 'verinoda-assist', description: 'Where a change belongs: locate files, what changes together, a tool and the first search (off, inject, tool, full, strict).' })
     await $.command.register({ name: 'verinoda-auto', description: 'Code questions: nudge (start with Verinoda analyze), search (attach results) or off.' })
+    await $.command.register({ name: 'verinoda-lang', description: 'The language Claude answers and offers final options in: auto, tr, en or any language by name.' })
     await $.command.register({ name: 'verinoda-guard', description: 'Review each commit with Verinoda afterwards: on, off, or toggle.' })
     await $.command.register({ name: 'verinoda-check', description: 'Check each edit of Python/Java/Kotlin code for names that do not exist: on, off, or toggle.' })
     // not plain `verinoda`: the Verinoda agent skill of that name takes `/verinoda` first
@@ -879,7 +907,10 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.compose', async ($, e, next) => {
-    const out = await next(e)
+    let out = await next(e)
+    if (live.interactive && options.improveOffer === true) {
+      out = { sections: [...out.sections, { id: 'verinoda-live:improve', text: OFFER_PROMPT, scope: 'session' as const }] }
+    }
     const f = await features($)
     if (!f.prompt || !inProject()) return out
     return { sections: [...out.sections, { id: 'verinoda-live:assist', text: assistPrompt(f), scope: 'session' as const }] }
@@ -968,10 +999,16 @@ export const register: Register = (on, options) => {
 
   // A code question typed in the project gets the nudge (or, in search mode, Verinoda's results) as context.
   on('prompt.submit', async ($, e, next) => {
+    if (e.origin?.kind === 'plugin' && e.origin.name === 'verinoda-live') return next(e)
     const isUser = isPersonsPrompt(e.origin)
     if (isUser) startTask(e.text)
-    if (live.root === undefined || !isUser || !isInside(live.cwd, live.root)) return next(e)
-    const blocks: string[] = []
+    const wanted = await read($, language)
+    const said = isUser && !/^[/!#]/.test(e.text.trim()) ? languageNote(wanted, live.langSent) : undefined
+    if (said !== undefined) live.langSent = wanted
+    const blocks: string[] = said === undefined ? [] : [said]
+    if (live.root === undefined || !isUser || !isInside(live.cwd, live.root)) {
+      return next(blocks.length === 0 ? e : { ...e, context: [...(e.context ?? []), ...blocks] })
+    }
     if ((await features($)).inject && looksLikeCodeQuestion(e.text, NUDGE_MAX_CHARS)) {
       const located = await lookup($, live.root, { op: 'locate', text: e.text.trim().slice(0, LOCATE_TEXT_MAX), anchors: [] })
       const answer = renderLocate(located, LOCATE_ANSWER_MAX)
@@ -994,7 +1031,10 @@ export const register: Register = (on, options) => {
   })
 
   // One re-index per turn, not per edit; left running so the turn ends at once.
-  on('turn.complete', ($, e, next) => {
+  on('turn.complete', async ($, e, next) => {
+    if (live.interactive && e.agentId === undefined && (await read($, improve)).turn === e.turnId) {
+      await update($, improve, s => turnEnded(s, e.turnId))
+    }
     if (e.agentId === undefined && live.pending.size > 0 && !live.isRunning) background(reindex($))
     return next(e)
   })
@@ -1021,6 +1061,14 @@ export const register: Register = (on, options) => {
     return { text: `assist: ${value}${where}` }
   })
 
+  on('command.run', { command: 'verinoda-lang' }, async ($, e) => {
+    const value = languageCommand(e.args)
+    if (value === undefined) return { text: `answer language: ${await read($, language)} (usage: /verinoda-lang [auto|tr|en|<a language>])` }
+    if (value !== LANG_AUTO && value === (await read($, language))) live.langSent = undefined
+    await setLanguage($, value)
+    return { text: `answer language: ${value}${value === LANG_AUTO ? ' (Claude follows the language you write in)' : ''}` }
+  })
+
   on('command.run', { command: 'verinoda-guard' }, async ($, e) => {
     const value = settingCommand(e.args, await read($, guard))
     if (value === undefined) return { text: 'usage: /verinoda-guard [on|off]' }
@@ -1041,7 +1089,10 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Button, Text } = elements
+    const Input = 'Input' in elements ? elements.Input : undefined
+    const lang = await read($, language)
     const s = await read($, idx)
     const said = await read($, notice)
     const mode = await read($, auto)
@@ -1185,18 +1236,46 @@ export const register: Register = (on, options) => {
       if (lastLine !== null) used += 1
     }
 
+    const following = nextLanguage(lang)
+    const isTyped = lang !== LANG_AUTO && lang !== LANG_TURKISH && lang !== LANG_ENGLISH
+    const langHint = lang === LANG_AUTO ? LANG_HINT.auto : LANG_HINT.set(lang)
+    const langButton = (value: string, label: string) => (
+      <Button key={`lang-${value}`} label={`${value === lang ? '● ' : ''}${label}`} hotkey={value === following ? 'l' : undefined}
+        variant={value === lang ? 'primary' : 'secondary'} onPress={() => (value === lang ? undefined : setLanguage($, value))} />
+    )
+    const langEl = (
+      <Box key="language" flexDirection="column">
+        <Box flexDirection={columns < 40 ? 'column' : 'row'} columnGap={1}>
+          <Text bold={!isInline}>{isInline ? 'Dil' : 'Cevap dili'}</Text>
+          {langButton(LANG_AUTO, 'Otomatik')}
+          {langButton(LANG_TURKISH, 'Türkçe')}
+          {langButton(LANG_ENGLISH, 'English')}
+          {isTyped && <Button key="lang-typed" label={`● ${languageLabel(lang)}`} variant="primary" onPress={() => undefined} />}
+        </Box>
+        {!isInline && Input !== undefined && (
+          <Input key="lang-input" placeholder="Başka bir dil yaz (ör. Deutsch)" submitLabel="seç"
+            onSubmit={value => setLanguage($, asLanguage(value))} />
+        )}
+        {!isInline && <Text dimColor wrap="wrap">{langHint}</Text>}
+      </Box>
+    )
+    if (!isInline) {
+      used += 2 + (columns < 40 ? 3 + (isTyped ? 1 : 0) : 0) + (Input !== undefined ? 1 : 0)
+      count(langHint)
+    }
+
     if (isInline) {
       return (
         <Box flexDirection="column">
           {indexBlock}
           {reviewBlock}
-          <Box flexDirection="row" columnGap={2} flexWrap="wrap">{contextEl}{guardEl}{checkEl}</Box>
+          <Box flexDirection="row" columnGap={2} flexWrap="wrap">{contextEl}{guardEl}{checkEl}{langEl}</Box>
         </Box>
       )
     }
 
     // 6 · footer: only the keys that exist in this drawing
-    const keys = [action !== null ? 'u güncelle' : '', '1-3 bağlam', 'r inceleme', 'k kontrol', isCut ? 'd ayrıntı' : ''].filter(Boolean)
+    const keys = [action !== null ? 'u güncelle' : '', '1-3 bağlam', 'r inceleme', 'k kontrol', 'l dil', isCut ? 'd ayrıntı' : ''].filter(Boolean)
     const footer = e.props.isFocused ? keys.join(' · ') : 'Kısayollar için ctrl+x tab'
     used += 2 // the footer and the gap above it
 
@@ -1232,6 +1311,7 @@ export const register: Register = (on, options) => {
         {contextEl}
         {guardEl}
         {checkEl}
+        {langEl}
         {mascot}
         <Text dimColor wrap="truncate">{footer}</Text>
       </Box>

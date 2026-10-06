@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="title desc">
+  <title id="title">Verinoda — yaşam döngüsü</title>
+  <desc id="desc">Aynı yaprağın merkez çevresinde 120 ve 240 derece döndürülmesiyle oluşan, yazısız yeşil küre simgesi.</desc>
+  <defs>
+    <path id="leaf" d="M270 240 C380 110 500 100 600 118 C805 140 910 315 860 488 C835 592 753 661 654 669 C768 627 784 551 756 490 C716 414 633 400 605 325 C565 222 563 181 497 170 C415 150 330 186 270 240 Z"/>
+  </defs>
+  <g fill="#00865A">
+    <use href="#leaf"/>
+    <use href="#leaf" transform="rotate(120 512 512)"/>
+    <use href="#leaf" transform="rotate(240 512 512)"/>
+  </g>
+</svg>

@@ -17140,6 +17140,80 @@ not in `CORE_DIRECT`: listing it would add standing context to every request.
 `tests/test_locate.py` (signals on temporary git repositories, the command line, the worker) and
 `tests/test_locate_daemon.py` (routes, token, idle end, a real detached start and stop).
 
+## 148. The improvement checklist pane (D175, 2026-10-04)
+
+### 148.1 Why
+
+A vague request ("make this better", "nicer") leaves the axis of improvement unstated. The model can inspect the work and
+offer concrete changes for the person to recognize and choose. The list itself grants no permission to edit, and an
+unselected item is not a rejected preference. This ships step 1 of `claude-mods/verinoda-live/IMPROVE-PANE.md`; real-session
+acceptance and the later steps remain.
+
+### 148.2 Decisions
+
+- `/verinoda-improve [what to look at]` opens a separate Turkish pane and asks for a ranked list without changes. The two
+  tools, `improve_propose` and `improve_report`, are registered only after that command, on reload of an active checklist,
+  or with `improveOffer` on. They are first-class, not deferred. Scripted sessions get neither tools nor an offer. No
+  index or Verinoda command is needed; no new store entries or Python changes.
+- Possible problems, functional improvements and matters of taste are separate groups. The seven best-ranked list items
+  appear first; decisions, verified items and the open item remain visible too. Details explain the observation, reason,
+  change, cost and evidence. Missing evidence and unseen visual guesses have explicit row labels. Own items are selected
+  on entry, capped at ten, and use ids never reused during the session. Mobile draws no Input.
+- Apply, keep and investigate-only are explicit choices. Only selected work and explicit keeps enter the selection prompt.
+  A confirmed check returns the item undecided, with evidence, the note and its proposed fix. Reports validate as a whole;
+  final outcomes are immutable, while unreported items still accept a late report. Extra changes are shown separately.
+- One session state key, `improve`, carries the checklist, draft and turn tracking. Every new submission clears the prior
+  turn id; `turn.start` matches the submitted prompt's first line. Only that main-loop turn's completion marks missing
+  results unreported. Failed submissions restore choices; a request sequence prevents old failures undoing a newer
+  request. Concurrent send presses queue one selection. `/clear` explicitly resets the state and invalidates pending work.
+- Pure logic is in `hooks/improve.ts`; the pane and its own hooks are in `hooks/improve-pane.tsx`. The shared lifecycle hooks
+  remain in `register.tsx` with small additions. The host validator forbids duplicate unmatched hooks on one event and
+  passing `$` into an imported helper; two atoms naming the same plugin/key access the same state from the two modules.
+- **Host finding, different from the brief:** direct `prompt.submit` from `command.run` fails even when launched in the
+  background: `called from a command.run hook, it would wait on the turn this hook is holding`. The command instead opens
+  the pane immediately and schedules its submission with `$.clock.after(0, ...)`. The callback checks the current request
+  before submitting. This path is tested with the host's mock clock. Selection and report requests are submitted unawaited
+  from press handlers. All three use `asUser: true` and bypass this mod's own auto-context and assist task setup.
+
+### 148.3 Measured
+
+Before the change: 88 tests passed in 5 files. After it: 126 passed, 0 failed in 6 files, including 38 new improvement tests.
+The mod's validator passes and lists the added hooks, `$.clock.after`, `$.prompt.submit` and the `improve` state key.
+TypeScript passes. The tests mount the pane, operate its controls and validate its tree at 30 columns on terminal, desktop
+and mobile. They use mocked prompts, tool inputs and host answers; **no real session was run**. User satisfaction, agent
+scope adherence, evidence accuracy, elapsed review time, tokens and typing latency are **not measured**.
+
+### 148.4 Not done
+
+Step 2 (single-choice alternatives, nested items, redirection preserving selections, conflicts/dependencies), visual
+previews/screenshot loops and preference memory are not implemented. The module expresses scope in the agent's prompt;
+it does not mechanically prove that the agent's edits conform to it. Selection rate is not a success metric.
+
+A person still needs to check real pane placement (including a tool opening one in a narrow terminal), keyboard focus,
+scrolling/wrapping of twenty items at forty columns, Input clearing and typing latency, the zero-delay review start, actual
+model proposals/edits/reports and the optional offer. The desktop application's `isInteractive` flag, prompt rewriting by
+other plugins and native state retention through `/clear` remain unknown. Explicit reset and recovery paths are tested.
+
+### 148.5 Tests
+
+`claude-mods/verinoda-live/hooks/improve.test.ts`: input bounds and atomic refusal; ranking/folding; decisions and own items;
+all five report statuses; confirmed problems returning to the list; optional malformed fields; explicit scope prompts;
+inactive/scripted sessions; tool registration and descriptions; no-index operation; nudge/assist bypass; placed/unplaced
+pane replies; every control and surface; selection freeze, late/partial reports and stop/ask again; turn ownership;
+dropped/rejected submissions; stale request failures; concurrent sends; reload and clear, including a pending review.
+
+Checks from the repository root:
+
+```
+claude plugin validate claude-mods/verinoda-live
+claude plugin test claude-mods/verinoda-live
+npx --yes -p typescript tsc -p claude-mods/verinoda-live
+```
+
+The original direct-command submission tests first failed on the host restriction quoted above; after moving submission
+to the timer, the final suite passes. The first `npx` attempt failed with npm `EACCES` under the sandbox's network/cache
+restrictions; the authorized rerun succeeds. The Python suite was not run (no Python changed).
+
 ## Sources
 
 - **Retrieval:**

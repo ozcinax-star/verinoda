@@ -1,0 +1,11 @@
+Generator: built-in image_gen
+Output: verinoda-logo-square.png
+
+Use case: logo-brand
+Asset type: square version of the existing Verinoda logo.
+Input image: edit target, existing horizontal Verinoda logo.
+Primary request: Convert this exact logo into a balanced square 1:1 stacked logo lockup on an actually transparent background.
+Composition: a large blue connected-node V symbol centered above the lowercase "verinoda" wordmark. Center both horizontally. The symbol is the main focal point and the wordmark beneath it is clearly readable, with generous separation and balanced outer padding. The canvas must be square, equal width and height.
+Invariants: Preserve the existing distinctive V with its three circular nodes and two connecting strokes, exact bright blue color, dark navy wordmark, typography, and exact text "verinoda". Change only the arrangement and relative sizing to fit the square composition. Preserve transparency.
+Style: crisp flat professional brand asset.
+Avoid: new symbols, altered spelling, taglines, gradients, shadows, textures, glow, badges, mockups, extra text, watermarks.

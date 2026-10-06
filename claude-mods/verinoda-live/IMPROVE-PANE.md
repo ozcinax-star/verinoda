@@ -1,6 +1,10 @@
 # The improvement checklist pane: step 1 (backlog 13.9)
 
-Status: to build. Decided 2026-10-04. This is the brief for whoever builds it. Read `AGENTS.md` beside this file first: it
+Status: step 1 implemented, automated checks passed; real-session acceptance remains. Decided 2026-10-04.
+Implementation note (D175): the host rejects `prompt.submit` inside `command.run`, even without awaiting it. The review
+submission described below therefore runs through `$.clock.after(0, ...)` after the command returns, with a request
+sequence check so a newer review or `/clear` cancels it. Selection/report submissions still start from the person's press.
+This is the brief for whoever builds it. Read `AGENTS.md` beside this file first: it
 holds how the mod is laid out, the three checks, how the tests work and the facts about the host this brief leans on.
 
 ## What it is for

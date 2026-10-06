@@ -1,0 +1,13 @@
+Generator: built-in image_gen
+Output: verinoda-logo.png
+
+Use case: logo-brand
+Asset type: final logo for the Verinoda open-source developer tool, suitable for README, project website and package branding.
+Primary request: Create a distinctive, professional, minimal logo for "verinoda", a codebase analysis tool that answers questions with exact file-and-line evidence and explicit verification status.
+Subject: A confidently drawn geometric V symbol made from a very small number of connected solid nodes and strong connecting strokes. The V subtly evokes a verification check and a traceable path through a code graph. It must be one cohesive recognizable mark, not a generic busy network diagram. Pair it with a carefully spaced lowercase wordmark.
+Style/medium: crisp flat vector-like brand design, clean edges, deliberate optical balance, confident contemporary technical typography, no textures. Understated and memorable.
+Composition/framing: one centered horizontal logo lockup, symbol on the left and wordmark on the right, generous clear space, large enough to occupy most of the usable image width. A single logo only.
+Text (verbatim): "verinoda" — v e r i n o d a, lowercase, accurate spelling.
+Color treatment: restrained, readable two-color treatment appropriate for a trustworthy developer tool; dark wordmark and a distinct accent on the symbol.
+Scene/backdrop: truly transparent background, preserve alpha.
+Constraints: Strong silhouette, simple enough to remain readable at favicon scale, lettering exact, only the specified wordmark. No tagline, extra captions, presentation board, mockup, shadow, gradients, glow, bevel, 3D, mascot, enclosing badge or watermark. Do not imitate an existing company logo.
