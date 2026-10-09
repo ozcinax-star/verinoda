@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biyoloji Nöron Ağı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="brand" id="home" type="button" title="Ana ekran (H)">
+      <span class="mark" aria-hidden="true"></span>
+      <span class="brand-text">
+        <span class="brand-name">Biyoloji Ağı</span>
+        <span class="brand-sub">Lise 9–12 · MEB müfredatı</span>
+      </span>
+    </button>
+    <form class="search" id="search-form" role="search">
+      <input id="q" type="search" list="topic-list" placeholder="Konu yazın, örneğin mitoz" autocomplete="off" aria-label="Konu ara">
+      <datalist id="topic-list"></datalist>
+      <button type="submit">Ara</button>
+    </form>
+  </header>
+
+  <main class="stage" id="stage">
+    <canvas id="net" role="img" aria-label="Biyoloji konularının nöron ağı"></canvas>
+    <div class="hud" id="hud" aria-live="polite">Ağ hazırlanıyor…</div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="zoom" role="group" aria-label="Yakınlaştırma">
+      <button type="button" id="zoom-in" aria-label="Yakınlaştır">+</button>
+      <button type="button" id="zoom-out" aria-label="Uzaklaştır">−</button>
+    </div>
+
+    <aside class="panel" id="panel" aria-labelledby="panel-title">
+      <div class="panel-head">
+        <div>
+          <h2 id="panel-title"></h2>
+          <p class="grades" id="panel-grades"></p>
+        </div>
+        <button type="button" class="close" id="panel-close" aria-label="Paneli kapat">×</button>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </aside>
+  </main>
+
+  <footer class="foot">
+    <ul class="legend" aria-label="Gösterim">
+      <li><span class="sw sw-onkosul"></span>ön koşul (ok yönü: önce → sonra)</li>
+      <li><span class="sw sw-destek"></span>destek</li>
+      <li><span class="sw sw-ortak"></span>ortak kavram</li>
+      <li><span class="sw sw-verified"></span>düz çizgi: doğrulandı</li>
+      <li><span class="sw sw-inference"></span>kesik: çıkarım</li>
+      <li><span class="sw sw-unknown"></span>noktalı: bilinmiyor</li>
+    </ul>
+    <p class="scope">Ortaokul fen bilgisi konuları henüz yok; bu sürümde yalnızca lise 9–12 konuları gösterilir.</p>
+    <details>
+      <summary>Belirsizlikler</summary>
+      <ul id="unknowns" class="unknowns"></ul>
+    </details>
+  </footer>
+
+  <script src="geometry.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

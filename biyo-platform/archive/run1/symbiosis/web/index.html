@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biyoloji konu haritası</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Biyoloji konu haritası</div>
+    <form id="search-form" class="search" role="search">
+      <label for="q" class="sr-only">Konu ara</label>
+      <input id="q" name="q" type="search" autocomplete="off" placeholder="Konu ara, örn. fotosentez" required>
+      <button type="submit">Ara</button>
+    </form>
+  </header>
+
+  <main class="layout">
+    <p id="status" class="status" role="status"></p>
+
+    <section class="stage" id="stage">
+      <canvas id="graph" role="img" aria-label="Konu haritası. Konuları aşağıdaki listeden de açabilirsiniz."></canvas>
+      <div id="empty" class="empty">
+        <p id="empty-text">Bir konu yazın, ya da birini seçin.</p>
+        <div class="examples" id="examples"></div>
+      </div>
+      <div id="tip" class="tip" hidden></div>
+    </section>
+
+    <nav id="chips" class="chips" aria-label="Haritadaki konular"></nav>
+
+    <section class="legend" aria-label="Açıklama">
+      <span><i class="swatch" style="border-color:#f5b14c"></i>Ön koşul (önce öğren)</span>
+      <span><i class="swatch" style="border-color:#3fd0c9"></i>Destek / uygulama</span>
+      <span><i class="swatch" style="border-color:#b193ff"></i>Ortak kavram</span>
+      <span><i class="swatch solid"></i>doğrulandı (metinde alıntı var)</span>
+      <span><i class="swatch dashed"></i>çıkarım (alıntı yok)</span>
+      <span><i class="swatch dotted"></i>bilinmiyor</span>
+    </section>
+
+    <details id="unknowns-box" class="unknowns" hidden>
+      <summary>Belirsiz kalanlar</summary>
+      <ul id="unknowns"></ul>
+    </details>
+  </main>
+
+  <aside id="panel" class="panel" aria-labelledby="p-title" aria-hidden="true" inert>
+    <div class="panel-head">
+      <h2 id="p-title"></h2>
+      <button id="close" type="button" class="ghost">Kapat</button>
+    </div>
+    <p id="p-grades" class="muted"></p>
+
+    <section>
+      <h3>Özet</h3>
+      <p id="p-summary"></p>
+    </section>
+    <section>
+      <h3>Nerelerde kullanılır</h3>
+      <ul id="p-uses" class="plain"></ul>
+    </section>
+    <section>
+      <h3>Hangi kaynaklardan çalışılmalı</h3>
+      <p class="muted small">MEB kaynakları önce gelir. "doğrulanmadı" olan kaynağın adı ve bağlantısı bu uygulamada kontrol edilmedi.</p>
+      <ol id="p-sources" class="plain"></ol>
+    </section>
+    <section>
+      <h3>Ne zaman / hangi sırayla çalışılmalı</h3>
+      <p id="p-study"></p>
+    </section>
+    <section>
+      <h3>İlişkiler</h3>
+      <ul id="p-rel" class="plain"></ul>
+    </section>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>

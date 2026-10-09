@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biyoloji Öğrenme Platformu</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Biyoloji Öğrenme Platformu</h1>
+    <form id="search-form" class="search" role="search">
+      <input id="q" type="search" placeholder="Konu ara, örn. mitoz" autocomplete="off" aria-label="Konu ara">
+      <button type="submit">Ara</button>
+    </form>
+  </header>
+
+  <main>
+    <p id="status" class="status" role="status"></p>
+    <div id="graph-wrap">
+      <svg id="graph" viewBox="0 0 1000 700" role="img" aria-label="Konu ağı"></svg>
+    </div>
+    <ul class="legend" aria-label="İlişki türleri">
+      <li><span class="swatch onkosul"></span>ön koşul (önce bu)</li>
+      <li><span class="swatch destek"></span>destek</li>
+      <li><span class="swatch ortak"></span>ortak kavram</li>
+      <li class="hint">Düğüme tıklayın; ilişkinin üzerine gelince kanıt durumu görünür.</li>
+    </ul>
+  </main>
+
+  <aside id="panel" class="panel" aria-hidden="true" aria-labelledby="panel-title">
+    <div class="panel-head">
+      <h2 id="panel-title"></h2>
+      <button id="panel-close" type="button" aria-label="Kapat">×</button>
+    </div>
+    <div id="panel-body"></div>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>

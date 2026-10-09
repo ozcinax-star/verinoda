@@ -1,0 +1,17 @@
+[
+  {"q": "fotosentez", "center": "fotosentez"},
+  {"q": "enerji", "center": "atp-enerji",
+   "note": "Biraz belirsiz: 'enerji' hücresel solunum ya da ekosistemde enerji akışı için de yazılabilir. Merkez olarak hücrede enerjinin ortak para birimi ATP seçildi; hucresel-solunum bu merkezin çekirdek bir kenarıdır, ekosistem ise ne doğru ne yanlış (yargılanmamış) bırakıldı."},
+  {"q": "kalıtım", "center": "mendel-kalitimi"},
+  {"q": "DNA", "center": "nukleik-asitler",
+   "note": "Biraz belirsiz: 'DNA' dna-replikasyonu için de yazılabilir. Merkez DNA'nın yapısını anlatan nukleik-asitler; dna-replikasyonu bu merkezin çekirdek bir kenarıdır."},
+  {"q": "sinir", "center": "sinir-sistemi"},
+  {"q": "bağışıklık", "center": "bagisiklik-sistemi"},
+  {"q": "osmoz", "center": "difuzyon-ve-osmoz",
+   "note": "Konu başlığı 'ozmoz' yazımını kullanır; 'osmoz' öğrencilerin sık yazdığı varyanttır ve eşanlamlı/yazım toleransını sınar."},
+  {"q": "mitoz", "center": "mitoz"},
+  {"q": "evrim", "center": "evrim"},
+  {"q": "ekosistem", "center": "ekosistem"},
+  {"q": "hücre zarı", "center": "hucre-zari-madde-gecisi"},
+  {"q": "bitki su", "center": "bitkilerde-su-tasinimi"}
+]

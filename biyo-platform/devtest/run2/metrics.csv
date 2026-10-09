@@ -1,0 +1,7 @@
+variant,phase,subagent_tokens,tool_uses,duration_ms,notes
+baseline,P1,94901,13,116736,query.py only; mitoz gives 3 nodes 2 edges
+symbiosis,P1,104252,15,162322,query.py only; mitoz gives 3 nodes 2 edges; verinoda calls logged in symbiosis-p1.md
+baseline,P2,108163,18,180011,serve.py and web/ written; not run yet
+symbiosis,P2,111253,15,179493,serve.py and web/ written; verinoda calls logged in symbiosis-p2.md
+baseline,P3,91162,16,90218,README written; server run and checks in baseline-p3.md
+symbiosis,P3,88945,16,98830,README written; verinoda calls in symbiosis-p3.md

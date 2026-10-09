@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biyoloji Haritası</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <div>
+        <h1>Biyoloji Haritası</h1>
+        <p class="tagline">Bir konu yaz, bağlantılı konuları ve çalışma sırasını gör (9–12. sınıf, MEB)</p>
+      </div>
+    </div>
+    <form id="search-form" class="search" role="search" autocomplete="off">
+      <label for="q" class="sr-only">Konu ara</label>
+      <input id="q" name="q" type="search" placeholder="Örnek: fotosentez, mitoz, sinir sistemi, kalıtım" maxlength="120">
+      <button type="submit">Ara</button>
+    </form>
+    <div class="chips" id="chips" aria-label="Hızlı aramalar"></div>
+  </header>
+
+  <main class="stage">
+    <div id="graph-wrap" class="graph-wrap">
+      <svg id="graph" role="img" aria-labelledby="graph-title">
+        <title id="graph-title">Konu bağlantı haritası</title>
+      </svg>
+      <div id="empty" class="empty">
+        <p>Aramak istediğin biyoloji konusunu yaz.</p>
+        <p class="muted">Merkezde aradığın konu, dallarda onunla bağlantılı konular görünür. Bir konuya tıkla: özeti, nerelerde kullanıldığı ve neyle çalışacağın sağdan açılır.</p>
+      </div>
+      <div id="loading" class="loading" hidden>Yükleniyor…</div>
+    </div>
+
+    <section class="notes" id="notes" hidden aria-live="polite">
+      <h2>Sistem notları</h2>
+      <ul id="unknowns"></ul>
+    </section>
+
+    <aside class="legend" aria-label="Gösterge">
+      <div class="legend-row"><span class="lg-line onkosul"></span>Ön koşul (önce bunu çalış → sonra bunu)</div>
+      <div class="legend-row"><span class="lg-line destek"></span>Destek / uygulama</div>
+      <div class="legend-row"><span class="lg-line ortak"></span>Ortak kavram</div>
+      <div class="legend-sep"></div>
+      <div class="legend-row"><span class="lg-status verified"></span>Doğrulandı: metinde alıntısı var</div>
+      <div class="legend-row"><span class="lg-status inference"></span>Çıkarım: alıntı yok, müfredat bilgisi</div>
+      <div class="legend-row"><span class="lg-status unknown"></span>Bilinmiyor</div>
+    </aside>
+  </main>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+  <aside id="panel" class="panel" aria-hidden="true" aria-labelledby="panel-title" tabindex="-1" inert>
+    <div class="panel-head">
+      <h2 id="panel-title"></h2>
+      <button id="panel-close" class="close" type="button" aria-label="Paneli kapat">×</button>
+    </div>
+    <div id="panel-body" class="panel-body"></div>
+  </aside>
+
+  <footer class="foot">
+    Prototip (baseline). İçerik yerel derlemden gelir; EBA bağlantısı yok. Kaynaklar doğrulanmadı.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

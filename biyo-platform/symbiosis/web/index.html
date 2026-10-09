@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Biyoloji Konu Ağı</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="brand" class="brand" type="button" title="Ana ağa dön (H)" aria-label="Ana ağa dön">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="6.5" />
+        <path d="M16 9.5 C 16 4, 22 3.5, 25 5.5 M22.5 16 C 27 16, 28.5 21, 27 25 M9.5 16 C 4 16, 3.5 21, 6 25.5 M16 22.5 C 16 27, 12 29, 8.5 28" />
+      </svg>
+      <span class="brand-text">
+        <span class="brand-name">Biyoloji Konu Ağı</span>
+        <span class="brand-sub">Lise biyolojisi · 9–12. sınıf</span>
+      </span>
+    </button>
+
+    <form id="search-form" class="search" role="search">
+      <label class="visually-hidden" for="q">Konu ara</label>
+      <input id="q" type="search" list="topic-list" placeholder="Konu ara, örneğin mitoz" autocomplete="off" enterkeyhint="search">
+      <button type="submit">Ara</button>
+    </form>
+
+    <div class="topbar-row">
+      <div class="chips" aria-label="Örnek aramalar">
+        <button type="button" class="chip" data-q="mitoz">mitoz</button>
+        <button type="button" class="chip" data-q="fotosentez">fotosentez</button>
+        <button type="button" class="chip" data-q="mendel kalıtımı">mendel kalıtımı</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </div>
+    <datalist id="topic-list"></datalist>
+  </header>
+
+  <main id="stage" class="stage">
+    <div id="graph" class="graph" aria-label="Konu ağı (3B)">
+      <canvas id="canvas"></canvas>
+    </div>
+    <details id="notes" class="notes" hidden>
+      <summary>Notlar</summary>
+      <ul id="notes-list"></ul>
+    </details>
+    <div class="legend" aria-label="Gösterim açıklaması">
+      <ul>
+        <li><span class="sw sw-onkosul"></span>Önkoşul: ok yönünde önce gelir</li>
+        <li><span class="sw sw-destek"></span>Destek: biri diğerini destekler</li>
+        <li><span class="sw sw-ortak"></span>Ortak kavram: sırası yoktur</li>
+      </ul>
+      <ul class="status-legend">
+        <li><span class="ln ln-verified"></span>Kanıtlı</li>
+        <li><span class="ln ln-inference"></span>Çıkarım</li>
+        <li><span class="ln ln-unknown"></span>Bilinmiyor</li>
+      </ul>
+      <p class="hint">Bir nörona dokunun: özet, kaynaklar ve çalışma sırası açılır.</p>
+    </div>
+    <p class="footnote">Ortaokul fen bilimi konuları henüz yok. Bu ağda yalnızca lise biyolojisi konuları vardır.</p>
+  </main>
+
+  <aside id="panel" class="panel" aria-hidden="true" aria-labelledby="panel-title">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Konu</p>
+        <h2 id="panel-title"></h2>
+        <p id="panel-grades" class="grades"></p>
+      </div>
+      <button id="panel-close" type="button" class="close" aria-label="Paneli kapat">&times;</button>
+    </div>
+    <div id="panel-body" class="panel-body"></div>
+  </aside>
+
+  <div id="tip" class="tip" role="tooltip" hidden></div>
+
+  <script src="graph3d.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

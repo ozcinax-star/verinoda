@@ -1,0 +1,5 @@
+variant,phase,subagent_tokens,tool_uses,duration_ms,notes
+baseline,R1-data,135585,19,210803,query.py relation layer rewritten
+baseline,R2-frontend,136104,23,240316,3D light theme; serve.py adds /api/topics; not browser tested
+symbiosis,R1-data,165149,30,293937,query.py rewritten; verinoda queried twice
+symbiosis,R2-frontend,166543,30,384896,3D light theme; serve.py adds get_topics and /api/topics; not browser tested

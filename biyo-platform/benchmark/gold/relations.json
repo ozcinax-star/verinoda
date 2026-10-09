@@ -1,0 +1,229 @@
+{
+  "fotosentez": {
+    "edges": [
+      {"a": "atp-enerji", "b": "fotosentez", "type": "onkosul", "from": "atp-enerji", "to": "fotosentez", "core": true,
+       "why": "Işığa bağlı tepkimelerde ATP üretilir, Calvin döngüsünde harcanır; ATP'nin yapısı ve işlevi önce bilinmeli."},
+      {"a": "hucre-organelleri", "b": "fotosentez", "type": "onkosul", "from": "hucre-organelleri", "to": "fotosentez", "core": true,
+       "why": "Fotosentez kloroplastta (tilakoit, stroma) gerçekleşir."},
+      {"a": "fotosentez", "b": "hucresel-solunum", "type": "ortak", "core": true,
+       "why": "Elektron taşıma sistemi, kemiozmoz ve ATP sentezi ortak; ürün ve girdileri birbirinin tersi."},
+      {"a": "fotosentez", "b": "madde-dongusu", "type": "destek", "core": true,
+       "why": "Karbon döngüsünde CO2'nin organik maddeye bağlanması fotosentezle olur."},
+      {"a": "enzimler", "b": "fotosentez", "type": "onkosul", "from": "enzimler", "to": "fotosentez", "core": false,
+       "why": "Fotosentez hızını etkileyen sıcaklık vb. faktörler enzim etkinliğiyle açıklanır."},
+      {"a": "karbonhidratlar", "b": "fotosentez", "type": "onkosul", "from": "karbonhidratlar", "to": "fotosentez", "core": false,
+       "why": "Fotosentezin ürünü glikoz/nişasta; monosakkarit ve polisakkarit kavramı önce gelir."},
+      {"a": "ekosistem", "b": "fotosentez", "type": "destek", "core": false,
+       "why": "Üreticiler ve enerji akışı fotosentezle başlar."},
+      {"a": "bitkilerde-su-tasinimi", "b": "fotosentez", "type": "destek", "core": false,
+       "why": "Su fotosentezin hammaddesidir, stomalar gaz alışverişini düzenler, floem fotosentez ürünlerini taşır."}
+    ],
+    "irrelevant": ["mendel-kalitimi", "bagisiklik-sistemi", "sinir-sistemi", "bosaltim-sistemi", "mayoz"]
+  },
+
+  "atp-enerji": {
+    "edges": [
+      {"a": "atp-enerji", "b": "hucresel-solunum", "type": "onkosul", "from": "atp-enerji", "to": "hucresel-solunum", "core": true,
+       "why": "Hücresel solunumun amacı ATP üretimidir; ATP önce bilinmeli."},
+      {"a": "atp-enerji", "b": "fotosentez", "type": "onkosul", "from": "atp-enerji", "to": "fotosentez", "core": true,
+       "why": "fotosentez merkeziyle aynı karar."},
+      {"a": "atp-enerji", "b": "enzimler", "type": "destek", "core": true,
+       "why": "ATP sentezi ve kullanımı enzimatik tepkimelerdir; metabolizma ikisini birlikte gerektirir."},
+      {"a": "atp-enerji", "b": "hucre-zari-madde-gecisi", "type": "destek", "core": true,
+       "why": "Aktif taşıma, endositoz ve ekzositoz ATP harcar."},
+      {"a": "nukleik-asitler", "b": "atp-enerji", "type": "onkosul", "from": "nukleik-asitler", "to": "atp-enerji", "core": false,
+       "why": "ATP bir nükleotit türevidir (adenin, riboz, fosfat); nükleotit yapısı önce bilinmeli."},
+      {"a": "atp-enerji", "b": "hucre-organelleri", "type": "destek", "core": false,
+       "why": "ATP'nin büyük kısmı mitokondride, bitkilerde ayrıca kloroplastta üretilir."},
+      {"a": "atp-enerji", "b": "karbonhidratlar", "type": "destek", "core": false,
+       "why": "Glikoz hücrenin başlıca ATP üretim kaynağıdır."}
+    ],
+    "irrelevant": ["mendel-kalitimi", "genetik-muhendisligi", "bagisiklik-sistemi", "populasyon-ekolojisi", "evrim"]
+  },
+
+  "mendel-kalitimi": {
+    "edges": [
+      {"a": "mayoz", "b": "mendel-kalitimi", "type": "onkosul", "from": "mayoz", "to": "mendel-kalitimi", "core": true,
+       "why": "Ayrılma ve bağımsız dağılım ilkeleri mayozda kromozomların davranışıyla açıklanır; programda Hücre Bölünmeleri Kalıtım'dan önce gelir."},
+      {"a": "mendel-kalitimi", "b": "evrim", "type": "onkosul", "from": "mendel-kalitimi", "to": "evrim", "core": true,
+       "why": "Doğal seçilim kalıtsal varyasyon üzerinden işler; kalıtım önce bilinmeli."},
+      {"a": "mutasyon", "b": "mendel-kalitimi", "type": "destek", "core": true,
+       "why": "Yeni aleller mutasyonla ortaya çıkar; genetik varyasyonun kaynağı."},
+      {"a": "nukleik-asitler", "b": "mendel-kalitimi", "type": "ortak", "core": false,
+       "why": "Gen/alel kavramı ortak; gen DNA'nın bir bölümüdür."},
+      {"a": "mendel-kalitimi", "b": "genetik-muhendisligi", "type": "destek", "core": false,
+       "why": "Genetik mühendisliği gen ve kalıtım kavramlarını uygular."},
+      {"a": "mendel-kalitimi", "b": "protein-sentezi", "type": "destek", "core": false,
+       "why": "Genotipten fenotipe geçiş protein sentezi üzerinden olur."}
+    ],
+    "irrelevant": ["fotosentez", "sindirim-sistemi", "madde-dongusu", "bosaltim-sistemi", "hucre-zari-madde-gecisi"]
+  },
+
+  "nukleik-asitler": {
+    "edges": [
+      {"a": "nukleik-asitler", "b": "dna-replikasyonu", "type": "onkosul", "from": "nukleik-asitler", "to": "dna-replikasyonu", "core": true,
+       "why": "Eşlenme, DNA'nın nükleotit yapısı ve baz eşleşmesi bilinmeden anlaşılamaz."},
+      {"a": "nukleik-asitler", "b": "protein-sentezi", "type": "onkosul", "from": "nukleik-asitler", "to": "protein-sentezi", "core": true,
+       "why": "Transkripsiyon ve translasyon DNA, mRNA, tRNA, rRNA bilgisini gerektirir."},
+      {"a": "nukleik-asitler", "b": "mutasyon", "type": "onkosul", "from": "nukleik-asitler", "to": "mutasyon", "core": true,
+       "why": "Mutasyon DNA dizisindeki değişikliktir."},
+      {"a": "nukleik-asitler", "b": "genetik-muhendisligi", "type": "onkosul", "from": "nukleik-asitler", "to": "genetik-muhendisligi", "core": true,
+       "why": "Rekombinant DNA, kesim enzimleri, PCR DNA yapısını gerektirir."},
+      {"a": "nukleik-asitler", "b": "atp-enerji", "type": "onkosul", "from": "nukleik-asitler", "to": "atp-enerji", "core": false,
+       "why": "atp-enerji merkeziyle aynı karar."},
+      {"a": "nukleik-asitler", "b": "proteinler", "type": "ortak", "core": false,
+       "why": "İkisi de monomerlerden oluşan organik makromolekül; DNA protein dizisini kodlar."},
+      {"a": "nukleik-asitler", "b": "hucre-organelleri", "type": "destek", "core": false,
+       "why": "DNA çekirdekte (ayrıca mitokondri ve kloroplastta), RNA ribozomda bulunur."},
+      {"a": "nukleik-asitler", "b": "mendel-kalitimi", "type": "ortak", "core": false,
+       "why": "mendel-kalitimi merkeziyle aynı karar."}
+    ],
+    "irrelevant": ["ekosistem", "solunum-sistemi", "sinir-sistemi", "populasyon-ekolojisi", "bitkilerde-su-tasinimi"]
+  },
+
+  "sinir-sistemi": {
+    "edges": [
+      {"a": "sinir-sistemi", "b": "endokrin-sistem", "type": "ortak", "core": true,
+       "why": "İkisi de düzenleyici sistem; hipotalamus–hipofiz bağlantısı ortak."},
+      {"a": "hucre-zari-madde-gecisi", "b": "sinir-sistemi", "type": "onkosul", "from": "hucre-zari-madde-gecisi", "to": "sinir-sistemi", "core": true,
+       "why": "İmpuls iletimi zar potansiyeline, iyon kanallarına ve Na+/K+ pompasına dayanır."},
+      {"a": "atp-enerji", "b": "sinir-sistemi", "type": "destek", "core": true,
+       "why": "Na+/K+ pompası ve nörotransmiter salgılanması ATP harcar."},
+      {"a": "difuzyon-ve-osmoz", "b": "sinir-sistemi", "type": "destek", "core": false,
+       "why": "Aksiyon potansiyelinde iyonlar derişim farkına göre difüzyonla geçer; sinapsta nörotransmiter difüzyonla ilerler."},
+      {"a": "sinir-sistemi", "b": "dolasim-sistemi", "type": "destek", "core": false,
+       "why": "Kalp atışı ve kan basıncı otonom sinir sistemiyle düzenlenir."},
+      {"a": "sinir-sistemi", "b": "solunum-sistemi", "type": "destek", "core": false,
+       "why": "Soluk alıp verme omurilik soğanındaki merkezle düzenlenir."}
+    ],
+    "irrelevant": ["fotosentez", "madde-dongusu", "mendel-kalitimi", "genetik-muhendisligi", "bitkilerde-su-tasinimi"]
+  },
+
+  "bagisiklik-sistemi": {
+    "edges": [
+      {"a": "bagisiklik-sistemi", "b": "dolasim-sistemi", "type": "destek", "core": true,
+       "why": "Programda vücudun savunması dolaşım sistemi ünitesinde işlenir; lenf sistemi ve akyuvarlar dolaşımla taşınır."},
+      {"a": "proteinler", "b": "bagisiklik-sistemi", "type": "onkosul", "from": "proteinler", "to": "bagisiklik-sistemi", "core": true,
+       "why": "Antikorlar proteindir; antijen–antikor özgüllüğü protein yapısıyla açıklanır."},
+      {"a": "hucre-zari-madde-gecisi", "b": "bagisiklik-sistemi", "type": "destek", "core": true,
+       "why": "Fagositoz bir endositoz türüdür; antikor salgılanması ekzositozla olur."},
+      {"a": "hucre-organelleri", "b": "bagisiklik-sistemi", "type": "destek", "core": false,
+       "why": "Fagositozda lizozom sindirimi; plazma hücresinde granüllü ER ve Golgi."},
+      {"a": "protein-sentezi", "b": "bagisiklik-sistemi", "type": "destek", "core": false,
+       "why": "Plazma hücreleri antikoru protein sentezi ile üretir."},
+      {"a": "genetik-muhendisligi", "b": "bagisiklik-sistemi", "type": "destek", "core": false,
+       "why": "Rekombinant aşılar ve aşı üretimi biyoteknoloji uygulamalarıdır."}
+    ],
+    "irrelevant": ["fotosentez", "madde-dongusu", "bitkilerde-su-tasinimi", "mayoz", "ekosistem"]
+  },
+
+  "difuzyon-ve-osmoz": {
+    "edges": [
+      {"a": "difuzyon-ve-osmoz", "b": "hucre-zari-madde-gecisi", "type": "ortak", "core": true,
+       "why": "Difüzyon ve ozmoz hücre zarından pasif madde geçişinin türleridir; aynı çekirdek kavram."},
+      {"a": "difuzyon-ve-osmoz", "b": "bitkilerde-su-tasinimi", "type": "onkosul", "from": "difuzyon-ve-osmoz", "to": "bitkilerde-su-tasinimi", "core": true,
+       "why": "Kökte su alımı ozmozla, kök basıncı ve turgor ozmotik basınçla açıklanır."},
+      {"a": "difuzyon-ve-osmoz", "b": "solunum-sistemi", "type": "destek", "core": true,
+       "why": "Alveol ve dokularda gaz değişimi difüzyonla olur."},
+      {"a": "difuzyon-ve-osmoz", "b": "bosaltim-sistemi", "type": "destek", "core": true,
+       "why": "Nefronda suyun geri emilimi ozmozla, bazı maddelerin geçişi difüzyonla olur."},
+      {"a": "difuzyon-ve-osmoz", "b": "sindirim-sistemi", "type": "destek", "core": false,
+       "why": "İnce bağırsakta bazı besinlerin emilimi difüzyonla olur."},
+      {"a": "difuzyon-ve-osmoz", "b": "dolasim-sistemi", "type": "destek", "core": false,
+       "why": "Kılcallarda doku sıvısıyla madde alışverişi difüzyon ve ozmotik basınçla olur."},
+      {"a": "difuzyon-ve-osmoz", "b": "sinir-sistemi", "type": "destek", "core": false,
+       "why": "sinir-sistemi merkeziyle aynı karar."}
+    ],
+    "irrelevant": ["mendel-kalitimi", "evrim", "genetik-muhendisligi", "mayoz", "populasyon-ekolojisi"]
+  },
+
+  "mitoz": {
+    "edges": [
+      {"a": "dna-replikasyonu", "b": "mitoz", "type": "onkosul", "from": "dna-replikasyonu", "to": "mitoz", "core": true,
+       "why": "Mitoz öncesinde interfazda DNA eşlenir; kardeş kromatitler eşlenmeden anlaşılamaz."},
+      {"a": "hucre-organelleri", "b": "mitoz", "type": "onkosul", "from": "hucre-organelleri", "to": "mitoz", "core": true,
+       "why": "Çekirdek, kromatin, sentrozom ve iğ iplikleri hücre yapısı bilgisi gerektirir."},
+      {"a": "nukleik-asitler", "b": "mitoz", "type": "onkosul", "from": "nukleik-asitler", "to": "mitoz", "core": true,
+       "why": "Kromozom DNA'dan oluşur; DNA yapısı önce bilinmeli."},
+      {"a": "mitoz", "b": "mayoz", "type": "ortak", "core": true,
+       "why": "İkisi de hücre bölünmesi; evreler ve kromozom davranışı karşılaştırılarak öğrenilir."},
+      {"a": "mutasyon", "b": "mitoz", "type": "destek", "core": false,
+       "why": "Kontrolsüz mitoz (kanser) bölünmeyi denetleyen genlerdeki mutasyonlarla ilişkilidir."}
+    ],
+    "irrelevant": ["sindirim-sistemi", "fotosentez", "ekosistem", "madde-dongusu", "bosaltim-sistemi"]
+  },
+
+  "evrim": {
+    "edges": [
+      {"a": "mutasyon", "b": "evrim", "type": "onkosul", "from": "mutasyon", "to": "evrim", "core": true,
+       "why": "Mutasyon kalıtsal varyasyonun temel kaynağıdır; doğal seçilim varyasyon üzerinde işler."},
+      {"a": "mendel-kalitimi", "b": "evrim", "type": "onkosul", "from": "mendel-kalitimi", "to": "evrim", "core": true,
+       "why": "mendel-kalitimi merkeziyle aynı karar."},
+      {"a": "populasyon-ekolojisi", "b": "evrim", "type": "destek", "core": true,
+       "why": "Evrim popülasyon düzeyinde gerçekleşir; popülasyon büyüklüğü ve rekabet seçilimi etkiler."},
+      {"a": "mayoz", "b": "evrim", "type": "destek", "core": false,
+       "why": "Krossing-over ve bağımsız dağılım varyasyon kaynağıdır."},
+      {"a": "ekosistem", "b": "evrim", "type": "destek", "core": false,
+       "why": "Adaptasyonlar çevre koşullarına göre seçilir."},
+      {"a": "canlilarin-ortak-ozellikleri", "b": "evrim", "type": "destek", "core": false,
+       "why": "Uyum (adaptasyon) canlıların ortak özelliklerinden biri olarak işlenir."}
+    ],
+    "irrelevant": ["sindirim-sistemi", "bosaltim-sistemi", "atp-enerji", "hucre-zari-madde-gecisi", "difuzyon-ve-osmoz"]
+  },
+
+  "ekosistem": {
+    "edges": [
+      {"a": "ekosistem", "b": "madde-dongusu", "type": "onkosul", "from": "ekosistem", "to": "madde-dongusu", "core": true,
+       "why": "Döngüler üretici, tüketici ve ayrıştırıcı kavramları üzerine kurulur; programda ekosistemin bileşenleri önce işlenir."},
+      {"a": "ekosistem", "b": "fotosentez", "type": "destek", "core": true,
+       "why": "fotosentez merkeziyle aynı karar."},
+      {"a": "ekosistem", "b": "populasyon-ekolojisi", "type": "ortak", "core": true,
+       "why": "İkisi de ekoloji; popülasyon, komünite ve ekosistem aynı organizasyon basamaklarıdır."},
+      {"a": "ekosistem", "b": "hucresel-solunum", "type": "destek", "core": false,
+       "why": "Enerji akışında her basamakta solunumla enerji kaybı; ayrıştırıcılar CO2 açığa çıkarır."},
+      {"a": "ekosistem", "b": "evrim", "type": "destek", "core": false,
+       "why": "evrim merkeziyle aynı karar."}
+    ],
+    "irrelevant": ["sinir-sistemi", "dna-replikasyonu", "protein-sentezi", "mitoz", "endokrin-sistem"]
+  },
+
+  "hucre-zari-madde-gecisi": {
+    "edges": [
+      {"a": "difuzyon-ve-osmoz", "b": "hucre-zari-madde-gecisi", "type": "ortak", "core": true,
+       "why": "difuzyon-ve-osmoz merkeziyle aynı karar."},
+      {"a": "lipitler", "b": "hucre-zari-madde-gecisi", "type": "onkosul", "from": "lipitler", "to": "hucre-zari-madde-gecisi", "core": true,
+       "why": "Zarın temeli fosfolipit çift katmandır; seçici geçirgenlik buna dayanır."},
+      {"a": "proteinler", "b": "hucre-zari-madde-gecisi", "type": "onkosul", "from": "proteinler", "to": "hucre-zari-madde-gecisi", "core": true,
+       "why": "Kanal ve taşıyıcı proteinler kolaylaştırılmış difüzyon ve aktif taşımayı sağlar."},
+      {"a": "atp-enerji", "b": "hucre-zari-madde-gecisi", "type": "destek", "core": true,
+       "why": "atp-enerji merkeziyle aynı karar."},
+      {"a": "hucre-zari-madde-gecisi", "b": "sinir-sistemi", "type": "onkosul", "from": "hucre-zari-madde-gecisi", "to": "sinir-sistemi", "core": false,
+       "why": "sinir-sistemi merkeziyle aynı karar."},
+      {"a": "hucre-zari-madde-gecisi", "b": "bagisiklik-sistemi", "type": "destek", "core": false,
+       "why": "bagisiklik-sistemi merkeziyle aynı karar."},
+      {"a": "hucre-zari-madde-gecisi", "b": "hucre-organelleri", "type": "ortak", "core": false,
+       "why": "Zar sistemi ve organeller hücre yapısının ortak konusu; endomembran sistemi."},
+      {"a": "hucre-zari-madde-gecisi", "b": "bitkilerde-su-tasinimi", "type": "onkosul", "from": "hucre-zari-madde-gecisi", "to": "bitkilerde-su-tasinimi", "core": false,
+       "why": "bitkilerde-su-tasinimi merkeziyle aynı karar."}
+    ],
+    "irrelevant": ["evrim", "ekosistem", "mendel-kalitimi", "madde-dongusu", "populasyon-ekolojisi"]
+  },
+
+  "bitkilerde-su-tasinimi": {
+    "edges": [
+      {"a": "difuzyon-ve-osmoz", "b": "bitkilerde-su-tasinimi", "type": "onkosul", "from": "difuzyon-ve-osmoz", "to": "bitkilerde-su-tasinimi", "core": true,
+       "why": "difuzyon-ve-osmoz merkeziyle aynı karar."},
+      {"a": "bitkilerde-su-tasinimi", "b": "fotosentez", "type": "destek", "core": true,
+       "why": "fotosentez merkeziyle aynı karar."},
+      {"a": "hucre-zari-madde-gecisi", "b": "bitkilerde-su-tasinimi", "type": "onkosul", "from": "hucre-zari-madde-gecisi", "to": "bitkilerde-su-tasinimi", "core": true,
+       "why": "Kökte mineral alımı aktif taşımayla olur; floem yüklemesi zar taşımasına dayanır."},
+      {"a": "karbonhidratlar", "b": "bitkilerde-su-tasinimi", "type": "destek", "core": false,
+       "why": "Floemde organik besin başlıca sakaroz olarak taşınır."},
+      {"a": "dolasim-sistemi", "b": "bitkilerde-su-tasinimi", "type": "ortak", "core": false,
+       "why": "Canlıda madde taşınması ortak kavramı; hayvanlarda dolaşım, bitkilerde iletim dokuları."},
+      {"a": "atp-enerji", "b": "bitkilerde-su-tasinimi", "type": "destek", "core": false,
+       "why": "Aktif mineral alımı ve floem yüklemesi ATP harcar."}
+    ],
+    "irrelevant": ["sinir-sistemi", "bagisiklik-sistemi", "mendel-kalitimi", "mayoz", "endokrin-sistem"]
+  }
+}
