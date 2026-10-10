@@ -162,6 +162,12 @@ next steps. Stage B (incremental cross-file passes) is not started.
 | 19.4 | **Regression test generation (opt-in)** | Tests that pin current behaviour before a refactor | Pynguin | a generated test passes on the current tree |
 | 19.5 | **Runtime diff between base and head** | Call paths, SQL queries, routes and exceptions added or removed at runtime between two revisions | AppMap compare | `review --observe` lists runtime changes |
 
+## 20 - Evaluation on a Docker machine
+
+| id | feature | what | seen in | done when |
+|---|---|---|---|---|
+| 20.1 | **Official SWE-bench Lite evaluation of the Claude Code study (needs Docker or a cloud runner)** | The study kept in the Verinoda Symbiosis repository (github.com/Verinoda-Labs/verinoda-symbiosis: design `benchmarks/agent_compare/DESIGN_SWEBENCH.md`, harness `swebench_prepare.py` and `swebench_run.py`), Claude Code alone against Claude Code with Verinoda Symbiosis on 100 SWE-bench Lite instances, writes `predictions-none.jsonl` and `predictions-verinoda_guided.jsonl`, but its main measure, the share of instances resolved, is **not measured**: the official harness runs each instance in a Docker image (x86_64 Linux, about 120 GB of disk, 16 GB of RAM) and the Windows machine the study ran on cannot. To do on a machine with Docker, or with `sb-cli` or Modal (`benchmarks/agent_compare/SWEBENCH_EVAL.md` in that repository has the commands): (1) take the two predictions files (committed in that repository under `benchmarks/results/swebench-lite-100-2026-10-10/` when the run ends); (2) evaluate each with the same dataset and instance list; (3) keep the reports and the per-instance resolved lists beside the predictions; (4) run the paired analysis of the design (instances resolved in one arm only, bootstrap 95 % interval); (5) add the result to that repository's `docs/DESIGN.md`, the proxies of the pilot beside it. Until then no resolved share is reported, and a result is not compared with the leaderboard (the agents ran without the projects' dependencies installed) | none: our own idea (2026-10-10), not from the survey | both arms' resolved shares and their paired difference with its interval, from the official harness, are in that folder |
+
 ## Out of scope
 
 Not built, with the reason; listed so they are not proposed again without a new reason.
